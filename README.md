@@ -45,9 +45,11 @@ flowchart TD
     IMG["entrada de imagem (OBS)"]
     AUD["entrada de áudio (monitor do sistema)"]
 
-    IMG --> VT["thread de vídeo (FFMPEG)"]
+    IMG --> CAPV["captura de vídeo (FFMPEG)"]
+    CAPV --> VT["thread de vídeo"]
     VT --> SF["state['frame']"]
-    AUD --> AT["thread de áudio (parec)<br/>FFT + faixas + kick + suavização attack/release"]
+    AUD --> CAPA["captura de áudio (parec)"]
+    CAPA --> AT["thread de áudio<br/>FFT + faixas + kick + suavização attack/release"]
 
     SF -->|"glTexImage2D"| UTEX["u_texture_0"]
     SF --> DCT["dominant_color_thread (~10/s)"]
