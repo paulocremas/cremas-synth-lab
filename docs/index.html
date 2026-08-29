@@ -33,6 +33,15 @@
               padding: 11px 13px; font-size: 14.5px; line-height: 1.55;
               color: #e6edf3; box-shadow: 0 6px 20px rgba(0,0,0,.55); }
   #glosstip code { background: #12171d; border-color: #2b3440; }
+  /* status: implementado = visual padrão · possibilidade = bloco esmaecido, dois tons neutros */
+  .maybe { border-left: 3px dashed #7a828d; padding: 2px 0 2px 16px; margin: 18px 0; color: #9aa4af; }
+  .maybe h4 { color: #8b949e; }
+  .maybe code { color: #c9d1d9; }
+  .maybe b, .maybe strong { color: #c2cbd4; }
+  .maybe-tag { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+               text-transform: uppercase; color: #7a828d; border: 1px dashed #7a828d;
+               border-radius: 4px; padding: 1px 7px; margin-bottom: 6px; }
+  p.legend-status .maybe-tag { margin-bottom: 0; }
   svg.flow { width: 100%; height: auto; max-width: 800px; display: block; margin: 0 auto; }
   .hint { text-align: center; color: #8b949e; font-size: 13px; margin-top: 8px; }
   .hotspots rect { fill: transparent; stroke: transparent; stroke-width: 2; cursor: pointer; transition: fill .12s, stroke .12s; }
@@ -283,6 +292,7 @@
   </g>
 </svg>
 <p class="hint">passe o mouse pra ver os blocos clicáveis</p>
+<p class="hint legend-status" style="margin-top:4px"><b style="color:#c9d1d9">implementado</b> — o que roda hoje (todo o fluxograma e a maioria dos blocos) &nbsp;·&nbsp; <span class="maybe-tag">possibilidade</span> ideias marcadas à parte, não é código de hoje</p>
 </figure>
 
 <main>
@@ -314,9 +324,12 @@ cola <code>.monitor</code> no fim.</li>
 <code>pactl list short sources</code>.</li>
 </ul>
 
-<h4>trocar a fonte — só <code>--audio NOME</code>, zero código</h4>
-<p>O <code>parec</code> não liga se a fonte é monitor, microfone ou entrada de placa. Se aparece
-em <code>pactl list short sources</code>, serve:</p>
+<div class="maybe">
+<span class="maybe-tag">possibilidade</span>
+<p><b>Trocar a fonte</b> — nada disto roda hoje. Três níveis, cada um só entra quando o de cima
+não dá:</p>
+
+<h4>1 · a fonte já aparece em <code>pactl list short sources</code> → só <code>--audio NOME</code></h4>
 <ul>
 <li><b>Microfone ou line-in da placa da máquina</b> — nome tipo
 <code>alsa_input.pci-...analog-stereo</code>. O mic do notebook, ou um cabo no conector de
@@ -334,7 +347,7 @@ fonte → <code>--audio alsa_input.usb-...</code>. <b>Funciona hoje.</b> Dois po
 <code>--audio &lt;outro-sink&gt;.monitor</code>.</li>
 </ul>
 
-<h4>trocar a fonte — só configuração, ainda zero código</h4>
+<h4>2 · a fonte ainda não existe → um comando cria, aí <code>--audio NOME</code></h4>
 <ul>
 <li><b>"Sink falso" (null sink) como desvio</b> — cria uma saída de mentira
 (<code>pactl load-module module-null-sink</code>), manda um app só pra ela, grava o
@@ -345,7 +358,7 @@ No PulseAudio antigo precisa carregar <code>module-jack-source</code>.</li>
 uma fonte na lista.</li>
 </ul>
 
-<h4>trocar a fonte — aí precisa mexer no código</h4>
+<h4>3 · nem flag nem comando → editar a <a href="#audio-thread">thread de áudio</a></h4>
 <ul>
 <li><b>Várias entradas separadas</b> — gravar "entrada&nbsp;1" e "entrada&nbsp;2" da interface
 como faixas independentes: tirar o <code>--channels=1</code> e fatiar os números.</li>
@@ -355,6 +368,7 @@ como faixas independentes: tirar o <code>--channels=1</code> e fatiar os número
 <li><b>Fora do PulseAudio</b> — usar ALSA puro (<code>arecord</code>) ou PortAudio. Só se um dia
 a máquina não tiver PulseAudio/PipeWire.</li>
 </ul>
+</div>
 </section>
 
 <section id="parec">
@@ -409,7 +423,11 @@ qualquer tamanho).</li>
 <li><code>--screen</code> muda tudo: em vez de câmera, captura a tela (ver abaixo).</li>
 </ul>
 
-<h4>trocar a fonte — só flag, zero código</h4>
+<div class="maybe">
+<span class="maybe-tag">possibilidade</span>
+<p><b>Trocar a fonte</b> — nada disto roda hoje. Dois níveis:</p>
+
+<h4>1 · dá com uma flag (<code>--device</code> ou <code>--screen</code>)</h4>
 <ul>
 <li><b>Outra câmera / placa de captura HDMI</b> (Elgato e afins) — também aparece como
 <code>/dev/videoN</code>. <code>--device /dev/video2</code>. Serve pra puxar DSLR, videogame,
@@ -426,7 +444,7 @@ mesmo coberta por outra, mas só ~2–5&nbsp;fps.</li>
 <li><b>Um retângulo exato</b> — <code>--screen --region</code>, arrasta pra recortar o pedaço.</li>
 </ul>
 
-<h4>trocar a fonte — aí precisa mexer no código</h4>
+<h4>2 · editar a <a href="#video-thread">thread de vídeo</a></h4>
 <ul>
 <li><b>Arquivo de vídeo</b> — trocar o comando por
 <code>ffmpeg -stream_loop -1 -re -i clipe.mp4 -vf scale=L:A -pix_fmt rgb24 -f rawvideo -</code> na
@@ -435,6 +453,7 @@ mesmo coberta por outra, mas só ~2–5&nbsp;fps.</li>
 <li><b>Sessão Wayland</b> (sem X11) — <code>x11grab</code> não funciona; trocar por
 <code>-f kmsgrab</code> ou o portal do PipeWire.</li>
 </ul>
+</div>
 </section>
 
 <section id="ffmpeg">
@@ -655,8 +674,9 @@ Essa imagem é a única saída do programa.</p>
 </section>
 </div>
 
-<section id="nao-conectadas">
+<section id="nao-conectadas" class="maybe">
 <h2>não conectadas · referência</h2>
+<span class="maybe-tag">possibilidade</span>
 <p>Já calculado hoje, mas só aparece nos painéis. Vira uniform com ~2 linhas (declarar em <code>image.frag</code> + <code>glUniform*</code> no loop).</p>
 <p><b>Áudio</b> — magnitudes brutas por banda, <code>*_raw</code> sem escala, smoothing por banda, <code>kick_baseline</code>, <code>kick_decay_dynamic</code>, espectrograma dB (24 faixas log), FFT suavizada inteira.</p>
 <p><b>Imagem — global + grid 3×3</b> — brilho, saturação, temp. de cor, contraste, nitidez (variância do Laplaciano), entropia, bordas, movimento.</p>
