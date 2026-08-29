@@ -396,17 +396,98 @@ uniforms de som.</p>
 
 <section id="image-in">
 <h3>entrada de imagem (OBS)</h3>
-<p>A <b>fonte</b>: câmera virtual (<code>v4l2loopback</code> alimentado pelo OBS), <code>/dev/videoN</code>.
-<code>--device PATH</code> escolhe qual. No mesmo lugar cabem webcam real (<code>/dev/video0</code>) ou
-<code>--screen</code> (captura de tela / janela).</p>
+<p>É a <b>fonte</b> — de onde vem a imagem. Não é o programa (o programa é o
+<a href="#ffmpeg"><code>ffmpeg</code></a>, seção seguinte).</p>
+
+<h4>palavras primeiro</h4>
+<ul>
+<li><b>Frame</b> = uma imagem parada, um quadro. Vídeo = uma fila de frames, ~30 por segundo.</li>
+<li><b>Pixel</b> = um pontinho da imagem. Cada um tem 3 números: quanto de vermelho, verde e
+azul, de 0 a 255.</li>
+<li><b>RGB24 cru</b> = a imagem escrita como esses números e nada mais: 3 bytes por pixel, pixel
+atrás de pixel, sem compressão (não é JPEG, PNG nem H.264), sem cabeçalho. "24" = 3 canais ×
+8&nbsp;bits.</li>
+<li><b>stdout / cano</b> = mesmo do lado do áudio: o programa de captura joga os bytes num cano
+em vez da tela, e o Python lê do outro lado.</li>
+<li><b>v4l2</b> ("Video4Linux2") = a parte do Linux que fala com câmera. Cada câmera vira um
+arquivo <code>/dev/video0</code>, <code>/dev/video1</code>…</li>
+<li><b>v4l2loopback</b> = um módulo que cria uma <b>câmera falsa</b> (<code>/dev/videoN</code>):
+qualquer programa escreve nela e o resto do sistema a enxerga como webcam normal.</li>
+<li><b>OBS Virtual Camera</b> = o OBS Studio monta uma cena (janela + textos + filtros) e
+despeja nessa câmera falsa. "Câmera virtual" = essa dupla.</li>
+<li><b>x11grab</b> = "gravar a tela do X11": o ffmpeg lê os pixels da área de trabalho em vez de
+uma câmera.</li>
+<li><b>scale</b> = filtro do ffmpeg que redimensiona a imagem — aqui, pra bater com o tamanho da
+textura do shader.</li>
+</ul>
+
+<h4>hoje — o padrão</h4>
+<ul>
+<li>Fonte usada = a <b>webcam de verdade</b>, <code>/dev/video0</code>.</li>
+<li><code>--device /dev/videoN</code> troca de câmera. Se não for a <code>/dev/video0</code>, o
+programa pergunta a resolução dela com <code>v4l2-ctl</code> (a câmera virtual pode estar em
+qualquer tamanho).</li>
+<li><code>--screen</code> muda tudo: em vez de câmera, captura a tela (ver abaixo).</li>
+</ul>
+
+<h4>trocar a fonte — só flag, zero código</h4>
+<ul>
+<li><b>Outra câmera / placa de captura HDMI</b> (Elgato e afins) — também aparece como
+<code>/dev/videoN</code>. <code>--device /dev/video2</code>. Serve pra puxar DSLR, videogame,
+outro PC.</li>
+<li><b>Câmera virtual (OBS + v4l2loopback)</b> — <code>--device /dev/videoN</code> apontando pra
+ela. O OBS monta a cena e o programa recebe em fps cheio — melhor que <code>--window</code>.</li>
+<li><b>Tela inteira</b> — <code>--screen</code>. O ffmpeg troca pra <code>x11grab</code> e pega a
+área de trabalho toda.</li>
+<li><b>Um monitor só</b> — <code>--screen --source eDP-1</code> (sem valor = pega o secundário
+sozinho).</li>
+<li><b>Uma janela só</b> — <code>--screen --window "pedaço do título"</code> (ou sem valor =
+clica na janela). Aqui usa o ImageMagick <code>import</code> no lugar do ffmpeg: segue a janela
+mesmo coberta por outra, mas só ~2–5&nbsp;fps.</li>
+<li><b>Um retângulo exato</b> — <code>--screen --region</code>, arrasta pra recortar o pedaço.</li>
+</ul>
+
+<h4>trocar a fonte — aí precisa mexer no código</h4>
+<ul>
+<li><b>Arquivo de vídeo</b> — trocar o comando por
+<code>ffmpeg -stream_loop -1 -re -i clipe.mp4 -vf scale=L:A -pix_fmt rgb24 -f rawvideo -</code> na
+<a href="#video-thread">thread de vídeo</a>. Poucas linhas.</li>
+<li><b>Stream de rede (RTSP/HTTP)</b> — mesma troca, <code>-i rtsp://...</code> no ffmpeg.</li>
+<li><b>Sessão Wayland</b> (sem X11) — <code>x11grab</code> não funciona; trocar por
+<code>-f kmsgrab</code> ou o portal do PipeWire.</li>
+</ul>
 </section>
 
 <section id="ffmpeg">
 <h3>captura · FFMPEG</h3>
-<p>Binário à parte, processo separado.
-<code>ffmpeg -f v4l2 -video_size WxH -i DEVICE -pix_fmt rgb24 -f rawvideo -</code> → frames RGB24 crus
-no <code>stdout</code>. No modo <code>--screen</code> troca pra <code>-f x11grab</code> + <code>scale</code>.
-A <a href="#video-thread">thread de vídeo</a> lê do pipe.</p>
+<p><b>O que é:</b> <code>ffmpeg</code> = o canivete suíço de áudio/vídeo. Aqui faz uma coisa só:
+lê a fonte de imagem e cospe <b>frames RGB24 crus</b> no <code>stdout</code>, sem parar.</p>
+<ul>
+<li>Programa separado, <b>processo à parte</b>. Se cair, o resto segue — só congela no último
+frame.</li>
+<li>O Python liga a ponta do cano (<code>stdout</code> do ffmpeg) na entrada dele e lê frame por
+frame.</li>
+</ul>
+<p><b>O comando (webcam):</b>
+<code>ffmpeg -f v4l2 -video_size LxA -i /dev/videoN -pix_fmt rgb24 -f rawvideo -</code></p>
+<ul>
+<li><code>-f v4l2</code> — a fonte é uma câmera Linux;</li>
+<li><code>-video_size LxA</code> — largura × altura pedidas à câmera;</li>
+<li><code>-i /dev/videoN</code> — qual câmera;</li>
+<li>só pra webcam de verdade (<code>/dev/video0</code>) ele acrescenta
+<code>-input_format yuyv422</code> — o formato bruto que essas câmeras entregam;</li>
+<li><code>-pix_fmt rgb24</code> — converte cada pixel pra 3 bytes R/G/B;</li>
+<li><code>-f rawvideo -</code> — saída sem container, direto no <code>stdout</code>
+(<code>-</code> = stdout).</li>
+</ul>
+<p><b>O comando (tela, <code>--screen</code>):</b> troca <code>-f v4l2 -i /dev/videoN</code> por
+<code>-f x11grab -framerate 30 -i :0+X,Y</code> e adiciona <code>-vf scale=L:A</code> pra encaixar
+no tamanho da textura.</p>
+<p><b>O que sai:</b> um esguicho de bytes no <code>stdout</code> — largura × altura × 3 por frame,
+um frame atrás do outro, sem marca de onde um acaba e o outro começa (a
+<a href="#video-thread">thread de vídeo</a> conta os bytes). Fica <b>só o último frame</b> em
+memória: se o loop atrasa, os do meio somem. Modo <code>--window</code> não usa ffmpeg — usa o
+ImageMagick <code>import</code>, ~2–5&nbsp;fps.</p>
 </section>
 </div>
 
