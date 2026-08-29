@@ -40,51 +40,7 @@ Não há fila nem socket no meio. Existe **um dicionário em memória, `state`**
 escrevem, o loop de render lê 30×/s. Sempre vale o último valor; se algo atrasa, o frame velho é
 descartado (nunca acumula fila).
 
-```mermaid
-flowchart TD
-    subgraph IMG_SIDE["imagem"]
-        direction TB
-        IMG["entrada de imagem (OBS)"] --> CAPV["captura de vídeo (FFMPEG)"]
-        CAPV --> VT["thread de vídeo"]
-        VT --> SF["state['frame']"]
-        SF --> DCT["dominant_color_thread (~10/s)"]
-        DCT --> SD["state['dominant']"]
-        SF --> UTEX["u_texture_0"]
-        SD --> UDOM["u_dominant"]
-    end
-
-    subgraph MON["dashboards"]
-        direction TB
-        MON_I["imagem · gnome-terminal<br/>brilho, cor, bordas, movimento…<br/>redraw ~230 ms (no ritmo do áudio)"]
-        MON_A["áudio · stdout<br/>kick + faixas + espectrograma"]
-        MON_I ~~~ MON_A
-    end
-
-    subgraph AUD_SIDE["áudio"]
-        direction TB
-        AUD["entrada de áudio (monitor do sistema)"] --> CAPA["captura de áudio (parec)"]
-        CAPA --> AT["thread de áudio<br/>FFT + faixas + kick + suavização"]
-        AT --> SA["state['amp'] … state['kick']"]
-        SA --> UAUD["u_amp … u_air, u_kick"]
-        TUN["tuning.py"] -.->|"mtime"| AT
-    end
-
-    SF -.-> MON_I
-    SD -.-> MON_I
-    AT -.-> MON_A
-
-    subgraph SH["shader — hot-reload por mtime"]
-        direction TB
-        FRAG["image.frag (arquivo)"] -.-> GPU["image.frag na GPU · 1× por pixel"]
-    end
-
-    MON_A ~~~ FRAG
-
-    UTEX -->|"glTexImage2D"| GPU
-    UDOM -->|"glUniform3f"| GPU
-    UAUD -->|"glUniform1f × 13"| GPU
-    GPU --> WIN["pygame · 30 fps → janela / monitor"]
-```
+![Fluxo técnico do native_synth.py](docs/flow-tecnico.svg)
 
 **Imagem** — origem física → `ffmpeg` (webcam/tela) ou `import` (uma janela, segue mesmo coberta)
 cospe pixels crus RGB24 → `video_thread` guarda o último em `state['frame']` → o loop sobe pra GPU
