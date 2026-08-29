@@ -193,12 +193,11 @@ de imagem (é o que `u_bass`, `u_kick`, etc. fazem). A imagem sintetizada é a �
 
 ```mermaid
 flowchart TD
-    IN["entrada de áudio + imagem"] --> NOTE["note (laptop)"]
+    OBS["cena no OBS<br/>(a entrada de imagem)"] --> NOTE["note (laptop)"]
+    AUDIO["entrada de áudio"] --> NOTE
     NOTE --> APP["Motor de síntese (native_synth.py)"]
     APP --> SYN["síntese de imagem<br/>image.frag · GLSL"]
-    APP --> OBS["cena no OBS"]
-    SYN --> OUT["OUTPUT<br/>imagem sintetizada"]
-    OBS --> OUT
+    SYN --> OUT["OUTPUT · imagem sintetizada"]
     OUT --> LIGHTS["luzes de palco<br/>programadas a partir do output"]
 
     classDef todo stroke-dasharray: 6 4;
@@ -207,9 +206,8 @@ flowchart TD
 
 **Estado atual:**
 
-- entrada de áudio + imagem → **Motor de síntese** (`native_synth.py`)
-- `image.frag` sintetiza a imagem reagindo ao áudio
-- OBS monta a cena de saída
+- **OBS** monta a cena que entra no Motor como **imagem** (via câmera virtual); em paralelo entra a **entrada de áudio**
+- **Motor de síntese** (`native_synth.py`) roda o `image.frag`, que sintetiza a imagem reagindo ao áudio → **OUTPUT**
 
 **A fazer:**
 
