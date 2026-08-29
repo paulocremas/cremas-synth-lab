@@ -78,13 +78,13 @@
   <!-- dashed blue: hot-reload (mtime) -->
   <g fill="none" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)">
     <path d="M243,172 V208"/>
-    <path d="M830,572 H814"/>
+    <path d="M445,530 V548"/>
   </g>
 
   <!-- edge labels -->
   <g font-size="12" fill="#8b949e" text-anchor="middle">
     <text x="243" y="166" fill="#58a6ff">mtime</text>
-    <text x="812" y="558" fill="#58a6ff" text-anchor="end">mtime</text>
+    <text x="460" y="544" fill="#58a6ff" text-anchor="start">mtime</text>
     <text x="203" y="629">glUniform1f × 13</text>
     <text x="458" y="629">glTexImage2D</text>
     <text x="694" y="629">glUniform3f</text>
@@ -110,7 +110,7 @@
   <!-- ================= nós: documento (arquivo) ================= -->
   <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
     <path d="M198,126 H288 V166 C262,176 234,158 198,170 Z"/>
-    <path d="M830,544 H946 V592 C914,602 882,584 830,596 Z"/>
+    <path d="M376,484 H514 V526 C488,536 456,518 376,530 Z"/>
   </g>
 
   <!-- ================= nós: cilindro (dado) ================= -->
@@ -154,7 +154,7 @@
       <text x="203" y="675">u_amp … u_air, u_kick</text>
       <text x="458" y="675">u_texture_0</text>
       <text x="694" y="675">u_dominant</text>
-      <text x="888" y="572">image.frag<tspan x="888" dy="17">(arquivo)</tspan></text>
+      <text x="443" y="502">image.frag<tspan x="443" dy="16">(arquivo)</tspan></text>
       <text x="461" y="766">image.frag na GPU</text>
     </g>
     <g font-size="14">
