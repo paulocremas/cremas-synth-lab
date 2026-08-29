@@ -193,30 +193,26 @@ de imagem (é o que `u_bass`, `u_kick`, etc. fazem). A imagem sintetizada é a �
 
 ```mermaid
 flowchart TD
-    A1["entrada de áudio"] --> NOTE["note (laptop)"]
-    A2["entrada de imagem"] --> NOTE
-    NOTE --> NS["native_synth.py"]
-    NS --> SYN["image.frag (GLSL)<br/>sintetiza a IMAGEM<br/>reagindo ao áudio + imagem de entrada"]
-    NS --> OBS["OBS monta a cena<br/>dashboards do INPUT como fontes"]
-    SYN --> OUT["OUTPUT = imagem sintetizada"]
+    IN["entrada de áudio + imagem"] --> NOTE["note (laptop)"]
+    NOTE --> APP["Motor de síntese (native_synth.py)"]
+    APP --> SYN["síntese de imagem<br/>image.frag · GLSL"]
+    APP --> OBS["cena no OBS"]
+    SYN --> OUT["OUTPUT<br/>imagem sintetizada"]
     OBS --> OUT
-    OUT --> DASH2["dashboard de imagem lendo o OUTPUT<br/>(em vez da entrada) · A FAZER"]
-    OUT --> LIGHTS["programação das luzes de palco<br/>100% baseada no output · A FAZER"]
+    OUT --> LIGHTS["luzes de palco<br/>programadas a partir do output"]
 
-    classDef todo stroke-dasharray: 5 5;
-    class DASH2,LIGHTS todo;
+    classDef todo stroke-dasharray: 6 4;
+    class LIGHTS todo;
 ```
 
 **Estado atual:**
 
-- entrada de áudio + imagem → `native_synth.py`
+- entrada de áudio + imagem → **Motor de síntese** (`native_synth.py`)
 - `image.frag` sintetiza a imagem reagindo ao áudio
-- OBS monta a cena com os dashboards de entrada como fontes
+- OBS monta a cena de saída
 
 **A fazer:**
 
-- **Dashboard do output** — o mesmo dashboard de análise de imagem do `native_synth.py`, apontado
-  pra imagem **já sintetizada** em vez da original. Assim as luzes reagem ao que está na tela, não
-  à imagem crua (que já foi alterada pelo shader).
-- **Luzes de palco** — hardware/protocolo ainda não definido (DMX / Art-Net / PWM…). Toda a
-  programação de luz vai sair da análise do output.
+- **Luzes de palco** — toda a programação de luz sai da análise do **output** (a imagem já
+  sintetizada, não a original — assim as luzes reagem ao que está na tela). Hardware/protocolo
+  ainda não definido (DMX / Art-Net / PWM…).
