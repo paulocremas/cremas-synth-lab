@@ -64,8 +64,8 @@ flowchart TD
 
     UTEX -->|"glTexImage2D"| GPU["image.frag na GPU · 1× por pixel"]
     UDOM -->|"glUniform3f"| GPU
+    FRAG["image.frag (arquivo)"] -.->|"mtime → recompila"| GPU
     UAUD -->|"glUniform1f × 13"| GPU
-    FRAG["image.frag"] -.->|"mtime → recompila"| GPU
     GPU --> WIN["pygame · 30 fps → janela / monitor"]
 
     AT -.-> DASH_A["dashboard de áudio · stdout<br/>kick + faixas + espectrograma"]
