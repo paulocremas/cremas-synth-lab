@@ -42,19 +42,19 @@ descartado (nunca acumula fila).
 
 ```mermaid
 flowchart TD
-    VID["webcam / tela / janela / OBS cam"]
-    AUD["som que sai do PC (monitor do sistema)"]
+    IMG["entrada de imagem (OBS)"]
+    AUD["entrada de áudio (monitor do sistema)"]
 
-    VID -->|"ffmpeg ou import"| VT["video_thread"]
+    IMG --> VT["thread de vídeo (FFMPEG)"]
     VT --> SF["state['frame']"]
-    AUD -->|"parec, chunks ~23 ms"| AT["audio_thread<br/>FFT + faixas + kick + suavização attack/release"]
+    AUD --> AT["thread de áudio (parec)<br/>FFT + faixas + kick + suavização attack/release"]
 
     SF -->|"glTexImage2D"| UTEX["u_texture_0"]
     SF --> DCT["dominant_color_thread (~10/s)"]
     DCT --> SD["state['dominant']"]
     SD -->|"glUniform3f"| UDOM["u_dominant"]
     AT --> SA["state['amp'], state['bass'], state['kick'], …"]
-    SA -->|"glUniform1f (x17)"| UAUD["u_amp, u_bass … u_air, u_kick"]
+    SA -->|"glUniform1f × 13"| UAUD["u_amp, u_bass … u_air, u_kick"]
 
     TUN["tuning.py"] -.->|"mtime → recarrega constantes"| AT
     FRAG["image.frag"] -.->|"mtime → recompila (mantém o antigo se der erro)"| SHADER
