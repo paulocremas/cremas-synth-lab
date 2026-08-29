@@ -57,6 +57,7 @@ flowchart TD
         direction TB
         MON_I["imagem · gnome-terminal<br/>brilho, cor, bordas, movimento…<br/>redraw ~230 ms (no ritmo do áudio)"]
         MON_A["áudio · stdout<br/>kick + faixas + espectrograma"]
+        MON_I ~~~ MON_A
     end
 
     subgraph AUD_SIDE["áudio"]
@@ -76,6 +77,8 @@ flowchart TD
         direction TB
         FRAG["image.frag (arquivo)"] -.->|"mtime → recompila"| GPU["image.frag na GPU · 1× por pixel"]
     end
+
+    MON_A ~~~ FRAG
 
     UTEX -->|"glTexImage2D"| GPU
     UDOM -->|"glUniform3f"| GPU
