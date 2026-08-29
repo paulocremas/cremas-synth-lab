@@ -101,7 +101,7 @@
   <text x="302" y="390" font-size="14" font-weight="600" fill="#8b949e">Visualização</text>
 
   <!-- sub-caixa: thread de áudio + tuning.py (tuning.py pertence à thread, recarrega por mtime) -->
-  <rect x="22" y="220" width="346" height="76" rx="10" fill="none" stroke="#6e7681" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <rect x="22" y="220" width="380" height="76" rx="10" fill="none" stroke="#6e7681" stroke-width="1.4" stroke-dasharray="5 4"/>
 
   <!-- legenda de formas -->
   <rect x="286" y="14" width="228" height="146" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
@@ -152,12 +152,12 @@
   </g>
   <!-- setas: hot-reload (mtime) -->
   <g fill="none" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)">
-    <path d="M270,258 H262"/>
-    <path d="M400,544 V548"/>
+    <path d="M304,258 H262"/>
+    <path d="M400,528 V548"/>
   </g>
   <g font-size="12" fill="#8b949e" text-anchor="middle">
-    <text x="264" y="250" fill="#58a6ff" text-anchor="end">mtime</text>
-    <text x="492" y="530" fill="#58a6ff" text-anchor="start">mtime</text>
+    <text x="283" y="250" fill="#58a6ff" text-anchor="middle">mtime</text>
+    <text x="492" y="514" fill="#58a6ff" text-anchor="start">mtime</text>
     <text x="154" y="618">glUniform1f × 13</text>
     <text x="400" y="618">glTexImage2D</text>
     <text x="640" y="618">glUniform3f</text>
@@ -180,8 +180,8 @@
   </g>
   <!-- nós: documentos (arquivo) -->
   <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
-    <path d="M270,238 H358 V276 C338,285 314,269 270,280 Z"/>
-    <path d="M316,512 H484 V540 C456,548 400,532 316,544 Z"/>
+    <path d="M304,238 H392 V276 C372,285 348,269 304,280 Z"/>
+    <path d="M316,496 H484 V524 C456,532 400,516 316,528 Z"/>
   </g>
   <!-- nós: cilindros (dado) -->
   <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
@@ -211,7 +211,7 @@
       <text x="655" y="259">thread de vídeo</text>
       <text x="400" y="577">loop principal · 30 fps</text>
       <text x="400" y="875">pygame → janela / monitor</text>
-      <text x="314" y="264">tuning.py</text>
+      <text x="348" y="264">tuning.py</text>
       <text x="400" y="660">u_texture_0</text>
       <text x="640" y="660">u_dominant</text>
       <text x="400" y="780">image.frag na GPU</text>
@@ -224,7 +224,7 @@
       <text x="656" y="470">state['dominant']</text>
       <text x="655" y="402">dominant_color_thread (~10/s)</text>
       <text x="154" y="662">13 uniforms de áudio</text>
-      <text x="400" y="531">image.frag (arquivo)</text>
+      <text x="400" y="515">image.frag (arquivo)</text>
     </g>
     <g font-size="13" fill="#8b949e">
       <text x="145" y="76">(monitor do sistema)</text>
@@ -256,14 +256,14 @@
     <a href="#ffmpeg"><rect x="570" y="104" width="170" height="44" rx="8"/></a>
     <!-- dentro do processo -->
     <a href="#audio-thread"><rect x="30" y="232" width="230" height="58" rx="8"/></a>
-    <a href="#tuning"><rect x="270" y="238" width="90" height="44" rx="6"/></a>
+    <a href="#tuning"><rect x="304" y="238" width="90" height="44" rx="6"/></a>
     <a href="#state-audio"><rect x="34" y="426" width="222" height="52" rx="10"/></a>
     <a href="#video-thread"><rect x="540" y="232" width="230" height="46" rx="8"/></a>
     <a href="#state-frame"><rect x="592" y="300" width="126" height="48" rx="10"/></a>
     <a href="#dominant-thread"><rect x="540" y="374" width="230" height="48" rx="8"/></a>
     <a href="#state-dominant"><rect x="568" y="440" width="176" height="50" rx="10"/></a>
     <a href="#loop"><rect x="40" y="548" width="720" height="48" rx="10"/></a>
-    <a href="#shader-file"><rect x="316" y="510" width="168" height="38" rx="6"/></a>
+    <a href="#shader-file"><rect x="316" y="494" width="168" height="38" rx="6"/></a>
     <a href="#uniforms"><rect x="54" y="630" width="200" height="52" rx="10"/></a>
     <a href="#u_texture_0"><rect x="320" y="630" width="160" height="52" rx="10"/></a>
     <a href="#u_dominant"><rect x="560" y="630" width="160" height="52" rx="10"/></a>
