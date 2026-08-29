@@ -138,11 +138,11 @@
     <path d="M640,684 V785 H500"/>
     <path d="M400,812 V846"/>
   </g>
-  <!-- setas: leitura p/ Visualização — descem pelo canal x=522, longe do dominant_color_thread (x>=540) -->
+  <!-- setas: leitura p/ Visualização — dois canais paralelos (x=532, x=524), ambos < x=540 pra não cruzar dominant_color_thread; pontas na linha "imagem" (y 398–438) -->
   <g fill="none" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)">
     <path d="M205,296 V418 H292"/>
-    <path d="M592,326 H522 V418 H512"/>
-    <path d="M568,468 H522 V440 H512"/>
+    <path d="M592,326 H532 V410 H512"/>
+    <path d="M568,468 H524 V426 H512"/>
   </g>
   <!-- setas: hot-reload (mtime) -->
   <g fill="none" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)">
@@ -283,17 +283,111 @@ sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
 
 <section id="audio-in">
 <h3>entrada de áudio</h3>
-<p>A <b>fonte</b>, não o programa: o <code>.monitor</code> da saída padrão do PulseAudio/PipeWire
-(<code>pactl get-default-sink</code> + <code>.monitor</code>). Capta tudo que sai pelo alto-falante/fone,
-de qualquer app. <code>--audio SOURCE</code> força outra source.</p>
+<p>É a <b>fonte</b> — o lugar de onde o som vem. Não é o programa (o programa é o
+<a href="#parec"><code>parec</code></a>, seção seguinte).</p>
+
+<h4>palavras primeiro</h4>
+<ul>
+<li><b>Som digital</b> = uma fila de números. Cada número diz onde estava o alto-falante num
+instante. 44100 números por segundo = "44,1&nbsp;kHz".</li>
+<li><b>Amostras cruas</b> = só esses números, sem embrulho: sem cabeçalho de <code>.wav</code>,
+sem compressão de <code>.mp3</code>. Número atrás de número, nada mais.</li>
+<li><b>stdout</b> ("saída padrão") = o cano por onde todo programa de terminal escreve o
+resultado. O que aparece na tela quando você roda um comando saiu por aí. Esse cano pode ser
+desviado direto pra dentro de outro programa em vez da tela — é o que o <code>parec</code> faz
+com o Python.</li>
+<li><b>sink</b> = uma <b>saída</b> de som (fone, caixa, saída da placa). "Tocar no fone" =
+mandar pro sink do fone.</li>
+<li><b>source / fonte</b> = uma <b>entrada</b> de som (microfone, line-in).</li>
+<li><b><code>.monitor</code></b> = todo sink ganha de brinde uma fonte gêmea chamada
+<code>&lt;sink&gt;.monitor</code>. Ela devolve — como se fosse um microfone — exatamente o que
+está tocando naquela saída. Um grampo na própria caixa de som.</li>
+</ul>
+
+<h4>hoje — o padrão</h4>
+<ul>
+<li>Fonte usada = o <b><code>.monitor</code> da saída de som padrão</b>.</li>
+<li>Ou seja: o programa não ouve microfone nenhum. Ouve o <i>monitor</i> da sua saída normal →
+capta <b>a mistura de tudo que você ouviria no fone</b> naquele momento (navegador + Spotify +
+DAW…), já somado, depois do volume.</li>
+<li>Como acha o nome: <code>pactl get-default-sink</code> responde qual é a saída padrão agora;
+cola <code>.monitor</code> no fim.</li>
+<li><code>--audio NOME</code> troca por qualquer outra fonte da lista
+<code>pactl list short sources</code>.</li>
+</ul>
+
+<h4>trocar a fonte — só <code>--audio NOME</code>, zero código</h4>
+<p>O <code>parec</code> não liga se a fonte é monitor, microfone ou entrada de placa. Se aparece
+em <code>pactl list short sources</code>, serve:</p>
+<ul>
+<li><b>Microfone ou line-in da placa da máquina</b> — nome tipo
+<code>alsa_input.pci-...analog-stereo</code>. O mic do notebook, ou um cabo no conector de
+entrada.</li>
+<li><b>Interface de áudio USB</b> (Focusrite, Behringer, MOTU…) — nome tipo
+<code>alsa_input.usb-...</code>. Ligou instrumento ou microfone na interface → ela aparece como
+fonte → <code>--audio alsa_input.usb-...</code>. <b>Funciona hoje.</b> Dois poréns:
+  <ul>
+  <li>o programa pede mono (<code>--channels=1</code>), então junta todas as entradas da
+  interface numa só — não separa "entrada&nbsp;1" de "entrada&nbsp;2";</li>
+  <li>se a interface roda a 48&nbsp;kHz, o sistema converte pra 44,1 sozinho, custo baixo.</li>
+  </ul>
+</li>
+<li><b>Monitor de outra saída</b> — se você tem um segundo sink,
+<code>--audio &lt;outro-sink&gt;.monitor</code>.</li>
+</ul>
+
+<h4>trocar a fonte — só configuração, ainda zero código</h4>
+<ul>
+<li><b>"Sink falso" (null sink) como desvio</b> — cria uma saída de mentira
+(<code>pactl load-module module-null-sink</code>), manda um app só pra ela, grava o
+<code>.monitor</code> dela. Isola o som de um app do resto.</li>
+<li><b>JACK / PipeWire</b> — no PipeWire, programas de áudio pro já aparecem como fonte direto.
+No PulseAudio antigo precisa carregar <code>module-jack-source</code>.</li>
+<li><b>Rede</b> — receber áudio de outra máquina (<code>module-rtp-recv</code>), se isso virar
+uma fonte na lista.</li>
+</ul>
+
+<h4>trocar a fonte — aí precisa mexer no código</h4>
+<ul>
+<li><b>Várias entradas separadas</b> — gravar "entrada&nbsp;1" e "entrada&nbsp;2" da interface
+como faixas independentes: tirar o <code>--channels=1</code> e fatiar os números.</li>
+<li><b>Ler um arquivo direto</b> — trocar o <code>parec</code> por
+<code>ffmpeg -i faixa.wav -f s16le -ar 44100 -ac 1 -</code> na
+<a href="#audio-thread">thread de áudio</a>. Uma linha.</li>
+<li><b>Fora do PulseAudio</b> — usar ALSA puro (<code>arecord</code>) ou PortAudio. Só se um dia
+a máquina não tiver PulseAudio/PipeWire.</li>
+</ul>
 </section>
 
 <section id="parec">
 <h3>captura · parec</h3>
-<p>Binário à parte (<code>pulseaudio-utils</code>), processo separado.
-<code>parec --format=s16le --rate=44100 --channels=1 --latency-msec=50</code> → PCM 16-bit mono
-44,1&nbsp;kHz cru no <code>stdout</code>, que a <a href="#audio-thread">thread de áudio</a> lê pelo pipe.
-Sem <code>parec</code>: sem uniforms de som, o shader ainda roda.</p>
+<p><b>O que é:</b> <code>parec</code> = "PulseAudio record" (gravar do PulseAudio). Pense num
+<code>cat</code> pra som — liga numa <a href="#audio-in">fonte</a> e vai jogando as amostras
+cruas no <code>stdout</code>, sem parar, até você matar.</p>
+<ul>
+<li>Programa separado, do pacote <code>pulseaudio-utils</code>, <b>já vem no Linux</b> — assim
+não precisa instalar biblioteca de áudio no Python.</li>
+<li>Roda como <b>processo à parte</b>. Se cair, o resto segue — só fica sem os números do som.</li>
+<li>O Python liga a ponta do cano (<code>stdout</code> do <code>parec</code>) na entrada dele e
+lê de lá.</li>
+</ul>
+<p><b>O comando:</b>
+<code>parec --device=FONTE --format=s16le --rate=44100 --channels=1 --latency-msec=50</code></p>
+<ul>
+<li><code>--device=FONTE</code> — qual <a href="#audio-in">fonte</a> escutar (a da seção acima);</li>
+<li><code>--format=s16le</code> — cada amostra é um inteiro de 16 bits (2 bytes). Formato de som
+mais comum;</li>
+<li><code>--rate=44100</code> — 44100 amostras por segundo. Qualidade de CD;</li>
+<li><code>--channels=1</code> — mono: um canal só. Junta esquerdo + direito → metade dos dados,
+FFT mais simples;</li>
+<li><code>--latency-msec=50</code> — pede o som em blocos de ~50&nbsp;ms. Quanto menor, mais o
+visual gruda no som.</li>
+</ul>
+<p><b>O que sai:</b> um esguicho de bytes no <code>stdout</code> — sem cabeçalho de arquivo, sem
+nada em volta, amostra atrás de amostra. A <a href="#audio-thread">thread de áudio</a> pega de
+1024 em 1024 amostras (~23&nbsp;ms por vez), converte com <code>np.frombuffer</code>, aplica a
+janela de Hanning e faz a FFT. Sem <code>parec</code> instalado: o shader roda igual, só sem os
+uniforms de som.</p>
 </section>
 </div>
 
