@@ -2,8 +2,9 @@
 
 Estudo pessoal de síntese de sinal de baixo nível em dois domínios que compartilham o mesmo
 vocabulário (oscilador, frequência, fase, ruído, filtro, feedback): **GLSL puro** (síntese de
-imagem, na GPU) e **SuperCollider** (síntese de áudio). Repositório privado.
+imagem, na GPU) e **SuperCollider** (síntese de áudio).
 
+- **[Fluxo técnico navegável](https://paulocremas.github.io/cremas-synth-lab/)** — diagrama clicável (cada bloco pula pra explicação)
 - Plano de estudo e estado do ambiente: [CLAUDE.md](CLAUDE.md)
 - Índice das fontes (Book of Shaders + tutoriais Fieldsteel): [MAPA.md](MAPA.md)
 

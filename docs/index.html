@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cremas-synth-lab · fluxo técnico</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: #0d1117; color: #e6edf3;
+    font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+  header p, footer { color: #8b949e; font-size: 14px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 40px 0 10px; scroll-margin-top: 16px; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: #161b22; border: 1px solid #30363d; border-radius: 4px; padding: 1px 5px; font-size: 0.88em; }
+  figure { margin: 24px 0; }
+  svg.flow { width: 100%; height: auto; max-width: 780px; display: block; margin: 0 auto; }
+  .hint { text-align: center; color: #8b949e; font-size: 13px; margin-top: 8px; }
+  .hotspots rect { fill: transparent; stroke: transparent; stroke-width: 2; cursor: pointer; transition: fill .12s, stroke .12s; }
+  .hotspots a:hover rect, .hotspots a:focus rect { fill: rgba(88,166,255,.16); stroke: #58a6ff; }
+  section { border-top: 1px solid #21262d; padding-top: 4px; scroll-margin-top: 16px; }
+  section:target { animation: flash 1.8s ease-out; }
+  @keyframes flash { from { background: rgba(88,166,255,.13); } to { background: transparent; } }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid #30363d; padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: #161b22; }
+  ul { padding-left: 22px; }
+  .back { font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>cremas-synth-lab — fluxo técnico do <code>native_synth.py</code></h1>
+  <p>Clique num bloco do diagrama pra pular pra explicação. ·
+     <a href="https://github.com/paulocremas/cremas-synth-lab">repositório</a> ·
+     <a href="https://github.com/paulocremas/cremas-synth-lab/blob/master/README.md">README</a></p>
+</header>
+
+<figure>
+<svg class="flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 866" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker>
+    <marker id="arg" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6e7681"/></marker>
+    <marker id="arb" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#58a6ff"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="780" height="866" fill="#0d1117"/>
+
+  <g fill="#161b22" stroke="#30363d" stroke-width="1.5">
+    <rect x="10" y="12" width="244" height="488" rx="8"/>
+    <rect x="266" y="168" width="244" height="140" rx="8"/>
+    <rect x="522" y="12" width="248" height="488" rx="8"/>
+  </g>
+  <g font-size="17" font-weight="600" fill="#8b949e">
+    <text x="22" y="34">áudio</text>
+    <text x="278" y="190">Visualização</text>
+    <text x="534" y="34">imagem</text>
+  </g>
+
+  <rect x="262" y="18" width="252" height="142" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <g stroke="#7d8590" stroke-width="1.4" fill="#21262d">
+    <rect x="272" y="34" width="22" height="12" rx="6"/>
+    <rect x="272" y="55" width="22" height="12" rx="3"/>
+    <path d="M272,76 h22 v8 c-5,3 -11,-3 -22,1 z"/>
+    <path d="M273,96 v8 a10,3 0 0 0 20,0 v-8"/>
+    <ellipse cx="283" cy="96" rx="10" ry="3"/>
+    <path d="M276,116 h12 l4,6 -4,6 h-12 l-4,-6 z"/>
+  </g>
+  <rect x="272" y="138" width="22" height="12" rx="3" fill="none" stroke="#6e7681" stroke-width="1.4" stroke-dasharray="3 2"/>
+  <g font-size="12.5" fill="#8b949e">
+    <text x="304" y="44">fonte externa · saída</text>
+    <text x="304" y="65">processo · thread · loop</text>
+    <text x="304" y="86">arquivo (hot-reload)</text>
+    <text x="304" y="107">dado em memória (state / uniform)</text>
+    <text x="304" y="128">programa na GPU</text>
+    <text x="304" y="149">Visualização (só leitura)</text>
+  </g>
+
+  <g fill="none" stroke="#8b949e" stroke-width="1.6" marker-end="url(#ar)">
+    <path d="M132,88 V114"/><path d="M132,156 V188"/><path d="M132,242 V410"/>
+    <path d="M646,86 V110"/><path d="M646,152 V178"/><path d="M646,220 V244"/>
+    <path d="M622,292 L608,318"/><path d="M636,366 V392"/>
+    <path d="M132,462 V546"/><path d="M714,264 H774 V568 H696"/><path d="M636,442 V546"/>
+    <path d="M168,592 V624"/><path d="M390,592 V624"/><path d="M590,592 V624"/>
+    <path d="M168,672 V735 H300"/><path d="M390,672 V706"/><path d="M590,672 V735 H500"/>
+    <path d="M400,764 V798"/>
+  </g>
+  <g fill="none" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)">
+    <path d="M244,215 H256 V258 H266"/><path d="M594,268 H498"/><path d="M548,417 H510 V262 H498"/>
+  </g>
+  <g fill="none" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)">
+    <path d="M209,156 V188"/><path d="M372,532 V546"/>
+  </g>
+  <g font-size="12" fill="#8b949e" text-anchor="middle">
+    <text x="209" y="150" fill="#58a6ff">mtime</text>
+    <text x="392" y="544" fill="#58a6ff" text-anchor="start">mtime</text>
+    <text x="168" y="614">glUniform1f × 13</text>
+    <text x="390" y="614">glTexImage2D</text>
+    <text x="590" y="614">glUniform3f</text>
+  </g>
+
+  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
+    <rect x="22" y="36" width="220" height="52" rx="26"/>
+    <rect x="530" y="36" width="232" height="50" rx="25"/>
+    <rect x="292" y="798" width="216" height="46" rx="23"/>
+  </g>
+  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
+    <rect x="24" y="114" width="132" height="42" rx="8"/>
+    <rect x="24" y="188" width="220" height="54" rx="8"/>
+    <rect x="530" y="110" width="232" height="42" rx="8"/>
+    <rect x="538" y="178" width="216" height="42" rx="8"/>
+    <rect x="528" y="318" width="236" height="48" rx="8"/>
+    <rect x="60" y="546" width="636" height="46" rx="10"/>
+  </g>
+  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
+    <path d="M170,114 H248 V150 C226,159 202,143 170,154 Z"/>
+    <path d="M312,488 H432 V526 C406,535 378,519 312,530 Z"/>
+  </g>
+  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
+    <path d="M28,417 V455 A102,7 0 0 0 232,455 V417"/><ellipse cx="130" cy="417" rx="102" ry="7"/>
+    <path d="M594,251 V285 A60,7 0 0 0 714,285 V251"/><ellipse cx="654" cy="251" rx="60" ry="7"/>
+    <path d="M548,399 V435 A88,7 0 0 0 724,435 V399"/><ellipse cx="636" cy="399" rx="88" ry="7"/>
+    <path d="M70,631 V667 A98,7 0 0 0 266,667 V631"/><ellipse cx="168" cy="631" rx="98" ry="7"/>
+    <path d="M312,631 V667 A78,7 0 0 0 468,667 V631"/><ellipse cx="390" cy="631" rx="78" ry="7"/>
+    <path d="M512,631 V667 A78,7 0 0 0 668,667 V631"/><ellipse cx="590" cy="631" rx="78" ry="7"/>
+  </g>
+  <path d="M320,706 H480 L500,735 L480,764 H320 L300,735 Z" fill="#21262d" stroke="#7d8590" stroke-width="1.5"/>
+  <g fill="#21262d" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.7">
+    <rect x="280" y="198" width="218" height="44" rx="8"/>
+    <rect x="280" y="254" width="218" height="42" rx="8"/>
+  </g>
+
+  <g fill="#e6edf3" text-anchor="middle">
+    <g font-size="16">
+      <text x="132" y="58">entrada de áudio</text>
+      <text x="90" y="141">captura (parec)</text>
+      <text x="132" y="212">thread de áudio</text>
+      <text x="646" y="66">entrada de imagem (OBS)</text>
+      <text x="646" y="137">captura (FFMPEG)</text>
+      <text x="646" y="205">thread de vídeo</text>
+      <text x="378" y="575">loop principal · 30 fps</text>
+      <text x="400" y="827">pygame → janela / monitor</text>
+      <text x="209" y="140">tuning.py</text>
+      <text x="390" y="653">u_texture_0</text>
+      <text x="590" y="653">u_dominant</text>
+      <text x="400" y="732">image.frag na GPU</text>
+      <text x="389" y="225">imagem · gnome-terminal</text>
+      <text x="389" y="281">áudio · stdout</text>
+    </g>
+    <g font-size="14">
+      <text x="130" y="441">state['amp'] … state['kick']</text>
+      <text x="654" y="273">state['frame']</text>
+      <text x="636" y="421">state['dominant']</text>
+      <text x="646" y="347">dominant_color_thread (~10/s)</text>
+      <text x="168" y="655">u_amp … u_air, u_kick</text>
+      <text x="372" y="506">image.frag<tspan x="372" dy="15">(arquivo)</tspan></text>
+    </g>
+    <g font-size="13" fill="#8b949e">
+      <text x="132" y="78">(monitor do sistema)</text>
+      <text x="132" y="232">FFT · bandas · kick · suavização</text>
+      <text x="400" y="750">1× por pixel</text>
+    </g>
+  </g>
+
+  <g font-size="12.5" fill="#8b949e">
+    <line x1="520" y1="798" x2="550" y2="798" stroke="#8b949e" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="558" y="802">fluxo de dados / chamada GL</text>
+    <line x1="520" y1="820" x2="550" y2="820" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)"/>
+    <text x="558" y="824">hot-reload (mtime)</text>
+    <line x1="520" y1="842" x2="550" y2="842" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)"/>
+    <text x="558" y="846">leitura p/ Visualização</text>
+  </g>
+
+  <g class="hotspots">
+    <a href="#som"><rect x="22" y="36" width="220" height="52" rx="26"/></a>
+    <a href="#som"><rect x="24" y="114" width="132" height="42" rx="8"/></a>
+    <a href="#som"><rect x="24" y="188" width="220" height="54" rx="8"/></a>
+    <a href="#som"><rect x="28" y="410" width="204" height="52" rx="10"/></a>
+    <a href="#arquivos"><rect x="170" y="114" width="78" height="42" rx="6"/></a>
+    <a href="#arquivos"><rect x="312" y="488" width="120" height="42" rx="6"/></a>
+    <a href="#imagem"><rect x="530" y="36" width="232" height="50" rx="25"/></a>
+    <a href="#imagem"><rect x="530" y="110" width="232" height="42" rx="8"/></a>
+    <a href="#imagem"><rect x="538" y="178" width="216" height="42" rx="8"/></a>
+    <a href="#imagem"><rect x="594" y="244" width="120" height="48" rx="10"/></a>
+    <a href="#cor-dominante"><rect x="528" y="318" width="236" height="48" rx="8"/></a>
+    <a href="#cor-dominante"><rect x="548" y="392" width="176" height="50" rx="10"/></a>
+    <a href="#loop-saida"><rect x="60" y="546" width="636" height="46" rx="10"/></a>
+    <a href="#uniforms"><rect x="70" y="624" width="196" height="50" rx="10"/></a>
+    <a href="#uniforms"><rect x="312" y="624" width="156" height="50" rx="10"/></a>
+    <a href="#uniforms"><rect x="512" y="624" width="156" height="50" rx="10"/></a>
+    <a href="#loop-saida"><rect x="300" y="706" width="200" height="58" rx="8"/></a>
+    <a href="#loop-saida"><rect x="292" y="798" width="216" height="46" rx="23"/></a>
+    <a href="#visualizacao"><rect x="280" y="198" width="218" height="44" rx="8"/></a>
+    <a href="#visualizacao"><rect x="280" y="254" width="218" height="42" rx="8"/></a>
+  </g>
+</svg>
+<p class="hint">passe o mouse pra ver os blocos clicáveis</p>
+</figure>
+
+<main>
+
+<section id="som">
+<h2>Som — entrada de áudio</h2>
+<p>Monitor da saída padrão do sistema → <code>parec</code> (processo externo) cospe PCM 44,1&nbsp;kHz mono →
+a <b>thread de áudio</b> lê em chunks de 1024 amostras (~23&nbsp;ms). Por chunk: FFT → energia em
+<code>bass</code>/<code>mid</code>/<code>treble</code> (cortes em <code>tuning.BASS_MID_HZ</code>&nbsp;=&nbsp;150 e
+<code>MID_TREBLE_HZ</code>&nbsp;=&nbsp;4000) + 8 faixas finas (Sub-bass…Air), <code>amp</code> (RMS), detector de kick,
+e suavização attack/release. Cada resultado vai pro dict <code>state</code>
+(<code>state['amp']</code>, <code>state['bass']</code>, …, <code>state['kick']</code>).</p>
+<p>O <a href="#loop-saida">loop principal</a> lê isso e faz <code>glUniform1f</code> pros uniforms
+<code>u_amp</code>, <code>u_bass</code>, <code>u_mid</code>, <code>u_treble</code>, <code>u_kick</code>,
+<code>u_subbass</code>…<code>u_air</code> — 13 floats. As 8 faixas finas vêm em nível relativo ao pico
+entre elas (auto-calibra; alguma está quase sempre em 1.0).</p>
+</section>
+
+<section id="imagem">
+<h2>Imagem — entrada de vídeo</h2>
+<p>Fonte física (câmera virtual do OBS, <code>/dev/videoN</code>) → <code>FFMPEG</code> (processo externo)
+abre o dispositivo, converte pra RGB24 cru e joga num pipe → a <b>thread de vídeo</b> lê frame a frame
+e guarda o mais recente em <code>state['frame']</code> (array numpy — só o último, nunca acumula fila).</p>
+<p>O <a href="#loop-saida">loop principal</a> sobe esse array pra GPU como a textura <code>u_texture_0</code>
+via <code>glTexImage2D</code>. No shader, <code>texture2D(u_texture_0, coord)</code> lê a cor de um ponto.</p>
+</section>
+
+<section id="cor-dominante">
+<h2>Cor dominante</h2>
+<p>A <b>dominant_color_thread</b> lê <code>state['frame']</code>, ~10×/s quantiza as cores (5 bits por canal)
+e conta a combinação mais frequente → <code>state['dominant']</code> (RGB 0..1). Fica numa thread à parte
+porque o cálculo é pesado demais pra rodar a 30&nbsp;fps.</p>
+<p>O <a href="#loop-saida">loop principal</a> faz <code>glUniform3f</code> → <code>u_dominant</code> (vec3).
+É a moda (cor mais frequente), diferente da cor média — as duas podem divergir bastante.</p>
+</section>
+
+<section id="arquivos">
+<h2>Arquivos e hot-reload</h2>
+<p><b><code>tuning.py</code></b> — constantes de calibração (cortes de Hz, escalas por banda, parâmetros do kick,
+suavização). A <a href="#som">thread de áudio</a> compara o <code>mtime</code> a cada volta; se você salvou,
+<code>importlib.reload</code> na hora — sem reiniciar, sem perder o áudio. Vale no próximo chunk.</p>
+<p><b><code>image.frag</code></b> — o shader no disco. O <a href="#loop-saida">loop principal</a> compara o
+<code>mtime</code>; se mudou, recompila e troca o programa ativo. Se o novo tiver erro de sintaxe, mantém
+o antigo e imprime o erro.</p>
+</section>
+
+<section id="loop-saida">
+<h2>Loop principal e saída</h2>
+<p><b>loop principal · 30&nbsp;fps</b> é o <i>main thread</i> do <code>native_synth.py</code>. A cada frame:
+lê o dict <code>state</code>, faz <code>glTexImage2D</code> (a textura) + <code>glUniform*</code>
+(os 13 floats de áudio + <code>u_dominant</code>; mais <code>u_resolution</code> e <code>u_time</code>,
+que ele mesmo calcula), verifica o <code>mtime</code> do <a href="#arquivos"><code>image.frag</code></a>,
+e chama <code>glDrawArrays</code>.</p>
+<p>A GPU roda <b><code>image.frag</code></b> <b>1× por pixel</b>, em paralelo — cada execução lê a textura
++ os uniforms e devolve uma cor. <code>pygame.display.flip()</code> joga o resultado na tela: janela,
+fullscreen, ou fixo num monitor com <code>--monitor</code>.</p>
+<p>Não há fila nem socket no meio: o dict <code>state</code> é o ponto de encontro — as threads escrevem,
+o loop lê 30×/s, sempre vale o último valor.</p>
+</section>
+
+<section id="uniforms">
+<h2>Variáveis do shader — em uso</h2>
+<p>Todas alimentadas todo frame pelo <code>native_synth.py</code>:</p>
+<table>
+<tr><th>uniform</th><th>tipo</th><th>faixa</th><th>significado</th></tr>
+<tr><td><code>u_resolution</code></td><td>vec2</td><td>px</td><td>tamanho da janela (do loop)</td></tr>
+<tr><td><code>u_time</code></td><td>float</td><td>s</td><td>segundos desde o início (do loop)</td></tr>
+<tr><td><code>u_texture_0</code></td><td>sampler2D</td><td>—</td><td>frame de vídeo de entrada</td></tr>
+<tr><td><code>u_amp</code></td><td>float</td><td>0..1</td><td>volume RMS geral</td></tr>
+<tr><td><code>u_bass</code></td><td>float</td><td>0..1</td><td>energia &lt; 150 Hz</td></tr>
+<tr><td><code>u_mid</code></td><td>float</td><td>0..1</td><td>energia 150 Hz – 4 kHz</td></tr>
+<tr><td><code>u_treble</code></td><td>float</td><td>0..1</td><td>energia &gt; 4 kHz</td></tr>
+<tr><td><code>u_kick</code></td><td>float</td><td>0..1</td><td>pulso de batida: sobe pra 1 e decai sozinho (não é nível)</td></tr>
+<tr><td><code>u_dominant</code></td><td>vec3</td><td>0..1</td><td>cor mais frequente do frame</td></tr>
+<tr><td><code>u_subbass</code></td><td>float</td><td>0..1</td><td>0 – 250 Hz</td></tr>
+<tr><td><code>u_lowmid</code></td><td>float</td><td>0..1</td><td>250 – 500 Hz</td></tr>
+<tr><td><code>u_midrange</code></td><td>float</td><td>0..1</td><td>500 Hz – 2 kHz</td></tr>
+<tr><td><code>u_highmid</code></td><td>float</td><td>0..1</td><td>2 – 4 kHz</td></tr>
+<tr><td><code>u_presence</code></td><td>float</td><td>0..1</td><td>4 – 6 kHz</td></tr>
+<tr><td><code>u_treble_hi</code></td><td>float</td><td>0..1</td><td>6 – 10 kHz</td></tr>
+<tr><td><code>u_brilho</code></td><td>float</td><td>0..1</td><td>10 – 16 kHz</td></tr>
+<tr><td><code>u_air</code></td><td>float</td><td>0..1</td><td>&gt; 16 kHz</td></tr>
+</table>
+<p>Embutidas do GLSL, já usadas no <code>image.frag</code>: <code>gl_FragCoord</code> (posição do pixel),
+<code>gl_FragColor</code> (cor de saída).</p>
+</section>
+
+<section id="visualizacao">
+<h2>Visualização — painéis de texto</h2>
+<p>Dois painéis que a <a href="#som">thread de áudio</a> desenha a cada ~230&nbsp;ms:</p>
+<ul>
+<li><b><code>stdout</code></b> — kick + as 8 faixas de mixagem (bruto × final × smoothing) + espectrograma (dB e %).</li>
+<li><b><code>gnome-terminal</code></b> (janela à parte) — análise da imagem de <b>entrada</b>: brilho, cor,
+matiz, nitidez, bordas, movimento, entropia, simetria… cada um com "quanto no total" e "onde na tela" (grid 3×3).</li>
+</ul>
+<p>São só leitura pra humano — <b>não voltam pro shader nem pro sistema</b>. O painel de imagem lê
+<code>state['frame']</code> e <code>state['dominant']</code> direto; roda no throttle da thread de áudio
+só por conveniência (por isso "no ritmo do áudio").</p>
+</section>
+
+<section id="nao-conectadas">
+<h2>Variáveis disponíveis — NÃO conectadas</h2>
+<p>Já são calculadas hoje (ou são convenção trivial de ligar), mas só aparecem nos painéis. Cada uma vira
+uniform novo com ~2 linhas: declarar em <code>image.frag</code> + um <code>glUniform*</code> no loop.</p>
+<p><b>Áudio</b> (calculado na thread de áudio): magnitude bruta por banda, <code>bass_raw</code>/<code>mid_raw</code>/<code>treble_raw</code>
+(sem escala), <code>amp_raw</code> (RMS puro), smoothing usado por banda, <code>kick_baseline</code>,
+<code>kick_decay_dynamic</code>, espectrograma absoluto (24 faixas log, dB), espectrograma relativo (%), a FFT inteira suavizada.</p>
+<p><b>Imagem</b> — com medida global <b>e</b> grid 3×3: brilho, saturação, temperatura de cor, contraste,
+nitidez (variância do Laplaciano), entropia, densidade de borda, movimento (diff entre frames).</p>
+<p><b>Imagem</b> — só global: cor média, simetria esq/dir, clipping, correlação R/G/B, centro de massa do brilho,
+coloridez (Hasler–Süsstrunk), nº de cores únicas, mudança de cor entre frames, fração de tons quentes/pele.</p>
+<p><b>Imagem</b> — distribuições: histograma de matiz (12), de brilho (16), espectro espacial FFT-2D por canal RGB (20 anéis),
+orientação de borda (9).</p>
+<p><b>Convenção GLSL não ligada:</b> <code>u_mouse</code>, canais de textura extras (<code>u_texture_1</code>…),
+buffer de feedback (o frame de saída anterior — o "pingpong" da Fase 3), <code>u_tex0_resolution</code>.</p>
+</section>
+
+</main>
+
+<footer>
+<p class="back">Diagrama estático (Markdown) e detalhes completos no
+<a href="https://github.com/paulocremas/cremas-synth-lab/blob/master/README.md">README</a>.
+Fluxo macro (áudio → síntese → OBS → luzes de palco) também está lá.</p>
+</footer>
+
+</div>
+</body>
+</html>
