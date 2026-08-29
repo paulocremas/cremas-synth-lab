@@ -200,13 +200,13 @@
     <rect x="542" y="34" width="226" height="52" rx="26" stroke="#5cb8a6"/>
     <rect x="290" y="846" width="220" height="46" rx="23" stroke="#d98aa8"/>
   </g>
-  <!-- nós: rounded (processo · thread · loop) — stroke por região -->
+  <!-- nós: rounded — contorno: região p/ captura externa; linhagem do dado dentro do processo -->
   <g fill="#21262d" stroke-width="1.5">
     <rect x="60" y="104" width="170" height="44" rx="8" stroke="#d0a45c"/>
-    <rect x="30" y="232" width="230" height="58" rx="8" stroke="#a394d6"/>
+    <rect x="30" y="232" width="230" height="58" rx="8" stroke="#d0a45c"/>
     <rect x="570" y="104" width="170" height="44" rx="8" stroke="#5cb8a6"/>
-    <rect x="540" y="232" width="230" height="46" rx="8" stroke="#a394d6"/>
-    <rect x="540" y="374" width="230" height="48" rx="8" stroke="#a394d6"/>
+    <rect x="540" y="232" width="230" height="46" rx="8" stroke="#5cb8a6"/>
+    <rect x="540" y="374" width="230" height="48" rx="8" stroke="#5cb8a6"/>
     <rect x="40" y="548" width="720" height="48" rx="10" stroke="#a394d6"/>
   </g>
   <!-- nós: documentos (arquivo) — processo -->
@@ -214,14 +214,18 @@
     <path d="M304,238 H392 V276 C372,285 348,269 304,280 Z"/>
     <path d="M316,496 H484 V524 C456,532 400,516 316,528 Z"/>
   </g>
-  <!-- nós: cilindros (dado) — processo -->
-  <g fill="#21262d" stroke="#a394d6" stroke-width="1.5">
-    <path d="M34,433 V471 A111,7 0 0 0 256,471 V433"/><ellipse cx="145" cy="433" rx="111" ry="7"/>
-    <path d="M592,307 V341 A63,7 0 0 0 718,341 V307"/><ellipse cx="655" cy="307" rx="63" ry="7"/>
-    <path d="M568,447 V483 A88,7 0 0 0 744,483 V447"/><ellipse cx="656" cy="447" rx="88" ry="7"/>
-    <path d="M54,635 V671 A100,7 0 0 0 254,671 V635"/><ellipse cx="154" cy="635" rx="100" ry="7"/>
-    <path d="M320,635 V671 A80,7 0 0 0 480,671 V635"/><ellipse cx="400" cy="635" rx="80" ry="7"/>
-    <path d="M560,635 V671 A80,7 0 0 0 720,671 V635"/><ellipse cx="640" cy="635" rx="80" ry="7"/>
+  <!-- nós: cilindros (dado) — contorno pela linhagem: âmbar = veio do áudio, verde-água = veio da imagem -->
+  <g fill="#21262d" stroke-width="1.5">
+    <g stroke="#d0a45c">
+      <path d="M34,433 V471 A111,7 0 0 0 256,471 V433"/><ellipse cx="145" cy="433" rx="111" ry="7"/>
+      <path d="M54,635 V671 A100,7 0 0 0 254,671 V635"/><ellipse cx="154" cy="635" rx="100" ry="7"/>
+    </g>
+    <g stroke="#5cb8a6">
+      <path d="M592,307 V341 A63,7 0 0 0 718,341 V307"/><ellipse cx="655" cy="307" rx="63" ry="7"/>
+      <path d="M568,447 V483 A88,7 0 0 0 744,483 V447"/><ellipse cx="656" cy="447" rx="88" ry="7"/>
+      <path d="M320,635 V671 A80,7 0 0 0 480,671 V635"/><ellipse cx="400" cy="635" rx="80" ry="7"/>
+      <path d="M560,635 V671 A80,7 0 0 0 720,671 V635"/><ellipse cx="640" cy="635" rx="80" ry="7"/>
+    </g>
   </g>
   <!-- nó: hexágono (programa na GPU) -->
   <path d="M320,754 H480 L500,783 L480,812 H320 L300,783 Z" fill="#21262d" stroke="#d98aa8" stroke-width="1.5"/>
@@ -309,6 +313,7 @@
 <p class="hint">passe o mouse pra ver os blocos clicáveis</p>
 <p class="hint legend-status" style="margin-top:4px"><b style="color:#c9d1d9">implementado</b> — o que roda hoje (todo o fluxograma e a maioria dos blocos) &nbsp;·&nbsp; <span class="maybe-tag">possibilidade</span> ideias marcadas à parte, não é código de hoje</p>
 <p class="legend-rg"><span style="color:#d0a45c"><i></i>áudio · externo</span><span style="color:#5cb8a6"><i></i>imagem · externo</span><span style="color:#a394d6"><i></i>native_synth.py</span><span style="color:#d98aa8"><i></i>GPU e saída</span></p>
+<p class="legend-rg" style="font-size:12px">dentro do processo, contorno <span style="color:#d0a45c">âmbar</span> / <span style="color:#5cb8a6">verde-água</span> num nó = o dado ali veio do áudio / da imagem</p>
 </figure>
 
 <main>
