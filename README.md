@@ -32,7 +32,7 @@ tempo real — tudo nativo, sem navegador.
 
 Binários externos (não versionados): `ffmpeg` (webcam/tela), `import`/ImageMagick (uma janela),
 `parec`/`pactl` (áudio PulseAudio), `xrandr`/`wmctrl`/`xwininfo`/`v4l2-ctl` (geometria e fontes),
-`gnome-terminal` (janela do painel de imagem).
+`gnome-terminal` (janela do dashboard de imagem).
 
 ### O caminho
 
@@ -53,6 +53,12 @@ flowchart TD
         SD --> UDOM["u_dominant"]
     end
 
+    subgraph MON["dashboards"]
+        direction TB
+        MON_I["imagem · gnome-terminal<br/>brilho, cor, bordas, movimento…<br/>redraw ~230 ms (no ritmo do áudio)"]
+        MON_A["áudio · stdout<br/>kick + faixas + espectrograma"]
+    end
+
     subgraph AUD_SIDE["áudio"]
         direction TB
         AUD["entrada de áudio (monitor do sistema)"] --> CAPA["captura de áudio (parec)"]
@@ -61,6 +67,10 @@ flowchart TD
         SA --> UAUD["u_amp … u_air, u_kick"]
         TUN["tuning.py"] -.->|"mtime"| AT
     end
+
+    SF -.-> MON_I
+    SD -.-> MON_I
+    AT -.-> MON_A
 
     subgraph SH["shader"]
         direction TB
@@ -71,16 +81,6 @@ flowchart TD
     UDOM -->|"glUniform3f"| GPU
     UAUD -->|"glUniform1f × 13"| GPU
     GPU --> WIN["pygame · 30 fps → janela / monitor"]
-
-    subgraph PANELS["painéis de texto (só leitura)"]
-        direction TB
-        PANEL_A["painel de áudio · stdout<br/>kick + faixas + espectrograma"]
-        PANEL_I["painel de imagem · gnome-terminal<br/>brilho, cor, bordas, movimento…<br/>(redraw ~230 ms, no ritmo do áudio)"]
-    end
-
-    AT -.-> PANEL_A
-    SF -.-> PANEL_I
-    SD -.-> PANEL_I
 ```
 
 **Imagem** — origem física → `ffmpeg` (webcam/tela) ou `import` (uma janela, segue mesmo coberta)
@@ -133,14 +133,14 @@ Embutidas do GLSL, já usadas no `image.frag`: `gl_FragCoord` (posição do pixe
 ### Variáveis disponíveis — NÃO conectadas
 
 Tudo abaixo já é **calculado** hoje (ou é convenção trivial de ligar), mas só aparece nos
-painéis de texto. Vira uniform novo com ~2 linhas: declarar em `image.frag` + um `glUniform*`
+dashboards de texto. Vira uniform novo com ~2 linhas: declarar em `image.frag` + um `glUniform*`
 no loop de `native_synth.py`.
 
 **Áudio — já calculado no `audio_thread`:**
 
 | dado | o que é |
 |---|---|
-| magnitude bruta por banda | as 8 faixas finas antes de normalizar (coluna BRUTO do painel) |
+| magnitude bruta por banda | as 8 faixas finas antes de normalizar (coluna BRUTO do dashboard) |
 | `bass_raw` / `mid_raw` / `treble_raw` | trio clássico sem escala nem clamp |
 | `amp_raw` | RMS puro, sem o `×4` nem clamp |
 | smoothing usado por banda | o attack/release que valeu naquele chunk (coluna SMOOTH) |
@@ -150,7 +150,7 @@ no loop de `native_synth.py`.
 | espectrograma relativo | 24 faixas log, % do pico do frame |
 | `smooth_spectrum` | a FFT inteira suavizada (todos os bins) |
 
-**Imagem — já calculado quando o painel de imagem está aberto.** Com medida global **e** mapa
+**Imagem — já calculado quando o dashboard de imagem está aberto.** Com medida global **e** mapa
 3×3 ("onde na tela"):
 
 | métrica | o que é |
