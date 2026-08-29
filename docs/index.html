@@ -32,6 +32,28 @@
   ul, ol { margin: 6px 0; padding-left: 22px; }
   li { margin: 2px 0; }
   .back { font-size: 13px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; scroll-margin-top: 16px; }
+  h4 { font-size: 13px; margin: 14px 0 4px; color: #adbac7; scroll-margin-top: 16px; }
+  .block { border: 1px solid #30363d; border-radius: 10px; background: #12171d;
+           padding: 0 16px 12px; margin: 22px 0; }
+  .block--io { border-style: dashed; }
+  h2.block-label { font-size: 13px; color: #8b949e; font-weight: 700; letter-spacing: .04em;
+                   margin: 14px 0 2px; scroll-margin-top: 16px; }
+  .block--io > h2.block-label { color: #d29922; }
+  .inner { border-left: 2px solid #21262d; padding-left: 16px; margin: 6px 0 0; }
+  .sub { border: 1px dashed #30363d; border-radius: 8px; background: #0d1117;
+         padding: 0 14px 10px; margin: 12px 0; }
+  .sub .block-label { display: block; font-size: 12px; color: #8b949e; font-weight: 700;
+                      letter-spacing: .04em; margin: 10px 0 2px; }
+  .block > section:first-of-type, .inner > section:first-of-type,
+  .sub section:first-of-type { border-top: none; }
+  .ext { color: #d29922; font-weight: 600; font-size: 0.92em; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 12.5px;
+          display: block; overflow-x: auto; }
+  th, td { border: 1px solid #30363d; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: #161b22; color: #8b949e; font-weight: 600; white-space: nowrap; }
+  td.grouprow { background: #12171e; color: #adbac7; }
+  tr:target td { background: rgba(88,166,255,.13); }
 </style>
 </head>
 <body>
@@ -39,7 +61,7 @@
 
 <header>
   <h1>cremas-synth-lab — fluxo técnico do <code>native_synth.py</code></h1>
-  <p>Clique num bloco do diagrama pra pular pra descrição. ·
+  <p>Cada nó do diagrama pula pra sua própria descrição. ·
      <a href="https://github.com/paulocremas/cremas-synth-lab">repositório</a> ·
      <a href="https://github.com/paulocremas/cremas-synth-lab/blob/master/README.md">README</a></p>
 </header>
@@ -72,6 +94,9 @@
   <rect x="292" y="372" width="220" height="118" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1.3"/>
   <text x="302" y="390" font-size="14" font-weight="600" fill="#8b949e">Visualização</text>
 
+  <!-- sub-caixa: thread de áudio + tuning.py (tuning.py pertence à thread, recarrega por mtime) -->
+  <rect x="22" y="220" width="346" height="76" rx="10" fill="none" stroke="#6e7681" stroke-width="1.4" stroke-dasharray="5 4"/>
+
   <!-- legenda de formas -->
   <rect x="286" y="14" width="228" height="146" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
   <g stroke="#7d8590" stroke-width="1.4" fill="#21262d">
@@ -98,7 +123,7 @@
     <path d="M145,150 V232"/>
     <path d="M655,88 V104"/>
     <path d="M655,150 V232"/>
-    <path d="M145,290 V426"/>
+    <path d="M145,296 V426"/>
     <path d="M655,278 V300"/>
     <path d="M632,348 L618,374"/>
     <path d="M655,422 V440"/>
@@ -115,7 +140,7 @@
   </g>
   <!-- setas: leitura p/ Visualização -->
   <g fill="none" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)">
-    <path d="M205,290 V418 H292"/>
+    <path d="M205,296 V418 H292"/>
     <path d="M592,330 H540 V418 H512"/>
     <path d="M568,468 H528 V440 H512"/>
   </g>
@@ -180,7 +205,7 @@
       <text x="655" y="259">thread de vídeo</text>
       <text x="400" y="577">loop principal · 30 fps</text>
       <text x="400" y="875">pygame → janela / monitor</text>
-      <text x="314" y="286">tuning.py</text>
+      <text x="314" y="264">tuning.py</text>
       <text x="400" y="660">u_texture_0</text>
       <text x="640" y="660">u_dominant</text>
       <text x="400" y="780">image.frag na GPU</text>
@@ -188,11 +213,11 @@
       <text x="400" y="470">áudio · stdout</text>
     </g>
     <g font-size="14">
-      <text x="145" y="460">state['amp'] … state['kick']</text>
+      <text x="145" y="460">13 floats de áudio</text>
       <text x="655" y="331">state['frame']</text>
       <text x="656" y="470">state['dominant']</text>
       <text x="655" y="402">dominant_color_thread (~10/s)</text>
-      <text x="154" y="662">u_amp … u_air, u_kick</text>
+      <text x="154" y="662">13 uniforms de áudio</text>
       <text x="400" y="523">image.frag (arquivo)</text>
     </g>
     <g font-size="13" fill="#8b949e">
@@ -212,130 +237,270 @@
     <text x="574" y="790">leitura p/ Visualização</text>
   </g>
 
-  <!-- áreas clicáveis -->
+  <!-- áreas clicáveis — um nó, uma seção -->
   <g class="hotspots">
     <a href="#processo"><rect x="14" y="196" width="300" height="26" rx="4"/></a>
-    <a href="#imagem"><rect x="542" y="34" width="226" height="52" rx="26"/></a>
-    <a href="#imagem"><rect x="570" y="104" width="170" height="44" rx="8"/></a>
-    <a href="#imagem"><rect x="540" y="232" width="230" height="46" rx="8"/></a>
-    <a href="#imagem"><rect x="592" y="300" width="126" height="48" rx="10"/></a>
-    <a href="#audio"><rect x="32" y="34" width="226" height="52" rx="26"/></a>
-    <a href="#audio"><rect x="60" y="104" width="170" height="44" rx="8"/></a>
-    <a href="#audio"><rect x="30" y="232" width="230" height="58" rx="8"/></a>
-    <a href="#audio"><rect x="34" y="426" width="222" height="52" rx="10"/></a>
-    <a href="#dominante"><rect x="540" y="374" width="230" height="48" rx="8"/></a>
-    <a href="#dominante"><rect x="568" y="440" width="176" height="50" rx="10"/></a>
+    <!-- áudio · externo -->
+    <a href="#audio-in"><rect x="32" y="34" width="226" height="52" rx="26"/></a>
+    <a href="#parec"><rect x="60" y="104" width="170" height="44" rx="8"/></a>
+    <!-- imagem · externo -->
+    <a href="#image-in"><rect x="542" y="34" width="226" height="52" rx="26"/></a>
+    <a href="#ffmpeg"><rect x="570" y="104" width="170" height="44" rx="8"/></a>
+    <!-- dentro do processo -->
+    <a href="#audio-thread"><rect x="30" y="232" width="230" height="58" rx="8"/></a>
     <a href="#tuning"><rect x="270" y="238" width="90" height="44" rx="6"/></a>
+    <a href="#state-audio"><rect x="34" y="426" width="222" height="52" rx="10"/></a>
+    <a href="#video-thread"><rect x="540" y="232" width="230" height="46" rx="8"/></a>
+    <a href="#state-frame"><rect x="592" y="300" width="126" height="48" rx="10"/></a>
+    <a href="#dominant-thread"><rect x="540" y="374" width="230" height="48" rx="8"/></a>
+    <a href="#state-dominant"><rect x="568" y="440" width="176" height="50" rx="10"/></a>
     <a href="#loop"><rect x="40" y="548" width="720" height="48" rx="10"/></a>
+    <a href="#shader-file"><rect x="344" y="498" width="112" height="42" rx="6"/></a>
     <a href="#uniforms"><rect x="54" y="630" width="200" height="52" rx="10"/></a>
-    <a href="#uniforms"><rect x="320" y="630" width="160" height="52" rx="10"/></a>
-    <a href="#uniforms"><rect x="560" y="630" width="160" height="52" rx="10"/></a>
-    <a href="#shader"><rect x="344" y="498" width="112" height="42" rx="6"/></a>
-    <a href="#shader"><rect x="300" y="754" width="200" height="58" rx="8"/></a>
+    <a href="#u_texture_0"><rect x="320" y="630" width="160" height="52" rx="10"/></a>
+    <a href="#u_dominant"><rect x="560" y="630" width="160" height="52" rx="10"/></a>
+    <!-- Visualização -->
+    <a href="#vis-img"><rect x="304" y="398" width="196" height="40" rx="8"/></a>
+    <a href="#vis-audio"><rect x="304" y="444" width="196" height="40" rx="8"/></a>
+    <!-- fora do processo (baixo) -->
+    <a href="#shader-gpu"><rect x="300" y="754" width="200" height="58" rx="8"/></a>
     <a href="#saida"><rect x="290" y="846" width="220" height="46" rx="23"/></a>
-    <a href="#visualizacao"><rect x="304" y="398" width="196" height="40" rx="8"/></a>
-    <a href="#visualizacao"><rect x="304" y="444" width="196" height="40" rx="8"/></a>
   </g>
 </svg>
 <p class="hint">passe o mouse pra ver os blocos clicáveis</p>
 </figure>
 
 <main>
-<p class="lead">Ordem de execução. As threads de entrada rodam em paralelo; o <code>loop principal</code> consome o <code>state</code> a 30&nbsp;fps.</p>
+<p class="lead">O diagrama tem três caixas: <b>áudio · externo</b> e <b>imagem · externo</b> — binários
+que rodam à parte — e <b>native_synth.py</b>, o processo. Cada nó do diagrama tem a sua seção abaixo,
+na ordem de leitura: as entradas capturam → as threads derivam números → o <a href="#loop">loop</a>
+sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
+
+<div class="block block--io">
+<h2 class="block-label">áudio · externo — fora do processo</h2>
+
+<section id="audio-in">
+<h3>entrada de áudio</h3>
+<p>A <b>fonte</b>, não o programa: o <code>.monitor</code> da saída padrão do PulseAudio/PipeWire
+(<code>pactl get-default-sink</code> + <code>.monitor</code>). Capta tudo que sai pelo alto-falante/fone,
+de qualquer app. <code>--audio SOURCE</code> força outra source.</p>
+</section>
+
+<section id="parec">
+<h3>captura · parec</h3>
+<p>Binário à parte (<code>pulseaudio-utils</code>), processo separado.
+<code>parec --format=s16le --rate=44100 --channels=1 --latency-msec=50</code> → PCM 16-bit mono
+44,1&nbsp;kHz cru no <code>stdout</code>, que a <a href="#audio-thread">thread de áudio</a> lê pelo pipe.
+Sem <code>parec</code>: sem uniforms de som, o shader ainda roda.</p>
+</section>
+</div>
+
+<div class="block block--io">
+<h2 class="block-label">imagem · externo — fora do processo</h2>
+
+<section id="image-in">
+<h3>entrada de imagem (OBS)</h3>
+<p>A <b>fonte</b>: câmera virtual (<code>v4l2loopback</code> alimentado pelo OBS), <code>/dev/videoN</code>.
+<code>--device PATH</code> escolhe qual. No mesmo lugar cabem webcam real (<code>/dev/video0</code>) ou
+<code>--screen</code> (captura de tela / janela).</p>
+</section>
+
+<section id="ffmpeg">
+<h3>captura · FFMPEG</h3>
+<p>Binário à parte, processo separado.
+<code>ffmpeg -f v4l2 -video_size WxH -i DEVICE -pix_fmt rgb24 -f rawvideo -</code> → frames RGB24 crus
+no <code>stdout</code>. No modo <code>--screen</code> troca pra <code>-f x11grab</code> + <code>scale</code>.
+A <a href="#video-thread">thread de vídeo</a> lê do pipe.</p>
+</section>
+</div>
+
+<div class="block block--proc">
+<h2 class="block-label">native_synth.py — 1 processo Python</h2>
 
 <section id="processo">
-<h2>native_synth.py — 1 processo Python</h2>
-<p>Dentro dele: 3 threads daemon — <b>vídeo</b>, <b>áudio</b>, <b>cor dominante</b> — mais o <i>main thread</i>
-(o <a href="#loop">loop principal</a>). Todas falam pelo dict <code>state</code> em memória; sem fila, sem socket.</p>
-<p>Fora dele: <code>FFMPEG</code> e <code>parec</code> são processos à parte; a GPU roda o shader; a janela é do
-sistema. <code>tuning.py</code> e <code>image.frag</code> são arquivos no disco, lidos por <code>mtime</code>.</p>
+<p>Um processo. 3 threads daemon — <a href="#audio-thread">áudio</a>, <a href="#video-thread">vídeo</a>,
+<a href="#dominant-thread">cor dominante</a> — e o <i>main thread</i> (o <a href="#loop">loop</a>).
+Conversam só pelo dict global <code>state</code> em memória: cada thread escreve as suas chaves, o loop
+lê todas. Sem fila, sem lock, sem socket — "último valor ganha". Relê do disco por <code>mtime</code>:
+<a href="#tuning"><code>tuning.py</code></a> e <a href="#shader-file"><code>image.frag</code></a>.</p>
 </section>
 
-<section id="imagem">
-<h2>1 · Entrada de imagem</h2>
-<p>Fonte: câmera virtual do OBS (<code>/dev/videoN</code>).</p>
-<p><code>FFMPEG</code> (processo à parte) → abre o device → converte pra RGB24 cru → escreve num pipe.</p>
-<p><code>thread de vídeo</code> → lê o pipe → guarda só o último frame em <code>state['frame']</code>. Sem fila; frame velho é descartado.</p>
-</section>
+<div class="inner">
 
-<section id="audio">
-<h2>2 · Entrada de áudio</h2>
-<p>Fonte: monitor da saída padrão do sistema (tudo que toca no PC).</p>
-<p><code>parec</code> (processo à parte) → PCM 44,1&nbsp;kHz mono → pipe.</p>
-<p><code>thread de áudio</code> → lê em blocos de 1024 amostras (~23&nbsp;ms). Por bloco:</p>
+<section id="audio-thread">
+<h3>thread de áudio</h3>
+<p>Lê o pipe do <a href="#parec"><code>parec</code></a> em blocos de 1024 amostras (~23&nbsp;ms). Por
+bloco: janela de Hanning → <code>rfft</code> → e daí:</p>
 <ul>
-<li>FFT.</li>
-<li><code>bass</code>/<code>mid</code>/<code>treble</code> (cortes 150&nbsp;Hz e 4&nbsp;kHz) + 8 faixas finas Sub-bass…Air.</li>
-<li><code>amp</code> = RMS.</li>
-<li>detector de kick (onset no grave).</li>
-<li>suavização attack/release.</li>
+<li><code>amp</code> = RMS do bloco (×4, teto&nbsp;1);</li>
+<li><code>bass</code> / <code>mid</code> / <code>treble</code> clássico — média das bins abaixo de
+<code>BASS_MID_HZ</code>, entre, e acima de <code>MID_TREBLE_HZ</code>, cada uma × sua <code>*_SCALE</code>;</li>
+<li>as 8 <a href="#state-audio">faixas finas</a> Sub-bass…Air;</li>
+<li><code>kick</code> — detector de onset no grave;</li>
+<li>suavização attack/release, chave por chave.</li>
 </ul>
-<p>Escreve em <code>state</code>: <code>state['amp']</code>, <code>state['bass']</code>, …, <code>state['kick']</code>.</p>
-</section>
+<p>Grava as 13 chaves em <code>state</code>. Efeito colateral: os <a href="#vis-audio">painéis de
+texto</a>, 1× a cada 10 blocos (~230&nbsp;ms).</p>
 
-<section id="dominante">
-<h2>3 · Cor dominante</h2>
-<p><code>dominant_color_thread</code> → lê <code>state['frame']</code> ~10×/s.</p>
-<p>Quantiza (5 bits/canal) → conta a cor mais frequente → <code>state['dominant']</code> (RGB 0..1).</p>
-<p>Thread separada: lento demais pra 30&nbsp;fps. É a moda, não a média.</p>
-</section>
-
+<div class="sub">
 <section id="tuning">
-<h2>4 · tuning.py (calibração)</h2>
-<p>Só constantes: cortes de Hz, escalas por banda, params do kick, suavização.</p>
-<p><code>thread de áudio</code> checa o <code>mtime</code> a cada volta. Mudou → <code>importlib.reload</code>. Sem reiniciar, sem perder o áudio. Vale no próximo bloco.</p>
+<h4>tuning.py · calibração</h4>
+<p>Arquivo <b>só de constantes</b>, lido e recarregado por <b>esta thread</b> (não pelo loop): cortes
+<code>BASS_MID_HZ</code> / <code>MID_TREBLE_HZ</code>; escalas <code>BASS_SCALE</code> / <code>MID_SCALE</code> /
+<code>TREBLE_SCALE</code>; suavização <code>SMOOTHING</code>, <code>SMOOTHING_MIN/MAX</code>,
+<code>ATTACK_RATIO</code>; auto-gain <code>PEAK_DECAY</code>; kick (<code>KICK_THRESHOLD</code>,
+<code>KICK_WARMUP_CHUNKS</code>, <code>KICK_DECAY*</code>).</p>
+<p>Hot-reload: a thread compara o <code>mtime</code> a cada volta; mudou → <code>importlib.reload</code> +
+recomputa os bins de Hz e o release por banda. Vale no bloco seguinte, sem reiniciar nem cortar o
+áudio. As bordas de Hz das 8 faixas finas (<code>FREQ_BANDS</code>) <b>não</b> ficam aqui — são
+constantes no <code>native_synth.py</code>.</p>
+</section>
+</div>
+</section>
+
+<section id="state-audio">
+<h3>13 floats de áudio · <code>state</code></h3>
+<p>As 13 chaves de áudio de <code>state</code>, todas <code>0..1</code>, reescritas a cada bloco pela
+<a href="#audio-thread">thread de áudio</a> e lidas pelo <a href="#loop">loop</a>:</p>
+<p><code>amp</code>, <code>bass</code>, <code>mid</code>, <code>treble</code>, <code>kick</code> + 8 faixas finas
+(<code>subbass</code>, <code>lowmid</code>, <code>midrange</code>, <code>highmid</code>, <code>presence</code>,
+<code>treble_hi</code>, <code>brilho</code>, <code>air</code>).</p>
+<p>Cada uma vira o uniform de mesmo nome com prefixo <code>u_</code> — faixa de Hz, escala e suavização
+de cada uma na <a href="#uniforms">tabela de uniforms</a>.</p>
+</section>
+
+<section id="video-thread">
+<h3>thread de vídeo</h3>
+<p>Lê o pipe do <a href="#ffmpeg"><code>ffmpeg</code></a>, um frame por vez
+(<code>WIDTH×HEIGHT×3</code> bytes). Guarda <b>só o último</b> em <code>state['frame']</code>. Sem fila: se
+o loop atrasa, os frames do meio são sobrescritos e perdidos. No modo <code>--window</code> roda
+<code>window_capture_thread</code> (ImageMagick <code>import</code>) no lugar, ~2–5&nbsp;fps.</p>
+</section>
+
+<section id="state-frame">
+<h3><code>state['frame']</code></h3>
+<p>O último frame de vídeo cru, array de bytes RGB24. Escrito pela <a href="#video-thread">thread de
+vídeo</a>; lido pela <a href="#dominant-thread">cor dominante</a> (~10×/s), pelo <a href="#loop">loop</a>
+(todo frame, vira textura) e pelo <a href="#vis-img">painel de imagem</a>. Um buffer, sem histórico.</p>
+</section>
+
+<section id="dominant-thread">
+<h3><code>dominant_color_thread</code></h3>
+<p>Thread própria porque o cálculo num frame 720p pode passar de 100&nbsp;ms — no loop travaria os
+30&nbsp;fps. A cada 100&nbsp;ms: pega <code>state['frame']</code>, quantiza 5&nbsp;bits/canal (256→32
+níveis por canal), conta a combinação mais frequente. Escreve <code>state['dominant']</code>.</p>
+</section>
+
+<section id="state-dominant">
+<h3><code>state['dominant']</code></h3>
+<p>Tupla <code>(r, g, b)</code> em <code>0..1</code> — a cor <b>mais frequente</b> (moda) do frame, não a
+média. Atualizada ~10×/s. Vira <a href="#u_dominant"><code>u_dominant</code></a> (vec3). Começa em
+<code>(0.5, 0.5, 0.5)</code> até o primeiro cálculo.</p>
 </section>
 
 <section id="loop">
-<h2>5 · Loop principal</h2>
-<p>Main thread. 30&nbsp;fps (<code>clock.tick(30)</code>). Todo frame:</p>
+<h3>loop principal · 30 fps</h3>
+<p>Main thread, <code>clock.tick(30)</code>. Por frame, em ordem:</p>
 <ol>
-<li>lê <code>state</code>.</li>
-<li>checa <code>mtime</code> do <code>image.frag</code>.</li>
-<li><code>glTexImage2D</code>: sobe <code>state['frame']</code> → <code>u_texture_0</code>.</li>
-<li><code>glUniform*</code>: sobe o resto — 13 floats de áudio + <code>u_dominant</code> + <code>u_resolution</code>/<code>u_time</code> (que ele calcula).</li>
-<li><code>glDrawArrays</code>: dispara a GPU.</li>
+<li>eventos do pygame (ESC / fechar → encerra);</li>
+<li><code>mtime</code> do <a href="#shader-file"><code>image.frag</code></a> → recompila se mudou;</li>
+<li><code>glTexImage2D</code>: <code>state['frame']</code> → <a href="#u_texture_0"><code>u_texture_0</code></a>;</li>
+<li><code>glUniform2f/1f/3f</code>: <code>u_resolution</code> e <code>u_time</code> (calculados aqui) + os 13
+floats de áudio (<code>glUniform1f</code> ×13) + <code>u_dominant</code>;</li>
+<li><code>glClear</code> + <code>glDrawArrays(GL_TRIANGLES, 0, 3)</code> → dispara a <a href="#shader-gpu">GPU</a>;</li>
 <li><code>pygame.display.flip()</code>.</li>
 </ol>
+<p>Não trava se uma thread parar: lê o último <code>state</code> e segue.</p>
+</section>
+
+<section id="shader-file">
+<h3><code>image.frag</code> · arquivo</h3>
+<p>O shader no disco. O <a href="#loop">loop</a> guarda o <code>mtime</code>; mudou → recompila e troca o
+programa GL vivo. Erro de compilação → mantém o programa anterior e imprime o log. Mesmo hot-reload do
+<a href="#tuning"><code>tuning.py</code></a>, só que no loop e pro lado da GPU.</p>
 </section>
 
 <section id="uniforms">
-<h2>6 · Uniforms (o que sobe pra GPU)</h2>
-<ul>
-<li><code>u_texture_0</code> — o frame de vídeo (textura). No shader: <code>texture2D(u_texture_0, coord)</code>.</li>
-<li><code>u_amp u_bass u_mid u_treble u_kick</code> — 0..1. <code>u_kick</code> é pulso, não nível.</li>
-<li><code>u_subbass u_lowmid u_midrange u_highmid u_presence u_treble_hi u_brilho u_air</code> — 8 faixas: 0–250, 250–500, 500–2k, 2–4k, 4–6k, 6–10k, 10–16k, &gt;16k&nbsp;Hz. 0..1, relativo ao pico entre elas.</li>
-<li><code>u_dominant</code> — vec3, cor dominante.</li>
-<li><code>u_resolution u_time</code> — tamanho da janela, segundos.</li>
-</ul>
-<p>Embutidos do GLSL: <code>gl_FragCoord</code> (posição do pixel), <code>gl_FragColor</code> (saída).</p>
-<p>Métricas calculadas mas <b>não</b> ligadas a uniform: ver <a href="#nao-conectadas">não conectadas</a>.</p>
+<h3>uniforms · o que sobe pra GPU</h3>
+<p>Os 3 cilindros do diagrama = 3 grupos que o <a href="#loop">loop</a> sobe por frame: a textura de
+vídeo, os 13 floats de áudio, a cor dominante — mais <code>u_resolution</code> / <code>u_time</code> que o
+loop calcula. As colunas <b>vem de</b> / <b>escala · auto-gain</b> / <b>suavização</b> mostram como o
+número nasce na <a href="#audio-thread">thread de áudio</a>; constantes em
+<a href="#tuning"><code>tuning.py</code></a>.</p>
+<table>
+<thead><tr>
+<th>uniform</th><th>tipo</th><th>vem de</th><th>faixa</th><th>escala · auto-gain</th><th>suavização</th><th>o que é</th>
+</tr></thead>
+<tbody>
+<tr id="u_texture_0"><td><code>u_texture_0</code></td><td><code>sampler2D</code></td><td><code>state['frame']</code> (<a href="#state-frame">vídeo</a>)</td><td>—</td><td>—</td><td>—</td><td>frame de vídeo cru (RGB24), unidade de textura 0. No shader: <code>texture2D(u_texture_0, st)</code>.</td></tr>
+<tr><td><code>u_resolution</code></td><td><code>vec2</code></td><td>loop (<code>WIN_W, WIN_H</code>)</td><td>—</td><td>—</td><td>—</td><td>tamanho da janela em px.</td></tr>
+<tr><td><code>u_time</code></td><td><code>float</code></td><td>loop (<code>perf_counter()−t0</code>)</td><td>—</td><td>—</td><td>—</td><td>segundos desde o start.</td></tr>
+<tr><td><code>u_amp</code></td><td><code>float</code> 0..1</td><td><code>state['amp']</code></td><td>espectro inteiro</td><td><code>min(1, RMS×4)</code></td><td>release <code>SMOOTHING</code> (0.9); attack ×<code>ATTACK_RATIO</code> (0.4)</td><td>volume geral do bloco.</td></tr>
+<tr><td><code>u_bass</code></td><td><code>float</code> 0..1</td><td><code>state['bass']</code></td><td>&lt; <code>BASS_MID_HZ</code> (150&nbsp;Hz)</td><td>×<code>BASS_SCALE</code> (0.15), teto 1.0</td><td>global (0.9 / attack 0.36)</td><td>energia do grave.</td></tr>
+<tr><td><code>u_mid</code></td><td><code>float</code> 0..1</td><td><code>state['mid']</code></td><td>150&nbsp;Hz – 4&nbsp;kHz</td><td>×<code>MID_SCALE</code> (6.0), teto 1.0</td><td>global</td><td>voz / melodia.</td></tr>
+<tr><td><code>u_treble</code></td><td><code>float</code> 0..1</td><td><code>state['treble']</code></td><td>&gt; <code>MID_TREBLE_HZ</code> (4&nbsp;kHz)</td><td>×<code>TREBLE_SCALE</code> (30.0), teto 1.0</td><td>global</td><td>agudo / hi-hat.</td></tr>
+<tr><td><code>u_kick</code></td><td><code>float</code> 0..1</td><td><code>state['kick']</code></td><td>grave cru (sem teto)</td><td>onset: pula pra 1.0 quando o grave &gt; baseline&nbsp;×&nbsp;<code>KICK_THRESHOLD</code> (1.5), depois de <code>KICK_WARMUP_CHUNKS</code> (20) blocos; decai por <code>kick_decay_dynamic</code>, adaptado ao ritmo entre <code>KICK_DECAY_MIN</code> (0.5) e <code>KICK_DECAY_MAX</code> (0.95)</td><td>nenhuma — ataque instantâneo</td><td><b>pulso de batida</b>, não nível.</td></tr>
+<tr><td colspan="7" class="grouprow"><b>8 faixas finas</b> — 0..1, cada uma <b>relativa ao próprio pico recente</b> (auto-gain por banda: sobe na hora, decai por <code>PEAK_DECAY</code> 0.999/bloco), então uma banda estruturalmente mais forte não fica grudada em 1.0. Release interpolado de <code>SMOOTHING_MIN</code> (0.7, no Sub-bass) a <code>SMOOTHING_MAX</code> (0.95, no Air); attack ×0.4. Bordas de Hz em <code>FREQ_BANDS</code>.</td></tr>
+<tr><td><code>u_subbass</code></td><td colspan="2"><code>state['subbass']</code> — Sub-bass</td><td colspan="4">0 – 250&nbsp;Hz</td></tr>
+<tr><td><code>u_lowmid</code></td><td colspan="2"><code>state['lowmid']</code> — Low-mid</td><td colspan="4">250 – 500&nbsp;Hz</td></tr>
+<tr><td><code>u_midrange</code></td><td colspan="2"><code>state['midrange']</code> — Midrange</td><td colspan="4">500&nbsp;Hz – 2&nbsp;kHz</td></tr>
+<tr><td><code>u_highmid</code></td><td colspan="2"><code>state['highmid']</code> — High-mid</td><td colspan="4">2 – 4&nbsp;kHz</td></tr>
+<tr><td><code>u_presence</code></td><td colspan="2"><code>state['presence']</code> — Presence</td><td colspan="4">4 – 6&nbsp;kHz</td></tr>
+<tr><td><code>u_treble_hi</code></td><td colspan="2"><code>state['treble_hi']</code> — Treble</td><td colspan="4">6 – 10&nbsp;kHz — sufixo <code>_hi</code> pra não colidir com <code>u_treble</code></td></tr>
+<tr><td><code>u_brilho</code></td><td colspan="2"><code>state['brilho']</code> — Brilliance</td><td colspan="4">10 – 16&nbsp;kHz</td></tr>
+<tr><td><code>u_air</code></td><td colspan="2"><code>state['air']</code> — Air</td><td colspan="4">&gt; 16&nbsp;kHz</td></tr>
+<tr id="u_dominant"><td><code>u_dominant</code></td><td><code>vec3</code> 0..1</td><td><code>state['dominant']</code> (<a href="#dominant-thread">cor dominante</a>)</td><td>—</td><td>moda de cor, 5&nbsp;bits/canal, ~10×/s</td><td>—</td><td>cor mais frequente do frame.</td></tr>
+</tbody>
+</table>
+<p>Embutidos do GLSL (não são uniforms): <code>gl_FragCoord</code> (posição do pixel), <code>gl_FragColor</code> (saída).</p>
+<p>Métricas já calculadas mas <b>não</b> ligadas a uniform: <a href="#nao-conectadas">referência</a>.</p>
 </section>
 
-<section id="shader">
-<h2>7 · image.frag</h2>
-<p><b>arquivo</b> — o shader no disco. O loop checa <code>mtime</code> → recompila → troca o programa. Erro de sintaxe → mantém o antigo, imprime o erro.</p>
-<p><b>na GPU</b> — <code>glDrawArrays</code> desenha 1 triângulo que cobre a tela → a GPU roda o <code>image.frag</code> <b>1× por pixel</b>, em paralelo → cada execução lê textura + uniforms → devolve <code>gl_FragColor</code>.</p>
+</div><!-- /.inner -->
+
+<div class="sub">
+<p class="block-label">Visualização · painéis de texto — só leitura</p>
+
+<section id="vis-img">
+<h4>imagem · gnome-terminal</h4>
+<p>Uma janela <code>gnome-terminal</code> (<code>--full-screen</code>), aberta uma vez no start; a
+<a href="#audio-thread">thread de áudio</a> escreve nela por um FIFO a cada ~230&nbsp;ms. Mostra a
+análise da imagem de <b>entrada</b> (não da sintetizada): RESUMO (cor dominante, brilho, saturação,
+temp. de cor, contraste, nitidez, entropia, bordas, movimento…), o mesmo em grid 3×3, e 4 histogramas
+(matiz, brilho, FFT-2D de cor, orientação de borda). Sem <code>gnome-terminal</code> / <code>$DISPLAY</code>
+→ desligado, o resto segue.</p>
+</section>
+
+<section id="vis-audio">
+<h4>áudio · stdout</h4>
+<p>O <code>stdout</code> do processo, reescrito no lugar (tela alternada) a cada ~230&nbsp;ms pela
+<a href="#audio-thread">thread de áudio</a>: <code>kick</code> (final + decay), as 8 faixas finas em
+BRUTO / FINAL / SMOOTHING / Δ, e o espectrograma (dB absoluto + % do pico). É o medidor pra calibrar o
+<a href="#tuning"><code>tuning.py</code></a> a olho.</p>
+</section>
+</div>
+</div><!-- /.block--proc -->
+
+<div class="block block--io">
+<h2 class="block-label">fora do processo — GPU e saída</h2>
+
+<section id="shader-gpu">
+<h3><code>image.frag</code> na GPU</h3>
+<p><code>glDrawArrays</code> desenha 1 triângulo que cobre a tela → a GPU roda o <code>image.frag</code>
+<b>1× por pixel</b>, em paralelo. Cada execução lê <code>u_texture_0</code> + os uniforms e devolve
+<code>gl_FragColor</code>. É "o synth" — a imagem sintetizada. Hardware, externo ao processo.</p>
 </section>
 
 <section id="saida">
-<h2>8 · Saída</h2>
-<p><code>pygame.display.flip()</code> → joga o frame renderizado na tela.</p>
-<p>Janela, fullscreen, ou fixo num monitor (<code>--monitor HDMI-1</code>).</p>
+<h3>saída · janela / monitor</h3>
+<p><code>pygame.display.flip()</code> joga o frame renderizado na janela. Modos: janela normal,
+<code>--fullscreen</code>, ou <code>--monitor NOME</code> (sem borda, fixa num monitor — ex. projetor).
+Essa imagem é a única saída do programa.</p>
 </section>
-
-<section id="visualizacao">
-<h2>9 · Visualização (painéis de texto)</h2>
-<p>Efeito colateral da <code>thread de áudio</code>, a cada ~230&nbsp;ms. Só leitura — não volta pro shader nem pro sistema.</p>
-<ul>
-<li><code>stdout</code>: kick + 8 faixas (bruto/final/smoothing) + espectrograma (dB e %).</li>
-<li>janela <code>gnome-terminal</code>: análise da imagem de <b>entrada</b> — brilho, cor, matiz, nitidez, bordas, movimento, entropia, simetria… "quanto no total" + grid 3×3.</li>
-</ul>
-<p>O painel de imagem lê <code>state['frame']</code> e <code>state['dominant']</code> direto; só roda no ritmo do áudio por conveniência.</p>
-</section>
+</div>
 
 <section id="nao-conectadas">
-<h2>10 · Não conectadas (referência)</h2>
+<h2>não conectadas · referência</h2>
 <p>Já calculado hoje, mas só aparece nos painéis. Vira uniform com ~2 linhas (declarar em <code>image.frag</code> + <code>glUniform*</code> no loop).</p>
 <p><b>Áudio</b> — magnitudes brutas por banda, <code>*_raw</code> sem escala, smoothing por banda, <code>kick_baseline</code>, <code>kick_decay_dynamic</code>, espectrograma dB (24 faixas log), FFT suavizada inteira.</p>
 <p><b>Imagem — global + grid 3×3</b> — brilho, saturação, temp. de cor, contraste, nitidez (variância do Laplaciano), entropia, bordas, movimento.</p>
