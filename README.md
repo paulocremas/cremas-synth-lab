@@ -65,7 +65,10 @@ flowchart TD
     SHADER --> PG["pygame · 30 fps"]
     PG --> WIN["janela / fullscreen / monitor"]
 
-    AT -.-> DASH["2 dashboards de texto<br/>stdout + gnome-terminal<br/>só leitura, não voltam ao pipeline"]
+    AT -.-> DASHA["dashboard de áudio · stdout<br/>kick + faixas de mixagem + espectrograma"]
+    SF -.-> DASHI["dashboard de imagem · gnome-terminal<br/>brilho, cor, nitidez, bordas, movimento…"]
+    SD -.-> DASHI
+    AT -.->|"só dispara o redraw (~230 ms)"| DASHI
 ```
 
 **Imagem** — origem física → `ffmpeg` (webcam/tela) ou `import` (uma janela, segue mesmo coberta)
