@@ -62,10 +62,15 @@ flowchart TD
         TUN["tuning.py"] -.->|"mtime"| AT
     end
 
-    UTEX -->|"glTexImage2D"| GPU["image.frag na GPU · 1× por pixel"]
+    UTEX -->|"glTexImage2D"| GPU
     UDOM -->|"glUniform3f"| GPU
-    FRAG["image.frag (arquivo)"] -.->|"mtime → recompila"| GPU
     UAUD -->|"glUniform1f × 13"| GPU
+
+    subgraph SHADER["shader"]
+        direction LR
+        FRAG["image.frag (arquivo)"] -.->|"mtime → recompila"| GPU["image.frag na GPU · 1× por pixel"]
+    end
+
     GPU --> WIN["pygame · 30 fps → janela / monitor"]
 
     AT -.-> DASH_A["dashboard de áudio · stdout<br/>kick + faixas + espectrograma"]
