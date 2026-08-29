@@ -40,20 +40,32 @@ Não há fila nem socket no meio. Existe **um dicionário em memória, `state`**
 escrevem, o loop de render lê 30×/s. Sempre vale o último valor; se algo atrasa, o frame velho é
 descartado (nunca acumula fila).
 
-```
-                    processo externo       thread (native_synth.py)   state{}              loop 30fps          GPU
-                    ────────────────       ────────────────────────   ───────              ──────────          ───
-webcam / tela / ──► ffmpeg | import    ──► video_thread           ──► state['frame']    ─► glTexImage2D  ──► u_texture_0 ┐
-janela / OBS cam                                                          │                                              │
-                                          dominant_color_thread   ──► state['dominant'] ─► glUniform3f   ──► u_dominant  ┼─► image.frag ─► pygame ─► janela
-                                          (lê state['frame'], ~10/s)                                                     │   (1x/pixel)    (30fps)   / monitor 2
-som que sai do  ──► parec              ──► audio_thread            ──► state['amp']      ─► glUniform1f   ──► u_amp,      ┘
-PC (monitor)        (chunks ~23 ms)        FFT + faixas + kick         state['bass'] …      (x17 no total)    u_bass … u_air,
-                                          + suavização attack/release   state['kick']                        u_kick
+```mermaid
+flowchart TD
+    VID["webcam / tela / janela / OBS cam"]
+    AUD["som que sai do PC (monitor do sistema)"]
 
-tuning.py   ─ mtime ─► audio_thread recarrega as constantes
-image.frag  ─ mtime ─► loop principal recompila o shader (mantém o antigo se der erro)
-audio_thread ─► 2 dashboards de TEXTO (stdout + gnome-terminal) · só leitura, não voltam ao pipeline
+    VID -->|"ffmpeg ou import"| VT["video_thread"]
+    VT --> SF["state['frame']"]
+    AUD -->|"parec, chunks ~23 ms"| AT["audio_thread<br/>FFT + faixas + kick + suavização attack/release"]
+
+    SF -->|"glTexImage2D"| UTEX["u_texture_0"]
+    SF --> DCT["dominant_color_thread (~10/s)"]
+    DCT --> SD["state['dominant']"]
+    SD -->|"glUniform3f"| UDOM["u_dominant"]
+    AT --> SA["state['amp'], state['bass'], state['kick'], …"]
+    SA -->|"glUniform1f (x17)"| UAUD["u_amp, u_bass … u_air, u_kick"]
+
+    TUN["tuning.py"] -.->|"mtime → recarrega constantes"| AT
+    FRAG["image.frag"] -.->|"mtime → recompila (mantém o antigo se der erro)"| SHADER
+
+    UTEX --> SHADER["image.frag na GPU · 1x por pixel"]
+    UDOM --> SHADER
+    UAUD --> SHADER
+    SHADER --> PG["pygame · 30 fps"]
+    PG --> WIN["janela / fullscreen / monitor"]
+
+    AT -.-> DASH["2 dashboards de texto<br/>stdout + gnome-terminal<br/>só leitura, não voltam ao pipeline"]
 ```
 
 **Imagem** — origem física → `ffmpeg` (webcam/tela) ou `import` (uma janela, segue mesmo coberta)
@@ -176,19 +188,20 @@ Distribuições (histograma inteiro, não um número):
 Por enquanto **só se sintetiza imagem**. O áudio nunca é sintetizado — ele **controla** a síntese
 de imagem (é o que `u_bass`, `u_kick`, etc. fazem). A imagem sintetizada é a única saída.
 
-```
-áudio entra ─┐
-             ├─► note (laptop) ─► native_synth.py
-imagem entra ┘                     ├─ image.frag (GLSL) sintetiza a IMAGEM, reagindo ao áudio + imagem de entrada
-                                   └─ OBS monta a cena, com os dashboards do INPUT como fontes
-                                          │
-                                          ▼
-                            OUTPUT = imagem sintetizada
-                                          │
-                  ┌───────────────────────┴───────────────────────┐
-                  ▼                                               ▼
-     dashboard de imagem, agora lendo o           programação das luzes de palco,
-     OUTPUT em vez da entrada      (A FAZER)       100% baseada no output       (A FAZER)
+```mermaid
+flowchart TD
+    A1["entrada de áudio"] --> NOTE["note (laptop)"]
+    A2["entrada de imagem"] --> NOTE
+    NOTE --> NS["native_synth.py"]
+    NS --> SYN["image.frag (GLSL)<br/>sintetiza a IMAGEM<br/>reagindo ao áudio + imagem de entrada"]
+    NS --> OBS["OBS monta a cena<br/>dashboards do INPUT como fontes"]
+    SYN --> OUT["OUTPUT = imagem sintetizada"]
+    OBS --> OUT
+    OUT --> DASH2["dashboard de imagem lendo o OUTPUT<br/>(em vez da entrada) · A FAZER"]
+    OUT --> LIGHTS["programação das luzes de palco<br/>100% baseada no output · A FAZER"]
+
+    classDef todo stroke-dasharray: 5 5;
+    class DASH2,LIGHTS todo;
 ```
 
 **Estado atual:**
