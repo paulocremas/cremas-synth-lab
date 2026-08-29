@@ -342,6 +342,10 @@ sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
 pelo stdout ao Python. As fontes vivem no PulseAudio/PipeWire, que divide tudo em saídas
 (sinks) e entradas (sources); o <code>.monitor</code> de um sink é a entrada gêmea que devolve
 o que aquela saída está tocando.</p>
+<p>O que <b>cruza pra dentro</b> do <a href="#processo">processo</a> é só um cano de bytes crus, sem
+cabeçalho: PCM <code>s16le</code> mono a 44,1&nbsp;kHz, amostra atrás de amostra. Captura, soma pra
+mono e reamostragem acontecem no <code>parec</code> / servidor de som, <b>antes</b> — o Python não
+fala com ALSA nem com o hardware.</p>
 
 <h4>hoje — o padrão</h4>
 <ul>
@@ -424,19 +428,23 @@ lê de lá.</li>
 <code>parec --device=FONTE --format=s16le --rate=44100 --channels=1 --latency-msec=50</code></p>
 <ul>
 <li><code>--device=FONTE</code> — qual <a href="#audio-in">fonte</a> escutar (a da seção acima);</li>
-<li><code>--format=s16le</code> — cada amostra é um inteiro de 16 bits <b>com sinal</b>,
-<b>little-endian</b> (2 bytes). O PCM não-comprimido mais comum;</li>
-<li><code>--rate=44100</code> — 44100 amostras por segundo. Qualidade de CD;</li>
-<li><code>--channels=1</code> — mono: um canal só. Junta esquerdo + direito → metade dos dados,
-FFT mais simples;</li>
-<li><code>--latency-msec=50</code> — pede o som em blocos de ~50&nbsp;ms. Quanto menor, mais o
-visual gruda no som.</li>
+<li><code>--format=s16le</code> — inteiro de 16 bits <b>com sinal</b>, <b>little-endian</b>
+(2 bytes/amostra). O menor PCM comum — metade do float32 — e a <a href="#audio-thread">thread</a>
+lê direto com <code>np.frombuffer</code>, sem conversão;</li>
+<li><code>--rate=44100</code> — 44100 amostras/s (qualidade de CD). É a taxa que o <code>.monitor</code>
+já roda → no caminho padrão o servidor <b>não reamostra</b>; só uma fonte noutro rate (ex. interface
+a 48&nbsp;kHz) paga esse custo;</li>
+<li><code>--channels=1</code> — mono: junta esquerdo + direito → metade dos bytes e <b>uma</b> FFT;</li>
+<li><code>--latency-msec=50</code> — som em blocos de ~50&nbsp;ms. Menor = visual gruda mais no som,
+mas mais wakeups/CPU e mais risco de underrun. Esse buffer também <b>segura</b> um tranco curto do
+Python sem perder amostra (a thread lê tudo em fila quando volta) — ao contrário do
+<a href="#video-thread">vídeo</a>, que descarta frame na fonte.</li>
 </ul>
 <p><b>O que sai:</b> um esguicho de bytes no <code>stdout</code> — sem cabeçalho de arquivo, sem
 nada em volta, amostra atrás de amostra. A <a href="#audio-thread">thread de áudio</a> pega de
-1024 em 1024 amostras (~23&nbsp;ms por vez), converte com <code>np.frombuffer</code>, aplica a
-janela de Hanning e faz a FFT. Sem <code>parec</code> instalado: o shader roda igual, só sem os
-uniforms de som.</p>
+1024 em 1024 amostras (~23&nbsp;ms por vez), vira array com <code>np.frombuffer</code> (view, sem
+cópia), aplica a janela de Hanning e faz a FFT. Sem <code>parec</code> instalado: o shader roda
+igual, só sem os uniforms de som.</p>
 </section>
 </div>
 
@@ -448,6 +456,10 @@ uniforms de som.</p>
 <p>É a <b>fonte</b> — de onde vem a imagem. Não é o programa (o programa é o
 <a href="#ffmpeg"><code>ffmpeg</code></a>, seção seguinte), que lê frames em RGB24 cru e os
 entrega pelo stdout ao Python.</p>
+<p>O que <b>cruza pra dentro</b> do <a href="#processo">processo</a> é só um cano de bytes crus, sem
+cabeçalho: frames <code>RGB24</code> já no tamanho da textura, um atrás do outro. Decode do formato
+da câmera, conversão de cor e <code>scale</code> acontecem no <code>ffmpeg</code>, <b>antes</b> — o
+Python não fala com v4l2 nem com o X.</p>
 <p>Duas famílias de fonte. <b>Câmera</b> — real ou virtual — entra pelo v4l2 do Linux como
 <code>/dev/videoN</code> (uma câmera falsa via v4l2loopback + OBS Virtual Camera cai no mesmo
 lugar). <b>Tela</b> — com <code>--screen</code>, a fonte deixa de ser câmera e vira a área de
@@ -516,14 +528,19 @@ frame.</li>
 <li><code>-video_size LxA</code> — largura × altura pedidas à câmera;</li>
 <li><code>-i /dev/videoN</code> — qual câmera;</li>
 <li>só pra webcam de verdade (<code>/dev/video0</code>) ele acrescenta
-<code>-input_format yuyv422</code> — o formato bruto que essas câmeras entregam;</li>
-<li><code>-pix_fmt rgb24</code> — converte cada pixel pra 3 bytes R/G/B;</li>
+<code>-input_format yuyv422</code> — o formato nativo do sensor; sem isso o ffmpeg pode negociar
+MJPEG e pagar um decode a cada frame;</li>
+<li><code>-pix_fmt rgb24</code> — 3 bytes R/G/B por pixel. Com o <code>scale</code>, o ffmpeg entrega
+no formato <b>e</b> no tamanho exatos da textura → o <a href="#loop">loop</a> não redimensiona nem
+converte cor, só <code>glTexImage2D</code>;</li>
 <li><code>-f rawvideo -</code> — saída sem container, direto no <code>stdout</code>
 (<code>-</code> = stdout).</li>
 </ul>
 <p><b>O comando (tela, <code>--screen</code>):</b> troca <code>-f v4l2 -i /dev/videoN</code> por
 <code>-f x11grab -framerate 30 -i :0+X,Y</code> e adiciona <code>-vf scale=L:A</code> pra encaixar
-no tamanho da textura.</p>
+no tamanho da textura — limitado a 1280&nbsp;px no lado maior (<code>fit()</code>, arredondado a
+par): teto de bytes por frame, banda de upload e custo da <a href="#dominant-thread">cor
+dominante</a>.</p>
 <p><b>O que sai:</b> um esguicho de bytes no <code>stdout</code> — largura × altura × 3 por frame,
 um frame atrás do outro, sem marca de onde um acaba e o outro começa (a
 <a href="#video-thread">thread de vídeo</a> conta os bytes). Fica <b>só o último frame</b> em
@@ -541,14 +558,21 @@ ImageMagick <code>import</code>, ~2–5&nbsp;fps.</p>
 Conversam só pelo dict global <code>state</code> em memória: cada thread escreve as suas chaves, o loop
 lê todas. Sem fila, sem lock, sem socket — "último valor ganha". Relê do disco por <code>mtime</code>:
 <a href="#tuning"><code>tuning.py</code></a> e <a href="#shader-file"><code>image.frag</code></a>.</p>
+<p>No arranque, e só então, chama <code>xrandr</code> / <code>pactl</code> / <code>wmctrl</code> /
+<code>xwininfo</code> / <code>v4l2-ctl</code> pra descobrir tamanho de tela, nome da fonte de áudio e
+geometria de janela/câmera — <b>1× cada, fora do caminho de dados</b>. No loop de dados, só
+<a href="#parec"><code>parec</code></a> e <a href="#ffmpeg"><code>ffmpeg</code></a> (ou
+<code>import</code>, no modo <code>--window</code>).</p>
 </section>
 
 <div class="inner">
 
 <section id="audio-thread">
 <h3>thread de áudio</h3>
-<p>Lê o pipe do <a href="#parec"><code>parec</code></a> em blocos de 1024 amostras (~23&nbsp;ms). Por
-bloco: janela de Hanning → <code>rfft</code> → e daí:</p>
+<p>Lê o pipe do <a href="#parec"><code>parec</code></a> em blocos de 1024 amostras (~23&nbsp;ms —
+1024 é potência de 2, <code>rfft</code> rápida). Por bloco: <code>np.frombuffer</code> (view, sem
+cópia) + um <code>/32768</code> vetorizado → janela de Hanning → <code>rfft</code> (transformada
+<b>real</b>, metade do <code>fft</code> cheio) → e daí:</p>
 <ul>
 <li><code>amp</code> = RMS do bloco (×4, teto&nbsp;1);</li>
 <li><code>bass</code> / <code>mid</code> / <code>treble</code> clássico — média das bins abaixo de
@@ -557,8 +581,14 @@ bloco: janela de Hanning → <code>rfft</code> → e daí:</p>
 <li><code>kick</code> — detector de onset no grave;</li>
 <li>suavização attack/release, chave por chave.</li>
 </ul>
-<p>Grava as 13 chaves em <code>state</code>. Efeito colateral: os <a href="#vis-audio">painéis de
-texto</a>, 1× a cada 10 blocos (~230&nbsp;ms).</p>
+<p>A janela de Hanning, o eixo de frequências (<code>rfftfreq</code>) e as máscaras de bin
+(<code>bass_bins</code>…) são montados <b>1×</b> fora do loop — as máscaras só se refazem quando o
+<a href="#tuning"><code>tuning.py</code></a> recarrega. Resolução: 44100/1024 ≈ <b>43&nbsp;Hz/bin</b>
+— no grave as faixas log ficam mais estreitas que um bin, daí o fallback pro bin mais próximo.</p>
+<p>Grava as 13 chaves em <code>state</code>. No <b>10º</b> bloco (~230&nbsp;ms) roda, aqui dentro, os
+<a href="#vis-audio">painéis de áudio</a> <b>e</b> toda a <a href="#vis-img">análise da imagem</a> de
+entrada (HSV, FFT-2D, grid 3×3) — sobre um frame reduzido por stride (<code>frame_downsample</code>):
+em resolução cheia (~200&nbsp;ms) atrasaria a leitura do próximo bloco de áudio.</p>
 
 <div class="sub">
 <section id="tuning">
@@ -615,6 +645,28 @@ níveis por canal), conta a combinação mais frequente. Escreve <code>state['do
 média. Atualizada ~10×/s. Vira <a href="#u_dominant"><code>u_dominant</code></a> (vec3). Começa em
 <code>(0.5, 0.5, 0.5)</code> até o primeiro cálculo.</p>
 </section>
+
+<div class="sub">
+<p class="block-label">Visualização · painéis de texto — só leitura</p>
+
+<section id="vis-img">
+<h4>imagem · gnome-terminal</h4>
+<p>Uma janela <code>gnome-terminal</code> (<code>--full-screen</code>), aberta uma vez no start; a
+<a href="#audio-thread">thread de áudio</a> escreve nela por um FIFO a cada ~230&nbsp;ms. Mostra a
+análise da imagem de <b>entrada</b> (não da sintetizada): RESUMO (cor dominante, brilho, saturação,
+temp. de cor, contraste, nitidez, entropia, bordas, movimento…), o mesmo em grid 3×3, e 4 histogramas
+(matiz, brilho, FFT-2D de cor, orientação de borda). Sem <code>gnome-terminal</code> / <code>$DISPLAY</code>
+→ desligado, o resto segue.</p>
+</section>
+
+<section id="vis-audio">
+<h4>áudio · stdout</h4>
+<p>O <code>stdout</code> do processo, reescrito no lugar (tela alternada) a cada ~230&nbsp;ms pela
+<a href="#audio-thread">thread de áudio</a>: <code>kick</code> (final + decay), as 8 faixas finas em
+BRUTO / FINAL / SMOOTHING / Δ, e o espectrograma (dB absoluto + % do pico). É o medidor pra calibrar o
+<a href="#tuning"><code>tuning.py</code></a> a olho.</p>
+</section>
+</div>
 
 <section id="loop">
 <h3>loop principal · 30 fps</h3>
@@ -675,28 +727,6 @@ número nasce na <a href="#audio-thread">thread de áudio</a>; constantes em
 </section>
 
 </div><!-- /.inner -->
-
-<div class="sub">
-<p class="block-label">Visualização · painéis de texto — só leitura</p>
-
-<section id="vis-img">
-<h4>imagem · gnome-terminal</h4>
-<p>Uma janela <code>gnome-terminal</code> (<code>--full-screen</code>), aberta uma vez no start; a
-<a href="#audio-thread">thread de áudio</a> escreve nela por um FIFO a cada ~230&nbsp;ms. Mostra a
-análise da imagem de <b>entrada</b> (não da sintetizada): RESUMO (cor dominante, brilho, saturação,
-temp. de cor, contraste, nitidez, entropia, bordas, movimento…), o mesmo em grid 3×3, e 4 histogramas
-(matiz, brilho, FFT-2D de cor, orientação de borda). Sem <code>gnome-terminal</code> / <code>$DISPLAY</code>
-→ desligado, o resto segue.</p>
-</section>
-
-<section id="vis-audio">
-<h4>áudio · stdout</h4>
-<p>O <code>stdout</code> do processo, reescrito no lugar (tela alternada) a cada ~230&nbsp;ms pela
-<a href="#audio-thread">thread de áudio</a>: <code>kick</code> (final + decay), as 8 faixas finas em
-BRUTO / FINAL / SMOOTHING / Δ, e o espectrograma (dB absoluto + % do pico). É o medidor pra calibrar o
-<a href="#tuning"><code>tuning.py</code></a> a olho.</p>
-</section>
-</div>
 </div><!-- /.block--proc -->
 
 <div class="block block--io rg-gpu">
