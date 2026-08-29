@@ -42,14 +42,17 @@
                text-transform: uppercase; color: #7a828d; border: 1px dashed #7a828d;
                border-radius: 4px; padding: 1px 7px; margin-bottom: 6px; }
   p.legend-status .maybe-tag { margin-bottom: 0; }
-  /* color-coding por região — mesma cor no fluxograma e no título/trilho do bloco de texto */
-  .rg-audio { --rg: #d0a45c; }
-  .rg-img   { --rg: #5cb8a6; }
-  .rg-proc  { --rg: #a394d6; }
-  .rg-gpu   { --rg: #d98aa8; }
+  /* color-coding por região — mesma cor no fluxograma e no bloco de texto; --rgd = tom fraco pros sub-blocos */
+  .rg-audio { --rg: #d0a45c; --rgd: #6b5a3a; }
+  .rg-img   { --rg: #5cb8a6; --rgd: #3a5f5a; }
+  .rg-proc  { --rg: #a394d6; --rgd: #574f70; }
+  .rg-gpu   { --rg: #d98aa8; --rgd: #6f4f5c; }
   .block.rg-audio, .block.rg-img, .block.rg-proc, .block.rg-gpu { border-left: 3px solid var(--rg); padding-left: 15px; }
   [class*="rg-"] > h2.block-label { color: var(--rg); }
   [class*="rg-"] section > h3 { color: var(--rg); }
+  [class*="rg-"] .inner { border-left-color: var(--rgd); }
+  [class*="rg-"] .sub { border-color: var(--rgd); }
+  [class*="rg-"] .sub .block-label { color: var(--rg); opacity: .85; }
   .legend-rg { text-align: center; color: #8b949e; font-size: 13px; margin: 4px 0 0; }
   .legend-rg span { white-space: nowrap; margin: 0 6px; }
   .legend-rg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
@@ -73,7 +76,7 @@
   .block--io { border-style: dashed; }
   h2.block-label { font-size: 13px; color: #8b949e; font-weight: 700; letter-spacing: .04em;
                    margin: 14px 0 2px; scroll-margin-top: 16px; }
-  .block--io > h2.block-label { color: #d29922; }
+  /* .block--io label color agora vem da região (.rg-*) */
   .inner { border-left: 2px solid #21262d; padding-left: 16px; margin: 6px 0 0; }
   .sub { border: 1px dashed #30363d; border-radius: 8px; background: #0d1117;
          padding: 0 14px 10px; margin: 12px 0; }
@@ -124,12 +127,12 @@
     <text x="542" y="30" fill="#5cb8a6">imagem · externo</text>
   </g>
 
-  <!-- Visualização (sub-caixa) -->
-  <rect x="292" y="372" width="220" height="118" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1.3"/>
-  <text x="302" y="390" font-size="14" font-weight="600" fill="#8b949e">Visualização</text>
+  <!-- Visualização (sub-caixa) — tom fraco da região processo -->
+  <rect x="292" y="372" width="220" height="118" rx="8" fill="#0d1117" stroke="#574f70" stroke-width="1.3"/>
+  <text x="302" y="390" font-size="14" font-weight="600" fill="#8b7fa8">Visualização</text>
 
   <!-- sub-caixa: thread de áudio + tuning.py (tuning.py pertence à thread, recarrega por mtime) -->
-  <rect x="22" y="220" width="380" height="76" rx="10" fill="none" stroke="#6e7681" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <rect x="22" y="220" width="380" height="76" rx="10" fill="none" stroke="#574f70" stroke-width="1.4" stroke-dasharray="5 4"/>
 
   <!-- legenda de formas -->
   <rect x="286" y="14" width="228" height="146" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
