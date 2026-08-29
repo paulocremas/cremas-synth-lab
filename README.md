@@ -73,9 +73,9 @@ flowchart TD
     SD -.-> MON_I
     AT -.-> MON_A
 
-    subgraph SH["shader"]
+    subgraph SH["shader — hot-reload por mtime"]
         direction TB
-        FRAG["image.frag (arquivo)"] -.->|"mtime → recompila"| GPU["image.frag na GPU · 1× por pixel"]
+        FRAG["image.frag (arquivo)"] -.-> GPU["image.frag na GPU · 1× por pixel"]
     end
 
     MON_A ~~~ FRAG
