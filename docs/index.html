@@ -26,7 +26,7 @@
   .hotspots a:hover rect, .hotspots a:focus rect { fill: rgba(88,166,255,.16); stroke: #58a6ff; }
   .lead { margin: 20px 0 4px; }
   section { border-top: 1px solid #21262d; padding-top: 2px; scroll-margin-top: 16px; }
-  section:target, section.flash { animation: flash 1.8s ease-out; }
+  section:target, .flash { animation: flash 1.8s ease-out; }
   @keyframes flash { from { background: rgba(88,166,255,.13); } to { background: transparent; } }
   section p { margin: 6px 0; }
   ul, ol { margin: 6px 0; padding-left: 22px; }
@@ -67,14 +67,14 @@
 </header>
 
 <figure>
-<svg class="flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 920" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+<svg class="flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 930" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
   <defs>
     <marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker>
     <marker id="arg" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6e7681"/></marker>
     <marker id="arb" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#58a6ff"/></marker>
   </defs>
 
-  <rect x="0" y="0" width="800" height="920" fill="#0d1117"/>
+  <rect x="0" y="0" width="800" height="930" fill="#0d1117"/>
 
   <!-- native_synth.py boundary (atrás de tudo) -->
   <rect x="14" y="196" width="772" height="506" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
@@ -147,11 +147,11 @@
   <!-- setas: hot-reload (mtime) -->
   <g fill="none" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)">
     <path d="M270,258 H262"/>
-    <path d="M400,540 V548"/>
+    <path d="M400,544 V548"/>
   </g>
   <g font-size="12" fill="#8b949e" text-anchor="middle">
     <text x="264" y="250" fill="#58a6ff" text-anchor="end">mtime</text>
-    <text x="400" y="536" fill="#58a6ff">mtime</text>
+    <text x="492" y="530" fill="#58a6ff" text-anchor="start">mtime</text>
     <text x="154" y="618">glUniform1f × 13</text>
     <text x="400" y="618">glTexImage2D</text>
     <text x="640" y="618">glUniform3f</text>
@@ -175,7 +175,7 @@
   <!-- nós: documentos (arquivo) -->
   <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
     <path d="M270,238 H358 V276 C338,285 314,269 270,280 Z"/>
-    <path d="M344,498 H456 V536 C432,545 406,529 344,540 Z"/>
+    <path d="M316,512 H484 V540 C456,548 400,532 316,544 Z"/>
   </g>
   <!-- nós: cilindros (dado) -->
   <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
@@ -218,7 +218,7 @@
       <text x="656" y="470">state['dominant']</text>
       <text x="655" y="402">dominant_color_thread (~10/s)</text>
       <text x="154" y="662">13 uniforms de áudio</text>
-      <text x="400" y="523">image.frag (arquivo)</text>
+      <text x="400" y="531">image.frag (arquivo)</text>
     </g>
     <g font-size="13" fill="#8b949e">
       <text x="145" y="76">(monitor do sistema)</text>
@@ -227,23 +227,25 @@
     </g>
   </g>
 
-  <!-- legenda de setas -->
+  <!-- legenda de setas — barra no rodapé, longe dos nós -->
   <g font-size="12" fill="#8b949e">
-    <line x1="536" y1="742" x2="566" y2="742" stroke="#8b949e" stroke-width="1.6" marker-end="url(#ar)"/>
-    <text x="574" y="746">fluxo de dados / chamada GL</text>
-    <line x1="536" y1="764" x2="566" y2="764" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)"/>
-    <text x="574" y="768">hot-reload (mtime)</text>
-    <line x1="536" y1="786" x2="566" y2="786" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)"/>
-    <text x="574" y="790">leitura p/ Visualização</text>
+    <line x1="40" y1="909" x2="66" y2="909" stroke="#8b949e" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="72" y="913">fluxo de dados / chamada GL</text>
+    <line x1="250" y1="909" x2="276" y2="909" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)"/>
+    <text x="282" y="913">hot-reload (mtime)</text>
+    <line x1="405" y1="909" x2="431" y2="909" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)"/>
+    <text x="437" y="913">leitura p/ Visualização</text>
   </g>
 
   <!-- áreas clicáveis — um nó, uma seção -->
   <g class="hotspots">
     <a href="#processo"><rect x="14" y="196" width="300" height="26" rx="4"/></a>
     <!-- áudio · externo -->
+    <a href="#audio-ext"><rect x="20" y="10" width="250" height="24" rx="8"/></a>
     <a href="#audio-in"><rect x="32" y="34" width="226" height="52" rx="26"/></a>
     <a href="#parec"><rect x="60" y="104" width="170" height="44" rx="8"/></a>
     <!-- imagem · externo -->
+    <a href="#imagem-ext"><rect x="530" y="10" width="250" height="24" rx="8"/></a>
     <a href="#image-in"><rect x="542" y="34" width="226" height="52" rx="26"/></a>
     <a href="#ffmpeg"><rect x="570" y="104" width="170" height="44" rx="8"/></a>
     <!-- dentro do processo -->
@@ -255,7 +257,7 @@
     <a href="#dominant-thread"><rect x="540" y="374" width="230" height="48" rx="8"/></a>
     <a href="#state-dominant"><rect x="568" y="440" width="176" height="50" rx="10"/></a>
     <a href="#loop"><rect x="40" y="548" width="720" height="48" rx="10"/></a>
-    <a href="#shader-file"><rect x="344" y="498" width="112" height="42" rx="6"/></a>
+    <a href="#shader-file"><rect x="316" y="510" width="168" height="38" rx="6"/></a>
     <a href="#uniforms"><rect x="54" y="630" width="200" height="52" rx="10"/></a>
     <a href="#u_texture_0"><rect x="320" y="630" width="160" height="52" rx="10"/></a>
     <a href="#u_dominant"><rect x="560" y="630" width="160" height="52" rx="10"/></a>
@@ -277,7 +279,7 @@ na ordem de leitura: as entradas capturam → as threads derivam números → o 
 sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
 
 <div class="block block--io">
-<h2 class="block-label">áudio · externo — fora do processo</h2>
+<h2 class="block-label" id="audio-ext">áudio · externo — fora do processo</h2>
 
 <section id="audio-in">
 <h3>entrada de áudio</h3>
@@ -296,7 +298,7 @@ Sem <code>parec</code>: sem uniforms de som, o shader ainda roda.</p>
 </div>
 
 <div class="block block--io">
-<h2 class="block-label">imagem · externo — fora do processo</h2>
+<h2 class="block-label" id="imagem-ext">imagem · externo — fora do processo</h2>
 
 <section id="image-in">
 <h3>entrada de imagem (OBS)</h3>
