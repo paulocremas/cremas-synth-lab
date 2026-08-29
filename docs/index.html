@@ -26,7 +26,7 @@
   .hotspots a:hover rect, .hotspots a:focus rect { fill: rgba(88,166,255,.16); stroke: #58a6ff; }
   .lead { margin: 20px 0 4px; }
   section { border-top: 1px solid #21262d; padding-top: 2px; scroll-margin-top: 16px; }
-  section:target { animation: flash 1.8s ease-out; }
+  section:target, section.flash { animation: flash 1.8s ease-out; }
   @keyframes flash { from { background: rgba(88,166,255,.13); } to { background: transparent; } }
   section p { margin: 6px 0; }
   ul, ol { margin: 6px 0; padding-left: 22px; }
@@ -53,7 +53,7 @@
   th, td { border: 1px solid #30363d; padding: 5px 8px; text-align: left; vertical-align: top; }
   th { background: #161b22; color: #8b949e; font-weight: 600; white-space: nowrap; }
   td.grouprow { background: #12171e; color: #adbac7; }
-  tr:target td { background: rgba(88,166,255,.13); }
+  tr:target td, tr.flash td { background: rgba(88,166,255,.13); }
 </style>
 </head>
 <body>
@@ -517,5 +517,23 @@ Essa imagem é a única saída do programa.</p>
 </footer>
 
 </div>
+
+<script>
+// Cliques em âncoras internas (blocos do diagrama, links do texto): rola até a
+// seção sem escrever #hash na URL. Com JS desligado, o link de fragmento ainda funciona.
+document.addEventListener('click', function (e) {
+  var a = e.target.closest && e.target.closest('a[href^="#"]');
+  if (!a) return;
+  var el = document.getElementById(a.getAttribute('href').slice(1));
+  if (!el) return;
+  e.preventDefault();
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.classList.remove('flash');
+  void el.offsetWidth;               // reinicia a animação em cliques repetidos
+  el.classList.add('flash');
+  setTimeout(function () { el.classList.remove('flash'); }, 1800);
+});
+</script>
 </body>
 </html>
