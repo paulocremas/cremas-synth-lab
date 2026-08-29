@@ -26,6 +26,13 @@
            box-shadow: 0 2px 8px rgba(0,0,0,.4); }
   .totop:hover { border-color: #58a6ff; background: #1c2430; text-decoration: none; }
   @media (max-width: 640px) { .totop { right: 12px; bottom: 12px; } }
+  .term { border-bottom: 1px dotted #58a6ff; cursor: help; }
+  .term:hover, .term:focus { color: #58a6ff; outline: none; }
+  #glosstip { position: fixed; z-index: 20; max-width: 340px; display: none;
+              background: #1c2330; border: 1px solid #3d4450; border-radius: 8px;
+              padding: 9px 11px; font-size: 12.5px; line-height: 1.5;
+              color: #e6edf3; box-shadow: 0 6px 20px rgba(0,0,0,.55); }
+  #glosstip code { background: #12171d; border-color: #2b3440; }
   svg.flow { width: 100%; height: auto; max-width: 800px; display: block; margin: 0 auto; }
   .hint { text-align: center; color: #8b949e; font-size: 13px; margin-top: 8px; }
   .hotspots rect { fill: transparent; stroke: transparent; stroke-width: 2; cursor: pointer; transition: fill .12s, stroke .12s; }
@@ -290,25 +297,13 @@ sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
 <section id="audio-in">
 <h3>entrada de áudio</h3>
 <p>É a <b>fonte</b> — o lugar de onde o som vem. Não é o programa (o programa é o
-<a href="#parec"><code>parec</code></a>, seção seguinte).</p>
-
-<h4>palavras primeiro</h4>
-<ul>
-<li><b>Som digital</b> = uma fila de números. Cada número diz onde estava o alto-falante num
-instante. 44100 números por segundo = "44,1&nbsp;kHz".</li>
-<li><b>Amostras cruas</b> = só esses números, sem embrulho: sem cabeçalho de <code>.wav</code>,
-sem compressão de <code>.mp3</code>. Número atrás de número, nada mais.</li>
-<li><b>stdout</b> ("saída padrão") = o cano por onde todo programa de terminal escreve o
-resultado. O que aparece na tela quando você roda um comando saiu por aí. Esse cano pode ser
-desviado direto pra dentro de outro programa em vez da tela — é o que o <code>parec</code> faz
-com o Python.</li>
-<li><b>sink</b> = uma <b>saída</b> de som (fone, caixa, saída da placa). "Tocar no fone" =
-mandar pro sink do fone.</li>
-<li><b>source / fonte</b> = uma <b>entrada</b> de som (microfone, line-in).</li>
-<li><b><code>.monitor</code></b> = todo sink ganha de brinde uma fonte gêmea chamada
-<code>&lt;sink&gt;.monitor</code>. Ela devolve — como se fosse um microfone — exatamente o que
-está tocando naquela saída. Um grampo na própria caixa de som.</li>
-</ul>
+<a href="#parec"><code>parec</code></a>, seção seguinte), que lê
+<span class="term" data-term="amostras-cruas">amostras cruas</span> e as entrega pelo
+<span class="term" data-term="stdout">stdout</span> ao Python. As fontes vivem no
+PulseAudio/PipeWire, que divide tudo em <span class="term" data-term="sink">saídas (sinks)</span>
+e <span class="term" data-term="source">entradas (sources)</span>; o
+<span class="term" data-term="monitor"><code>.monitor</code></span> de um sink é a entrada gêmea
+que devolve o que aquela saída está tocando.</p>
 
 <h4>hoje — o padrão</h4>
 <ul>
@@ -403,29 +398,16 @@ uniforms de som.</p>
 <section id="image-in">
 <h3>entrada de imagem (OBS)</h3>
 <p>É a <b>fonte</b> — de onde vem a imagem. Não é o programa (o programa é o
-<a href="#ffmpeg"><code>ffmpeg</code></a>, seção seguinte).</p>
-
-<h4>palavras primeiro</h4>
-<ul>
-<li><b>Frame</b> = uma imagem parada, um quadro. Vídeo = uma fila de frames, ~30 por segundo.</li>
-<li><b>Pixel</b> = um pontinho da imagem. Cada um tem 3 números: quanto de vermelho, verde e
-azul, de 0 a 255.</li>
-<li><b>RGB24 cru</b> = a imagem escrita como esses números e nada mais: 3 bytes por pixel, pixel
-atrás de pixel, sem compressão (não é JPEG, PNG nem H.264), sem cabeçalho. "24" = 3 canais ×
-8&nbsp;bits.</li>
-<li><b>stdout / cano</b> = mesmo do lado do áudio: o programa de captura joga os bytes num cano
-em vez da tela, e o Python lê do outro lado.</li>
-<li><b>v4l2</b> ("Video4Linux2") = a parte do Linux que fala com câmera. Cada câmera vira um
-arquivo <code>/dev/video0</code>, <code>/dev/video1</code>…</li>
-<li><b>v4l2loopback</b> = um módulo que cria uma <b>câmera falsa</b> (<code>/dev/videoN</code>):
-qualquer programa escreve nela e o resto do sistema a enxerga como webcam normal.</li>
-<li><b>OBS Virtual Camera</b> = o OBS Studio monta uma cena (janela + textos + filtros) e
-despeja nessa câmera falsa. "Câmera virtual" = essa dupla.</li>
-<li><b>x11grab</b> = "gravar a tela do X11": o ffmpeg lê os pixels da área de trabalho em vez de
-uma câmera.</li>
-<li><b>scale</b> = filtro do ffmpeg que redimensiona a imagem — aqui, pra bater com o tamanho da
-textura do shader.</li>
-</ul>
+<a href="#ffmpeg"><code>ffmpeg</code></a>, seção seguinte), que lê
+<span class="term" data-term="frame">frames</span> em
+<span class="term" data-term="rgb24">RGB24 cru</span> e os entrega pelo
+<span class="term" data-term="stdout">stdout</span> ao Python. As câmeras entram pelo
+<span class="term" data-term="v4l2">v4l2</span> do Linux (<code>/dev/videoN</code>); uma
+<span class="term" data-term="v4l2loopback">câmera falsa (v4l2loopback)</span> alimentada pela
+<span class="term" data-term="obs-virtual-camera">OBS Virtual Camera</span> entra no mesmo lugar.
+Com <code>--screen</code>, a fonte vira a tela — via
+<span class="term" data-term="x11grab">x11grab</span> +
+<span class="term" data-term="scale">scale</span>.</p>
 
 <h4>hoje — o padrão</h4>
 <ul>
@@ -700,6 +682,7 @@ Essa imagem é a única saída do programa.</p>
 </footer>
 
 <a class="totop" href="#topo" aria-label="Voltar ao fluxograma no topo">↑ fluxograma</a>
+<div id="glosstip" role="tooltip"></div>
 
 </div>
 
@@ -719,6 +702,62 @@ document.addEventListener('click', function (e) {
   el.classList.add('flash');
   setTimeout(function () { el.classList.remove('flash'); }, 1800);
 });
+
+// Glossário: um <span class="term" data-term="slug"> mostra a definição de GLOSS num
+// tooltip flutuante — hover, foco de teclado ou tap. A definição mora só aqui; repetir
+// o termo no texto é só marcar outro span com o mesmo slug.
+// ponytail: tooltip na mão, sem lib. Se um dia precisar de seta/delay/flip esperto, Tippy.js.
+var GLOSS = {
+  'amostras-cruas': 'Som digital é uma fila de números — cada um diz onde estava o alto-falante num instante, <b>44100 por segundo</b> ("44,1&nbsp;kHz"). "Cru" (PCM) = só esses números, sem embrulho nenhum: sem cabeçalho de <code>.wav</code>, sem compressão de <code>.mp3</code>. Número atrás de número.',
+  'stdout': '"Saída padrão": o cano por onde todo programa de terminal escreve o resultado — normalmente a tela (o que aparece quando você roda um comando). Esse cano pode ser desviado direto pra dentro de outro programa em vez da tela; é assim que o <code>parec</code>/<code>ffmpeg</code> entrega os bytes pro Python, sem arquivo no meio.',
+  'sink': 'Uma <b>saída</b> de som no PulseAudio/PipeWire: fone, caixa, saída da placa. "Tocar no fone" = mandar pro sink do fone. O oposto de <i>source</i>.',
+  'source': 'Uma <b>entrada</b> de som no PulseAudio/PipeWire: microfone, line-in — ou o <code>.monitor</code> de um sink. Também chamada <b>fonte</b>; é o que o <code>parec</code> grava.',
+  'monitor': 'Todo <i>sink</i> (saída) ganha de brinde uma <i>source</i> gêmea <code>&lt;sink&gt;.monitor</code>. Ela devolve — como se fosse um microfone — exatamente o que está tocando naquela saída. Um grampo na própria caixa de som.',
+  'frame': 'Um quadro — uma imagem parada. Vídeo = uma fila de frames, ~30 por segundo. O programa guarda só o último.',
+  'rgb24': 'A imagem escrita só como números e nada mais: <b>3 bytes por pixel</b> — vermelho, verde, azul, cada um de 0 a 255 — pixel atrás de pixel, sem compressão (não é JPEG, PNG nem H.264) e sem cabeçalho. "24" = 3 canais &times; 8&nbsp;bits. É o equivalente visual das <i>amostras cruas</i> do áudio.',
+  'v4l2': '"Video4Linux2": a parte do Linux que fala com câmera. Cada câmera vira um arquivo <code>/dev/video0</code>, <code>/dev/video1</code>…',
+  'v4l2loopback': 'Um módulo do kernel que cria uma <b>câmera falsa</b> (<code>/dev/videoN</code>): qualquer programa escreve nela e o resto do sistema a enxerga como webcam normal.',
+  'obs-virtual-camera': 'O OBS Studio monta uma cena (janela + textos + filtros) e a despeja numa câmera falsa (v4l2loopback). "Câmera virtual" = essa dupla: o OBS escrevendo e o <code>/dev/videoN</code> saindo.',
+  'x11grab': '"Gravar a tela do X11": o <code>ffmpeg</code> lê os pixels da área de trabalho em vez de uma câmera.',
+  'scale': 'Filtro do <code>ffmpeg</code> que redimensiona a imagem — aqui, pra bater com o tamanho da textura do shader.'
+};
+(function () {
+  var tip = document.getElementById('glosstip');
+  if (!tip) return;
+  [].forEach.call(document.querySelectorAll('.term'), function (el) {
+    if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+  });
+  function place(el) {
+    var k = el.getAttribute('data-term');
+    if (!GLOSS[k]) return;
+    tip.innerHTML = GLOSS[k];
+    tip.style.display = 'block';
+    var r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    tip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - t.width - 8)) + 'px';
+    var below = r.bottom + 8 + t.height <= window.innerHeight;
+    tip.style.top = (below ? r.bottom + 8 : Math.max(8, r.top - 8 - t.height)) + 'px';
+  }
+  function hide() { tip.style.display = 'none'; }
+  document.addEventListener('pointerover', function (e) {
+    var el = e.target.closest && e.target.closest('.term');
+    if (el) place(el);
+  });
+  document.addEventListener('pointerout', function (e) {
+    var el = e.target.closest && e.target.closest('.term');
+    if (el && !el.contains(e.relatedTarget)) hide();
+  });
+  document.addEventListener('focusin', function (e) {
+    var el = e.target.closest && e.target.closest('.term');
+    if (el) place(el);
+  });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest('.term');
+    if (el) { e.preventDefault(); tip.style.display === 'block' ? hide() : place(el); }
+    else if (!e.target.closest('#glosstip')) hide();
+  });
+  window.addEventListener('scroll', hide, true);
+})();
 </script>
 </body>
 </html>
