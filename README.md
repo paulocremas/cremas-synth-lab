@@ -42,35 +42,35 @@ descartado (nunca acumula fila).
 
 ```mermaid
 flowchart TD
-    IMG["entrada de imagem (OBS)"]
-    AUD["entrada de áudio (monitor do sistema)"]
+    subgraph IMG_SIDE["imagem"]
+        direction TB
+        IMG["entrada de imagem (OBS)"] --> CAPV["captura de vídeo (FFMPEG)"]
+        CAPV --> VT["thread de vídeo"]
+        VT --> SF["state['frame']"]
+        SF --> DCT["dominant_color_thread (~10/s)"]
+        DCT --> SD["state['dominant']"]
+        SF --> UTEX["u_texture_0"]
+        SD --> UDOM["u_dominant"]
+    end
 
-    IMG --> CAPV["captura de vídeo (FFMPEG)"]
-    CAPV --> VT["thread de vídeo"]
-    VT --> SF["state['frame']"]
-    AUD --> CAPA["captura de áudio (parec)"]
-    CAPA --> AT["thread de áudio<br/>FFT + faixas + kick + suavização attack/release"]
+    subgraph AUD_SIDE["áudio"]
+        direction TB
+        AUD["entrada de áudio (monitor do sistema)"] --> CAPA["captura de áudio (parec)"]
+        CAPA --> AT["thread de áudio<br/>FFT + faixas + kick + suavização"]
+        AT --> SA["state['amp'] … state['kick']"]
+        SA --> UAUD["u_amp … u_air, u_kick"]
+        TUN["tuning.py"] -.->|"mtime"| AT
+    end
 
-    SF -->|"glTexImage2D"| UTEX["u_texture_0"]
-    SF --> DCT["dominant_color_thread (~10/s)"]
-    DCT --> SD["state['dominant']"]
-    SD -->|"glUniform3f"| UDOM["u_dominant"]
-    AT --> SA["state['amp'], state['bass'], state['kick'], …"]
-    SA -->|"glUniform1f × 13"| UAUD["u_amp, u_bass … u_air, u_kick"]
+    UTEX -->|"glTexImage2D"| GPU["image.frag na GPU · 1× por pixel"]
+    UDOM -->|"glUniform3f"| GPU
+    UAUD -->|"glUniform1f × 13"| GPU
+    FRAG["image.frag"] -.->|"mtime → recompila"| GPU
+    GPU --> WIN["pygame · 30 fps → janela / monitor"]
 
-    TUN["tuning.py"] -.->|"mtime → recarrega constantes"| AT
-    FRAG["image.frag"] -.->|"mtime → recompila (mantém o antigo se der erro)"| SHADER
-
-    UTEX --> SHADER["image.frag na GPU · 1x por pixel"]
-    UDOM --> SHADER
-    UAUD --> SHADER
-    SHADER --> PG["pygame · 30 fps"]
-    PG --> WIN["janela / fullscreen / monitor"]
-
-    AT -.-> DASHA["dashboard de áudio · stdout<br/>kick + faixas de mixagem + espectrograma"]
-    SF -.-> DASHI["dashboard de imagem · gnome-terminal<br/>brilho, cor, nitidez, bordas, movimento…"]
-    SD -.-> DASHI
-    AT -.->|"só dispara o redraw (~230 ms)"| DASHI
+    AT -.-> DASH_A["dashboard de áudio · stdout<br/>kick + faixas + espectrograma"]
+    SF -.-> DASH_I["dashboard de imagem · gnome-terminal<br/>brilho, cor, bordas, movimento…<br/>(redraw ~230 ms, no ritmo do áudio)"]
+    SD -.-> DASH_I
 ```
 
 **Imagem** — origem física → `ffmpeg` (webcam/tela) ou `import` (uma janela, segue mesmo coberta)
