@@ -294,16 +294,13 @@ sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
 <div class="block block--io">
 <h2 class="block-label" id="audio-ext">áudio · externo — fora do processo</h2>
 
-<section id="audio-in">
+<section id="audio-in" data-glossary>
 <h3>entrada de áudio</h3>
 <p>É a <b>fonte</b> — o lugar de onde o som vem. Não é o programa (o programa é o
-<a href="#parec"><code>parec</code></a>, seção seguinte), que lê
-<span class="term" data-term="amostras-cruas">amostras cruas</span> e as entrega pelo
-<span class="term" data-term="stdout">stdout</span> ao Python. As fontes vivem no
-PulseAudio/PipeWire, que divide tudo em <span class="term" data-term="sink">saídas (sinks)</span>
-e <span class="term" data-term="source">entradas (sources)</span>; o
-<span class="term" data-term="monitor"><code>.monitor</code></span> de um sink é a entrada gêmea
-que devolve o que aquela saída está tocando.</p>
+<a href="#parec"><code>parec</code></a>, seção seguinte), que lê amostras cruas e as entrega
+pelo stdout ao Python. As fontes vivem no PulseAudio/PipeWire, que divide tudo em saídas
+(sinks) e entradas (sources); o <code>.monitor</code> de um sink é a entrada gêmea que devolve
+o que aquela saída está tocando.</p>
 
 <h4>hoje — o padrão</h4>
 <ul>
@@ -395,19 +392,13 @@ uniforms de som.</p>
 <div class="block block--io">
 <h2 class="block-label" id="imagem-ext">imagem · externo — fora do processo</h2>
 
-<section id="image-in">
+<section id="image-in" data-glossary>
 <h3>entrada de imagem (OBS)</h3>
 <p>É a <b>fonte</b> — de onde vem a imagem. Não é o programa (o programa é o
-<a href="#ffmpeg"><code>ffmpeg</code></a>, seção seguinte), que lê
-<span class="term" data-term="frame">frames</span> em
-<span class="term" data-term="rgb24">RGB24 cru</span> e os entrega pelo
-<span class="term" data-term="stdout">stdout</span> ao Python. As câmeras entram pelo
-<span class="term" data-term="v4l2">v4l2</span> do Linux (<code>/dev/videoN</code>); uma
-<span class="term" data-term="v4l2loopback">câmera falsa (v4l2loopback)</span> alimentada pela
-<span class="term" data-term="obs-virtual-camera">OBS Virtual Camera</span> entra no mesmo lugar.
-Com <code>--screen</code>, a fonte vira a tela — via
-<span class="term" data-term="x11grab">x11grab</span> +
-<span class="term" data-term="scale">scale</span>.</p>
+<a href="#ffmpeg"><code>ffmpeg</code></a>, seção seguinte), que lê frames em RGB24 cru e os
+entrega pelo stdout ao Python. As câmeras entram pelo v4l2 do Linux (<code>/dev/videoN</code>);
+uma câmera falsa (v4l2loopback) alimentada pela OBS Virtual Camera entra no mesmo lugar. Com
+<code>--screen</code>, a fonte vira a tela — via x11grab + scale.</p>
 
 <h4>hoje — o padrão</h4>
 <ul>
@@ -703,34 +694,85 @@ document.addEventListener('click', function (e) {
   setTimeout(function () { el.classList.remove('flash'); }, 1800);
 });
 
-// Glossário: um <span class="term" data-term="slug"> mostra a definição de GLOSS num
-// tooltip flutuante — hover, foco de teclado ou tap. A definição mora só aqui; repetir
-// o termo no texto é só marcar outro span com o mesmo slug.
-// ponytail: tooltip na mão, sem lib. Se um dia precisar de seta/delay/flip esperto, Tippy.js.
+// Glossário. Fonte da verdade: GLOSS — cada verbete tem a definição (d) e as formas de
+// escrita que disparam o hover (hit). linkify() varre o texto de qualquer [data-glossary]
+// e embrulha TODA ocorrência num <span class="term"> sozinho — não se marca termo na mão.
+// Um <code> cujo texto é exatamente um verbete também vira termo.
+// ponytail: linkify roda uma vez, na carga. Se o texto passar a mudar em runtime, chamar de novo.
 var GLOSS = {
-  'amostras-cruas': 'Som digital é uma fila de números — cada um diz onde estava o alto-falante num instante, <b>44100 por segundo</b> ("44,1&nbsp;kHz"). "Cru" (PCM) = só esses números, sem embrulho nenhum: sem cabeçalho de <code>.wav</code>, sem compressão de <code>.mp3</code>. Número atrás de número.',
-  'stdout': '"Saída padrão": o cano por onde todo programa de terminal escreve o resultado — normalmente a tela (o que aparece quando você roda um comando). Esse cano pode ser desviado direto pra dentro de outro programa em vez da tela; é assim que o <code>parec</code>/<code>ffmpeg</code> entrega os bytes pro Python, sem arquivo no meio.',
-  'sink': 'Uma <b>saída</b> de som no PulseAudio/PipeWire: fone, caixa, saída da placa. "Tocar no fone" = mandar pro sink do fone. O oposto de <i>source</i>.',
-  'source': 'Uma <b>entrada</b> de som no PulseAudio/PipeWire: microfone, line-in — ou o <code>.monitor</code> de um sink. Também chamada <b>fonte</b>; é o que o <code>parec</code> grava.',
-  'monitor': 'Todo <i>sink</i> (saída) ganha de brinde uma <i>source</i> gêmea <code>&lt;sink&gt;.monitor</code>. Ela devolve — como se fosse um microfone — exatamente o que está tocando naquela saída. Um grampo na própria caixa de som.',
-  'frame': 'Um quadro — uma imagem parada. Vídeo = uma fila de frames, ~30 por segundo. O programa guarda só o último.',
-  'rgb24': 'A imagem escrita só como números e nada mais: <b>3 bytes por pixel</b> — vermelho, verde, azul, cada um de 0 a 255 — pixel atrás de pixel, sem compressão (não é JPEG, PNG nem H.264) e sem cabeçalho. "24" = 3 canais &times; 8&nbsp;bits. É o equivalente visual das <i>amostras cruas</i> do áudio.',
-  'v4l2': '"Video4Linux2": a parte do Linux que fala com câmera. Cada câmera vira um arquivo <code>/dev/video0</code>, <code>/dev/video1</code>…',
-  'v4l2loopback': 'Um módulo do kernel que cria uma <b>câmera falsa</b> (<code>/dev/videoN</code>): qualquer programa escreve nela e o resto do sistema a enxerga como webcam normal.',
-  'obs-virtual-camera': 'O OBS Studio monta uma cena (janela + textos + filtros) e a despeja numa câmera falsa (v4l2loopback). "Câmera virtual" = essa dupla: o OBS escrevendo e o <code>/dev/videoN</code> saindo.',
-  'x11grab': '"Gravar a tela do X11": o <code>ffmpeg</code> lê os pixels da área de trabalho em vez de uma câmera.',
-  'scale': 'Filtro do <code>ffmpeg</code> que redimensiona a imagem — aqui, pra bater com o tamanho da textura do shader.'
+  'amostras-cruas': { hit: ['amostras cruas'], d: 'Som digital é uma fila de números — cada um diz onde estava o alto-falante num instante, <b>44100 por segundo</b> ("44,1&nbsp;kHz"). "Cru" (PCM) = só esses números, sem embrulho nenhum: sem cabeçalho de <code>.wav</code>, sem compressão de <code>.mp3</code>. Número atrás de número.' },
+  'stdout': { hit: ['stdout'], d: '"Saída padrão": o cano por onde todo programa de terminal escreve o resultado — normalmente a tela (o que aparece quando você roda um comando). Esse cano pode ser desviado direto pra dentro de outro programa em vez da tela; é assim que o <code>parec</code>/<code>ffmpeg</code> entrega os bytes pro Python, sem arquivo no meio.' },
+  'sink': { hit: ['sink', 'sinks'], d: 'Uma <b>saída</b> de som no PulseAudio/PipeWire: fone, caixa, saída da placa. "Tocar no fone" = mandar pro sink do fone. O oposto de <i>source</i>.' },
+  'source': { hit: ['source', 'sources'], d: 'Uma <b>entrada</b> de som no PulseAudio/PipeWire: microfone, line-in — ou o <code>.monitor</code> de um sink. Também chamada <b>fonte</b>; é o que o <code>parec</code> grava.' },
+  'monitor': { hit: ['.monitor'], d: 'Todo <i>sink</i> (saída) ganha de brinde uma <i>source</i> gêmea <code>&lt;sink&gt;.monitor</code>. Ela devolve — como se fosse um microfone — exatamente o que está tocando naquela saída. Um grampo na própria caixa de som.' },
+  'frame': { hit: ['frame', 'frames'], d: 'Um quadro — uma imagem parada. Vídeo = uma fila de frames, ~30 por segundo. O programa guarda só o último.' },
+  'rgb24': { hit: ['RGB24 cru', 'RGB24'], d: 'A imagem escrita só como números e nada mais: <b>3 bytes por pixel</b> — vermelho, verde, azul, cada um de 0 a 255 — pixel atrás de pixel, sem compressão (não é JPEG, PNG nem H.264) e sem cabeçalho. "24" = 3 canais &times; 8&nbsp;bits. É o equivalente visual das <i>amostras cruas</i> do áudio.' },
+  'v4l2': { hit: ['v4l2'], d: '"Video4Linux2": a parte do Linux que fala com câmera. Cada câmera vira um arquivo <code>/dev/video0</code>, <code>/dev/video1</code>…' },
+  'v4l2loopback': { hit: ['v4l2loopback', 'câmera falsa'], d: 'Um módulo do kernel que cria uma <b>câmera falsa</b> (<code>/dev/videoN</code>): qualquer programa escreve nela e o resto do sistema a enxerga como webcam normal.' },
+  'obs-virtual-camera': { hit: ['OBS Virtual Camera', 'câmera virtual'], d: 'O OBS Studio monta uma cena (janela + textos + filtros) e a despeja numa câmera falsa (v4l2loopback). "Câmera virtual" = essa dupla: o OBS escrevendo e o <code>/dev/videoN</code> saindo.' },
+  'x11grab': { hit: ['x11grab'], d: '"Gravar a tela do X11": o <code>ffmpeg</code> lê os pixels da área de trabalho em vez de uma câmera.' },
+  'scale': { hit: ['scale'], d: 'Filtro do <code>ffmpeg</code> que redimensiona a imagem — aqui, pra bater com o tamanho da textura do shader.' }
 };
 (function () {
   var tip = document.getElementById('glosstip');
   if (!tip) return;
+
+  // --- auto-linkify: texto -> <span class="term"> ------------------------
+  var lookup = {}, phrases = [];
+  Object.keys(GLOSS).forEach(function (slug) {
+    (GLOSS[slug].hit || [slug]).forEach(function (p) { lookup[p.toLowerCase()] = slug; phrases.push(p); });
+  });
+  phrases.sort(function (a, b) { return b.length - a.length; });          // frase mais longa ganha
+  var rx = new RegExp('(' + phrases.map(function (p) {
+    return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }).join('|') + ')', 'gi');
+  function isWord(ch) { return !!ch && /[0-9A-Za-zÀ-ÿ_]/.test(ch); }
+  function mkTerm(text, slug) {
+    var s = document.createElement('span');
+    s.className = 'term'; s.setAttribute('data-term', slug);
+    if (text) s.textContent = text;
+    return s;
+  }
+  var SKIP = { A: 1, SCRIPT: 1, STYLE: 1, BUTTON: 1, SVG: 1 };
+  function linkify(root) {
+    [].slice.call(root.childNodes).forEach(function (n) {
+      if (n.nodeType === 3) {
+        var text = n.nodeValue, m, last = 0, frag = null;
+        rx.lastIndex = 0;
+        while ((m = rx.exec(text))) {
+          var i = m.index, j = i + m[0].length;
+          if (isWord(text[i - 1]) || isWord(text[j])) continue;
+          frag = frag || document.createDocumentFragment();
+          if (i > last) frag.appendChild(document.createTextNode(text.slice(last, i)));
+          frag.appendChild(mkTerm(m[0], lookup[m[0].toLowerCase()]));
+          last = j;
+        }
+        if (frag) {
+          if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+          n.parentNode.replaceChild(frag, n);
+        }
+      } else if (n.nodeType === 1) {
+        if (n.classList.contains('term') || n.id === 'glosstip') return;
+        var tag = n.tagName.toUpperCase();
+        if (tag === 'CODE') {
+          var slug = lookup[n.textContent.trim().toLowerCase()];
+          if (slug) { var w = mkTerm('', slug); n.parentNode.replaceChild(w, n); w.appendChild(n); }
+          return;                                                          // nunca entra num <code>
+        }
+        if (!SKIP[tag]) linkify(n);
+      }
+    });
+  }
+  [].forEach.call(document.querySelectorAll('[data-glossary]'), linkify);
+
+  // --- tooltip ---------------------------------------------------------
   [].forEach.call(document.querySelectorAll('.term'), function (el) {
     if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
   });
   function place(el) {
-    var k = el.getAttribute('data-term');
-    if (!GLOSS[k]) return;
-    tip.innerHTML = GLOSS[k];
+    var g = GLOSS[el.getAttribute('data-term')];
+    if (!g) return;
+    tip.innerHTML = g.d;
     tip.style.display = 'block';
     var r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
     tip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - t.width - 8)) + 'px';
