@@ -42,6 +42,16 @@
                text-transform: uppercase; color: #7a828d; border: 1px dashed #7a828d;
                border-radius: 4px; padding: 1px 7px; margin-bottom: 6px; }
   p.legend-status .maybe-tag { margin-bottom: 0; }
+  /* possibilidade = <details> retraído por natureza; cada nível é um card .lvl */
+  details.maybe > summary { cursor: pointer; list-style: none; padding: 4px 0; color: #c2cbd4; font-size: 13px; }
+  details.maybe > summary::-webkit-details-marker { display: none; }
+  details.maybe > summary::before { content: "\25B8"; color: #7a828d; margin-right: 7px; }
+  details.maybe[open] > summary::before { content: "\25BE"; }
+  details.maybe[open] > summary { margin-bottom: 4px; }
+  details.maybe > summary:hover { color: #e6edf3; }
+  details.maybe > summary .maybe-tag { margin-bottom: 0; }
+  .maybe .lvl { border: 1px solid #3a4149; border-radius: 8px; background: #14171c; padding: 8px 13px 3px; margin: 10px 0; }
+  .maybe .lvl > h4 { margin: 6px 0 5px; color: #b9c1cb; }
   /* color-coding por região — mesma cor no fluxograma e no bloco de texto; --rgd = tom fraco pros sub-blocos */
   .rg-audio { --rg: #d0a45c; --rgd: #6b5a3a; }
   .rg-img   { --rg: #5cb8a6; --rgd: #3a5f5a; }
@@ -123,8 +133,8 @@
     <rect x="530" y="10" width="250" height="156" rx="8" stroke="#5cb8a6"/>
   </g>
   <g font-size="14" font-weight="600">
-    <text x="32" y="30" fill="#d0a45c">áudio · externo</text>
-    <text x="542" y="30" fill="#5cb8a6">imagem · externo</text>
+    <text x="32" y="30" fill="#d0a45c">áudio · input</text>
+    <text x="542" y="30" fill="#5cb8a6">imagem · input</text>
   </g>
 
   <!-- Visualização (sub-caixa) — tom fraco da região processo -->
@@ -312,18 +322,18 @@
 </svg>
 <p class="hint">passe o mouse pra ver os blocos clicáveis</p>
 <p class="hint legend-status" style="margin-top:4px"><b style="color:#c9d1d9">implementado</b> — o que roda hoje (todo o fluxograma e a maioria dos blocos) &nbsp;·&nbsp; <span class="maybe-tag">possibilidade</span> ideias marcadas à parte, não é código de hoje</p>
-<p class="legend-rg"><span style="color:#d0a45c"><i></i>áudio · externo</span><span style="color:#5cb8a6"><i></i>imagem · externo</span><span style="color:#a394d6"><i></i>native_synth.py</span><span style="color:#d98aa8"><i></i>GPU e saída</span></p>
+<p class="legend-rg"><span style="color:#d0a45c"><i></i>áudio · input</span><span style="color:#5cb8a6"><i></i>imagem · input</span><span style="color:#a394d6"><i></i>native_synth.py</span><span style="color:#d98aa8"><i></i>GPU e saída</span></p>
 <p class="legend-rg" style="font-size:12px">dentro do processo, contorno <span style="color:#d0a45c">âmbar</span> / <span style="color:#5cb8a6">verde-água</span> num nó = o dado ali veio do áudio / da imagem</p>
 </figure>
 
 <main>
-<p class="lead">O diagrama tem três caixas: <b>áudio · externo</b> e <b>imagem · externo</b> — binários
+<p class="lead">O diagrama tem três caixas: <b>áudio · input</b> e <b>imagem · input</b> — binários
 que rodam à parte — e <b>native_synth.py</b>, o processo. Cada nó do diagrama tem a sua seção abaixo,
 na ordem de leitura: as entradas capturam → as threads derivam números → o <a href="#loop">loop</a>
 sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
 
 <div class="block block--io rg-audio">
-<h2 class="block-label" id="audio-ext">áudio · externo — fora do processo</h2>
+<h2 class="block-label" id="audio-ext">áudio · input — fora do processo</h2>
 
 <section id="audio-in" data-glossary>
 <h3>entrada de áudio</h3>
@@ -345,11 +355,11 @@ cola <code>.monitor</code> no fim.</li>
 <code>pactl list short sources</code>.</li>
 </ul>
 
-<div class="maybe">
-<span class="maybe-tag">possibilidade</span>
-<p><b>Trocar a fonte</b> — nada disto roda hoje. Três níveis, cada um só entra quando o de cima
-não dá:</p>
+<details class="maybe">
+<summary><span class="maybe-tag">possibilidade</span> trocar a fonte — 3 níveis de esforço</summary>
+<p>Nada disto roda hoje. Cada nível só entra quando o de cima não dá:</p>
 
+<div class="lvl">
 <h4>1 · a fonte já aparece em <code>pactl list short sources</code> → só <code>--audio NOME</code></h4>
 <ul>
 <li><b>Microfone ou line-in da placa da máquina</b> — nome tipo
@@ -367,7 +377,9 @@ fonte → <code>--audio alsa_input.usb-...</code>. <b>Funciona hoje.</b> Dois po
 <li><b>Monitor de outra saída</b> — se você tem um segundo sink,
 <code>--audio &lt;outro-sink&gt;.monitor</code>.</li>
 </ul>
+</div>
 
+<div class="lvl">
 <h4>2 · a fonte ainda não existe → um comando cria, aí <code>--audio NOME</code></h4>
 <ul>
 <li><b>"Sink falso" (null sink) como desvio</b> — cria uma saída de mentira
@@ -378,7 +390,9 @@ No PulseAudio antigo precisa carregar <code>module-jack-source</code>.</li>
 <li><b>Rede</b> — receber áudio de outra máquina (<code>module-rtp-recv</code>), se isso virar
 uma fonte na lista.</li>
 </ul>
+</div>
 
+<div class="lvl">
 <h4>3 · nem flag nem comando → editar a <a href="#audio-thread">thread de áudio</a></h4>
 <ul>
 <li><b>Várias entradas separadas</b> — gravar "entrada&nbsp;1" e "entrada&nbsp;2" da interface
@@ -390,9 +404,10 @@ como faixas independentes: tirar o <code>--channels=1</code> e fatiar os número
 a máquina não tiver PulseAudio/PipeWire.</li>
 </ul>
 </div>
+</details>
 </section>
 
-<section id="parec">
+<section id="parec" data-glossary>
 <h3>captura · parec</h3>
 <p><b>O que é:</b> <code>parec</code> = "PulseAudio record" (gravar do PulseAudio). Pense num
 <code>cat</code> pra som — liga numa <a href="#audio-in">fonte</a> e vai jogando as amostras
@@ -400,7 +415,8 @@ cruas no <code>stdout</code>, sem parar, até você matar.</p>
 <ul>
 <li>Programa separado, do pacote <code>pulseaudio-utils</code>, <b>já vem no Linux</b> — assim
 não precisa instalar biblioteca de áudio no Python.</li>
-<li>Roda como <b>processo à parte</b>. Se cair, o resto segue — só fica sem os números do som.</li>
+<li>Roda como <b>processo à parte</b>. Se cair — não instalado, ou a fonte escolhida sumiu no
+meio — o resto segue, só sem os uniforms de som.</li>
 <li>O Python liga a ponta do cano (<code>stdout</code> do <code>parec</code>) na entrada dele e
 lê de lá.</li>
 </ul>
@@ -408,8 +424,8 @@ lê de lá.</li>
 <code>parec --device=FONTE --format=s16le --rate=44100 --channels=1 --latency-msec=50</code></p>
 <ul>
 <li><code>--device=FONTE</code> — qual <a href="#audio-in">fonte</a> escutar (a da seção acima);</li>
-<li><code>--format=s16le</code> — cada amostra é um inteiro de 16 bits (2 bytes). Formato de som
-mais comum;</li>
+<li><code>--format=s16le</code> — cada amostra é um inteiro de 16 bits <b>com sinal</b>,
+<b>little-endian</b> (2 bytes). O PCM não-comprimido mais comum;</li>
 <li><code>--rate=44100</code> — 44100 amostras por segundo. Qualidade de CD;</li>
 <li><code>--channels=1</code> — mono: um canal só. Junta esquerdo + direito → metade dos dados,
 FFT mais simples;</li>
@@ -425,15 +441,17 @@ uniforms de som.</p>
 </div>
 
 <div class="block block--io rg-img">
-<h2 class="block-label" id="imagem-ext">imagem · externo — fora do processo</h2>
+<h2 class="block-label" id="imagem-ext">imagem · input — fora do processo</h2>
 
 <section id="image-in" data-glossary>
 <h3>entrada de imagem (OBS)</h3>
 <p>É a <b>fonte</b> — de onde vem a imagem. Não é o programa (o programa é o
 <a href="#ffmpeg"><code>ffmpeg</code></a>, seção seguinte), que lê frames em RGB24 cru e os
-entrega pelo stdout ao Python. As câmeras entram pelo v4l2 do Linux (<code>/dev/videoN</code>);
-uma câmera falsa (v4l2loopback) alimentada pela OBS Virtual Camera entra no mesmo lugar. Com
-<code>--screen</code>, a fonte vira a tela — via x11grab + scale.</p>
+entrega pelo stdout ao Python.</p>
+<p>Duas famílias de fonte. <b>Câmera</b> — real ou virtual — entra pelo v4l2 do Linux como
+<code>/dev/videoN</code> (uma câmera falsa via v4l2loopback + OBS Virtual Camera cai no mesmo
+lugar). <b>Tela</b> — com <code>--screen</code>, a fonte deixa de ser câmera e vira a área de
+trabalho, capturada via x11grab e ajustada com scale.</p>
 
 <h4>hoje — o padrão</h4>
 <ul>
@@ -444,10 +462,11 @@ qualquer tamanho).</li>
 <li><code>--screen</code> muda tudo: em vez de câmera, captura a tela (ver abaixo).</li>
 </ul>
 
-<div class="maybe">
-<span class="maybe-tag">possibilidade</span>
-<p><b>Trocar a fonte</b> — nada disto roda hoje. Dois níveis:</p>
+<details class="maybe">
+<summary><span class="maybe-tag">possibilidade</span> trocar a fonte — 2 níveis de esforço</summary>
+<p>Nada disto roda hoje:</p>
 
+<div class="lvl">
 <h4>1 · dá com uma flag (<code>--device</code> ou <code>--screen</code>)</h4>
 <ul>
 <li><b>Outra câmera / placa de captura HDMI</b> (Elgato e afins) — também aparece como
@@ -464,7 +483,9 @@ clica na janela). Aqui usa o ImageMagick <code>import</code> no lugar do ffmpeg:
 mesmo coberta por outra, mas só ~2–5&nbsp;fps.</li>
 <li><b>Um retângulo exato</b> — <code>--screen --region</code>, arrasta pra recortar o pedaço.</li>
 </ul>
+</div>
 
+<div class="lvl">
 <h4>2 · editar a <a href="#video-thread">thread de vídeo</a></h4>
 <ul>
 <li><b>Arquivo de vídeo</b> — trocar o comando por
@@ -472,18 +493,19 @@ mesmo coberta por outra, mas só ~2–5&nbsp;fps.</li>
 <a href="#video-thread">thread de vídeo</a>. Poucas linhas.</li>
 <li><b>Stream de rede (RTSP/HTTP)</b> — mesma troca, <code>-i rtsp://...</code> no ffmpeg.</li>
 <li><b>Sessão Wayland</b> (sem X11) — <code>x11grab</code> não funciona; trocar por
-<code>-f kmsgrab</code> ou o portal do PipeWire.</li>
+<code>kmsgrab</code> ou o portal do PipeWire.</li>
 </ul>
 </div>
+</details>
 </section>
 
-<section id="ffmpeg">
+<section id="ffmpeg" data-glossary>
 <h3>captura · FFMPEG</h3>
 <p><b>O que é:</b> <code>ffmpeg</code> = o canivete suíço de áudio/vídeo. Aqui faz uma coisa só:
 lê a fonte de imagem e cospe <b>frames RGB24 crus</b> no <code>stdout</code>, sem parar.</p>
 <ul>
-<li>Programa separado, <b>processo à parte</b>. Se cair, o resto segue — só congela no último
-frame.</li>
+<li>Programa separado, <b>processo à parte</b>. Se cair — sem <code>ffmpeg</code>, ou a fonte
+sumiu — o resto segue, congelado no último frame.</li>
 <li>O Python liga a ponta do cano (<code>stdout</code> do ffmpeg) na entrada dele e lê frame por
 frame.</li>
 </ul>
@@ -695,16 +717,15 @@ Essa imagem é a única saída do programa.</p>
 </section>
 </div>
 
-<section id="nao-conectadas" class="maybe">
-<h2>não conectadas · referência</h2>
-<span class="maybe-tag">possibilidade</span>
+<details id="nao-conectadas" class="maybe">
+<summary><span class="maybe-tag">possibilidade</span> não conectadas · referência</summary>
 <p>Já calculado hoje, mas só aparece nos painéis. Vira uniform com ~2 linhas (declarar em <code>image.frag</code> + <code>glUniform*</code> no loop).</p>
 <p><b>Áudio</b> — magnitudes brutas por banda, <code>*_raw</code> sem escala, smoothing por banda, <code>kick_baseline</code>, <code>kick_decay_dynamic</code>, espectrograma dB (24 faixas log), FFT suavizada inteira.</p>
 <p><b>Imagem — global + grid 3×3</b> — brilho, saturação, temp. de cor, contraste, nitidez (variância do Laplaciano), entropia, bordas, movimento.</p>
 <p><b>Imagem — só global</b> — cor média, simetria, clipping, correlação R/G/B, centro de massa do brilho, coloridez (Hasler–Süsstrunk), nº de cores únicas, mudança de cor, tons quentes/pele.</p>
 <p><b>Imagem — distribuições</b> — histograma de matiz (12), de brilho (16), FFT-2D por canal RGB (20 anéis), orientação de borda (9).</p>
 <p><b>Convenção GLSL</b> — <code>u_mouse</code>, <code>u_texture_1…</code>, buffer de feedback (pingpong da Fase 3), <code>u_tex0_resolution</code>.</p>
-</section>
+</details>
 
 <section id="refs">
 <h2>referências · documentação oficial</h2>
@@ -756,6 +777,7 @@ document.addEventListener('click', function (e) {
   if (!el) return;
   e.preventDefault();
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  var d = el.closest('details'); if (d) d.open = true;   // se o alvo está num <details> retraído, abre
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   el.classList.remove('flash');
   void el.offsetWidth;               // reinicia a animação em cliques repetidos
@@ -780,8 +802,22 @@ var GLOSS = {
   'v4l2': { hit: ['v4l2'], d: '"Video4Linux2": a parte do Linux que fala com câmera. Cada câmera vira um arquivo <code>/dev/video0</code>, <code>/dev/video1</code>…' },
   'v4l2loopback': { hit: ['v4l2loopback', 'câmera falsa'], d: 'Um módulo do kernel que cria uma <b>câmera falsa</b> (<code>/dev/videoN</code>): qualquer programa escreve nela e o resto do sistema a enxerga como webcam normal.' },
   'obs-virtual-camera': { hit: ['OBS Virtual Camera', 'câmera virtual'], d: 'O OBS Studio monta uma cena (janela + textos + filtros) e a despeja numa câmera falsa (v4l2loopback). "Câmera virtual" = essa dupla: o OBS escrevendo e o <code>/dev/videoN</code> saindo.' },
-  'x11grab': { hit: ['x11grab'], d: '"Gravar a tela do X11": o <code>ffmpeg</code> lê os pixels da área de trabalho em vez de uma câmera.' },
-  'scale': { hit: ['scale'], d: 'Filtro do <code>ffmpeg</code> que redimensiona a imagem — aqui, pra bater com o tamanho da textura do shader.' }
+  'x11grab': { hit: ['x11grab'], d: '"Gravar a tela do X11": o <code>ffmpeg</code> lê os pixels da área de trabalho em vez de uma câmera. Não roda em Wayland (aí é <code>kmsgrab</code> ou o portal do PipeWire).' },
+  'scale': { hit: ['scale'], d: 'Filtro do <code>ffmpeg</code> que redimensiona a imagem — aqui, pra bater com o tamanho da textura do shader.' },
+  'parec': { hit: ['parec'], d: 'Ferramenta de linha de comando do PulseAudio/PipeWire (pacote <code>pulseaudio-utils</code>) que grava uma <i>source</i> e joga as amostras cruas no <code>stdout</code> — um <code>cat</code> pra som. Roda como processo à parte; se cair (não instalado, ou a fonte sumiu), o shader segue sem os uniforms de áudio.' },
+  'ffmpeg': { hit: ['ffmpeg'], d: 'O canivete suíço de áudio/vídeo. Aqui faz só uma coisa: lê a fonte de imagem (câmera <code>v4l2</code> ou tela via <code>x11grab</code>) e escreve <b>frames RGB24 crus</b> no <code>stdout</code>. Processo à parte; se cair, congela no último frame.' },
+  'flag-audio': { hit: ['--audio'], d: 'Flag do <code>native_synth.py</code>: qual <i>source</i> o <code>parec</code> grava. Sem ela = o <code>.monitor</code> da saída padrão (a mistura do sistema). Aceita qualquer nome de <code>pactl list short sources</code>.' },
+  'flag-screen': { hit: ['--screen'], d: 'Flag do <code>native_synth.py</code>: em vez de câmera, captura a tela — o <code>ffmpeg</code> troca a entrada <code>v4l2</code> por <code>x11grab</code>. Combina com <code>--source</code> (um monitor), <code>--window</code> (uma janela) ou <code>--region</code> (um retângulo).' },
+  'flag-device': { hit: ['--device'], d: 'Flag do <code>native_synth.py</code>: qual câmera <code>v4l2</code> usar (<code>/dev/video0</code>, <code>/dev/video1</code>…). Default <code>/dev/video0</code>, a webcam real. Aponte pra um <code>v4l2loopback</code> pra receber a OBS Virtual Camera.' },
+  'flag-channels': { hit: ['--channels'], d: 'Quantos canais de áudio capturar. O <code>native_synth.py</code> pede <code>--channels=1</code> (mono): o <code>parec</code> soma esquerdo + direito num canal só — metade dos bytes e uma FFT só, que é tudo que a análise usa.' },
+  'flag-format': { hit: ['--format'], d: 'Formato de cada amostra. O <code>native_synth.py</code> pede <code>s16le</code> = inteiro de 16 bits <b>com sinal</b> (−32768…32767), <b>little-endian</b>. O PCM não-comprimido mais comum.' },
+  'flag-rate': { hit: ['--rate'], d: 'Taxa de amostragem: amostras por segundo. O <code>native_synth.py</code> pede <code>44100</code> ("qualidade de CD") — cobre até ~22&nbsp;kHz (metade da taxa, limite de Nyquist). Fonte noutro rate: o servidor reamostra sozinho.' },
+  'flag-latency': { hit: ['--latency-msec'], d: 'Latência que o <code>parec</code> pede ao servidor de som — na prática, o tamanho do buffer. O <code>native_synth.py</code> usa <code>50</code>: quanto menor, mais o visual gruda no som, mas mais risco de estouro (underrun).' },
+  'v4l2-ctl': { hit: ['v4l2-ctl'], d: 'Utilitário (pacote <code>v4l-utils</code>) que consulta e configura um dispositivo <code>v4l2</code>: resolução, formato de pixel, controles. O <code>native_synth.py</code> usa pra perguntar o tamanho de uma câmera que não seja a <code>/dev/video0</code>.' },
+  'im-import': { hit: ['import'], d: 'Comando do ImageMagick que tira um screenshot de <b>uma janela X11 específica</b> pelo id. Usado no modo <code>--window</code>: segue a janela mesmo coberta por outra, mas é lento (~2–5&nbsp;fps — um processo novo por frame).' },
+  'kmsgrab': { hit: ['kmsgrab'], d: 'Entrada do <code>ffmpeg</code> que captura a tela via DRM/KMS, direto da placa de vídeo — funciona onde o <code>x11grab</code> não roda (Wayland), mas precisa de permissão (<code>CAP_SYS_ADMIN</code> ou root).' },
+  'hanning': { hit: ['janela de Hanning', 'Hanning'], d: 'Antes da FFT, o bloco de amostras é multiplicado por uma curva que vai a zero nas duas pontas. Sem isso, o corte seco do bloco inventa frequências que não existem (vazamento espectral).' },
+  'fft': { hit: ['FFT'], d: 'Fast Fourier Transform: converte um bloco de amostras no tempo em quanta energia há em cada faixa de frequência. É como o som vira "grave / médio / agudo".' }
 };
 (function () {
   var tip = document.getElementById('glosstip');
@@ -803,7 +839,7 @@ var GLOSS = {
     if (text) s.textContent = text;
     return s;
   }
-  var SKIP = { A: 1, SCRIPT: 1, STYLE: 1, BUTTON: 1, SVG: 1 };
+  var SKIP = { A: 1, SCRIPT: 1, STYLE: 1, BUTTON: 1, SVG: 1, SUMMARY: 1 };
   function linkify(root) {
     [].slice.call(root.childNodes).forEach(function (n) {
       if (n.nodeType === 3) {
