@@ -42,6 +42,18 @@
                text-transform: uppercase; color: #7a828d; border: 1px dashed #7a828d;
                border-radius: 4px; padding: 1px 7px; margin-bottom: 6px; }
   p.legend-status .maybe-tag { margin-bottom: 0; }
+  /* color-coding por região — mesma cor no fluxograma e no título/trilho do bloco de texto */
+  .rg-audio { --rg: #d0a45c; }
+  .rg-img   { --rg: #5cb8a6; }
+  .rg-proc  { --rg: #a394d6; }
+  .rg-gpu   { --rg: #d98aa8; }
+  .block.rg-audio, .block.rg-img, .block.rg-proc, .block.rg-gpu { border-left: 3px solid var(--rg); padding-left: 15px; }
+  [class*="rg-"] > h2.block-label { color: var(--rg); }
+  [class*="rg-"] section > h3 { color: var(--rg); }
+  .legend-rg { text-align: center; color: #8b949e; font-size: 13px; margin: 4px 0 0; }
+  .legend-rg span { white-space: nowrap; margin: 0 6px; }
+  .legend-rg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+                 vertical-align: middle; margin-right: 4px; margin-bottom: 2px; background: currentColor; font-style: normal; }
   svg.flow { width: 100%; height: auto; max-width: 800px; display: block; margin: 0 auto; }
   .hint { text-align: center; color: #8b949e; font-size: 13px; margin-top: 8px; }
   .hotspots rect { fill: transparent; stroke: transparent; stroke-width: 2; cursor: pointer; transition: fill .12s, stroke .12s; }
@@ -99,17 +111,17 @@
   <rect x="0" y="0" width="800" height="930" fill="#0d1117"/>
 
   <!-- native_synth.py boundary (atrás de tudo) -->
-  <rect x="14" y="196" width="772" height="506" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
-  <text x="26" y="216" font-size="15" font-weight="600" fill="#8b949e">native_synth.py — 1 processo Python</text>
+  <rect x="14" y="196" width="772" height="506" rx="10" fill="#161b22" stroke="#a394d6" stroke-width="1.5"/>
+  <text x="26" y="216" font-size="15" font-weight="600" fill="#a394d6">native_synth.py — 1 processo Python</text>
 
   <!-- caixas de ingestão (externo) -->
-  <g fill="#161b22" stroke="#30363d" stroke-width="1.5">
-    <rect x="20" y="10" width="250" height="156" rx="8"/>
-    <rect x="530" y="10" width="250" height="156" rx="8"/>
+  <g fill="#161b22" stroke-width="1.5">
+    <rect x="20" y="10" width="250" height="156" rx="8" stroke="#d0a45c"/>
+    <rect x="530" y="10" width="250" height="156" rx="8" stroke="#5cb8a6"/>
   </g>
-  <g font-size="14" font-weight="600" fill="#8b949e">
-    <text x="32" y="30">áudio · externo</text>
-    <text x="542" y="30">imagem · externo</text>
+  <g font-size="14" font-weight="600">
+    <text x="32" y="30" fill="#d0a45c">áudio · externo</text>
+    <text x="542" y="30" fill="#5cb8a6">imagem · externo</text>
   </g>
 
   <!-- Visualização (sub-caixa) -->
@@ -179,28 +191,28 @@
     <text x="640" y="618">glUniform3f</text>
   </g>
 
-  <!-- nós: pills (fonte · saída) -->
-  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
-    <rect x="32" y="34" width="226" height="52" rx="26"/>
-    <rect x="542" y="34" width="226" height="52" rx="26"/>
-    <rect x="290" y="846" width="220" height="46" rx="23"/>
+  <!-- nós: pills (fonte · saída) — stroke por região -->
+  <g fill="#21262d" stroke-width="1.5">
+    <rect x="32" y="34" width="226" height="52" rx="26" stroke="#d0a45c"/>
+    <rect x="542" y="34" width="226" height="52" rx="26" stroke="#5cb8a6"/>
+    <rect x="290" y="846" width="220" height="46" rx="23" stroke="#d98aa8"/>
   </g>
-  <!-- nós: rounded (processo · thread · loop) -->
-  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
-    <rect x="60" y="104" width="170" height="44" rx="8"/>
-    <rect x="30" y="232" width="230" height="58" rx="8"/>
-    <rect x="570" y="104" width="170" height="44" rx="8"/>
-    <rect x="540" y="232" width="230" height="46" rx="8"/>
-    <rect x="540" y="374" width="230" height="48" rx="8"/>
-    <rect x="40" y="548" width="720" height="48" rx="10"/>
+  <!-- nós: rounded (processo · thread · loop) — stroke por região -->
+  <g fill="#21262d" stroke-width="1.5">
+    <rect x="60" y="104" width="170" height="44" rx="8" stroke="#d0a45c"/>
+    <rect x="30" y="232" width="230" height="58" rx="8" stroke="#a394d6"/>
+    <rect x="570" y="104" width="170" height="44" rx="8" stroke="#5cb8a6"/>
+    <rect x="540" y="232" width="230" height="46" rx="8" stroke="#a394d6"/>
+    <rect x="540" y="374" width="230" height="48" rx="8" stroke="#a394d6"/>
+    <rect x="40" y="548" width="720" height="48" rx="10" stroke="#a394d6"/>
   </g>
-  <!-- nós: documentos (arquivo) -->
-  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
+  <!-- nós: documentos (arquivo) — processo -->
+  <g fill="#21262d" stroke="#a394d6" stroke-width="1.5">
     <path d="M304,238 H392 V276 C372,285 348,269 304,280 Z"/>
     <path d="M316,496 H484 V524 C456,532 400,516 316,528 Z"/>
   </g>
-  <!-- nós: cilindros (dado) -->
-  <g fill="#21262d" stroke="#7d8590" stroke-width="1.5">
+  <!-- nós: cilindros (dado) — processo -->
+  <g fill="#21262d" stroke="#a394d6" stroke-width="1.5">
     <path d="M34,433 V471 A111,7 0 0 0 256,471 V433"/><ellipse cx="145" cy="433" rx="111" ry="7"/>
     <path d="M592,307 V341 A63,7 0 0 0 718,341 V307"/><ellipse cx="655" cy="307" rx="63" ry="7"/>
     <path d="M568,447 V483 A88,7 0 0 0 744,483 V447"/><ellipse cx="656" cy="447" rx="88" ry="7"/>
@@ -209,7 +221,7 @@
     <path d="M560,635 V671 A80,7 0 0 0 720,671 V635"/><ellipse cx="640" cy="635" rx="80" ry="7"/>
   </g>
   <!-- nó: hexágono (programa na GPU) -->
-  <path d="M320,754 H480 L500,783 L480,812 H320 L300,783 Z" fill="#21262d" stroke="#7d8590" stroke-width="1.5"/>
+  <path d="M320,754 H480 L500,783 L480,812 H320 L300,783 Z" fill="#21262d" stroke="#d98aa8" stroke-width="1.5"/>
   <!-- nós: Visualização (tracejado, esmaecido) -->
   <g fill="#21262d" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.7">
     <rect x="304" y="398" width="196" height="40" rx="8"/>
@@ -293,6 +305,7 @@
 </svg>
 <p class="hint">passe o mouse pra ver os blocos clicáveis</p>
 <p class="hint legend-status" style="margin-top:4px"><b style="color:#c9d1d9">implementado</b> — o que roda hoje (todo o fluxograma e a maioria dos blocos) &nbsp;·&nbsp; <span class="maybe-tag">possibilidade</span> ideias marcadas à parte, não é código de hoje</p>
+<p class="legend-rg"><span style="color:#d0a45c"><i></i>áudio · externo</span><span style="color:#5cb8a6"><i></i>imagem · externo</span><span style="color:#a394d6"><i></i>native_synth.py</span><span style="color:#d98aa8"><i></i>GPU e saída</span></p>
 </figure>
 
 <main>
@@ -301,7 +314,7 @@ que rodam à parte — e <b>native_synth.py</b>, o processo. Cada nó do diagram
 na ordem de leitura: as entradas capturam → as threads derivam números → o <a href="#loop">loop</a>
 sobe tudo pra GPU 30×/s → a GPU sintetiza a imagem → a janela mostra.</p>
 
-<div class="block block--io">
+<div class="block block--io rg-audio">
 <h2 class="block-label" id="audio-ext">áudio · externo — fora do processo</h2>
 
 <section id="audio-in" data-glossary>
@@ -403,7 +416,7 @@ uniforms de som.</p>
 </section>
 </div>
 
-<div class="block block--io">
+<div class="block block--io rg-img">
 <h2 class="block-label" id="imagem-ext">imagem · externo — fora do processo</h2>
 
 <section id="image-in" data-glossary>
@@ -489,7 +502,7 @@ ImageMagick <code>import</code>, ~2–5&nbsp;fps.</p>
 </section>
 </div>
 
-<div class="block block--proc">
+<div class="block block--proc rg-proc">
 <h2 class="block-label">native_synth.py — 1 processo Python</h2>
 
 <section id="processo">
@@ -656,7 +669,7 @@ BRUTO / FINAL / SMOOTHING / Δ, e o espectrograma (dB absoluto + % do pico). É 
 </div>
 </div><!-- /.block--proc -->
 
-<div class="block block--io">
+<div class="block block--io rg-gpu">
 <h2 class="block-label">fora do processo — GPU e saída</h2>
 
 <section id="shader-gpu">
@@ -683,6 +696,34 @@ Essa imagem é a única saída do programa.</p>
 <p><b>Imagem — só global</b> — cor média, simetria, clipping, correlação R/G/B, centro de massa do brilho, coloridez (Hasler–Süsstrunk), nº de cores únicas, mudança de cor, tons quentes/pele.</p>
 <p><b>Imagem — distribuições</b> — histograma de matiz (12), de brilho (16), FFT-2D por canal RGB (20 anéis), orientação de borda (9).</p>
 <p><b>Convenção GLSL</b> — <code>u_mouse</code>, <code>u_texture_1…</code>, buffer de feedback (pingpong da Fase 3), <code>u_tex0_resolution</code>.</p>
+</section>
+
+<section id="refs">
+<h2>referências · documentação oficial</h2>
+<p>As ferramentas que o <code>native_synth.py</code> chama por fora e as bibliotecas que ele importa
+— cores por região, iguais às do fluxograma.</p>
+<p><b style="color:#d0a45c">áudio</b> —
+<a href="https://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/">PulseAudio</a> ·
+<a href="https://man.archlinux.org/man/pactl.1">pactl</a> ·
+<a href="https://man.archlinux.org/man/pacat.1">parec / pacat</a> ·
+<a href="https://docs.pipewire.org/">PipeWire</a> ·
+<a href="https://man.archlinux.org/man/arecord.1">ALSA arecord</a></p>
+<p><b style="color:#5cb8a6">imagem · captura</b> —
+<a href="https://ffmpeg.org/ffmpeg.html">FFmpeg</a> ·
+<a href="https://ffmpeg.org/ffmpeg-devices.html">FFmpeg devices (x11grab, v4l2)</a> ·
+<a href="https://github.com/v4l2loopback/v4l2loopback">v4l2loopback</a> ·
+<a href="https://obsproject.com/kb/virtual-camera-guide">OBS Virtual Camera</a> ·
+<a href="https://www.kernel.org/doc/html/latest/userspace-api/media/v4l/v4l2.html">V4L2 API</a> ·
+<a href="https://imagemagick.org/script/import.php">ImageMagick import</a></p>
+<p><b style="color:#a394d6">processo · Python</b> —
+<a href="https://www.pygame.org/docs/">pygame</a> ·
+<a href="https://pyopengl.sourceforge.io/documentation/index.html">PyOpenGL</a> ·
+<a href="https://numpy.org/doc/stable/">NumPy</a> ·
+<a href="https://numpy.org/doc/stable/reference/routines.fft.html">numpy.fft</a> ·
+<a href="https://numpy.org/doc/stable/reference/generated/numpy.hanning.html">numpy.hanning</a></p>
+<p><b style="color:#d98aa8">shader</b> —
+<a href="https://registry.khronos.org/OpenGL/specs/es/2.0/GLSL_ES_Specification_1.00.pdf">GLSL ES 1.00 (spec)</a> ·
+<a href="https://thebookofshaders.com/">The Book of Shaders</a></p>
 </section>
 
 </main>
@@ -725,6 +766,7 @@ var GLOSS = {
   'sink': { hit: ['sink', 'sinks'], d: 'Uma <b>saída</b> de som no PulseAudio/PipeWire: fone, caixa, saída da placa. "Tocar no fone" = mandar pro sink do fone. O oposto de <i>source</i>.' },
   'source': { hit: ['source', 'sources'], d: 'Uma <b>entrada</b> de som no PulseAudio/PipeWire: microfone, line-in — ou o <code>.monitor</code> de um sink. Também chamada <b>fonte</b>; é o que o <code>parec</code> grava.' },
   'monitor': { hit: ['.monitor'], d: 'Todo <i>sink</i> (saída) ganha de brinde uma <i>source</i> gêmea <code>&lt;sink&gt;.monitor</code>. Ela devolve — como se fosse um microfone — exatamente o que está tocando naquela saída. Um grampo na própria caixa de som.' },
+  'pactl': { hit: ['pactl'], d: 'Cliente de linha de comando do PulseAudio/PipeWire. <code>pactl get-default-sink</code> diz qual é a saída de som atual; <code>pactl list short sources</code> lista tudo que dá pra gravar; <code>pactl load-module …</code> carrega módulos extras (null sink, ponte JACK, áudio de rede).' },
   'frame': { hit: ['frame', 'frames'], d: 'Um quadro — uma imagem parada. Vídeo = uma fila de frames, ~30 por segundo. O programa guarda só o último.' },
   'rgb24': { hit: ['RGB24 cru', 'RGB24'], d: 'A imagem escrita só como números e nada mais: <b>3 bytes por pixel</b> — vermelho, verde, azul, cada um de 0 a 255 — pixel atrás de pixel, sem compressão (não é JPEG, PNG nem H.264) e sem cabeçalho. "24" = 3 canais &times; 8&nbsp;bits. É o equivalente visual das <i>amostras cruas</i> do áudio.' },
   'v4l2': { hit: ['v4l2'], d: '"Video4Linux2": a parte do Linux que fala com câmera. Cada câmera vira um arquivo <code>/dev/video0</code>, <code>/dev/video1</code>…' },
@@ -775,7 +817,8 @@ var GLOSS = {
         if (n.classList.contains('term') || n.id === 'glosstip') return;
         var tag = n.tagName.toUpperCase();
         if (tag === 'CODE') {
-          var slug = lookup[n.textContent.trim().toLowerCase()];
+          var txt = n.textContent.trim().toLowerCase();
+          var slug = lookup[txt] || lookup[txt.split(/[\s=]/)[0]];         // <code> inteiro, ou 1º token (ex. "pactl …")
           if (slug) { var w = mkTerm('', slug); n.parentNode.replaceChild(w, n); w.appendChild(n); }
           return;                                                          // nunca entra num <code>
         }
