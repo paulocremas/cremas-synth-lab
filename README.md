@@ -32,7 +32,7 @@ tempo real — tudo nativo, sem navegador.
 
 Binários externos (não versionados): `ffmpeg` (webcam/tela), `import`/ImageMagick (uma janela),
 `parec`/`pactl` (áudio PulseAudio), `xrandr`/`wmctrl`/`xwininfo`/`v4l2-ctl` (geometria e fontes),
-`gnome-terminal` (janela do dashboard de imagem).
+`gnome-terminal` (janela da Visualização de imagem).
 
 ### O caminho
 
@@ -92,14 +92,14 @@ Embutidas do GLSL, já usadas no `image.frag`: `gl_FragCoord` (posição do pixe
 ### Variáveis disponíveis — NÃO conectadas
 
 Tudo abaixo já é **calculado** hoje (ou é convenção trivial de ligar), mas só aparece nos
-dashboards de texto. Vira uniform novo com ~2 linhas: declarar em `image.frag` + um `glUniform*`
+Visualizações de texto. Vira uniform novo com ~2 linhas: declarar em `image.frag` + um `glUniform*`
 no loop de `native_synth.py`.
 
 **Áudio — já calculado no `audio_thread`:**
 
 | dado | o que é |
 |---|---|
-| magnitude bruta por banda | as 8 faixas finas antes de normalizar (coluna BRUTO do dashboard) |
+| magnitude bruta por banda | as 8 faixas finas antes de normalizar (coluna BRUTO da Visualização) |
 | `bass_raw` / `mid_raw` / `treble_raw` | trio clássico sem escala nem clamp |
 | `amp_raw` | RMS puro, sem o `×4` nem clamp |
 | smoothing usado por banda | o attack/release que valeu naquele chunk (coluna SMOOTH) |
@@ -109,7 +109,7 @@ no loop de `native_synth.py`.
 | espectrograma relativo | 24 faixas log, % do pico do frame |
 | `smooth_spectrum` | a FFT inteira suavizada (todos os bins) |
 
-**Imagem — já calculado quando o dashboard de imagem está aberto.** Com medida global **e** mapa
+**Imagem — já calculado quando a Visualização de imagem está aberta.** Com medida global **e** mapa
 3×3 ("onde na tela"):
 
 | métrica | o que é |
