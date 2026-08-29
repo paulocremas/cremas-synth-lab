@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>html,body{margin:0;height:100%;background:#000}canvas{width:100vw;height:100vh;display:block}</style>
+</head>
+<body>
+<video id="cam" autoplay playsinline muted style="display:none"></video>
+<canvas id="gl"></canvas>
+<button id="start" style="position:fixed;inset:0;margin:auto;width:10em;height:3em;font-size:1.2em">iniciar</button>
+<div id="debug" style="position:fixed;top:8px;left:8px;color:#0f0;font:12px monospace;background:#000a;padding:4px 8px;white-space:pre"></div>
+<script>
+const canvas = document.getElementById('gl');
+const video = document.getElementById('cam');
+const gl = canvas.getContext('webgl');
+
+const VERT = `
+attribute vec2 a_pos;
+void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+`;
+
+function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s);
+    return s;
+}
+
+async function main() {
+    // ?screen na URL abre o seletor de aba/janela/tela do navegador em vez da webcam
+    const useScreen = new URLSearchParams(location.search).has('screen');
+    const stream = useScreen
+        ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+        : await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    await video.play();
+
+    // som do PC: só existe se você compartilhou uma ABA (não janela/tela) com "compartilhar áudio" marcado
+    const debug = document.getElementById('debug');
+    let analyser, audioData, audioLabel;
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) {
+        audioLabel = audioTrack.label;
+        const actx = new AudioContext();
+        const src = actx.createMediaStreamSource(new MediaStream([audioTrack]));
+        analyser = actx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.8;
+        src.connect(analyser);
+        audioData = new Uint8Array(analyser.frequencyBinCount);
+    } else {
+        debug.textContent = 'sem faixa de áudio (compartilhou janela/tela em vez de aba, ou não marcou áudio)';
+    }
+
+    // mesmo shader usado no glsl-canvas (VS Code) — troca só a fonte da textura
+    let fragSrc = await (await fetch('./image.frag')).text();
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+
+    let uRes, uTime, uTex0, uAmp;
+    function buildProgram(src) {
+        const p = gl.createProgram();
+        gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
+        gl.attachShader(p, compile(gl.FRAGMENT_SHADER, src));
+        gl.linkProgram(p);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw gl.getProgramInfoLog(p);
+        return p;
+    }
+    function useProgram(p) {
+        gl.useProgram(p);
+        const aPos = gl.getAttribLocation(p, 'a_pos');
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+        uRes = gl.getUniformLocation(p, 'u_resolution');
+        uTime = gl.getUniformLocation(p, 'u_time');
+        uTex0 = gl.getUniformLocation(p, 'u_texture_0');
+        uAmp = gl.getUniformLocation(p, 'u_amp');
+        gl.uniform1i(uTex0, 0);
+    }
+    useProgram(buildProgram(fragSrc));
+
+    // hot reload: repolla image.frag e recompila sem recarregar a página
+    // (mantém a webcam/captura de tela ligada em vez de pedir permissão de novo)
+    async function pollShader() {
+        try {
+            const text = await (await fetch('./image.frag', { cache: 'no-store' })).text();
+            if (text !== fragSrc) {
+                fragSrc = text;
+                try {
+                    useProgram(buildProgram(text));
+                    console.log('shader recarregado');
+                } catch (e) {
+                    console.warn('erro no shader, mantendo o anterior:\n' + e);
+                }
+            }
+        } catch (e) {}
+        setTimeout(pollShader, 400);
+    }
+    pollShader();
+
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    // ponytail: se a webcam aparecer de cabeça pra baixo no seu navegador, troca pra `true`
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+
+    function resize() {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const t0 = performance.now();
+    function frame() {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+
+        gl.uniform2f(uRes, canvas.width, canvas.height);
+        gl.uniform1f(uTime, (performance.now() - t0) / 1000);
+
+        if (analyser) {
+            analyser.getByteFrequencyData(audioData);
+            let sum = 0;
+            for (let i = 0; i < audioData.length; i++) sum += audioData[i];
+            const amp = sum / audioData.length / 255; // 0..1
+            gl.uniform1f(uAmp, amp);
+            debug.textContent = 'áudio: ' + audioLabel + '\namp: ' + amp.toFixed(3) + ' ' + '#'.repeat(Math.round(amp * 30));
+        }
+
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        requestAnimationFrame(frame);
+    }
+    frame();
+}
+
+// getDisplayMedia exige gesto direto do usuário (Firefox é estrito com isso) — precisa do clique
+document.getElementById('start').addEventListener('click', (e) => {
+    e.target.remove();
+    main().catch(err => { document.body.innerHTML = '<pre style="color:#f66;padding:2em">' + err + '</pre>'; });
+});
+</script>
+</body>
+</html>

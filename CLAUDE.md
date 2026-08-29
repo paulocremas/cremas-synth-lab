@@ -12,7 +12,7 @@ Meta: entender o comportamento isolado de cada ferramenta primeiro, comparar ond
 repete (oscilador, frequência, fase, ruído, filtro, feedback), e só depois compor coisas mais
 complexas — visual reagindo a áudio, ou os dois lado a lado.
 
-## Estado do ambiente (2026-08-23)
+## Estado do ambiente (2026-08-27)
 - SuperCollider 3.13.0 instalado (`sclang` + `scsynth`), sem SuperDirt/Tidal — synth cru, pronto
   pra escrever UGens direto.
 - GLSL: extensões VS Code `circledev.glsl-canvas` (live preview WebGL, uniforms `u_time`/
@@ -21,6 +21,17 @@ complexas — visual reagindo a áudio, ou os dois lado a lado.
 - `check.frag` nesta pasta é só teste de fumaça do pipeline (VS Code → GLSL Canvas → GPU).
 - Removido desta máquina: Tidal (lib cabal), extensão VS Code do Tidal, quarks SuperDirt/Vowel/
   Dirt-Samples, startup.scd antigo do SuperCollider.
+- **`native_synth.py`**: ferramenta nativa (Python + PyOpenGL, sem navegador) que implementa a
+  Fase 3 na prática, fora do índice de fases — captura webcam/tela (ffmpeg) + áudio do sistema
+  (`parec`/PulseAudio), faz FFT de áudio (bass/mid/treble clássico + 8 faixas finas Sub-bass..Air
+  + detecção de kick) e alimenta `image.frag` via uniforms em tempo real. `tuning.py` guarda as
+  constantes de calibração com hot-reload (edita e salva, aplica na hora, sem reiniciar o
+  programa nem perder o áudio em andamento).
+- O mesmo script também faz **análise de imagem** do frame de entrada cru (brilho, cor
+  dominante/média, matiz, saturação, temperatura de cor, nitidez, bordas, movimento, simetria,
+  entropia, coloridez...), com versão "quanto no total" (medidor) e "onde na tela" (grid
+  espacial 3x3) pra cada uma — dashboard próprio, numa janela `gnome-terminal` separada
+  (`--full-screen`) quando disponível.
 
 ## Vocabulário compartilhado (onda / sinal)
 
@@ -77,6 +88,9 @@ Baseado em dois currículos já validados, não inventado do zero:
 **Fase 3 — Fusão**
 - Áudio controlando visual: amplitude/RMS do SC modulando um uniform do shader via OSC (mesma ponte que vimos com Hydra/SuperDirt)
 - Comparar lado a lado: mesmo conceito (ex. ruído), duas saídas diferentes, ver o comportamento
+- Já implementado (fora de ordem) em `native_synth.py` — ver "Estado do ambiente" — só que com
+  `parec`/numpy direto em vez de SC+OSC; o exercício SC→OSC→shader ainda fica de pé como
+  comparação de abordagem quando chegar nessa fase pelo caminho planejado.
 
 ## Primeiro exercício (Fase 1, oscilador)
 
