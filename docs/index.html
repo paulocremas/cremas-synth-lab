@@ -53,7 +53,7 @@
   .maybe .lvl { border: 1px solid #3a4149; border-radius: 8px; background: #14171c; padding: 8px 13px 3px; margin: 10px 0; }
   .maybe .lvl > h4 { margin: 6px 0 5px; color: #b9c1cb; }
   /* color-coding por região — mesma cor no fluxograma e no bloco de texto; --rgd = tom fraco pros sub-blocos */
-  .rg-audio { --rg: #d0a45c; --rgd: #6b5a3a; }
+  .rg-audio { --rg: #e3b341; --rgd: #7a6838; }
   .rg-img   { --rg: #5cb8a6; --rgd: #3a5f5a; }
   .rg-proc  { --rg: #a394d6; --rgd: #574f70; }
   .rg-gpu   { --rg: #d98aa8; --rgd: #6f4f5c; }
@@ -129,17 +129,17 @@
 
   <!-- caixas de ingestão (externo) -->
   <g fill="#161b22" stroke-width="1.5">
-    <rect x="20" y="10" width="250" height="156" rx="8" stroke="#d0a45c"/>
+    <rect x="20" y="10" width="250" height="156" rx="8" stroke="#e3b341"/>
     <rect x="530" y="10" width="250" height="156" rx="8" stroke="#5cb8a6"/>
   </g>
   <g font-size="14" font-weight="600">
-    <text x="32" y="30" fill="#d0a45c">áudio · input</text>
+    <text x="32" y="30" fill="#e3b341">áudio · input</text>
     <text x="542" y="30" fill="#5cb8a6">imagem · input</text>
   </g>
 
   <!-- Visualização (sub-caixa) — tom fraco da região processo -->
-  <rect x="292" y="322" width="220" height="118" rx="8" fill="#0d1117" stroke="#574f70" stroke-width="1.3"/>
-  <text x="302" y="340" font-size="14" font-weight="600" fill="#8b7fa8">Visualização</text>
+  <rect x="270" y="322" width="220" height="118" rx="8" fill="#0d1117" stroke="#574f70" stroke-width="1.3"/>
+  <text x="280" y="340" font-size="14" font-weight="600" fill="#8b7fa8">Visualização</text>
 
   <!-- sub-caixa: thread de áudio + tuning.py (tuning.py pertence à thread, recarrega por mtime) -->
   <rect x="22" y="220" width="380" height="76" rx="10" fill="none" stroke="#574f70" stroke-width="1.4" stroke-dasharray="5 4"/>
@@ -187,9 +187,9 @@
   </g>
   <!-- setas: leitura p/ Visualização — dois canais paralelos (x=532, x=524), ambos < x=540 pra não cruzar dominant_color_thread; pontas na linha "imagem" (y 348–388) -->
   <g fill="none" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)">
-    <path d="M205,296 V368 H292"/>
-    <path d="M592,326 H532 V360 H512"/>
-    <path d="M568,468 H524 V376 H512"/>
+    <path d="M205,296 V368 H270"/>
+    <path d="M592,326 H532 V360 H490"/>
+    <path d="M568,468 H524 V376 H490"/>
   </g>
   <!-- setas: hot-reload (mtime) -->
   <g fill="none" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)">
@@ -206,14 +206,14 @@
 
   <!-- nós: pills (fonte · saída) — stroke por região -->
   <g fill="#21262d" stroke-width="1.5">
-    <rect x="32" y="34" width="226" height="52" rx="26" stroke="#d0a45c"/>
+    <rect x="32" y="34" width="226" height="52" rx="26" stroke="#e3b341"/>
     <rect x="542" y="34" width="226" height="52" rx="26" stroke="#5cb8a6"/>
     <rect x="290" y="846" width="220" height="46" rx="23" stroke="#d98aa8"/>
   </g>
   <!-- nós: rounded — contorno: região p/ captura externa; linhagem do dado dentro do processo -->
   <g fill="#21262d" stroke-width="1.5">
-    <rect x="60" y="104" width="170" height="44" rx="8" stroke="#d0a45c"/>
-    <rect x="30" y="232" width="230" height="58" rx="8" stroke="#d0a45c"/>
+    <rect x="60" y="104" width="170" height="44" rx="8" stroke="#e3b341"/>
+    <rect x="30" y="232" width="230" height="58" rx="8" stroke="#e3b341"/>
     <rect x="570" y="104" width="170" height="44" rx="8" stroke="#5cb8a6"/>
     <rect x="540" y="232" width="230" height="46" rx="8" stroke="#5cb8a6"/>
     <rect x="540" y="374" width="230" height="48" rx="8" stroke="#5cb8a6"/>
@@ -226,7 +226,7 @@
   </g>
   <!-- nós: cilindros (dado) — contorno pela linhagem: âmbar = veio do áudio, verde-água = veio da imagem -->
   <g fill="#21262d" stroke-width="1.5">
-    <g stroke="#d0a45c">
+    <g stroke="#e3b341">
       <path d="M34,433 V471 A111,7 0 0 0 256,471 V433"/><ellipse cx="145" cy="433" rx="111" ry="7"/>
       <path d="M54,635 V671 A100,7 0 0 0 254,671 V635"/><ellipse cx="154" cy="635" rx="100" ry="7"/>
     </g>
@@ -241,16 +241,16 @@
   <path d="M320,754 H480 L500,783 L480,812 H320 L300,783 Z" fill="#21262d" stroke="#d98aa8" stroke-width="1.5"/>
   <!-- nós: Visualização (tracejado, esmaecido) -->
   <g fill="#21262d" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.7">
-    <rect x="304" y="348" width="196" height="40" rx="8"/>
-    <rect x="304" y="394" width="196" height="40" rx="8"/>
+    <rect x="282" y="348" width="196" height="40" rx="8"/>
+    <rect x="282" y="394" width="196" height="40" rx="8"/>
   </g>
 
   <!-- textos dos nós — cor = contorno do nó (região p/ input externo, linhagem do dado dentro do processo) -->
   <g text-anchor="middle">
     <g font-size="16">
-      <text x="145" y="56" fill="#d0a45c">entrada de áudio</text>
-      <text x="145" y="131" fill="#d0a45c">captura (parec)</text>
-      <text x="145" y="254" fill="#d0a45c">thread de áudio</text>
+      <text x="145" y="56" fill="#e3b341">entrada de áudio</text>
+      <text x="145" y="131" fill="#e3b341">captura (parec)</text>
+      <text x="145" y="254" fill="#e3b341">thread de áudio</text>
       <text x="655" y="66" fill="#5cb8a6">entrada de imagem (OBS)</text>
       <text x="655" y="131" fill="#5cb8a6">captura (FFMPEG)</text>
       <text x="655" y="259" fill="#5cb8a6">thread de vídeo</text>
@@ -260,15 +260,15 @@
       <text x="400" y="660" fill="#5cb8a6">u_texture_0</text>
       <text x="640" y="660" fill="#5cb8a6">u_dominant</text>
       <text x="400" y="780" fill="#d98aa8">image.frag na GPU</text>
-      <text x="400" y="374" fill="#8b7fa8">imagem · gnome-terminal</text>
-      <text x="400" y="420" fill="#8b7fa8">áudio · stdout</text>
+      <text x="378" y="374" fill="#8b7fa8">imagem · gnome-terminal</text>
+      <text x="378" y="420" fill="#8b7fa8">áudio · stdout</text>
     </g>
     <g font-size="14">
-      <text x="145" y="460" fill="#d0a45c">13 floats de áudio</text>
+      <text x="145" y="460" fill="#e3b341">13 floats de áudio</text>
       <text x="655" y="331" fill="#5cb8a6">state['frame']</text>
       <text x="656" y="470" fill="#5cb8a6">state['dominant']</text>
       <text x="655" y="402" fill="#5cb8a6">dominant_color_thread (~10/s)</text>
-      <text x="154" y="662" fill="#d0a45c">13 uniforms de áudio</text>
+      <text x="154" y="662" fill="#e3b341">13 uniforms de áudio</text>
       <text x="400" y="501" fill="#a394d6">image.frag (arquivo)</text>
     </g>
     <g font-size="13" fill="#8b949e">
@@ -313,8 +313,8 @@
     <a href="#u_texture_0"><rect x="320" y="630" width="160" height="52" rx="10"/></a>
     <a href="#u_dominant"><rect x="560" y="630" width="160" height="52" rx="10"/></a>
     <!-- Visualização -->
-    <a href="#vis-img"><rect x="304" y="348" width="196" height="40" rx="8"/></a>
-    <a href="#vis-audio"><rect x="304" y="394" width="196" height="40" rx="8"/></a>
+    <a href="#vis-img"><rect x="282" y="348" width="196" height="40" rx="8"/></a>
+    <a href="#vis-audio"><rect x="282" y="394" width="196" height="40" rx="8"/></a>
     <!-- fora do processo (baixo) -->
     <a href="#shader-gpu"><rect x="300" y="754" width="200" height="58" rx="8"/></a>
     <a href="#saida"><rect x="290" y="846" width="220" height="46" rx="23"/></a>
@@ -322,8 +322,8 @@
 </svg>
 <p class="hint">passe o mouse pra ver os blocos clicáveis</p>
 <p class="hint legend-status" style="margin-top:4px"><b style="color:#c9d1d9">implementado</b> — o que roda hoje (todo o fluxograma e a maioria dos blocos) &nbsp;·&nbsp; <span class="maybe-tag">possibilidade</span> ideias marcadas à parte, não é código de hoje</p>
-<p class="legend-rg"><span style="color:#d0a45c"><i></i>áudio · input</span><span style="color:#5cb8a6"><i></i>imagem · input</span><span style="color:#a394d6"><i></i>native_synth.py</span><span style="color:#d98aa8"><i></i>GPU e saída</span></p>
-<p class="legend-rg" style="font-size:12px">dentro do processo, contorno <span style="color:#d0a45c">âmbar</span> / <span style="color:#5cb8a6">verde-água</span> num nó = o dado ali veio do áudio / da imagem</p>
+<p class="legend-rg"><span style="color:#e3b341"><i></i>áudio · input</span><span style="color:#5cb8a6"><i></i>imagem · input</span><span style="color:#a394d6"><i></i>native_synth.py</span><span style="color:#d98aa8"><i></i>GPU e saída</span></p>
+<p class="legend-rg" style="font-size:12px">dentro do processo, contorno <span style="color:#e3b341">âmbar</span> / <span style="color:#5cb8a6">verde-água</span> num nó = o dado ali veio do áudio / da imagem</p>
 </figure>
 
 <main>
@@ -552,7 +552,7 @@ ImageMagick <code>import</code>, ~2–5&nbsp;fps.</p>
 <div class="block block--proc rg-proc">
 <h2 class="block-label">native_synth.py — 1 processo Python</h2>
 
-<section id="processo">
+<section id="processo" data-glossary>
 <p>Um processo. 3 threads daemon — <a href="#audio-thread">áudio</a>, <a href="#video-thread">vídeo</a>,
 <a href="#dominant-thread">cor dominante</a> — e o <i>main thread</i> (o <a href="#loop">loop</a>).
 Conversam só pelo dict global <code>state</code> em memória: cada thread escreve as suas chaves, o loop
@@ -567,7 +567,7 @@ geometria de janela/câmera — <b>1× cada, fora do caminho de dados</b>. No lo
 
 <div class="inner">
 
-<section id="audio-thread">
+<section id="audio-thread" data-glossary>
 <h3>thread de áudio</h3>
 <p>Lê o pipe do <a href="#parec"><code>parec</code></a> em blocos de 1024 amostras (~23&nbsp;ms —
 1024 é potência de 2, <code>rfft</code> rápida). Por bloco: <code>np.frombuffer</code> (view, sem
@@ -591,7 +591,7 @@ entrada (HSV, FFT-2D, grid 3×3) — sobre um frame reduzido por stride (<code>f
 em resolução cheia (~200&nbsp;ms) atrasaria a leitura do próximo bloco de áudio.</p>
 
 <div class="sub">
-<section id="tuning">
+<section id="tuning" data-glossary>
 <h4>tuning.py · calibração</h4>
 <p>Arquivo <b>só de constantes</b>, lido e recarregado por <b>esta thread</b> (não pelo loop): cortes
 <code>BASS_MID_HZ</code> / <code>MID_TREBLE_HZ</code>; escalas <code>BASS_SCALE</code> / <code>MID_SCALE</code> /
@@ -606,7 +606,7 @@ constantes no <code>native_synth.py</code>.</p>
 </div>
 </section>
 
-<section id="state-audio">
+<section id="state-audio" data-glossary>
 <h3>13 floats de áudio · <code>state</code></h3>
 <p>As 13 chaves de áudio de <code>state</code>, todas <code>0..1</code>, reescritas a cada bloco pela
 <a href="#audio-thread">thread de áudio</a> e lidas pelo <a href="#loop">loop</a>:</p>
@@ -617,7 +617,7 @@ constantes no <code>native_synth.py</code>.</p>
 de cada uma na <a href="#uniforms">tabela de uniforms</a>.</p>
 </section>
 
-<section id="video-thread">
+<section id="video-thread" data-glossary>
 <h3>thread de vídeo</h3>
 <p>Lê o pipe do <a href="#ffmpeg"><code>ffmpeg</code></a>, um frame por vez
 (<code>WIDTH×HEIGHT×3</code> bytes). Guarda <b>só o último</b> em <code>state['frame']</code>. Sem fila: se
@@ -625,21 +625,21 @@ o loop atrasa, os frames do meio são sobrescritos e perdidos. No modo <code>--w
 <code>window_capture_thread</code> (ImageMagick <code>import</code>) no lugar, ~2–5&nbsp;fps.</p>
 </section>
 
-<section id="state-frame">
+<section id="state-frame" data-glossary>
 <h3><code>state['frame']</code></h3>
 <p>O último frame de vídeo cru, array de bytes RGB24. Escrito pela <a href="#video-thread">thread de
 vídeo</a>; lido pela <a href="#dominant-thread">cor dominante</a> (~10×/s), pelo <a href="#loop">loop</a>
 (todo frame, vira textura) e pelo <a href="#vis-img">painel de imagem</a>. Um buffer, sem histórico.</p>
 </section>
 
-<section id="dominant-thread">
+<section id="dominant-thread" data-glossary>
 <h3><code>dominant_color_thread</code></h3>
 <p>Thread própria porque o cálculo num frame 720p pode passar de 100&nbsp;ms — no loop travaria os
 30&nbsp;fps. A cada 100&nbsp;ms: pega <code>state['frame']</code>, quantiza 5&nbsp;bits/canal (256→32
 níveis por canal), conta a combinação mais frequente. Escreve <code>state['dominant']</code>.</p>
 </section>
 
-<section id="state-dominant">
+<section id="state-dominant" data-glossary>
 <h3><code>state['dominant']</code></h3>
 <p>Tupla <code>(r, g, b)</code> em <code>0..1</code> — a cor <b>mais frequente</b> (moda) do frame, não a
 média. Atualizada ~10×/s. Vira <a href="#u_dominant"><code>u_dominant</code></a> (vec3). Começa em
@@ -649,7 +649,7 @@ média. Atualizada ~10×/s. Vira <a href="#u_dominant"><code>u_dominant</code></
 <div class="sub">
 <p class="block-label">Visualização · painéis de texto — só leitura</p>
 
-<section id="vis-img">
+<section id="vis-img" data-glossary>
 <h4>imagem · gnome-terminal</h4>
 <p>Uma janela <code>gnome-terminal</code> (<code>--full-screen</code>), aberta uma vez no start; a
 <a href="#audio-thread">thread de áudio</a> escreve nela por um FIFO a cada ~230&nbsp;ms. Mostra a
@@ -659,7 +659,7 @@ temp. de cor, contraste, nitidez, entropia, bordas, movimento…), o mesmo em gr
 → desligado, o resto segue.</p>
 </section>
 
-<section id="vis-audio">
+<section id="vis-audio" data-glossary>
 <h4>áudio · stdout</h4>
 <p>O <code>stdout</code> do processo, reescrito no lugar (tela alternada) a cada ~230&nbsp;ms pela
 <a href="#audio-thread">thread de áudio</a>: <code>kick</code> (final + decay), as 8 faixas finas em
@@ -668,7 +668,7 @@ BRUTO / FINAL / SMOOTHING / Δ, e o espectrograma (dB absoluto + % do pico). É 
 </section>
 </div>
 
-<section id="loop">
+<section id="loop" data-glossary>
 <h3>loop principal · 30 fps</h3>
 <p>Main thread, <code>clock.tick(30)</code>. Por frame, em ordem:</p>
 <ol>
@@ -683,7 +683,7 @@ floats de áudio (<code>glUniform1f</code> ×13) + <code>u_dominant</code>;</li>
 <p>Não trava se uma thread parar: lê o último <code>state</code> e segue.</p>
 </section>
 
-<section id="shader-file">
+<section id="shader-file" data-glossary>
 <h3><code>image.frag</code> · arquivo</h3>
 <p>O shader no disco. O <a href="#loop">loop</a> guarda o <code>mtime</code>; mudou → recompila e troca o
 programa GL vivo. Erro de compilação → mantém o programa anterior e imprime o log. Mesmo hot-reload do
@@ -761,7 +761,7 @@ Essa imagem é a única saída do programa.</p>
 <h2>referências · documentação oficial</h2>
 <p>As ferramentas que o <code>native_synth.py</code> chama por fora e as bibliotecas que ele importa
 — cores por região, iguais às do fluxograma.</p>
-<p><b style="color:#d0a45c">áudio</b> —
+<p><b style="color:#e3b341">áudio</b> —
 <a href="https://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/">PulseAudio</a> ·
 <a href="https://man.archlinux.org/man/pactl.1">pactl</a> ·
 <a href="https://man.archlinux.org/man/pacat.1">parec / pacat</a> ·
@@ -840,7 +840,7 @@ var GLOSS = {
   'flag-screen': { hit: ['--screen'], d: 'Flag do <code>native_synth.py</code>: em vez de câmera, captura a tela — o <code>ffmpeg</code> troca a entrada <code>v4l2</code> por <code>x11grab</code>. Combina com <code>--source</code> (um monitor), <code>--window</code> (uma janela) ou <code>--region</code> (um retângulo).' },
   'flag-device': { hit: ['--device'], d: 'Flag do <code>native_synth.py</code>: qual câmera <code>v4l2</code> usar (<code>/dev/video0</code>, <code>/dev/video1</code>…). Default <code>/dev/video0</code>, a webcam real. Aponte pra um <code>v4l2loopback</code> pra receber a OBS Virtual Camera.' },
   'flag-channels': { hit: ['--channels'], d: 'Quantos canais de áudio capturar. O <code>native_synth.py</code> pede <code>--channels=1</code> (mono): o <code>parec</code> soma esquerdo + direito num canal só — metade dos bytes e uma FFT só, que é tudo que a análise usa.' },
-  'flag-format': { hit: ['--format'], d: 'Formato de cada amostra. O <code>native_synth.py</code> pede <code>s16le</code> = inteiro de 16 bits <b>com sinal</b> (−32768…32767), <b>little-endian</b>. O PCM não-comprimido mais comum.' },
+  'flag-format': { hit: ['--format', 's16le'], d: 'Formato de cada amostra. O <code>native_synth.py</code> pede <code>s16le</code> = inteiro de 16 bits <b>com sinal</b> (−32768…32767), <b>little-endian</b>. O PCM não-comprimido mais comum; a thread divide por 32768 pra pôr a amostra em −1..1.' },
   'flag-rate': { hit: ['--rate'], d: 'Taxa de amostragem: amostras por segundo. O <code>native_synth.py</code> pede <code>44100</code> ("qualidade de CD") — cobre até ~22&nbsp;kHz (metade da taxa, limite de Nyquist). Fonte noutro rate: o servidor reamostra sozinho.' },
   'flag-latency': { hit: ['--latency-msec'], d: 'Latência que o <code>parec</code> pede ao servidor de som — na prática, o tamanho do buffer. O <code>native_synth.py</code> usa <code>50</code>: quanto menor, mais o visual gruda no som, mas mais risco de estouro (underrun).' },
   'v4l2-ctl': { hit: ['v4l2-ctl'], d: 'Utilitário (pacote <code>v4l-utils</code>) que consulta e configura um dispositivo <code>v4l2</code>: resolução, formato de pixel, controles. O <code>native_synth.py</code> usa pra perguntar o tamanho de uma câmera que não seja a <code>/dev/video0</code>.' },
@@ -848,7 +848,14 @@ var GLOSS = {
   'kmsgrab': { hit: ['kmsgrab'], d: 'Entrada do <code>ffmpeg</code> que captura a tela via DRM/KMS, direto da placa de vídeo — funciona onde o <code>x11grab</code> não roda (Wayland), mas precisa de permissão (<code>CAP_SYS_ADMIN</code> ou root).' },
   'hanning': { hit: ['janela de Hanning', 'Hanning'], d: 'Antes da FFT, o bloco de amostras é multiplicado por uma curva que vai a zero nas duas pontas. Sem isso, o corte seco do bloco inventa frequências que não existem (vazamento espectral).' },
   'fft': { hit: ['FFT'], d: 'Fast Fourier Transform: converte um bloco de amostras no tempo em quanta energia há em cada faixa de frequência. É como o som vira "grave / médio / agudo".' },
-  'mjpeg': { hit: ['MJPEG'], d: 'Motion-JPEG: cada frame é um JPEG separado. Muitas webcams entregam MJPEG pra caber mais resolução/fps na USB — mas aí cada frame precisa ser <b>decodificado</b> antes de virar pixel. Por isso o <code>native_synth.py</code> força <code>yuyv422</code> (cru, sem decode) na webcam padrão.' }
+  'mjpeg': { hit: ['MJPEG'], d: 'Motion-JPEG: cada frame é um JPEG separado. Muitas webcams entregam MJPEG pra caber mais resolução/fps na USB — mas aí cada frame precisa ser <b>decodificado</b> antes de virar pixel. Por isso o <code>native_synth.py</code> força <code>yuyv422</code> (cru, sem decode) na webcam padrão.' },
+  'rfft': { hit: ['rfft', 'rfftfreq'], d: 'FFT <b>real</b> (<code>np.fft.rfft</code>): quando a entrada é só número real (áudio), metade do espectro é espelho da outra — a <code>rfft</code> calcula só a metade útil, ~2× mais rápida que a <code>fft</code> completa. <code>rfftfreq</code> devolve a frequência em Hz de cada bin desse meio-espectro.' },
+  'np-frombuffer': { hit: ['np.frombuffer'], d: 'Lê um bloco de bytes cru como array NumPy <b>sem copiar</b> — o array aponta pros mesmos bytes que vieram do pipe. Transformar os bytes do <code>parec</code>/<code>ffmpeg</code> em números é de graça; só um passo seguinte (dividir, reshape) é que gera dado novo.' },
+  'rms': { hit: ['RMS'], d: 'Root Mean Square: raiz da média dos quadrados das amostras do bloco. É a medida de "volume" que segue a energia média do sinal, não o pico. Vira o <code>u_amp</code>.' },
+  'mtime': { hit: ['mtime'], d: '"Modification time": o timestamp de última alteração de um arquivo. O <a href="#loop">loop</a> (pro <code>image.frag</code>) e a <a href="#audio-thread">thread de áudio</a> (pro <code>tuning.py</code>) comparam o <code>mtime</code> a cada volta; mudou → releem e aplicam sem reiniciar (hot-reload).' },
+  'xrandr': { hit: ['xrandr'], d: 'Ferramenta do X11 que lista e configura as saídas de vídeo (monitores): resolução, posição, qual é o primário. O <code>native_synth.py</code> chama no arranque pra saber o tamanho da tela e onde fica cada monitor.' },
+  'wmctrl': { hit: ['wmctrl'], d: 'Cliente de linha de comando do gerenciador de janelas do X11: lista as janelas abertas com título, posição e tamanho. Usado no modo <code>--window</code> pra achar a janela por um pedaço do título.' },
+  'xwininfo': { hit: ['xwininfo'], d: 'Utilitário do X11 que mostra os dados de uma janela (id, posição, tamanho) — no modo interativo você clica na janela. O <code>native_synth.py</code> usa quando o <code>--window</code> vem sem título.' }
 };
 (function () {
   var tip = document.getElementById('glosstip');
