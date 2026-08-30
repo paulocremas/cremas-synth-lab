@@ -60,6 +60,9 @@
   .block.rg-audio, .block.rg-img, .block.rg-proc, .block.rg-gpu { border-left: 3px solid var(--rg); padding-left: 15px; }
   [class*="rg-"] > h2.block-label { color: var(--rg); }
   [class*="rg-"] section > h3 { color: var(--rg); }
+  /* dentro do processo o heading segue a linhagem do dado (igual aos nós do SVG): áudio=amarelo, imagem=verde-água, núcleo=roxo */
+  #audio-thread > h3, #state-audio > h3 { color: #e3b341; }
+  #video-thread > h3, #state-frame > h3, #dominant-thread > h3, #state-dominant > h3 { color: #5cb8a6; }
   [class*="rg-"] .inner { border-left-color: var(--rgd); }
   [class*="rg-"] .sub { border-color: var(--rgd); }
   [class*="rg-"] .sub .block-label { color: var(--rg); opacity: .85; }
