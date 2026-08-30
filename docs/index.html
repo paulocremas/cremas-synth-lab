@@ -847,7 +847,8 @@ var GLOSS = {
   'im-import': { hit: ['import'], d: 'Comando do ImageMagick que tira um screenshot de <b>uma janela X11 específica</b> pelo id. Usado no modo <code>--window</code>: segue a janela mesmo coberta por outra, mas é lento (~2–5&nbsp;fps — um processo novo por frame).' },
   'kmsgrab': { hit: ['kmsgrab'], d: 'Entrada do <code>ffmpeg</code> que captura a tela via DRM/KMS, direto da placa de vídeo — funciona onde o <code>x11grab</code> não roda (Wayland), mas precisa de permissão (<code>CAP_SYS_ADMIN</code> ou root).' },
   'hanning': { hit: ['janela de Hanning', 'Hanning'], d: 'Antes da FFT, o bloco de amostras é multiplicado por uma curva que vai a zero nas duas pontas. Sem isso, o corte seco do bloco inventa frequências que não existem (vazamento espectral).' },
-  'fft': { hit: ['FFT'], d: 'Fast Fourier Transform: converte um bloco de amostras no tempo em quanta energia há em cada faixa de frequência. É como o som vira "grave / médio / agudo".' }
+  'fft': { hit: ['FFT'], d: 'Fast Fourier Transform: converte um bloco de amostras no tempo em quanta energia há em cada faixa de frequência. É como o som vira "grave / médio / agudo".' },
+  'mjpeg': { hit: ['MJPEG'], d: 'Motion-JPEG: cada frame é um JPEG separado. Muitas webcams entregam MJPEG pra caber mais resolução/fps na USB — mas aí cada frame precisa ser <b>decodificado</b> antes de virar pixel. Por isso o <code>native_synth.py</code> força <code>yuyv422</code> (cru, sem decode) na webcam padrão.' }
 };
 (function () {
   var tip = document.getElementById('glosstip');
