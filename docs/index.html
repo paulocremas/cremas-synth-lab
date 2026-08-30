@@ -60,10 +60,17 @@
   .block.rg-audio, .block.rg-img, .block.rg-proc, .block.rg-gpu { border-left: 3px solid var(--rg); padding-left: 15px; }
   [class*="rg-"] > h2.block-label { color: var(--rg); }
   [class*="rg-"] section > h3 { color: var(--rg); }
-  /* dentro do processo o heading segue a linhagem do dado (igual aos nós do SVG): áudio=amarelo, imagem=verde-água, núcleo=roxo */
+  /* dentro do processo, o heading E a linha vertical interna seguem a linhagem do dado (igual aos
+     nós do SVG): áudio=amarelo, imagem=verde-água, núcleo=roxo. A linha externa (.block) fica roxa. */
   #audio-thread > h3, #state-audio > h3 { color: #e3b341; }
   #video-thread > h3, #state-frame > h3, #dominant-thread > h3, #state-dominant > h3 { color: #5cb8a6; }
-  [class*="rg-"] .inner { border-left-color: var(--rgd); }
+  [class*="rg-"] .inner > section, [class*="rg-"] .inner > .sub {
+    border-left: 2px solid var(--rgd); padding-left: 16px; }
+  [class*="rg-"] .inner > .sub { border-radius: 0 8px 8px 0; }
+  .inner > #audio-thread, .inner > #state-audio { border-left-color: #e3b341; }
+  .inner > #video-thread, .inner > #state-frame,
+  .inner > #dominant-thread, .inner > #state-dominant { border-left-color: #5cb8a6; }
+  .inner > #loop, .inner > #shader-file, .inner > #uniforms { border-left-color: #a394d6; }
   [class*="rg-"] .sub { border-color: var(--rgd); }
   [class*="rg-"] .sub .block-label { color: var(--rg); opacity: .85; }
   .legend-rg { text-align: center; color: #8b949e; font-size: 13px; margin: 4px 0 0; }
@@ -90,7 +97,7 @@
   h2.block-label { font-size: 13px; color: #8b949e; font-weight: 700; letter-spacing: .04em;
                    margin: 14px 0 2px; scroll-margin-top: 16px; }
   /* .block--io label color agora vem da região (.rg-*) */
-  .inner { border-left: 2px solid #21262d; padding-left: 16px; margin: 6px 0 0; }
+  .inner { margin: 6px 0 0; }
   .sub { border: 1px dashed #30363d; border-radius: 8px; background: #0d1117;
          padding: 0 14px 10px; margin: 12px 0; }
   .sub .block-label { display: block; font-size: 12px; color: #8b949e; font-weight: 700;
