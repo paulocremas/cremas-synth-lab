@@ -138,8 +138,8 @@
   </g>
 
   <!-- Visualização (sub-caixa) — tom fraco da região processo -->
-  <rect x="292" y="338" width="220" height="118" rx="8" fill="#0d1117" stroke="#574f70" stroke-width="1.3"/>
-  <text x="302" y="356" font-size="14" font-weight="600" fill="#8b7fa8">Visualização</text>
+  <rect x="292" y="322" width="220" height="118" rx="8" fill="#0d1117" stroke="#574f70" stroke-width="1.3"/>
+  <text x="302" y="340" font-size="14" font-weight="600" fill="#8b7fa8">Visualização</text>
 
   <!-- sub-caixa: thread de áudio + tuning.py (tuning.py pertence à thread, recarrega por mtime) -->
   <rect x="22" y="220" width="380" height="76" rx="10" fill="none" stroke="#574f70" stroke-width="1.4" stroke-dasharray="5 4"/>
@@ -172,7 +172,7 @@
     <path d="M655,150 V232"/>
     <path d="M145,296 V426"/>
     <path d="M655,278 V300"/>
-    <path d="M632,348 L618,374"/>
+    <path d="M655,348 V374"/>
     <path d="M655,422 V440"/>
     <path d="M145,484 V548"/>
     <path d="M718,323 H776 V572 H760"/>
@@ -185,11 +185,11 @@
     <path d="M640,684 V785 H500"/>
     <path d="M400,812 V846"/>
   </g>
-  <!-- setas: leitura p/ Visualização — dois canais paralelos (x=532, x=524), ambos < x=540 pra não cruzar dominant_color_thread; pontas na linha "imagem" (y 364–404) -->
+  <!-- setas: leitura p/ Visualização — dois canais paralelos (x=532, x=524), ambos < x=540 pra não cruzar dominant_color_thread; pontas na linha "imagem" (y 348–388) -->
   <g fill="none" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)">
-    <path d="M205,296 V384 H292"/>
-    <path d="M592,326 H532 V376 H512"/>
-    <path d="M568,468 H524 V392 H512"/>
+    <path d="M205,296 V368 H292"/>
+    <path d="M592,326 H532 V360 H512"/>
+    <path d="M568,468 H524 V376 H512"/>
   </g>
   <!-- setas: hot-reload (mtime) -->
   <g fill="none" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)">
@@ -241,8 +241,8 @@
   <path d="M320,754 H480 L500,783 L480,812 H320 L300,783 Z" fill="#21262d" stroke="#d98aa8" stroke-width="1.5"/>
   <!-- nós: Visualização (tracejado, esmaecido) -->
   <g fill="#21262d" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.7">
-    <rect x="304" y="364" width="196" height="40" rx="8"/>
-    <rect x="304" y="410" width="196" height="40" rx="8"/>
+    <rect x="304" y="348" width="196" height="40" rx="8"/>
+    <rect x="304" y="394" width="196" height="40" rx="8"/>
   </g>
 
   <!-- textos dos nós — cor = contorno do nó (região p/ input externo, linhagem do dado dentro do processo) -->
@@ -260,8 +260,8 @@
       <text x="400" y="660" fill="#5cb8a6">u_texture_0</text>
       <text x="640" y="660" fill="#5cb8a6">u_dominant</text>
       <text x="400" y="780" fill="#d98aa8">image.frag na GPU</text>
-      <text x="400" y="390" fill="#8b7fa8">imagem · gnome-terminal</text>
-      <text x="400" y="436" fill="#8b7fa8">áudio · stdout</text>
+      <text x="400" y="374" fill="#8b7fa8">imagem · gnome-terminal</text>
+      <text x="400" y="420" fill="#8b7fa8">áudio · stdout</text>
     </g>
     <g font-size="14">
       <text x="145" y="460" fill="#d0a45c">13 floats de áudio</text>
@@ -313,8 +313,8 @@
     <a href="#u_texture_0"><rect x="320" y="630" width="160" height="52" rx="10"/></a>
     <a href="#u_dominant"><rect x="560" y="630" width="160" height="52" rx="10"/></a>
     <!-- Visualização -->
-    <a href="#vis-img"><rect x="304" y="364" width="196" height="40" rx="8"/></a>
-    <a href="#vis-audio"><rect x="304" y="410" width="196" height="40" rx="8"/></a>
+    <a href="#vis-img"><rect x="304" y="348" width="196" height="40" rx="8"/></a>
+    <a href="#vis-audio"><rect x="304" y="394" width="196" height="40" rx="8"/></a>
     <!-- fora do processo (baixo) -->
     <a href="#shader-gpu"><rect x="300" y="754" width="200" height="58" rx="8"/></a>
     <a href="#saida"><rect x="290" y="846" width="220" height="46" rx="23"/></a>
