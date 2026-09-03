@@ -123,6 +123,38 @@
      <a href="https://github.com/paulocremas/cremas-synth-lab/blob/master/README.md">README</a></p>
 </header>
 
+<!-- Referência rápida no topo: todo comando/flag do native_synth.py num lugar só.
+     Sem data-glossary de propósito — igual à tabela de #uniforms, linkify embrulharia
+     termo em toda célula. Neutro (sem cor de região): as flags cruzam áudio, imagem e proc. -->
+<section id="comandos">
+<h2>comandos — como rodar</h2>
+<p class="lead">Todo o programa é uma linha de terminal mais flags. As flags são do
+<code>native_synth.py</code> e valem igual pelo <code>watch_synth.sh</code>.</p>
+<table>
+<thead><tr><th>comando</th><th>o que faz</th></tr></thead>
+<tbody>
+<tr><td colspan="2" class="grouprow"><b>rodar</b></td></tr>
+<tr><td><code>.venv/bin/python native_synth.py</code></td><td>modo padrão: webcam <code>/dev/video0</code> + áudio = <code>.monitor</code> da saída padrão, janela do tamanho do frame.</td></tr>
+<tr><td><code>./watch_synth.sh</code> <span class="ext">[flags]</span></td><td>mesma coisa, mas reinicia sozinho toda vez que <code>native_synth.py</code> é salvo (poll de mtime a cada 1&nbsp;s). Wrapper de dev.</td></tr>
+<tr><td><code>ESC</code> / fechar a janela</td><td>sai do programa (e o <code>watch_synth.sh</code> junto).</td></tr>
+<tr><td colspan="2" class="grouprow"><b>flags — entrada de imagem</b></td></tr>
+<tr><td><code>--screen</code></td><td>captura a tela em vez da webcam (o <code>ffmpeg</code> troca <code>v4l2</code> por <code>x11grab</code>).</td></tr>
+<tr><td><code>--source</code> <span class="ext">[NOME]</span></td><td>no modo <code>--screen</code>, captura só um monitor (ex. <code>eDP-1</code>) em vez da tela toda. Sem valor = auto-detecta o secundário.</td></tr>
+<tr><td><code>--window</code> <span class="ext">[TÍTULO]</span></td><td>no modo <code>--screen</code>, captura uma janela só. Sem valor = clica na janela pra escolher; com título, acha por substring (<code>wmctrl</code>).</td></tr>
+<tr><td><code>--region</code></td><td>no modo <code>--screen</code>, arrasta um retângulo pra recortar a região exata (mais preciso que <code>--window</code>/<code>--source</code>).</td></tr>
+<tr><td><code>--device PATH</code></td><td>no modo webcam, qual device <code>v4l2</code> usar. Default <code>/dev/video0</code>. Aponte pra uma câmera virtual (v4l2loopback + OBS) pra puxar uma janela em fps cheio.</td></tr>
+<tr><td colspan="2" class="grouprow"><b>flags — entrada de áudio</b></td></tr>
+<tr><td><code>--audio SOURCE</code></td><td>fonte de áudio do PulseAudio/PipeWire (ver <code>pactl list short sources</code>). Default = <code>.monitor</code> da saída padrão (o som geral do sistema).</td></tr>
+<tr><td colspan="2" class="grouprow"><b>flags — janela de saída</b></td></tr>
+<tr><td><code>--fullscreen</code></td><td>janela sem borda, do tamanho da tela.</td></tr>
+<tr><td><code>--monitor</code> <span class="ext">[NOME]</span></td><td>sem borda, fixa num monitor específico (ex. <code>HDMI-1</code> — projetor); implica <code>--fullscreen</code>. Sem valor = auto-detecta o secundário.</td></tr>
+<tr><td colspan="2" class="grouprow"><b>hot-reload — sem comando, é só salvar</b></td></tr>
+<tr><td><code>image.frag</code></td><td>salvar recompila o shader na hora (por mtime), sem reiniciar.</td></tr>
+<tr><td><code>tuning.py</code></td><td>salvar recarrega as constantes de calibração na hora (por mtime), sem reiniciar.</td></tr>
+</tbody>
+</table>
+</section>
+
 <figure id="topo">
 <svg class="flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 930" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
   <defs>
