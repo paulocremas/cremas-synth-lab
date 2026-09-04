@@ -15,30 +15,26 @@ Entender cada ferramenta isolada primeiro, comparar onde o vocabulário se repet
 - **GLSL**: VS Code `circledev.glsl-canvas` (preview WebGL, uniforms `u_time`/`u_resolution`/`u_mouse`,
   modelo Shadertoy) + `slevesque.shader`. `check.frag` = smoke-test do pipeline.
 - **`native_synth.py`** (Python + PyOpenGL): captura webcam/tela (`ffmpeg`) + áudio do sistema
-  (`parec`/PulseAudio), faz FFT do áudio (bass/mid/treble + 8 faixas Sub-bass…Air com range
-  `[lo,hi)` editável por faixa + `HZ_OVERLAP` + kick) e alimenta `image.frag` via uniforms em
-  tempo real. As threads de captura são reiniciáveis ao vivo (troca de fonte pelo dashboard).
-- **Canais por instrumento** (em avaliação): `tuning.CHANNELS`, lista de tamanho livre (até 8,
-  add/remove pelo dash — não precisa pré-definir) — `u_chan`/`u_chan_hit` no shader, paralelo
-  às 8 faixas de frequência acima, não as substitui. Cada canal tem `src` (source do
-  PulseAudio; vazio = ocioso, `channel_thread` próprio quando ligado) e `output` (nome de uma
-  variável existente — kick/amp/bass/mid/treble/as 8 faixas — que esse canal PASSA A
-  ALIMENTAR enquanto tiver `src` bound; sem `src`, a variável original do mix principal
-  continua normal, sem fallback implícito por nome). As 8 faixas finas têm um toggle próprio
-  (`tuning.BANDS_ENABLED`, checkbox "ativar" no dash) que zera `u_subbass..u_air` sem apagar
-  as ranges. Dash: seção "Canais" e checkbox "ativar" na aba Audio.
-- **Saída de vídeo ao vivo** (em avaliação): barra "saída" no topo do dash (`#iobar`, ao lado
-  de áudio/vídeo de entrada) — monitor, dimensão (W×H) e tela cheia, sem reiniciar o processo.
-  `POST /output` -> `native_synth.set_output` grava `state['output_req']`; o main thread (dono
-  do contexto GL) vê a diferença no próximo frame e chama `open_window()` (reabre a janela —
-  `pygame.display.quit()+init()`, mesmo truque do antigo `SDL_VIDEO_WINDOW_POS` no arranque —
-  e regera vbo/tex/program, já que o contexto pode ou não sobreviver à troca). Unifica o que
-  antes só dava pra fixar via `--monitor`/`--fullscreen` na linha de comando.
+  (`parec`/PulseAudio), faz FFT do áudio (bass/mid/treble + 8 faixas Sub-bass…Air + kick) e
+  alimenta `image.frag` via uniforms em tempo real. Threads de captura reiniciáveis ao vivo
+  (troca de fonte pelo dashboard); a janela de saída também (ver "saída de vídeo" abaixo).
+- **Canais por instrumento**: `tuning.CHANNELS` — lista de tamanho livre (até 8, add/remove
+  pelo dash, sem pré-definir). Paralelo às 8 faixas de frequência, não as substitui. Cada canal
+  pode ter uma source do PulseAudio (stem isolado) e uma "saída" — uma variável existente
+  (kick/amp/bass/mid/treble/uma das 8 faixas) que ele passa a alimentar enquanto a source
+  estiver ligada; sem source, a variável original (FFT do mix) segue intocada. Detalhe técnico
+  completo (uniforms, endpoints): [fluxo técnico navegável](https://paulocremas.github.io/cremas-synth-lab/#uniforms).
+- **Saída de vídeo ao vivo**: monitor / dimensão / tela cheia mudam pela barra "saída" no topo
+  do dash, sem reiniciar o processo — não é mais só via `--monitor`/`--fullscreen` na CLI
+  (que continuam valendo como valor inicial). Lembra o tamanho de antes do fullscreen.
 - **Dashboard HTML** (substituiu os dashes de terminal): `dash_server.py` (HTTP+SSE stdlib) +
   `dash_data.py` (funções puras) + `dash.html`. Abre 2 abas no navegador ("Audio Input" /
-  "Image Input"). Mostra medidores de áudio + análise de imagem completa (histogramas, grid 3×3,
-  FFT 2D de cor) + detalhes da saída (janela/monitor/fps). Regula ao vivo: sliders de knob
-  gravam no `tuning.py`; barras de range das 8 faixas; troca de fonte áudio/vídeo.
+  "Image Input"), sincronizadas ao vivo. Regula tudo ao vivo, grava em `tuning.py`: knobs,
+  ranges das 8 faixas (com toggle `BANDS_ENABLED` e overlap), canais, fonte de áudio/vídeo,
+  saída de vídeo. Sincronização entre abas/janelas usa um guard por TEMPO (`TOUCH_MS` em
+  `dash.html`), não por foco — foco sozinho não prova edição em andamento (um `<select>` pode
+  ficar focado bem depois do dropdown fechar); se algum campo parecer "travado" sem atualizar,
+  é esse o mecanismo a olhar.
 - **Hot-reload por mtime** (edita/salva/aplica, sem restart): `image.frag`, `tuning.py`,
   `dash_server.py`, `dash_data.py`, `dash.html`. Só o `native_synth.py` em si precisa de restart
   (`watch_synth.sh` faz automático).

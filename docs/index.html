@@ -145,11 +145,11 @@
 <tr><td><code>--device PATH</code></td><td>no modo webcam, qual device <code>v4l2</code> usar. Default <code>/dev/video0</code>. Aponte pra uma câmera virtual (v4l2loopback + OBS) pra puxar uma janela em fps cheio.</td></tr>
 <tr><td colspan="2" class="grouprow"><b>flags — entrada de áudio</b></td></tr>
 <tr><td><code>--audio SOURCE</code></td><td>fonte de áudio do PulseAudio/PipeWire (ver <code>pactl list short sources</code>). Default = <code>.monitor</code> da saída padrão (o som geral do sistema).</td></tr>
-<tr><td colspan="2" class="grouprow"><b>flags — janela de saída</b></td></tr>
+<tr><td colspan="2" class="grouprow"><b>flags — janela de saída (valores INICIAIS — a barra "saída" do dashboard troca ao vivo, sem reiniciar)</b></td></tr>
 <tr><td><code>--fullscreen</code></td><td>janela sem borda, do tamanho da tela.</td></tr>
-<tr><td><code>--monitor</code> <span class="ext">[NOME]</span></td><td>sem borda, fixa num monitor específico (ex. <code>HDMI-1</code> — projetor); implica <code>--fullscreen</code>. Sem valor = auto-detecta o secundário. O dashboard (aba imagem → "Saída") lista os monitores disponíveis com nome/geometria.</td></tr>
+<tr><td><code>--monitor</code> <span class="ext">[NOME]</span></td><td>sem borda, fixa num monitor específico (ex. <code>HDMI-1</code> — projetor); implica <code>--fullscreen</code>. Sem valor = auto-detecta o secundário.</td></tr>
 <tr><td colspan="2" class="grouprow"><b>dashboard — no navegador, sem comando</b></td></tr>
-<tr><td>troca de fonte / knobs / ranges</td><td>tudo pelo dashboard (2 abas, <code>?panel=audio</code> / <code>?panel=image</code>): trocar entrada de áudio/vídeo ao vivo, sliders que gravam no <code>tuning.py</code>, barras de range das 8 faixas. Sincroniza entre as abas.</td></tr>
+<tr><td>troca de fonte / knobs / ranges / canais / saída</td><td>tudo pelo dashboard (2 abas, <code>?panel=audio</code> / <code>?panel=image</code>): trocar entrada de áudio/vídeo, monitor/dimensão/tela cheia da SAÍDA (lembra o tamanho de antes do fullscreen) — tudo ao vivo, sem reiniciar; sliders que gravam no <code>tuning.py</code>; barras de range das 8 faixas (clica pra arrastar dali, empurra a vizinha nos dois sentidos, liga/desliga sem apagar); canais por instrumento (adiciona/remove, cada um pode assumir uma variável existente — kick, faixas, amp/bass/mid/treble — quando tem source ligada). Sincroniza entre as abas.</td></tr>
 <tr><td colspan="2" class="grouprow"><b>hot-reload — sem comando, é só salvar</b></td></tr>
 <tr><td><code>image.frag</code></td><td>salvar recompila o shader na hora (por mtime), sem reiniciar.</td></tr>
 <tr><td><code>tuning.py</code></td><td>salvar recarrega as constantes de calibração na hora (por mtime), sem reiniciar.</td></tr>
@@ -669,7 +669,10 @@ com lock; o hot-reload aplica.</p>
 <code>treble_hi</code>, <code>brilho</code>, <code>air</code>).</p>
 <p>Cada uma vira o uniform de mesmo nome com prefixo <code>u_</code> — faixa de Hz, escala e suavização
 de cada uma na <a href="#uniforms">tabela de uniforms</a>.</p>
-<p>Fora essas 13, o <code>state</code> também carrega o que o <a href="#vis-audio">dashboard</a> lê:
+<p>Fora essas 13 (escalares, um uniform cada), <code>chan</code> e <code>chan_hit</code> são mais duas
+chaves de áudio — só que cada uma é uma LISTA de 8 (uma por slot de <a href="#uniforms">canal</a>),
+viram <code>u_chan[8]</code> / <code>u_chan_hit[8]</code> (array, não escalar).</p>
+<p>Fora essas, o <code>state</code> também carrega o que o <a href="#vis-audio">dashboard</a> lê:
 <code>audio_dash</code> / <code>image</code> (os dicts de medidores), <code>output</code> (geometria da
 janela + fps), <code>dominant</code>, e a fonte de áudio/vídeo atual (<code>audio_source</code>,
 <code>video</code>, <code>video_id</code>).</p>
@@ -715,16 +718,26 @@ média. Atualizada ~10×/s. Vira <a href="#u_dominant"><code>u_dominant</code></
 Endpoints: <code>GET /events</code> (stream SSE do <code>state</code> ~20&nbsp;Hz),
 <code>/knobs</code> · <code>POST /knob</code> (grava linha do <code>tuning.py</code>),
 <code>/inputs</code> · <code>POST /input</code> (troca fonte áudio/vídeo — reinicia só o subprocesso
-de captura), <code>POST /bands</code> (reescreve o bloco <code>FREQ_BAND_HZ</code>),
+de captura), <code>POST /bands</code> (reescreve <code>HZ_OVERLAP</code>/<code>BANDS_ENABLED</code>/o
+bloco <code>FREQ_BAND_HZ</code>), <code>POST /channels</code> (reescreve o bloco
+<code>CHANNELS</code>), <code>POST /output</code> (pede troca de monitor/dimensão/tela cheia da
+janela — quem aplica de verdade é o <code>main()</code>, dono do contexto GL, no próximo frame),
 <code>/favicon.png</code>.</p>
 
 <section id="vis-audio" data-glossary>
 <h4>dash.html · aba áudio (<code>?panel=audio</code>)</h4>
 <p>De <code>audio_dash_data()</code>: <code>kick</code> (final + decay), as 8 faixas finas em
-BRUTO / FINAL / SMOOTH / Δ, e o espectrograma (24 faixas log, dB absoluto + % do pico). Mais os
-controles: sliders de knob que gravam no <a href="#tuning"><code>tuning.py</code></a>, as barras de
-range <code>[lo, hi)</code> das 8 faixas (com toggle <code>HZ_OVERLAP</code> e barra-resumo), e o
-seletor de fonte de áudio.</p>
+BRUTO / FINAL / SMOOTH / Δ, e o espectrograma (24 faixas log, agudo → grave, dB absoluto + % do
+pico). Mais os controles: sliders de knob que gravam no <a href="#tuning"><code>tuning.py</code></a>;
+as barras de range <code>[lo, hi)</code> das 8 faixas, também agudo → grave (toggle
+<code>HZ_OVERLAP</code>, checkbox <b>ativar</b> = <code>BANDS_ENABLED</code>, barra-resumo) — clica em
+qualquer ponto da barra pra arrastar dali, o Hz sob o cursor aparece no hover; arrastar um limite
+empurra a faixa vizinha nos dois sentidos (sobe ou desce); sair do overlap resolve sobreposição
+fazendo a faixa mais larga ceder, preservando as outras; e a seção <b>Canais</b> — lista de
+tamanho livre (até 8, botão "+ adicionar canal"), cada linha com nome, source de áudio (ou
+"ocioso") e "saída" (qual variável — <code>kick</code>/<code>amp</code>/<code>bass</code>/
+<code>mid</code>/<code>treble</code>/uma das 8 faixas — esse canal substitui enquanto tiver
+source ligada).</p>
 </section>
 
 <section id="vis-img" data-glossary>
@@ -733,7 +746,10 @@ seletor de fonte de áudio.</p>
 RESUMO (cor dominante/média, simetria, clipping, correlação RGB, centro, coloridez, paleta, tom
 quente), o mesmo em grid 3×3, e 4 histogramas (matiz, brilho, FFT-2D de cor, orientação de borda).
 Mais o seletor de fonte de vídeo e o painel <b>Saída</b> — resolução do render, tamanho/posição da
-janela, fps e os monitores disponíveis (pra decidir onde a imagem vai aparecer).</p>
+janela, fps e os monitores disponíveis. O CONTROLE de saída (monitor / dimensão / tela cheia) fica
+na barra do topo (<code>#iobar</code>, visível nas duas abas, ao lado dos seletores de entrada) —
+troca ao vivo via <code>POST /output</code>, sem reiniciar o processo; lembra o último tamanho de
+janela pra restaurar quando a tela cheia é desligada.</p>
 </section>
 </div>
 
@@ -782,15 +798,19 @@ número nasce na <a href="#audio-thread">thread de áudio</a>; constantes em
 <tr><td><code>u_mid</code></td><td><code>float</code> 0..1</td><td><code>state['mid']</code></td><td>150&nbsp;Hz – 4&nbsp;kHz</td><td>×<code>MID_SCALE</code> (6.0), teto 1.0</td><td>global</td><td>voz / melodia.</td></tr>
 <tr><td><code>u_treble</code></td><td><code>float</code> 0..1</td><td><code>state['treble']</code></td><td>&gt; <code>MID_TREBLE_HZ</code> (4&nbsp;kHz)</td><td>×<code>TREBLE_SCALE</code> (30.0), teto 1.0</td><td>global</td><td>agudo / hi-hat.</td></tr>
 <tr><td><code>u_kick</code></td><td><code>float</code> 0..1</td><td><code>state['kick']</code></td><td>grave cru (sem teto)</td><td>onset: pula pra 1.0 quando o grave &gt; baseline&nbsp;×&nbsp;<code>KICK_THRESHOLD</code> (1.5), depois de <code>KICK_WARMUP_CHUNKS</code> (20) blocos; decai por <code>kick_decay_dynamic</code>, adaptado ao ritmo entre <code>KICK_DECAY_MIN</code> (0.5) e <code>KICK_DECAY_MAX</code> (0.95)</td><td>nenhuma — ataque instantâneo</td><td><b>pulso de batida</b>, não nível.</td></tr>
-<tr><td colspan="7" class="grouprow"><b>8 faixas finas</b> — 0..1, cada uma <b>relativa ao próprio pico recente</b> (auto-gain por banda: sobe na hora, decai por <code>PEAK_DECAY</code> 0.999/bloco), então uma banda estruturalmente mais forte não fica grudada em 1.0. Release interpolado de <code>SMOOTHING_MIN</code> (Sub-bass) a <code>SMOOTHING_MAX</code> (Air); attack ×0.4. Range <code>[lo, hi)</code> de cada uma em <code>FREQ_BAND_HZ</code> (<code>tuning.py</code>), <b>editável por faixa</b> nas barras do dashboard — os Hz abaixo são só o default. Com <code>HZ_OVERLAP=0</code> não se sobrepõem mas podem deixar buraco (cinza); com <code>=1</code>, livres.</td></tr>
-<tr><td><code>u_subbass</code></td><td colspan="2"><code>state['subbass']</code> — Sub-bass</td><td colspan="4">20 – 250&nbsp;Hz</td></tr>
-<tr><td><code>u_lowmid</code></td><td colspan="2"><code>state['lowmid']</code> — Low-mid</td><td colspan="4">250 – 500&nbsp;Hz</td></tr>
-<tr><td><code>u_midrange</code></td><td colspan="2"><code>state['midrange']</code> — Midrange</td><td colspan="4">500&nbsp;Hz – 2&nbsp;kHz</td></tr>
-<tr><td><code>u_highmid</code></td><td colspan="2"><code>state['highmid']</code> — High-mid</td><td colspan="4">2 – 4&nbsp;kHz</td></tr>
-<tr><td><code>u_presence</code></td><td colspan="2"><code>state['presence']</code> — Presence</td><td colspan="4">4 – 6&nbsp;kHz</td></tr>
-<tr><td><code>u_treble_hi</code></td><td colspan="2"><code>state['treble_hi']</code> — Treble</td><td colspan="4">6 – 10&nbsp;kHz — sufixo <code>_hi</code> pra não colidir com <code>u_treble</code></td></tr>
-<tr><td><code>u_brilho</code></td><td colspan="2"><code>state['brilho']</code> — Brilliance</td><td colspan="4">10 – 16&nbsp;kHz</td></tr>
-<tr><td><code>u_air</code></td><td colspan="2"><code>state['air']</code> — Air</td><td colspan="4">16 – 20&nbsp;kHz</td></tr>
+<tr><td colspan="7" class="grouprow"><b>8 faixas finas</b> — 0..1, cada uma <b>relativa ao próprio pico recente</b> (auto-gain por banda: sobe na hora, decai por <code>PEAK_DECAY</code> 0.999/bloco), então uma banda estruturalmente mais forte não fica grudada em 1.0. Release interpolado de <code>SMOOTHING_MIN</code> (Sub-bass) a <code>SMOOTHING_MAX</code> (Air); attack ×0.4. Range <code>[lo, hi)</code> de cada uma em <code>FREQ_BAND_HZ</code> (<code>tuning.py</code>), <b>editável por faixa</b> nas barras do dashboard (clica pra arrastar dali; empurra a vizinha nos dois sentidos) — os Hz abaixo são só o default. Com <code>HZ_OVERLAP=0</code> não se sobrepõem mas podem deixar buraco (cinza); com <code>=1</code>, livres. Checkbox "ativar" (<code>BANDS_ENABLED</code>) zera as 8 sem apagar as ranges.</td></tr>
+<tr><td><code>u_subbass</code></td><td colspan="2"><code>state['subbass']</code> — Sub-bass</td><td colspan="4">20 – 105&nbsp;Hz</td></tr>
+<tr><td><code>u_lowmid</code></td><td colspan="2"><code>state['lowmid']</code> — Low-mid</td><td colspan="4">105 – 393&nbsp;Hz</td></tr>
+<tr><td><code>u_midrange</code></td><td colspan="2"><code>state['midrange']</code> — Midrange</td><td colspan="4">393&nbsp;Hz – 1.47&nbsp;kHz</td></tr>
+<tr><td><code>u_highmid</code></td><td colspan="2"><code>state['highmid']</code> — High-mid</td><td colspan="4">1.47 – 3.17&nbsp;kHz</td></tr>
+<tr><td><code>u_presence</code></td><td colspan="2"><code>state['presence']</code> — Presence</td><td colspan="4">3.17 – 5.36&nbsp;kHz</td></tr>
+<tr><td><code>u_treble_hi</code></td><td colspan="2"><code>state['treble_hi']</code> — Treble</td><td colspan="4">5.36 – 6.61&nbsp;kHz — sufixo <code>_hi</code> pra não colidir com <code>u_treble</code></td></tr>
+<tr><td><code>u_brilho</code></td><td colspan="2"><code>state['brilho']</code> — Brilliance</td><td colspan="4">6.61 – 8.21&nbsp;kHz</td></tr>
+<tr><td><code>u_air</code></td><td colspan="2"><code>state['air']</code> — Air</td><td colspan="4">8.21 – 20&nbsp;kHz</td></tr>
+<tr><td colspan="7" class="grouprow"><b>canais por instrumento</b> — array fixo de 8 slots pra uma lista de TAMANHO LIVRE (<code>CHANNELS</code> em <code>tuning.py</code>; dashboard → aba áudio → "Canais", adiciona/remove até 8, não precisa pré-definir). Paralelo às faixas acima, não as substitui — só entra em cena quando o canal tem uma source do PulseAudio ligada (senão o slot fica 0 e a variável original segue intocada).</td></tr>
+<tr><td><code>u_chan[i]</code></td><td><code>float[8]</code> 0..1</td><td><code>state['chan'][i]</code></td><td>—</td><td>RMS suavizado (<code>SMOOTHING</code>) do canal <i>i</i>, se tiver source; senão 0</td><td>mesma do RMS acima</td><td>nível do canal <i>i</i> (instrumento isolado, ex. bumbo).</td></tr>
+<tr><td><code>u_chan_hit[i]</code></td><td><code>float[8]</code> 0..1</td><td><code>state['chan_hit'][i]</code></td><td>—</td><td>onset: mesmo detector do <code>u_kick</code>, agora sobre o RMS full-band do canal</td><td>nenhuma — ataque instantâneo</td><td><b>pulso de batida</b> do canal <i>i</i>, não nível.</td></tr>
+<tr><td colspan="7">Canal com <b>"saída"</b> escolhida (<code>kick</code>/<code>amp</code>/<code>bass</code>/<code>mid</code>/<code>treble</code>/uma das 8 faixas) <b>substitui</b> essa variável acima ENQUANTO tiver source bound — ex. um canal "bumbo" com saída <code>kick</code> troca o <code>u_kick</code> estimado por FFT pelo onset real do stem isolado.</td></tr>
 <tr id="u_dominant"><td><code>u_dominant</code></td><td><code>vec3</code> 0..1</td><td><code>state['dominant']</code> (<a href="#dominant-thread">cor dominante</a>)</td><td>—</td><td>moda de cor, 5&nbsp;bits/canal, ~10×/s</td><td>—</td><td>cor mais frequente do frame.</td></tr>
 </tbody>
 </table>
@@ -814,19 +834,29 @@ número nasce na <a href="#audio-thread">thread de áudio</a>; constantes em
 <section id="saida">
 <h3>saída · janela / monitor</h3>
 <p><code>pygame.display.flip()</code> joga o frame renderizado na janela. Essa imagem é a única saída
-do programa. Modos (fixados no start):</p>
+do programa. Modos — no start (flags) OU ao vivo (barra <b>saída</b> no topo do dashboard,
+<code>POST /output</code>, sem reiniciar o processo):</p>
 <ul>
-<li><b>janela</b> — do tamanho do render (<code>WIDTH×HEIGHT</code>, que vem da fonte de vídeo);</li>
-<li><code>--fullscreen</code> — sem borda, tamanho da tela;</li>
-<li><code>--monitor NOME</code> — sem borda, fixa num monitor (ex. projetor); posição vem do
-<code>xrandr</code>.</li>
+<li><b>janela</b> — dimensão livre (default = <code>WIDTH×HEIGHT</code> do render), sem monitor fixo;</li>
+<li><b>tela cheia</b> (<code>--fullscreen</code>) — sem borda, tamanho da tela toda inteira
+(<code>pygame.FULLSCREEN</code>);</li>
+<li><b>monitor</b> (<code>--monitor NOME</code>) — sem borda, fixa num monitor (ex. projetor); com
+tela cheia usa o tamanho dele, sem tela cheia aceita dimensão custom ancorada nele — os dois
+posicionados por <code>xrandr</code> (via <code>SDL_VIDEO_WINDOW_POS</code>).</li>
 </ul>
+<p>Troca ao vivo: <code>open_window()</code> reabre a janela (<code>pygame.display.quit()</code> +
+<code>init()</code> + <code>set_mode()</code> de novo — mesmo truque do <code>SDL_VIDEO_WINDOW_POS</code>
+do arranque) e regera <code>vbo</code>/<code>tex</code>/<code>program</code>: o contexto GL pode ou
+não sobreviver à troca, então regera sempre em vez de tentar adivinhar. Quem decide é o
+<a href="#loop">main thread</a> (dono do contexto), a cada frame, comparando
+<code>state['output_req']</code> (o que o dashboard pediu, via <code>set_output()</code>) com o
+que está aplicado agora. O dashboard lembra (no navegador) o último tamanho de janela pra
+restaurar quando a tela cheia é desligada.</p>
 <p>Em qualquer modo o shader escala o render pra <code>WIN_W×WIN_H</code> (uniform
 <code>u_resolution</code>). O <a href="#vis-img">dashboard</a> (aba imagem → <b>Saída</b>) mostra
 <code>state['output']</code>: resolução do render, tamanho/posição da janela, modo, fps medido,
 status do shader, e a lista de monitores (nome · <code>WxH</code> · <code>+x+y</code> · primário) —
-é o que usar pra decidir onde/como a imagem sai. Trocar isso ao vivo (sem restart) ainda é
-<span class="maybe-tag">possibilidade</span>.</p>
+é o que usar pra decidir onde/como a imagem sai.</p>
 </section>
 </div>
 

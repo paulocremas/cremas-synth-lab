@@ -30,10 +30,10 @@ Diagrama clicável + descrição de cada bloco (em ordem de execução) + tabela
 |---|---|
 | `native_synth.py` | orquestra tudo: threads de captura (reiniciáveis ao vivo), FFT de áudio, upload de uniforms, hot-reload, loop de render 30 fps, `dash_server.start()` |
 | `image.frag` | o shader — "o synth". Recebe a imagem como textura + os uniforms de áudio, devolve a imagem sintetizada. Hot-reload por mtime |
-| `tuning.py` | constantes de calibração (ranges de Hz das 8 faixas + `HZ_OVERLAP`, escalas por banda, kick, suavização). Hot-reload por mtime. Escrito ao vivo pelo dashboard |
-| `dash_server.py` | servidor HTTP + SSE (stdlib, sem dep). Endpoints: `/events` (stream do `state`), `/knobs` `/knob`, `/inputs` `/input` (troca de fonte áudio/vídeo), `/bands` (ranges das faixas), `/favicon.png`. Hot-reload por mtime |
+| `tuning.py` | constantes de calibração: ranges de Hz das 8 faixas + `HZ_OVERLAP` + `BANDS_ENABLED`, `CHANNELS` (canais por instrumento, lista livre), escalas por banda, kick, suavização. Hot-reload por mtime. Escrito ao vivo pelo dashboard |
+| `dash_server.py` | servidor HTTP + SSE (stdlib, sem dep). Endpoints: `/events` (stream do `state`), `/knobs` `/knob`, `/inputs` `/input` (troca de fonte áudio/vídeo), `/bands` (ranges + overlap + ativar/desativar), `/channels` (add/remove/editar canal), `/output` (monitor/dimensão/tela cheia da janela de saída, sem reiniciar), `/favicon.png`. Hot-reload por mtime |
 | `dash_data.py` | funções puras que montam os dicts de números do dashboard (`audio_dash_data`; `band_magnitudes`; cores das faixas). Hot-reload por mtime |
-| `dash.html` | o dashboard (JS puro, sem CDN). `?panel=audio` / `?panel=image` = duas abas ("Audio Input" / "Image Input"). Sliders de knob gravam no `tuning.py`; barras de range das faixas; seletores de fonte áudio/vídeo; detalhes da saída (janela/monitor/fps). Live-reload por `html_mtime` |
+| `dash.html` | o dashboard (JS puro, sem CDN). `?panel=audio` / `?panel=image` = duas abas ("Audio Input" / "Image Input"), sincronizadas ao vivo. Sliders de knob gravam no `tuning.py`; barras de range das faixas (clica pra arrastar dali, arrasto empurra a vizinha nos dois sentidos, liga/desliga sem apagar); seção Canais (add/remove, source + "saída" por canal); barra "saída" no topo (monitor/dimensão/tela cheia da janela, ao vivo). Live-reload por `html_mtime` |
 | `favicon.png` | ícone do dashboard (mesmo de paulocremas.github.io) |
 | `watch_synth.sh` | wrapper de dev: reinicia o `native_synth.py` quando o próprio `.py` muda (poll de mtime a cada 1 s). Os módulos `dash_*` fazem hot-reload sozinhos, sem restart |
 | `webcam.html` | mesma ideia no navegador (WebGL); lê o mesmo `image.frag`, conjunto reduzido de uniforms (`u_resolution`, `u_time`, `u_texture_0`, `u_amp`) |
@@ -67,9 +67,10 @@ flowchart TD
 
 - **OBS** monta a cena que entra no Motor como **imagem** (via câmera virtual); em paralelo entra a **entrada de áudio**
 - **Motor de síntese** (`native_synth.py`) roda o `image.frag`, que sintetiza a imagem reagindo ao áudio → **OUTPUT**
-- **OUTPUT** = janela OpenGL. `--fullscreen` / `--monitor <nome>` fixam num monitor; o dashboard
-  (aba "Image Input") mostra resolução do render, tamanho/posição da janela, fps e os monitores
-  disponíveis pra decidir onde a imagem vai aparecer
+- **OUTPUT** = janela OpenGL. Monitor / dimensão / tela cheia mudam ao vivo pela barra "saída"
+  no topo do dashboard (sem reiniciar o processo — `--fullscreen`/`--monitor <nome>` continuam
+  valendo como valor inicial, na linha de comando); a aba "Image Input" mostra resolução do
+  render, tamanho/posição da janela, fps e a lista de monitores disponíveis
 
 **A fazer:**
 
