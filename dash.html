@@ -1,0 +1,910 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>native_synth — dash</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<!--
+  Dashboard interativo do native_synth. Serve por dash_server.py (http://127.0.0.1:8765).
+  - EventSource('/events'): stream do state (~14 Hz, DASH_EVERY_N_CHUNKS no native_synth;
+    SSE re-poll a 20 Hz). d.audio = dash_data.audio_dash_data(); d.image = native_synth.image_dash_data().
+  - <input type=range>: potenciometro digital nativo; POST /knob reescreve tuning.py
+  - ?panel=audio | ?panel=image  -> mostra so uma secao (pras duas abas que abrem sozinhas)
+  - live-reload: editou este arquivo -> a aba recarrega sozinha (html_mtime no stream)
+  Sem framework, sem CDN — mesma pegada do webcam.html.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #111; color: #ddd;
+         font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 12px;
+           border-bottom: 1px solid #333; position: sticky; top: 0; background: #111; z-index: 1; }
+  header b { color: #fff; }
+  header button { background: #222; color: #bbb; border: 1px solid #444; border-radius: 4px;
+                  padding: 3px 8px; cursor: pointer; font: inherit; }
+  header button:hover { background: #2c2c2c; color: #fff; }
+  #rate { margin-left: auto; font-size: 11px; color: #888; }
+  #conn { font-size: 11px; color: #6a6; }
+  #conn.down { color: #c55; }
+  #iobar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+           padding: 8px 12px; border-bottom: 1px solid #2a2a2a; background: #161616;
+           position: sticky; top: 33px; z-index: 1; font-size: 11px; }
+  #iobar label { color: #888; display: flex; align-items: center; gap: 6px; }
+  main { padding: 14px; max-width: 1180px; }
+  section { margin-bottom: 26px; }
+  h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #888;
+       margin: 20px 0 8px; border-bottom: 1px solid #2a2a2a; padding-bottom: 4px; }
+  h2:first-child { margin-top: 0; }
+  h3 { font-size: 11px; color: #9a8; margin: 14px 0 6px; letter-spacing: .06em; }
+  h4 { font-size: 10px; color: #888; margin: 0 0 6px; letter-spacing: .08em; text-transform: uppercase; }
+
+  .track { display: block; background: #1c1c1c; border-radius: 3px; height: 11px; overflow: hidden; flex: 1; min-width: 0; }
+  .fill { display: block; height: 100%; width: 0; background: #4a8; transition: width .09s linear; }
+  .cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .cell .n { color: #888; font-size: 11px; white-space: nowrap; min-width: 40px; text-align: right; }
+
+  .meter { display: grid; grid-template-columns: 96px 1fr 60px; gap: 8px; align-items: center; margin: 3px 0; }
+  .meter .lbl { color: #999; text-align: right; }
+  .meter .val { color: #777; font-size: 11px; }
+
+  .chanrow { display: grid; grid-template-columns: 90px 1fr 1fr 1fr 40px 10px 20px; gap: 6px 8px;
+             align-items: center; margin: 3px 0; }
+  .chanrow input[type=text] { min-width: 0; }
+  .chanrow .val { color: #777; font-size: 11px; text-align: right; }
+  .chanrow .hit { width: 9px; height: 9px; border-radius: 50%; background: #333; }
+  .chanrow .hit.on { background: #e85; }
+  .chanrow .rm { padding: 1px 5px; }
+  #ranges-wrap.dim { opacity: .45; }
+
+  .faixas { display: grid; grid-template-columns: 92px repeat(4, minmax(120px, 1fr)); gap: 4px 12px; align-items: center; }
+  .faixas .head, .spectro .head { color: #888; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+                  border-bottom: 1px solid #2a2a2a; padding-bottom: 3px; }
+  .faixas .name { text-align: right; color: #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spectro { display: grid; grid-template-columns: 64px minmax(160px, 1fr) minmax(160px, 1fr); gap: 2px 12px; align-items: center; }
+  .spectro .hz { text-align: right; font-size: 11px; }
+
+  .ovl { display: block; color: #aaa; font-size: 12px; margin: 2px 0 8px; cursor: pointer; }
+  .ovl input { accent-color: #4a8; vertical-align: middle; }
+  .ranges { display: grid; grid-template-columns: 74px 1fr 58px 8px 58px;
+            gap: 22px 9px; align-items: center; margin-top: 6px; }
+  .ranges .rn { text-align: right; color: #bbb; font-size: 12px; }
+  .ranges .sep { text-align: center; color: #666; }
+  .ranges input { width: 100%; background: #1c1c1c; color: #ddd; border: 1px solid #444;
+                  border-radius: 4px; padding: 2px 3px; font: inherit; }
+  .ranges.rulerrow { gap: 0 9px; margin: 2px 0 0; }
+  .ranges.rulerrow i { font-style: normal; text-align: right; color: #666; font-size: 10px; }
+  #hzruler { position: relative; height: 13px; border-bottom: 1px solid #2a2a2a; }
+  #hzruler span { position: absolute; transform: translateX(-50%); bottom: 1px;
+                  font-size: 9px; color: #777; }
+  #bandmap { position: relative; height: 15px; margin: 3px 0 6px; background: #1c1c1c;
+             border-radius: 3px; overflow: hidden; }
+  /* cinza = buraco (nenhuma faixa). onde 2+ faixas se sobrepoem fica mais claro (screen). */
+  #bandmap .m { position: absolute; top: 0; height: 100%; opacity: .7; mix-blend-mode: screen; }
+  .bar { position: relative; height: 10px; background: #1c1c1c; border-radius: 5px;
+         cursor: pointer; touch-action: none; }
+  .bar .seg { position: absolute; top: 0; height: 100%; border-radius: 5px; opacity: .82; pointer-events: none; }
+  .bar .thumb { position: absolute; top: 50%; width: 13px; height: 13px; margin: -7px 0 0 -7px;
+                border-radius: 50%; background: #eee; border: 2px solid #1a1a1a; cursor: ew-resize;
+                touch-action: none; }
+  .bar .thumb:hover { background: #fff; }
+  .bar .thumb .tl { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+                    font-size: 9px; color: #bbb; white-space: nowrap; pointer-events: none; }
+  .bar .hzhint { position: absolute; bottom: 14px; transform: translateX(-50%); font-size: 9px;
+                 color: #7c7c7c; white-space: nowrap; pointer-events: none; }
+
+  .knob { display: grid; grid-template-columns: 1fr 60px; gap: 4px 10px; margin: 9px 0; }
+  .knob label { grid-column: 1 / -1; color: #aaa; }
+  .knob label small { color: #666; }
+  .knob input { width: 100%; accent-color: #4a8; }
+  .knob .kv { text-align: right; color: #cda; font-size: 12px; }
+
+  .swatch { display: inline-block; width: 46px; height: 20px; border-radius: 3px; border: 1px solid #333; vertical-align: middle; }
+  .io { color: #777; font-size: 11px; margin: 8px 0; }
+  .io span, .txtrow b { color: #cda; font-weight: normal; }
+  .insel { background: #1c1c1c; color: #ddd; border: 1px solid #444; border-radius: 4px;
+           padding: 2px 4px; font: inherit; max-width: 340px; }
+  .ibtn { background: #222; color: #bbb; border: 1px solid #444; border-radius: 4px;
+          padding: 1px 6px; cursor: pointer; font: inherit; }
+  .ibtn:hover { background: #2c2c2c; color: #fff; }
+  .txtrow { color: #888; font-size: 12px; margin: 3px 0; }
+  .txtrow .lbl { display: inline-block; width: 92px; text-align: right; color: #999; margin-right: 10px; }
+  .note { color: #666; margin-top: 10px; font-size: 11px; max-width: 46em; }
+
+  .grids { display: flex; flex-wrap: wrap; gap: 14px; }
+  .gbox { width: 108px; }
+  .gbox .gh { display: flex; justify-content: space-between; font-size: 10px; color: #aaa; margin-bottom: 3px; }
+  .gbox .gh .gtot { color: #cda; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+  .g3 div { height: 21px; border-radius: 2px; background: #222; }
+
+  .hists { display: flex; flex-wrap: wrap; gap: 28px; }
+  .hist { min-width: 210px; }
+  .hrow { display: grid; grid-template-columns: 46px 1fr; gap: 6px; align-items: center; margin: 2px 0; }
+  .hrow.rgb { grid-template-columns: 46px 1fr 1fr 1fr; }
+  .hrow .hl { text-align: right; font-size: 10px; color: #888; }
+
+  body[data-panel="audio"] #image, body[data-panel="image"] #audio { display: none; }
+</style>
+
+<header>
+  <b>native_synth</b> dash
+  <button onclick="pop('audio')">Audio Input &#8599;</button>
+  <button onclick="pop('image')">Image Input &#8599;</button>
+  <span id="rate">— Hz</span>
+  <span id="conn" class="down">offline</span>
+</header>
+
+<div id="iobar">
+  <label>áudio <select id="sel-audio" class="insel"></select></label>
+  <label>vídeo <select id="sel-video" class="insel"></select></label>
+  <button class="ibtn" onclick="loadInputs()" title="recarregar lista">&#8635;</button>
+  <label>saída <select id="out-mon" class="insel"></select></label>
+  <label>dimensão <input type="number" id="out-w" class="insel" style="width:60px" min="160" step="10">
+    &times; <input type="number" id="out-h" class="insel" style="width:60px" min="120" step="10"></label>
+  <label><input type="checkbox" id="out-full"> tela cheia</label>
+</div>
+
+<main>
+  <section id="audio">
+    <h2>KICK</h2>
+    <div id="kick"></div>
+
+    <h2>Faixas de mixagem</h2>
+    <div class="faixas" id="faixas">
+      <div class="head"></div><div class="head">bruto</div><div class="head">final</div>
+      <div class="head">smooth</div><div class="head">Δ bruto&rarr;final</div>
+    </div>
+
+    <h2>Espectrograma (24 faixas log, agudo &rarr; grave)</h2>
+    <div class="spectro" id="spectro">
+      <div class="head"></div><div class="head">absoluto (dB real)</div>
+      <div class="head">relativo (% do pico do frame)</div>
+    </div>
+
+    <h2>Ranges das faixas de mixagem (Hz)</h2>
+    <label class="ovl"><input type="checkbox" id="bands-cb" checked> ativar (desliga = u_subbass..u_air ficam 0 no shader,
+      sem apagar as ranges)</label>
+    <label class="ovl"><input type="checkbox" id="ovl-cb"> permitir sobreposição (overlap)</label>
+    <div id="ranges-wrap">
+      <div class="ranges rulerrow"><i></i><div id="hzruler"></div><i></i><i></i><i></i></div>
+      <div class="ranges rulerrow"><i>resumo</i><div id="bandmap"></div><i></i><i></i><i></i></div>
+      <div class="ranges" id="ranges"></div>
+    </div>
+    <p class="note" id="ovl-note"></p>
+
+    <h2>Canais (por instrumento)</h2>
+    <p class="note">Adiciona quantos quiser (até 8). Sem source: canal ocioso. "saída": qual
+      variável esse canal passa a SUBSTITUIR (kick, faixas, amp/bass/mid/treble) enquanto tiver
+      source ligada — sem source, a variável original continua normal. Não mexe nas faixas acima.</p>
+    <div id="channels"></div>
+    <button class="ibtn" onclick="addChannel()">+ adicionar canal</button>
+
+    <h2>Knobs &mdash; dinâmica (grava em tuning.py)</h2>
+    <div id="knoblist"></div>
+  </section>
+
+  <section id="image">
+    <h2>Saída (output) &mdash; onde/tamanho a imagem sintetizada aparece</h2>
+    <div id="output"></div>
+
+    <h2>Resumo</h2>
+    <div class="io">
+      dominante <span class="swatch" id="sw-dom"></span> <span id="dom-rgb">&mdash;</span>
+      &nbsp;&nbsp; média <span class="swatch" id="sw-mean"></span> <span id="mean-rgb">&mdash;</span>
+    </div>
+    <div id="img-meters"></div>
+    <div id="img-text"></div>
+
+    <h2>Onde na tela (grid 3&times;3 &mdash; mesmos medidores, por região)</h2>
+    <div class="grids" id="grids"></div>
+
+    <h2>Análise espacial</h2>
+    <div class="hists" id="hists"></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+// guard compartilhado: ms desde o ultimo "mexi nisso local" antes de aceitar o eco do SSE de
+// volta (select-audio/video, canais, saida) — por TEMPO, nao por foco (ver comentario onde e usado)
+const TOUCH_MS = 600;
+const panel = new URLSearchParams(location.search).get('panel');
+if (panel) document.body.dataset.panel = panel;
+document.title = panel === 'image' ? 'Image Input'
+              : panel === 'audio' ? 'Audio Input'
+              : 'native_synth — dash';
+function pop(p){ window.open('?panel=' + p, p, 'width=960,height=940'); }
+
+const fmt = v => String(parseFloat(Number(v).toFixed(4)));
+const rgbStr = a => a ? `rgb(${a[0]},${a[1]},${a[2]})` : '#888';
+const pct = v => Math.max(0, Math.min(100, v * 100)) + '%';
+
+function cell(){
+  const c = document.createElement('div');
+  c.className = 'cell';
+  c.innerHTML = '<span class="track"><span class="fill"></span></span><span class="n">0</span>';
+  return { el: c, fill: c.querySelector('.fill'), n: c.querySelector('.n') };
+}
+function setCell(o, level, text, color){
+  o.fill.style.width = pct(level);
+  if (color) o.fill.style.background = color;
+  o.n.textContent = text;
+}
+// cor de celula do grid — porta gray_bg / temp_bg do native_synth
+function cellBg(v, bipolar){
+  if (bipolar){
+    const t = Math.min(1, Math.abs(v) * 3);
+    const base = v > 0 ? [255,140,80] : [120,170,255];
+    const c = base.map(x => Math.round(128 + (x - 128) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+  const g = Math.round(Math.max(0, Math.min(1, v)) * 255);
+  return `rgb(${g},${g},${g})`;
+}
+function simpleMeter(parent, label){
+  const row = document.createElement('div');
+  row.className = 'meter';
+  row.innerHTML = `<span class="lbl">${label}</span><span class="track"><span class="fill"></span></span><span class="val">0.00</span>`;
+  parent.appendChild(row);
+  return { fill: row.querySelector('.fill'), val: row.querySelector('.val') };
+}
+
+// ============ ÁUDIO ============
+const kickEls = {};
+for (const [key, label, col] of [['final','final','#d84'], ['decay','decay','#888']]){
+  const row = document.createElement('div');
+  row.className = 'meter';
+  row.innerHTML = `<span class="lbl">${label}</span><span class="track"><span class="fill" style="background:${col}"></span></span><span class="val">0.00</span>`;
+  $('#kick').appendChild(row);
+  kickEls[key] = { fill: row.querySelector('.fill'), val: row.querySelector('.val') };
+}
+
+let faixasRows = null;
+function buildFaixas(bands){
+  faixasRows = bands.map(b => {
+    const name = document.createElement('div');
+    name.className = 'name'; name.textContent = b.name; name.style.color = rgbStr(b.rgb);
+    const bruto = cell(), final = cell(), smooth = cell(), delta = cell();
+    $('#faixas').append(name, bruto.el, final.el, smooth.el, delta.el);
+    return { bruto, final, smooth, delta, color: rgbStr(b.rgb) };
+  });
+}
+function renderFaixas(bands){
+  if (!faixasRows) buildFaixas(bands);
+  bands.forEach((b, i) => {
+    const r = faixasRows[i];
+    setCell(r.bruto,  b.raw_level, b.raw_mag.toFixed(3), r.color);
+    setCell(r.final,  b.final,     b.final.toFixed(2),   r.color);
+    setCell(r.smooth, b.smoothing, b.smoothing.toFixed(2), '#777');
+    setCell(r.delta,  b.delta,     b.delta.toFixed(2),   '#777');
+  });
+}
+
+let spectroRows = null;
+function buildSpectro(spec){
+  spectroRows = spec.map(s => {
+    const hz = document.createElement('div');
+    hz.className = 'hz'; hz.textContent = s.hz + ' Hz';
+    const abs = cell(), rel = cell();
+    $('#spectro').append(hz, abs.el, rel.el);
+    return { hz, abs, rel };
+  });
+}
+function renderSpectro(spec){
+  if (!spectroRows) buildSpectro(spec);
+  spec.forEach((s, i) => {
+    const r = spectroRows[i], c = rgbStr(s.rgb);  // cor vem do payload a cada frame — segue os ranges
+    r.hz.style.color = c;
+    setCell(r.abs, (s.db + 60) / 100, s.db.toFixed(1) + ' dB', c);
+    setCell(r.rel, s.rel, (s.rel * 100).toFixed(1) + '%', c);
+  });
+}
+
+// ============ SAÍDA (output) ============
+let _outStr = '';
+function renderOutput(o){
+  const sig = JSON.stringify(o || {});
+  if (sig === _outStr) return;          // só re-renderiza quando algo muda (fps ~2x/s)
+  _outStr = sig;
+  renderOutputBar(o);
+  if (!o || !o.window_w){ $('#output').innerHTML = '<div class="txtrow">— sem dados (app iniciando)</div>'; return; }
+  const shBad = o.shader_status && o.shader_status !== 'ok';
+  const mons = (o.monitors || []).map(m =>
+    `<div class="txtrow"><span class="lbl"></span>${m.name} &nbsp; ${m.w}×${m.h} &nbsp; +${m.x}+${m.y}`
+    + (m.primary ? ' <b>*</b>' : '') + '</div>').join('');
+  $('#output').innerHTML =
+    `<div class="txtrow"><span class="lbl">render</span><b>${o.content_w}×${o.content_h}</b> px (textura)</div>`
+    + `<div class="txtrow"><span class="lbl">janela</span><b>${o.window_w}×${o.window_h}</b> px &nbsp;·&nbsp; ${o.mode}`
+      + ` &nbsp;·&nbsp; pos ${o.pos ? o.pos.join(',') : '0,0'}</div>`
+    + `<div class="txtrow"><span class="lbl">fps</span><b>${(o.fps || 0).toFixed(1)}</b> / ${o.fps_target}</div>`
+    + `<div class="txtrow"><span class="lbl">shader</span>${o.shader} &nbsp;·&nbsp; `
+      + `<b style="color:${shBad ? '#c55' : '#6a6'}">${o.shader_status || 'ok'}</b></div>`
+    + `<div class="txtrow"><span class="lbl">monitores</span></div>` + mons
+    + `<p class="note">onde/tamanho: barra "saída" no topo (ao vivo, sem reiniciar). `
+      + `A resolução do render (textura) vem da fonte de vídeo; a janela escala pra caber.</p>`;
+}
+// controles de saída no #iobar (topo): monitor, dimensão, tela cheia — POST /output.
+// guard por TEMPO (TOUCH_MS, ver topo do script): mousedown/input ja conta como "mexendo".
+let outTouched = 0;
+function fillOutMon(monitors, current){
+  const items = [{ id: '', name: '— não fixa (janela normal)' },
+    ...monitors.map(m => ({ id: m.name, name: `${m.name} ${m.w}×${m.h}` + (m.primary ? ' *' : '') }))];
+  fillSel($('#out-mon'), items, current);
+}
+// lembra o ultimo tamanho de JANELA (nao-fullscreen) confirmado, pra restaurar ao sair do
+// fullscreen — localStorage porque e conveniencia de UI, nao config (sobrevive a um reload
+// da aba; nao precisa ir pro tuning.py).
+function saveOutSize(w, h){
+  try { localStorage.setItem('outSize', JSON.stringify({ w, h })); } catch {}
+}
+function loadOutSize(){
+  try { return JSON.parse(localStorage.getItem('outSize')); } catch { return null; }
+}
+function renderOutputBar(o){
+  if (!o || !o.window_w) return;
+  if (!o.fullscreen) saveOutSize(o.window_w, o.window_h);
+  if (performance.now() - outTouched < TOUCH_MS) return;
+  fillOutMon(o.monitors || [], o.monitor || '');
+  $('#out-full').checked = !!o.fullscreen;
+  $('#out-w').value = o.window_w;
+  $('#out-h').value = o.window_h;
+  $('#out-w').disabled = $('#out-h').disabled = !!o.fullscreen;
+}
+function sendOutput(){
+  outTouched = performance.now();
+  fetch('/output', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ monitor: $('#out-mon').value, fullscreen: $('#out-full').checked,
+                           w: +$('#out-w').value || 0, h: +$('#out-h').value || 0 }) });
+}
+$('#out-mon').addEventListener('mousedown', () => { outTouched = performance.now(); });
+$('#out-mon').addEventListener('change', sendOutput);
+$('#out-full').addEventListener('mousedown', () => { outTouched = performance.now(); });
+$('#out-full').addEventListener('change', () => {
+  const full = $('#out-full').checked;
+  if (!full){
+    const prev = loadOutSize();                    // volta pro tamanho de antes do fullscreen
+    if (prev && prev.w && prev.h){ $('#out-w').value = prev.w; $('#out-h').value = prev.h; }
+  }
+  $('#out-w').disabled = $('#out-h').disabled = full;
+  sendOutput();
+});
+$('#out-w').addEventListener('input', () => { outTouched = performance.now(); });
+$('#out-w').addEventListener('change', sendOutput);
+$('#out-h').addEventListener('input', () => { outTouched = performance.now(); });
+$('#out-h').addEventListener('change', sendOutput);
+
+// ============ IMAGEM ============
+let imgEls = null;
+function buildImage(im){
+  const M = {};
+  M.symmetry     = simpleMeter($('#img-meters'), 'simetria');
+  M.colorfulness = simpleMeter($('#img-meters'), 'coloridez');
+  M.color_change = simpleMeter($('#img-meters'), 'mud. cor');
+  M.warm         = simpleMeter($('#img-meters'), 'tom quente');
+  M.palette_level= simpleMeter($('#img-meters'), 'paleta');
+
+  const T = {};
+  for (const key of ['clipping','corr','centro']){
+    const d = document.createElement('div'); d.className = 'txtrow';
+    $('#img-text').appendChild(d); T[key] = d;
+  }
+
+  // 8 grids 3x3
+  const G = im.grids.map(g => {
+    const box = document.createElement('div'); box.className = 'gbox';
+    box.innerHTML = `<div class="gh"><span>${g.name}</span><span class="gtot">0</span></div><div class="g3"></div>`;
+    $('#grids').appendChild(box);
+    const g3 = box.querySelector('.g3');
+    const cells = [];
+    for (let i = 0; i < 9; i++){ const c = document.createElement('div'); g3.appendChild(c); cells.push(c); }
+    return { tot: box.querySelector('.gtot'), cells, bipolar: g.bipolar };
+  });
+
+  // 4 histogramas
+  function histCol(title){
+    const col = document.createElement('div'); col.className = 'hist';
+    col.innerHTML = `<h4>${title}</h4>`;
+    $('#hists').appendChild(col); return col;
+  }
+  function histRows(col, items, rgbClass){
+    return items.map(it => {
+      const row = document.createElement('div');
+      row.className = 'hrow' + (rgbClass ? ' rgb' : '');
+      if (rgbClass){
+        row.innerHTML = '<span class="hl"></span>' +
+          '<span class="track"><span class="fill" style="background:#e44"></span></span>' +
+          '<span class="track"><span class="fill" style="background:#4c4"></span></span>' +
+          '<span class="track"><span class="fill" style="background:#69f"></span></span>';
+        return { hl: row.querySelector('.hl'),
+                 fills: [...row.querySelectorAll('.fill')], el: (col.appendChild(row), row) };
+      }
+      row.innerHTML = '<span class="hl"></span><span class="track"><span class="fill"></span></span>';
+      col.appendChild(row);
+      return { hl: row.querySelector('.hl'), fill: row.querySelector('.fill') };
+    });
+  }
+  const hueCol = histCol('matiz (hue)');
+  const hueRows = histRows(hueCol, im.hue_hist);
+  const brightCol = histCol('brilho (V) — claro em cima');
+  const brightRows = histRows(brightCol, im.bright_hist);
+  const specCol = histCol('cores (FFT 2D espacial) — R / G / B');
+  const specRows = histRows(specCol, im.color_spectrum, true);
+  const orientCol = histCol('orientação de borda');
+  const orientRows = histRows(orientCol, im.edge_orient);
+
+  imgEls = { M, T, G, hueRows, brightRows, specRows, orientRows };
+}
+function renderImage(im){
+  if (!im || !im.grids) return;
+  if (!imgEls) buildImage(im);
+  const s = im.summary;
+
+  $('#sw-dom').style.background = rgbStr(im.dominant);
+  $('#dom-rgb').textContent = `RGB(${im.dominant.join(',')})`;
+  $('#sw-mean').style.background = rgbStr(s.mean_rgb);
+  $('#mean-rgb').textContent = `RGB(${s.mean_rgb.join(',')})`;
+
+  const M = imgEls.M;
+  const setM = (o, v) => { o.fill.style.width = pct(v); o.val.textContent = v.toFixed(2); };
+  setM(M.symmetry, s.symmetry); setM(M.colorfulness, s.colorfulness);
+  setM(M.color_change, s.color_change); setM(M.warm, s.warm); setM(M.palette_level, s.palette_level);
+  M.palette_level.val.textContent = (s.palette_level * 100).toFixed(1) + '%';
+
+  imgEls.T.clipping.innerHTML = `<span class="lbl">clipping</span>estourado <b>${(s.overexposed*100).toFixed(1)}%</b> &nbsp; escuro <b>${(s.underexposed*100).toFixed(1)}%</b>`;
+  imgEls.T.corr.innerHTML = `<span class="lbl">correlação</span>R↔G <b>${s.corr_rg.toFixed(2)}</b> &nbsp; R↔B <b>${s.corr_rb.toFixed(2)}</b> &nbsp; G↔B <b>${s.corr_gb.toFixed(2)}</b>`;
+  imgEls.T.centro.innerHTML = `<span class="lbl">centro</span>x <b>${s.cx.toFixed(2)}</b> &nbsp; y <b>${s.cy.toFixed(2)}</b> &nbsp; (0,0 = sup-esq) &nbsp;·&nbsp; paleta <b>${s.palette_unique}</b>/${s.palette_total}px`;
+
+  im.grids.forEach((g, gi) => {
+    const G = imgEls.G[gi];
+    G.tot.textContent = g.bipolar ? (g.total >= 0 ? '+' : '') + g.total.toFixed(2) : g.total.toFixed(2);
+    let k = 0;
+    for (const row of g.cells) for (const v of row){ G.cells[k++].style.background = cellBg(v, g.bipolar); }
+  });
+
+  im.hue_hist.forEach((h, i) => {
+    imgEls.hueRows[i].hl.textContent = h.deg + '°';
+    imgEls.hueRows[i].fill.style.width = pct(h.level);
+    imgEls.hueRows[i].fill.style.background = rgbStr(h.rgb);
+  });
+  im.bright_hist.forEach((h, i) => {
+    imgEls.brightRows[i].hl.textContent = h.gray;
+    imgEls.brightRows[i].fill.style.width = pct(h.level);
+    imgEls.brightRows[i].fill.style.background = `rgb(${h.gray},${h.gray},${h.gray})`;
+  });
+  im.color_spectrum.forEach((h, i) => {
+    imgEls.specRows[i].hl.textContent = h.radius + 'px';
+    imgEls.specRows[i].fills[0].style.width = pct(h.r);
+    imgEls.specRows[i].fills[1].style.width = pct(h.g);
+    imgEls.specRows[i].fills[2].style.width = pct(h.b);
+  });
+  im.edge_orient.forEach((h, i) => {
+    imgEls.orientRows[i].hl.textContent = h.deg + '°';
+    imgEls.orientRows[i].fill.style.width = pct(h.level);
+    imgEls.orientRows[i].fill.style.background = rgbStr(h.rgb);
+  });
+}
+
+// ============ KNOBS ============
+let activeKnob = null, releaseT = null, flushT = null;
+const pending = {}, knobEls = {};
+fetch('/knobs').then(r => r.json()).then(specs => {
+  const groups = {};
+  for (const s of specs) (groups[s.group] ||= []).push(s);
+  const GROUP_LABEL = { kick:'KICK', smooth:'SMOOTHING', autogain:'AUTO-GAIN', scale:'ESCALAS / CORTES' };
+  for (const g of Object.keys(groups)){
+    const h = document.createElement('h3'); h.textContent = GROUP_LABEL[g] || g;
+    $('#knoblist').appendChild(h);
+    for (const s of groups[g]){
+      const row = document.createElement('div');
+      row.className = 'knob';
+      row.innerHTML =
+        `<label>${s.name} <small>&mdash; ${s.label}</small></label>` +
+        `<input type="range" min="${s.min}" max="${s.max}" step="${s.step}">` +
+        `<span class="kv">&mdash;</span>`;
+      $('#knoblist').appendChild(row);
+      const inp = row.querySelector('input'), kv = row.querySelector('.kv');
+      knobEls[s.name] = { inp, kv };
+      inp.addEventListener('input', () => {
+        kv.textContent = fmt(inp.value);
+        pending[s.name] = inp.value;
+        activeKnob = s.name;
+        clearTimeout(releaseT); releaseT = setTimeout(() => activeKnob = null, 600);
+        if (!flushT) flushT = setTimeout(flush, 80);
+      });
+    }
+  }
+});
+// ============ RANGES DAS FAIXAS ============
+// Barra log (20 Hz–20 kHz) por faixa com 2 bolinhas (lo/hi) + caixas numericas ao lado,
+// sincronizadas nos dois sentidos. POST /bands manda a config inteira; o servidor normaliza
+// (overlap=1 livre; overlap=0 = sem sobreposicao mas com buraco permitido) e devolve; o SSE
+// atualiza o que voce nao estiver mexendo. Cinza = Hz sem faixa nenhuma (so no modo crossover).
+const HZ_LO = 20, HZ_HI = 20000, _L = Math.log(HZ_LO), _R = Math.log(HZ_HI);
+const hzPct = hz => (Math.log(Math.max(HZ_LO, Math.min(HZ_HI, hz))) - _L) / (_R - _L) * 100;
+const pctHz = p => Math.round(Math.exp(_L + (_R - _L) * Math.max(0, Math.min(1, p / 100))));
+const kfmt = hz => hz >= 1000 ? (hz / 1000).toFixed(hz % 1000 ? 1 : 0) + 'k' : '' + hz;
+const OVL_NOTE = {
+  0: 'crossover: as faixas NÃO se sobrepõem. Cada limite é meio-aberto [lo, hi) — o Hz do limite pertence à faixa DE CIMA (ex.: 73 Hz entra na Low-mid, não na Sub-bass; por isso "73" aparece dos dois lados sem overlap). Arraste a bolinha hi para mover a costura (a vizinha acompanha); arraste a bolinha lo de uma faixa para cima para abrir um buraco (cinza — Hz sem faixa nenhuma).',
+  1: 'livre: cada faixa com seu lo/hi. Podem se sobrepor (Hz compartilhado soma energia nas duas) ou deixar buraco. Na barra-resumo a sobreposição aparece mais clara.',
+};
+let rangeRows = null, dragRow = -1, rangesTouched = 0;  // rangesTouched: ms do ultimo mexer local
+const BAND_COLORS = {  // espelha dash_data.FREQ_BAND_RGB
+  'Sub-bass':'rgb(30,140,255)', 'Low-mid':'rgb(0,200,255)', 'Midrange':'rgb(0,230,200)',
+  'High-mid':'rgb(140,140,255)', 'Presence':'rgb(190,100,255)', 'Treble':'rgb(225,80,255)',
+  'Brilliance':'rgb(255,70,210)', 'Air':'rgb(255,110,160)' };
+const isOv = () => $('#ovl-cb').checked;
+
+function buildRanges(bh){
+  const ruler = $('#hzruler'); ruler.innerHTML = '';
+  const bmap = $('#bandmap'); bmap.innerHTML = '';
+  for (const t of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]){
+    const s = document.createElement('span'); s.textContent = kfmt(t); s.style.left = hzPct(t) + '%';
+    ruler.appendChild(s);
+  }
+  rangeRows = bh.names.map((name, i) => {
+    const rn = document.createElement('div'); rn.className = 'rn'; rn.textContent = name;
+    const bar = document.createElement('div'); bar.className = 'bar';
+    bar.innerHTML = '<div class="seg"></div>' +
+      '<div class="thumb lo"><span class="tl"></span></div><div class="thumb hi"><span class="tl"></span></div>' +
+      '<span class="hzhint" hidden></span>';
+    const lo = document.createElement('input'); lo.type = 'number'; lo.min = HZ_LO; lo.max = HZ_HI; lo.step = 1;
+    const sep = document.createElement('div'); sep.className = 'sep'; sep.textContent = '–';
+    const hi = lo.cloneNode();
+    const m = document.createElement('div'); m.className = 'm'; m.style.background = BAND_COLORS[name] || '#4a8';
+    bmap.appendChild(m);
+    // prepend => lista de cima pra baixo agudo->grave, igual ao espectrograma (rangeRows[] segue grave->agudo)
+    $('#ranges').prepend(rn, bar, lo, sep, hi);
+    const r = { name, bar, seg: bar.querySelector('.seg'), m,
+                tLo: bar.querySelector('.thumb.lo'), tHi: bar.querySelector('.thumb.hi'),
+                lLo: bar.querySelector('.thumb.lo .tl'), lHi: bar.querySelector('.thumb.hi .tl'),
+                lo, hi };
+    r.seg.style.background = BAND_COLORS[name] || '#4a8';
+    lo.addEventListener('change', () => commitRow(i));
+    hi.addEventListener('change', () => commitRow(i));
+    startDrag(r.tLo, i, 'lo'); startDrag(r.tHi, i, 'hi');
+    // hover: mostra o Hz sob o cursor (some em cima das bolinhas, que ja tem label proprio)
+    const hint = bar.querySelector('.hzhint');
+    bar.addEventListener('pointermove', ev => {
+      if (ev.target.closest('.thumb')){ hint.hidden = true; return; }
+      const rect = bar.getBoundingClientRect();
+      const x = (ev.clientX - rect.left) / rect.width * 100;
+      hint.textContent = kfmt(pctHz(x)); hint.style.left = x + '%'; hint.hidden = false;
+    });
+    bar.addEventListener('pointerleave', () => { hint.hidden = true; });
+    // clique na barra (fora das bolinhas): pega a borda mais perto e ja arrasta a partir dali
+    bar.addEventListener('pointerdown', ev => {
+      if (ev.target.closest('.thumb')) return;
+      const rr = rangeRows[i], rect = bar.getBoundingClientRect();
+      const p = (ev.clientX - rect.left) / rect.width * 100;
+      const edge = Math.abs(p - hzPct(+rr.lo.value || HZ_LO)) <=
+                   Math.abs(p - hzPct(+rr.hi.value || HZ_HI)) ? 'lo' : 'hi';
+      beginDrag(edge === 'lo' ? rr.tLo : rr.tHi, i, edge, ev, true);
+    });
+    return r;
+  });
+  $('#ovl-cb').addEventListener('change', () => {
+    if (!isOv()) reflowFromOverlap();  // saindo do overlap: quem sobrepoe cede, as outras faixas ficam como estavam
+    cascade(); sendRanges();
+  });
+  $('#bands-cb').addEventListener('change', sendRanges);
+}
+// overlap -> crossover: resolve cada sobreposicao movendo a costura pra borda da faixa mais
+// ESTREITA (a mais larga recua). Assim uma faixa que cobria tudo vira so o pedaco que sobrou
+// e as faixas "normais" mantem lo/hi. Buracos existentes ficam.
+function reflowFromOverlap(){
+  if (!rangeRows) return;
+  const v = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_LO]);
+  const lw = ([lo, hi]) => Math.log(Math.max(HZ_LO, hi)) - Math.log(Math.max(HZ_LO, lo));
+  let prev = HZ_LO;
+  for (let i = 0; i < 8; i++){
+    let [lo, hi] = v[i];
+    lo = Math.max(lo, prev);
+    if (i < 7 && hi > v[i + 1][0] && lw(v[i]) >= lw(v[i + 1])) hi = v[i + 1][0];  // eu sou a larga: recuo
+    hi = Math.min(HZ_HI, Math.max(hi, lo + 1));
+    lo = Math.min(lo, hi - 1);
+    v[i] = [lo, hi];
+    prev = hi;
+  }
+  rangeRows.forEach((r, i) => { r.lo.value = v[i][0]; r.hi.value = v[i][1]; });
+}
+// espelha dash_server._clamp_ranges: overlap=1 solto; overlap=0 = ordenado, sem sobrepor,
+// buraco ok. Le as caixas, corrige, repinta tudo. Nao mexe na linha em arrasto/foco.
+function cascade(){
+  if (!rangeRows) return;
+  const v = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_LO]);
+  if (isOv()){
+    for (let i = 0; i < 8; i++){
+      let [lo, hi] = v[i];
+      lo = Math.max(HZ_LO, Math.min(HZ_HI, lo)); hi = Math.min(HZ_HI, Math.max(lo + 1, hi));
+      applyRow(i, lo, hi);
+    }
+  } else {
+    let prevHi = HZ_LO;
+    for (let i = 0; i < 8; i++){
+      let [lo, hi] = v[i];
+      lo = Math.max(Math.min(Math.max(HZ_LO, lo), HZ_HI), prevHi);
+      hi = Math.min(HZ_HI, Math.max(lo + 1, hi));
+      lo = Math.min(lo, hi - 1);
+      applyRow(i, lo, hi);
+      prevHi = hi;
+    }
+  }
+}
+function applyRow(i, lo, hi){  // pinta so se nao estiver sendo editada
+  const r = rangeRows[i];
+  if (dragRow === i || r.lo === document.activeElement || r.hi === document.activeElement){
+    // ainda atualiza o mapa e o segmento (feedback visual), mas nao a caixa focada
+    paintVisual(i, lo, hi);
+  } else {
+    r.lo.value = lo; r.hi.value = hi;
+    paintVisual(i, lo, hi);
+  }
+}
+function paintVisual(i, lo, hi){
+  const r = rangeRows[i];
+  const a = hzPct(lo), b = hzPct(hi);
+  r.tLo.style.left = a + '%'; r.tHi.style.left = b + '%';
+  r.seg.style.left = a + '%'; r.seg.style.width = (b - a) + '%';
+  r.lLo.textContent = kfmt(lo); r.lHi.textContent = kfmt(hi);
+  r.m.style.left = a + '%'; r.m.style.width = (b - a) + '%';
+}
+function commitRow(i){ cascade(); sendRanges(); }
+function startDrag(thumb, i, edge){
+  thumb.addEventListener('pointerdown', ev => { ev.stopPropagation(); beginDrag(thumb, i, edge, ev); });
+}
+function beginDrag(thumb, i, edge, ev, snap){
+    ev.preventDefault(); thumb.setPointerCapture(ev.pointerId); dragRow = i;
+    const rect = rangeRows[i].bar.getBoundingClientRect();
+    // costura "grudada" com a vizinha de cima? entao arrastar o hi leva o lo dela junto
+    const linkedNext = !isOv() && edge === 'hi' && i < 7 &&
+      (+rangeRows[i + 1].lo.value === +rangeRows[i].hi.value);
+    const move = e => {
+      rangesTouched = performance.now();
+      let hz = Math.round(pctHz((e.clientX - rect.left) / rect.width * 100));
+      const r = rangeRows[i];
+      if (edge === 'lo'){
+        hz = Math.max(HZ_LO, Math.min(hz, (+r.hi.value || HZ_HI) - 1));
+        r.lo.value = hz;
+        // crossover: empurra as faixas graves pra baixo se o lo passou por cima delas (costura nos dois sentidos)
+        if (!isOv()) for (let k = i - 1, lim = hz; k >= 0; k--){
+          const p = rangeRows[k];
+          if ((+p.hi.value || HZ_LO) <= lim) break;
+          p.hi.value = lim;
+          if ((+p.lo.value || HZ_LO) < lim) break;
+          p.lo.value = (lim -= 1);
+        }
+      } else {
+        hz = Math.max(hz, (+r.lo.value || HZ_LO) + 1);
+        r.hi.value = Math.min(HZ_HI, hz);
+        if (linkedNext) rangeRows[i + 1].lo.value = r.hi.value;
+      }
+      cascade();
+      if (!thumb._t) thumb._t = setTimeout(() => { thumb._t = null; sendRanges(); }, 110);
+    };
+    const up = () => {
+      thumb.removeEventListener('pointermove', move);
+      thumb.removeEventListener('pointerup', up);
+      clearTimeout(thumb._t); thumb._t = null; dragRow = -1; sendRanges();
+    };
+    thumb.addEventListener('pointermove', move);
+    thumb.addEventListener('pointerup', up);
+    if (snap) move(ev);  // clique na barra: pula a borda pro ponto ja no pointerdown
+}
+const isBandsEnabled = () => $('#bands-cb').checked;
+function renderRanges(bh){
+  if (!bh || !bh.names) return;
+  if (!rangeRows) buildRanges(bh);
+  if (document.activeElement !== $('#ovl-cb')) $('#ovl-cb').checked = !!bh.overlap;
+  if (document.activeElement !== $('#bands-cb')) $('#bands-cb').checked = bh.enabled !== 0;
+  $('#ranges-wrap').classList.toggle('dim', bh.enabled === 0);
+  $('#ovl-note').textContent = OVL_NOTE[bh.overlap ? 1 : 0];
+  // acabou de arrastar/empurrar? ignora o eco velho do SSE ate o servidor devolver o novo
+  if (dragRow >= 0 || performance.now() - rangesTouched < 400) return;
+  bh.ranges.forEach(([lo, hi], i) => applyRow(i, lo, hi));
+}
+function sendRanges(){
+  if (!rangeRows) return;
+  rangesTouched = performance.now();
+  const ranges = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_LO]);
+  fetch('/bands', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ overlap: isOv() ? 1 : 0, ranges, enabled: isBandsEnabled() ? 1 : 0 }) });
+}
+
+// ============ CANAIS (por instrumento, lista de tamanho livre — add/remove aqui) ============
+// paralelo as ranges acima: mesmo esquema de POST-reescreve-bloco-inteiro, so que em
+// CHANNELS. Cada linha manda {name, src, output} inteiro no /channels a cada mudanca — o
+// servidor reescreve o bloco todo (sem slot fixo, sem padding).
+const MAX_CHANNELS = 8;
+const CHAN_OUTPUTS = [
+  ['', '— nenhuma (só no array u_chan[])'],
+  ['kick', 'kick (onset)'], ['amp', 'amp'], ['bass', 'bass'], ['mid', 'mid'], ['treble', 'treble'],
+  ['subbass', 'Sub-bass'], ['lowmid', 'Low-mid'], ['midrange', 'Midrange'], ['highmid', 'High-mid'],
+  ['presence', 'Presence'], ['treble_hi', 'Treble'], ['brilho', 'Brilliance'], ['air', 'Air'],
+];
+let chanRows = null, chanTouched = 0;   // 1:1 com o array vindo do servidor
+function makeChanRow(){
+  const row = document.createElement('div'); row.className = 'chanrow';
+  const name = document.createElement('input'); name.type = 'text'; name.className = 'insel'; name.placeholder = 'nome';
+  const srcSel = document.createElement('select'); srcSel.className = 'insel';
+  const outSel = document.createElement('select'); outSel.className = 'insel';
+  for (const [v, label] of CHAN_OUTPUTS){
+    const o = document.createElement('option'); o.value = v; o.textContent = label; outSel.appendChild(o);
+  }
+  const track = document.createElement('span'); track.className = 'track';
+  const fill = document.createElement('span'); fill.className = 'fill'; track.appendChild(fill);
+  const val = document.createElement('span'); val.className = 'val'; val.textContent = '0.00';
+  const hit = document.createElement('span'); hit.className = 'hit';
+  const rm = document.createElement('button'); rm.className = 'ibtn rm'; rm.textContent = '✕'; rm.title = 'remover canal';
+  row.append(name, srcSel, outSel, track, val, hit, rm);
+  $('#channels').appendChild(row);
+  const r = { name, srcSel, outSel, fill, val, hit };
+  name.addEventListener('input', () => { chanTouched = performance.now(); });
+  name.addEventListener('change', sendChannels);
+  for (const sel of [srcSel, outSel]){
+    sel.addEventListener('mousedown', () => { chanTouched = performance.now(); });
+    sel.addEventListener('change', sendChannels);
+  }
+  rm.addEventListener('click', () => {
+    const idx = chanRows.indexOf(r);   // busca a posicao NA HORA — indices deslizam apos remocao
+    if (idx < 0) return;
+    chanRows.splice(idx, 1);
+    row.remove();
+    sendChannels();
+  });
+  return r;
+}
+function addChannel(){
+  if (!chanRows) chanRows = [];
+  if (chanRows.length >= MAX_CHANNELS) return;
+  chanRows.push(makeChanRow());
+  fillAllChannelSelects();
+  sendChannels();
+}
+function fillAllChannelSelects(){
+  if (!chanRows) return;
+  const items = [{ id: '', name: '— (canal ocioso)' }, ...lastAudioSources];
+  for (const r of chanRows) fillSel(r.srcSel, items, r.srcSel.value);
+}
+function renderChannels(ch){
+  if (!ch || !ch.names) return;
+  // acabou de mexer local (add/remover/editar, ou so abriu um <select>)? ignora o eco velho do
+  // SSE por TOUCH_MS — guard por tempo, nao por foco (foco sozinho nao prova que ainda esta
+  // editando; um <select> pode ficar focado bem depois do dropdown fechar)
+  if (performance.now() - chanTouched < TOUCH_MS) return;
+  // so reconstroi quando a QUANTIDADE muda (add/remove — inclusive vindo de outra aba);
+  // edicao normal (nome/src/output) so atualiza valor, sem perder foco/selecao no meio do frame
+  if (!chanRows || chanRows.length !== ch.names.length){
+    $('#channels').innerHTML = '';
+    chanRows = ch.names.map(() => makeChanRow());
+    fillAllChannelSelects();
+  }
+  ch.names.forEach((name, i) => {
+    const r = chanRows[i];
+    r.name.value = name;
+    const src = ch.srcs[i] || '';
+    if ([...r.srcSel.options].some(o => o.value === src)) r.srcSel.value = src;
+    const out = ch.outputs[i] || '';
+    if ([...r.outSel.options].some(o => o.value === out)) r.outSel.value = out;
+    r.fill.style.width = pct(ch.levels[i] || 0);
+    r.val.textContent = (ch.levels[i] || 0).toFixed(2);
+    r.hit.classList.toggle('on', (ch.hits[i] || 0) > 0.5);
+  });
+}
+function sendChannels(){
+  if (!chanRows) return;
+  chanTouched = performance.now();
+  const channels = chanRows.map(r => ({ name: r.name.value, src: r.srcSel.value, output: r.outSel.value }));
+  fetch('/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channels }) });
+}
+
+function flush(){
+  flushT = null;
+  for (const [name, value] of Object.entries(pending)){
+    fetch('/knob', { method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `name=${encodeURIComponent(name)}&value=${encodeURIComponent(value)}` });
+    delete pending[name];
+  }
+}
+
+// ============ ENTRADAS (audio / video) ============
+function fillSel(sel, items, current){
+  sel.innerHTML = '';
+  for (const it of items){
+    const o = document.createElement('option');
+    o.value = it.id; o.textContent = it.name;
+    if (it.id === current) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+let lastAudioSources = [];
+function loadInputs(){
+  fetch('/inputs').then(r => r.json()).then(d => {
+    if (!d.audio && !d.video) return;
+    lastAudioSources = d.audio || [];
+    fillSel($('#sel-audio'), d.audio || [], (d.current || {}).audio);
+    fillSel($('#sel-video'), d.video || [], (d.current || {}).video);
+    fillAllChannelSelects();
+  }).catch(() => {});
+}
+function setInput(kind, id){
+  fetch('/input', { method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}` });
+}
+// segue o estado ao vivo (troca feita em outra aba). Guard por TEMPO desde o ultimo mousedown/
+// change LOCAL (mesmo TOUCH_MS da barra de saida) — nao por foco: focado sozinho nao prova
+// que o usuario ainda esta escolhendo, e um <select> pode ficar com foco muito depois do
+// dropdown fechar (ex. Esc sem blur), travando a sincronizacao pra sempre ate clicar fora.
+const selTouched = { audio: 0, video: 0 };
+function syncSel(sel, kind, val){
+  if (!val || performance.now() - selTouched[kind] < TOUCH_MS || sel.value === val) return;
+  if ([...sel.options].some(o => o.value === val)) sel.value = val;
+}
+for (const [id, kind] of [['#sel-audio', 'audio'], ['#sel-video', 'video']]){
+  const sel = $(id);
+  sel.addEventListener('mousedown', () => { selTouched[kind] = performance.now(); });
+  sel.addEventListener('change', e => { selTouched[kind] = performance.now(); setInput(kind, e.target.value); });
+}
+loadInputs();
+
+// ============ STREAM ============
+let htmlMtime = null, msgTimes = [];
+function tickRate(){
+  const now = performance.now();
+  msgTimes.push(now);
+  msgTimes = msgTimes.filter(t => now - t < 2000);
+  if (msgTimes.length > 1){
+    const hz = (msgTimes.length - 1) / ((msgTimes[msgTimes.length - 1] - msgTimes[0]) / 1000);
+    $('#rate').textContent = hz.toFixed(1) + ' Hz';
+  }
+}
+let deadT = null;
+function connect(){
+  const es = new EventSource('/events');
+  const alive = () => {
+    $('#conn').textContent = 'ao vivo'; $('#conn').classList.remove('down');
+    clearTimeout(deadT); deadT = null;
+  };
+  es.onopen = alive;
+  es.onmessage = e => { alive(); render(JSON.parse(e.data)); };
+  es.onerror = () => {  // fora do ar >3.5s (sobrevive ao blip de hot-reload) = servidor encerrado
+    $('#conn').textContent = 'reconectando'; $('#conn').classList.add('down');
+    if (!deadT) deadT = setTimeout(serverGone, 3500);
+  };
+}
+function serverGone(){
+  try { window.close(); } catch (e) {}   // fecha se esta aba/janela foi aberta por script (popups ↗)
+  setTimeout(() => {                      // as abas abertas pelo SO o navegador nao deixa o JS fechar
+    document.title = '⏹ encerrado';
+    document.body.innerHTML = '<div style="padding:44px;color:#999;font:14px/1.6 system-ui,sans-serif">'
+      + '⏹ <b style="color:#ccc">native_synth</b> foi encerrado no terminal.<br>Pode fechar esta aba.</div>';
+  }, 350);
+}
+function render(d){
+  if (htmlMtime !== null && d.html_mtime !== htmlMtime) { location.reload(); return; }
+  htmlMtime = d.html_mtime;
+  tickRate();
+
+  const a = d.audio || {};
+  if (a.kick){
+    kickEls.final.fill.style.width = pct(a.kick.final); kickEls.final.val.textContent = a.kick.final.toFixed(2);
+    kickEls.decay.fill.style.width = pct(a.kick.decay); kickEls.decay.val.textContent = a.kick.decay.toFixed(2);
+  }
+  if (a.bands) renderFaixas(a.bands);
+  if (a.spectrum) renderSpectro(a.spectrum);
+  renderRanges(d.bands_hz);
+  renderChannels(d.channels);
+  renderOutput(d.output);
+  renderImage(d.image);
+
+  for (const [name, o] of Object.entries(knobEls)){
+    if (name === activeKnob) continue;
+    if (d.knobs && name in d.knobs){ o.inp.value = d.knobs[name]; o.kv.textContent = fmt(d.knobs[name]); }
+  }
+  if (d.inputs){
+    syncSel($('#sel-audio'), 'audio', d.inputs.audio);
+    syncSel($('#sel-video'), 'video', d.inputs.video);
+  }
+}
+connect();
+</script>

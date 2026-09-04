@@ -10,21 +10,45 @@ Aprender síntese de sinal de baixo nível em dois domínios com o mesmo vocabul
 Entender cada ferramenta isolada primeiro, comparar onde o vocabulário se repete, só depois compor
 (visual reagindo a áudio, ou os dois lado a lado).
 
-## Estado do ambiente (2026-08-29)
+## Estado do ambiente (2026-09-04)
 - **SuperCollider** 3.13.0 (`sclang` + `scsynth`), sem SuperDirt/Tidal — synth cru.
 - **GLSL**: VS Code `circledev.glsl-canvas` (preview WebGL, uniforms `u_time`/`u_resolution`/`u_mouse`,
   modelo Shadertoy) + `slevesque.shader`. `check.frag` = smoke-test do pipeline.
-- **`native_synth.py`** (Python + PyOpenGL, sem navegador): captura webcam/tela (`ffmpeg`) + áudio do
-  sistema (`parec`/PulseAudio), faz FFT do áudio (bass/mid/treble + 8 faixas Sub-bass…Air + kick) e
-  alimenta `image.frag` via uniforms em tempo real. `tuning.py` = constantes de calibração com
-  hot-reload por mtime (edita, salva, aplica na hora). Também roda análise de imagem do frame de
-  entrada (brilho, cor dominante, saturação, nitidez, bordas, movimento…) num dashboard
-  `gnome-terminal` à parte.
+- **`native_synth.py`** (Python + PyOpenGL): captura webcam/tela (`ffmpeg`) + áudio do sistema
+  (`parec`/PulseAudio), faz FFT do áudio (bass/mid/treble + 8 faixas Sub-bass…Air com range
+  `[lo,hi)` editável por faixa + `HZ_OVERLAP` + kick) e alimenta `image.frag` via uniforms em
+  tempo real. As threads de captura são reiniciáveis ao vivo (troca de fonte pelo dashboard).
+- **Canais por instrumento** (em avaliação): `tuning.CHANNELS`, lista de tamanho livre (até 8,
+  add/remove pelo dash — não precisa pré-definir) — `u_chan`/`u_chan_hit` no shader, paralelo
+  às 8 faixas de frequência acima, não as substitui. Cada canal tem `src` (source do
+  PulseAudio; vazio = ocioso, `channel_thread` próprio quando ligado) e `output` (nome de uma
+  variável existente — kick/amp/bass/mid/treble/as 8 faixas — que esse canal PASSA A
+  ALIMENTAR enquanto tiver `src` bound; sem `src`, a variável original do mix principal
+  continua normal, sem fallback implícito por nome). As 8 faixas finas têm um toggle próprio
+  (`tuning.BANDS_ENABLED`, checkbox "ativar" no dash) que zera `u_subbass..u_air` sem apagar
+  as ranges. Dash: seção "Canais" e checkbox "ativar" na aba Audio.
+- **Saída de vídeo ao vivo** (em avaliação): barra "saída" no topo do dash (`#iobar`, ao lado
+  de áudio/vídeo de entrada) — monitor, dimensão (W×H) e tela cheia, sem reiniciar o processo.
+  `POST /output` -> `native_synth.set_output` grava `state['output_req']`; o main thread (dono
+  do contexto GL) vê a diferença no próximo frame e chama `open_window()` (reabre a janela —
+  `pygame.display.quit()+init()`, mesmo truque do antigo `SDL_VIDEO_WINDOW_POS` no arranque —
+  e regera vbo/tex/program, já que o contexto pode ou não sobreviver à troca). Unifica o que
+  antes só dava pra fixar via `--monitor`/`--fullscreen` na linha de comando.
+- **Dashboard HTML** (substituiu os dashes de terminal): `dash_server.py` (HTTP+SSE stdlib) +
+  `dash_data.py` (funções puras) + `dash.html`. Abre 2 abas no navegador ("Audio Input" /
+  "Image Input"). Mostra medidores de áudio + análise de imagem completa (histogramas, grid 3×3,
+  FFT 2D de cor) + detalhes da saída (janela/monitor/fps). Regula ao vivo: sliders de knob
+  gravam no `tuning.py`; barras de range das 8 faixas; troca de fonte áudio/vídeo.
+- **Hot-reload por mtime** (edita/salva/aplica, sem restart): `image.frag`, `tuning.py`,
+  `dash_server.py`, `dash_data.py`, `dash.html`. Só o `native_synth.py` em si precisa de restart
+  (`watch_synth.sh` faz automático).
 - Arquivos e os dois fluxos (técnico / macro): [README.md](README.md).
 - **Fluxo técnico navegável**: <https://paulocremas.github.io/cremas-synth-lab/> — fonte `docs/index.html`.
   Ao editar esse arquivo, respeitar os sistemas já montados (cada um tem comentário no próprio HTML):
   glossário `GLOSS` fonte-da-verdade + `linkify` automático; cores por região + linhagem de dado;
   possibilidades em `<details>` retraído; eixo status (`.maybe` cinza) separado da cor de região.
+  O bloco "Visualização" do diagrama agora é o **Dashboard** (HTTP, bidirecional — lê o `state` e
+  grava no `tuning.py`), não mais terminal/somente-leitura.
 
 ## Vocabulário compartilhado (onda / sinal)
 

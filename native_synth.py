@@ -6,29 +6,45 @@ Uso: .venv/bin/python native_synth.py [--screen [--source NOME]] [--fullscreen |
 """
 import argparse
 import colorsys
+import glob
 import importlib
 import os
 import re
-import shutil
+import select
 import signal
 import subprocess
 import sys
 import threading
 import time
-from itertools import zip_longest
 
 import numpy as np
 import pygame
 from OpenGL.GL import *
 
 import tuning
+import dash_server
+import dash_data
 
-TUNING_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tuning.py')
+_HERE = os.path.dirname(os.path.abspath(__file__))
+TUNING_PATH = os.path.join(_HERE, 'tuning.py')
+# hot-reload por mtime, junto com o tuning.py: editar e salvar aplica na hora, sem re-executar.
+# dash_server: para o servidor antigo e sobe um novo (o SSE do browser reconecta sozinho).
+# dash_data: so importlib.reload (chamado por dash_data.audio_dash_data, nao por nome fixo).
+# native_synth.py em si -> watch_synth.sh (restart do processo).
+DASH_SERVER_PATH = os.path.join(_HERE, 'dash_server.py')
+DASH_DATA_PATH = os.path.join(_HERE, 'dash_data.py')
+
+# de quantos em quantos chunks de audio (~23ms) o dash (terminal + HTTP) recalcula/redesenha.
+# menor = mais rapido, mas a analise de imagem (~16ms) roda dentro do audio_thread e nao pode
+# passar do budget do chunk. 3 -> ~14 Hz. 1 seria ~43 Hz e arrisca atrasar a leitura do parec.
+DASH_EVERY_N_CHUNKS = 3
 
 WIDTH, HEIGHT = 640, 480  # resolucao do conteudo (textura); recalculada no --screen
 WIN_W, WIN_H = WIDTH, HEIGHT  # resolucao da janela; recalculada no --fullscreen
 FRAME_SIZE = WIDTH * HEIGHT * 3  # rgb24
 FRAG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'image.frag')
+
+MAX_CHANNELS = 8  # teto do array u_chan/u_chan_hit no shader; tuning.CHANNELS pode ter menos
 
 VERT_SRC = """
 attribute vec2 a_pos;
@@ -39,7 +55,10 @@ state = {'frame': np.zeros(FRAME_SIZE, dtype=np.uint8), 'amp': 0.0, 'bass': 0.0,
          'kick': 0.0, 'dominant': (0.5, 0.5, 0.5),
          # faixas finas de mixagem (Sub-bass..Air) — controlam u_subbass..u_air no shader
          'subbass': 0.0, 'lowmid': 0.0, 'midrange': 0.0, 'highmid': 0.0, 'presence': 0.0,
-         'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0}
+         'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {},
+         'audio_source': '', 'video': None, 'video_label': '', 'video_id': '', 'output': {},
+         # canais por instrumento (ver tuning.CHANNELS) — controlam u_chan/u_chan_hit no shader
+         'chan': [0.0] * MAX_CHANNELS, 'chan_hit': [0.0] * MAX_CHANNELS}
 running = True
 
 
@@ -73,6 +92,82 @@ def pick_monitor(name=None):
         raise SystemExit(f'monitor "{name}" nao encontrado. Disponiveis: {[m["name"] for m in monitors]}')
     non_primary = [m for m in monitors if not m['primary']]
     return non_primary[0] if non_primary else monitors[0]
+
+
+def resolve_output(cfg):
+    """cfg: {'monitor': nome ou '', 'fullscreen': bool, 'w': int, 'h': int} -> (win_w, win_h,
+    pos, flags, label). Unifica o que antes era so --monitor/--fullscreen/janela default no
+    arranque — agora tambem serve pra reconfigurar ao vivo (barra "saida" no dash)."""
+    monitors = get_monitors()
+    mon = next((m for m in monitors if m['name'] == cfg.get('monitor')), None) if cfg.get('monitor') else None
+    flags = pygame.OPENGL | pygame.DOUBLEBUF
+    if cfg.get('fullscreen') and not mon:
+        win_w, win_h = get_screen_size()
+        pos = (0, 0)
+        flags |= pygame.FULLSCREEN | pygame.NOFRAME
+        label = 'fullscreen (tela toda)'
+    elif mon:
+        pos = (mon['x'], mon['y'])
+        flags |= pygame.NOFRAME  # sem WM decorando: a posicao (via env var) precisa bater certinho
+        if cfg.get('fullscreen'):
+            win_w, win_h = mon['w'], mon['h']
+            label = f"fullscreen {mon['name']}"
+        else:
+            win_w = max(160, int(cfg.get('w') or mon['w']))
+            win_h = max(120, int(cfg.get('h') or mon['h']))
+            label = f"janela {win_w}x{win_h} em {mon['name']}"
+    else:
+        win_w = max(160, int(cfg.get('w') or WIDTH))
+        win_h = max(120, int(cfg.get('h') or HEIGHT))
+        pos = (0, 0)
+        label = f'janela {win_w}x{win_h}'
+    return win_w, win_h, pos, flags, label
+
+
+def open_window(cfg):
+    """Abre (ou REABRE) a janela de saida a partir de resolve_output(cfg). pygame.display.quit()
+    + init() de novo e o mesmo truque que o --monitor original usava no arranque (SDL so le
+    SDL_VIDEO_WINDOW_POS na criacao da janela) — aqui repetido pra poder trocar de monitor/
+    tamanho/fullscreen AO VIVO, sem reiniciar o processo. Devolve vbo/tex NOVOS de proposito:
+    ponytail — o driver pode ou nao preservar o contexto GL numa troca dessas; em vez de tentar
+    adivinhar, o chamador SEMPRE regera vbo/tex/program depois (ver main()). Se o contexto
+    velho sobreviveu, os objetos antigos so ficam sem uso (vazamento pequeno, so quando o
+    usuario troca a saida pelo dash — nao por frame; upgrade se um dia isso incomodar)."""
+    win_w, win_h, pos, flags, label = resolve_output(cfg)
+    os.environ.pop('SDL_VIDEO_WINDOW_POS', None)
+    if flags & pygame.NOFRAME:
+        os.environ['SDL_VIDEO_WINDOW_POS'] = f'{pos[0]},{pos[1]}'
+    if pygame.display.get_init():
+        pygame.display.quit()
+    pygame.display.init()
+    pygame.display.set_mode((win_w, win_h), flags)
+    pygame.display.set_caption('native_synth — ESC ou fechar a janela pra sair')
+    glViewport(0, 0, win_w, win_h)
+
+    vbo = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, np.array([-1, -1, 3, -1, -1, 3], dtype=np.float32), GL_STATIC_DRAW)
+
+    tex = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, tex)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+
+    print(f'saida: {label} ({win_w}x{win_h}+{pos[0]}+{pos[1]})')
+    return win_w, win_h, pos, label, vbo, tex
+
+
+def set_output(cfg):
+    """cfg: {'monitor','fullscreen','w','h'} — o dash escreve aqui (aba Video, barra "saida");
+    quem realmente reabre a janela e o main thread (dono do contexto GL), no proximo frame,
+    quando ve state['output_req'] diferente do que esta aplicado agora (ver main())."""
+    state['output_req'] = {
+        'monitor': str(cfg.get('monitor') or ''),
+        'fullscreen': bool(cfg.get('fullscreen')),
+        'w': int(cfg.get('w') or 0) or WIDTH,
+        'h': int(cfg.get('h') or 0) or HEIGHT,
+    }
 
 
 def pick_window(title=None):
@@ -166,26 +261,78 @@ def read_exact(stream, n):
     return buf
 
 
-def video_thread(mode, region=None, device='/dev/video0'):
-    if mode == 'screen':
-        display = os.environ.get('DISPLAY', ':0') + f"+{region['x']},{region['y']}"
+def _spawn_ffmpeg(v):
+    """v = state['video'] = {'mode':'webcam'|'screen', 'device':.., 'region':..}. Sempre escala
+    pra WIDTH x HEIGHT fixos (nao mexe nos globais ao vivo — trocar de fonte pelo dash mantem a
+    resolucao de saida; pra aspect certo de tela, reinicie com --screen)."""
+    if v['mode'] == 'screen':
+        r = v['region']
+        display = os.environ.get('DISPLAY', ':0') + f"+{r['x']},{r['y']}"
         cmd = ['ffmpeg', '-loglevel', 'error', '-f', 'x11grab', '-framerate', '30',
-               '-video_size', f"{region['w']}x{region['h']}", '-i', display,
+               '-video_size', f"{r['w']}x{r['h']}", '-i', display,
                '-vf', f'scale={WIDTH}:{HEIGHT}', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
     else:
-        cmd = ['ffmpeg', '-loglevel', 'error', '-f', 'v4l2']
-        if device == '/dev/video0':  # so a webcam de verdade precisa forcar o formato
+        cmd = ['ffmpeg', '-loglevel', 'error', '-f', 'v4l2', '-framerate', '30']
+        if v['device'] == '/dev/video0':  # so a webcam de verdade precisa forcar o formato
             cmd += ['-input_format', 'yuyv422']
-        cmd += ['-video_size', f'{WIDTH}x{HEIGHT}', '-i', device, '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        cmd += ['-video_size', f'{WIDTH}x{HEIGHT}', '-i', v['device'],
+                '-vf', f'scale={WIDTH}:{HEIGHT}', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE)
+
+
+def _kill(proc):
+    """Mata o ffmpeg E ESPERA sair — v4l2 e exclusivo, sem isso o proximo ffmpeg pega
+    'Device or resource busy' e a webcam nao volta."""
+    proc.terminate()
+    try:
+        proc.wait(timeout=1.5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
+def _video_label(v):
+    if not v:
+        return ''
+    return v['device'] if v['mode'] == 'webcam' else f"tela: {(v.get('region') or {}).get('name', '')}"
+
+
+def video_thread(mode, region=None, device='/dev/video0'):
+    state['video'] = {'mode': mode, 'device': device, 'region': region}  # fonte da verdade
+    state['video_label'] = _video_label(state['video'])
+    state['video_id'] = _video_id(state['video'])
+    cur = dict(state['video'])
+    proc = _spawn_ffmpeg(cur)
     try:
         while running:
+            if state['video'] != cur:  # troca pedida pelo dash (set_input substitui o dict inteiro)
+                _kill(proc)
+                cur = dict(state['video'])
+                state['video_label'] = _video_label(cur)
+                state['video_id'] = _video_id(cur)
+                proc = _spawn_ffmpeg(cur)
+                print('video: fonte ->', _video_label(cur))
+                continue
+            # select com timeout: se o ffmpeg atual travar sem produzir frame (fonte ruim,
+            # ex. /dev/video1 que nao e camera), o loop ainda re-checa a troca a cada 0.25s
+            # em vez de ficar preso pra sempre num read bloqueante — era por isso que a
+            # webcam "nao voltava".
+            if not select.select([proc.stdout], [], [], 0.25)[0]:
+                if proc.poll() is not None:          # ffmpeg saiu — respawna a mesma fonte
+                    time.sleep(0.3)
+                    proc = _spawn_ffmpeg(cur)
+                continue
             frame = read_exact(proc.stdout, FRAME_SIZE)
             if frame is None:
-                break
+                if not running:
+                    break
+                time.sleep(0.3)  # fonte caiu — tenta de novo, sem matar a thread
+                _kill(proc)
+                proc = _spawn_ffmpeg(cur)
+                continue
             state['frame'] = np.frombuffer(frame, dtype=np.uint8)
     finally:
-        proc.terminate()
+        _kill(proc)
 
 
 def window_capture_thread(win_id):
@@ -213,79 +360,10 @@ def window_capture_thread(win_id):
             warned = True
 
 
-def _rgb(r, g, b):
-    return f'\033[38;2;{r};{g};{b}m'
-
-
-ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
-
-
-def visible_len(s):
-    return len(ANSI_RE.sub('', s))
-
-
-def pad_visible(s, width):
-    """Completa `s` com espacos ate `width` caracteres VISIVEIS — len() normal contaria os
-    codigos ANSI de cor como caractere, alinhando errado colunas lado a lado."""
-    return s + ' ' * max(0, width - visible_len(s))
-
-
-# ponytail: os 3 tons ficam espacados de proposito — gap pequeno demais (era 190/255)
-# deixa o cinza "parecer" branco por contraste simultaneo do lado das cores saturadas das
-# bandas; escuro demais (era 45, depois 90) fica ilegivel/flat perto delas.
-NO_BAND_COLOR = _rgb(150, 150, 150)   # cinza claro — cor padrao pra metro sem banda propria (kick/amp)
-TRICOLOR_WARN = _rgb(175, 175, 175)   # cinza medio — zona "perto do teto" (era amarelo)
-TRICOLOR_CLIP = _rgb(255, 255, 255)   # branco — zona "no teto"/clip (era vermelho)
-
-
-def tricolor_bar(filled, width, base_color='\033[32m'):
-    """Barra com zona de cor fixa por POSICAO: `base_color` nos primeiros 70% (identidade
-    da variavel/banda — verde por padrao), cinza claro 70-95%, branco 95-100% (aviso de
-    quase-clip/clip, sempre igual em todas as barras). A cor de cada posicao e sempre a
-    mesma; so o quanto acende (`filled`) muda com o valor."""
-    green_edge = round(width * 0.7)
-    yellow_edge = round(width * 0.95)
-    chars = []
-    for i in range(width):
-        color = TRICOLOR_CLIP if i >= yellow_edge else TRICOLOR_WARN if i >= green_edge else base_color
-        chars.append(f'{color}█\033[0m' if i < filled else '\033[2m░\033[0m')
-    return ''.join(chars)
-
-
-BAND_COLORS = {'bass': '\033[34m', 'mid': '\033[36m', 'treble': '\033[35m'}  # azul/ciano/magenta
-
-
-def band_name(hz, bass_mid_hz, mid_treble_hz):
-    """Qual banda (bass/mid/treble) esse Hz cai, usando os MESMOS limiares que definem
-    bass_bins/mid_bins/treble_bins no audio_thread — muda um, muda o outro junto."""
-    if hz < bass_mid_hz:
-        return 'bass'
-    elif hz < mid_treble_hz:
-        return 'mid'
-    return 'treble'
-
-
-# ponytail: faixas de referencia de engenharia de audio/mixagem (mais finas que o
-# bass/mid/treble que controla o shader) — so pra colorir o espectrograma, sem relacao
-# com bass_bins/mid_bins/treble_bins. Limites sao os mais citados nesse tipo de carta de
-# frequencia; ajusta os numeros se sua referencia usar outros cortes.
-# Cores em RGB de 24 bits (nao os 8 nomes padrao do terminal) pra garantir 9 tons
-# realmente diferentes entre si — azul/ciano/roxo/magenta/rosa em gradiente, evitando
-# vermelho/verde/amarelo (ja usados pelo nivel da barra) e evitando pares tipo
-# "azul"/"azul claro" que ficam parecidos demais. Todos claros/saturados o bastante pra
-# ler bem em fundo escuro.
-FREQ_BANDS = [
-    ('Sub-bass', 0, 250, _rgb(30, 140, 255)),          # azul vivo — inaudivel abaixo de
-                                                        # ~20Hz, mas a FFT (~43Hz/bin) nao
-                                                        # resolve isso separado mesmo
-    ('Low-mid', 250, 500, _rgb(0, 200, 255)),          # azul-ciano
-    ('Midrange', 500, 2000, _rgb(0, 230, 200)),        # ciano-turquesa
-    ('High-mid', 2000, 4000, _rgb(140, 140, 255)),     # indigo/periwinkle
-    ('Presence', 4000, 6000, _rgb(190, 100, 255)),     # roxo
-    ('Treble', 6000, 10000, _rgb(225, 80, 255)),       # violeta
-    ('Brilliance', 10000, 16000, _rgb(255, 70, 210)),  # magenta
-    ('Air', 16000, float('inf'), _rgb(255, 110, 160)),  # rosa
-]
+# nomes das 8 faixas de mixagem finas, grave->agudo. As cores vivem em dash_data.FREQ_BAND_RGB
+# (so o lado web usa cor); aqui so precisamos de nome + os cortes em Hz.
+FREQ_BAND_NAMES = ['Sub-bass', 'Low-mid', 'Midrange', 'High-mid',
+                   'Presence', 'Treble', 'Brilliance', 'Air']
 
 # nome de exibicao -> chave de uniform valida no GLSL (sem hifen/maiuscula; "Treble" vira
 # "treble_hi" pra nao colidir com o u_treble do bass/mid/treble classico)
@@ -294,41 +372,45 @@ FREQ_BAND_UNIFORM = {
     'High-mid': 'highmid', 'Presence': 'presence', 'Treble': 'treble_hi',
     'Brilliance': 'brilho', 'Air': 'air',
 }
+FINE_BAND_KEYS = set(FREQ_BAND_UNIFORM.values())  # pro gate do tuning.BANDS_ENABLED
+
+def chan_cfg(slot):
+    """tuning.CHANNELS[slot] com fallback a {} pra slot fora do tamanho atual da lista
+    (lista e de tamanho livre agora — add/remove pelo dash, sem slot fixo pre-definido)."""
+    chs = tuning.CHANNELS
+    return chs[slot] if slot < len(chs) else {}
+
+
+def freq_bands():
+    """[(nome, lo_hz, hi_hz)] das 8 faixas, direto de tuning.FREQ_BAND_HZ (range por faixa).
+    Reconstruido a cada reload do tuning.py — e como a secao "Ranges das faixas" do dash mexe
+    nas faixas ao vivo. As faixas podem se sobrepor ou deixar buraco (tuning.HZ_OVERLAP);
+    named_band_levels lida com qualquer (lo, hi), inclusive sobreposto/vazio."""
+    return [(name, float(lo), float(hi))
+            for name, (lo, hi) in zip(FREQ_BAND_NAMES, tuning.FREQ_BAND_HZ)]
 
 
 def band_smoothing_map():
     """{chave de uniform: SMOOTHING daquela banda}, interpolado linear entre
     tuning.SMOOTHING_MIN (Sub-bass, indice 0) e tuning.SMOOTHING_MAX (Air, ultimo indice),
-    seguindo a ordem grave->agudo de FREQ_BANDS. Recalcula toda vez que chamada — chamar
-    de novo apos um reload do tuning.py pra pegar os valores atualizados."""
-    n = len(FREQ_BANDS)
+    seguindo a ordem grave->agudo. Recalcula toda vez que chamada — chamar de novo apos um
+    reload do tuning.py pra pegar os valores atualizados."""
+    n = len(FREQ_BAND_NAMES)
     span = tuning.SMOOTHING_MAX - tuning.SMOOTHING_MIN
-    return {
-        FREQ_BAND_UNIFORM[name]: tuning.SMOOTHING_MIN + (i / (n - 1)) * span
-        for i, (name, _, _, _) in enumerate(FREQ_BANDS)
-    }
-
-
-def freq_band(hz):
-    """(nome, cor) da faixa de FREQ_BANDS que esse Hz pertence."""
-    for name, lo, hi, color in FREQ_BANDS:
-        if lo <= hz < hi:
-            return name, color
-    return FREQ_BANDS[-1][0], FREQ_BANDS[-1][3]
+    return {FREQ_BAND_UNIFORM[name]: tuning.SMOOTHING_MIN + (i / (n - 1)) * span
+            for i, name in enumerate(FREQ_BAND_NAMES)}
 
 
 def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay):
-    """Pra cada (nome, lo, hi, cor) em `bands` (ex. FREQ_BANDS): magnitude bruta (mesmo
-    fallback de bin mais proximo do band_magnitudes, pra faixa mais estreita que a
-    resolucao da FFT) e nivel relativo ao PICO RECENTE DA PROPRIA banda — nao ao pico
-    entre as bandas. Isso importa porque uma banda estruturalmente mais forte que as
-    outras (ex. Sub-bass, quase sempre a mais forte em musica de verdade) ficaria travada
-    perto de 1.0 quase sempre so por ser mais alta que as demais, nao por estar batendo
-    forte de verdade. `band_peaks` (dict {nome: pico atual}) e mantido pelo chamador entre
-    chunks: sobe na hora com um pico novo, decai devagar por `peak_decay` a cada chunk —
-    e o auto-gain de cada banda, sem escala manual."""
+    """Pra cada (nome, lo, hi) em `bands` (de freq_bands()): magnitude bruta (fallback de bin
+    mais proximo pra faixa mais estreita que a resolucao da FFT) e nivel relativo ao PICO
+    RECENTE DA PROPRIA banda — nao ao pico entre as bandas. Isso importa porque uma banda
+    estruturalmente mais forte (ex. Sub-bass) ficaria travada perto de 1.0 so por ser mais
+    alta que as demais. `band_peaks` (dict {nome: pico}) e mantido pelo chamador entre
+    chunks: sobe na hora com um pico novo, decai devagar por `peak_decay` — auto-gain sem
+    escala manual."""
     out = []
-    for name, lo, hi, _ in bands:
+    for name, lo, hi in bands:
         mask = (freqs >= lo) & (freqs < hi)
         if mask.any():
             mag = spectrum[mask].mean()
@@ -336,101 +418,8 @@ def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay):
             mid = (lo + min(hi, freqs[-1])) / 2  # `hi` pode ser infinito (ultima banda)
             mag = spectrum[np.argmin(np.abs(freqs - mid))]
         band_peaks[name] = max(mag, band_peaks[name] * peak_decay, 1e-6)
-        level = min(1.0, mag / band_peaks[name])
-        out.append((name, mag, level))
+        out.append((name, mag, min(1.0, mag / band_peaks[name])))
     return out
-
-
-LABEL_W = 10  # largura fixa do rotulo (nome ou Hz) — "Brilliance" e o mais longo, 10 chars.
-              # todo painel (medidores, espectrograma) usa o mesmo valor, pra colunas
-              # ficarem na mesma posicao horizontal em qualquer secao.
-
-
-def _meter_row(name, bar_level, printed_value, colors, width):
-    c = colors.get(name, '')
-    filled = int(round(max(0.0, min(1.0, bar_level)) * width))
-    bar = tricolor_bar(filled, width, base_color=c or NO_BAND_COLOR)
-    label = f'{c}{name:>{LABEL_W}}\033[0m' if c else f'{name:>{LABEL_W}}'
-    return f'{label}  {bar}  {printed_value}'
-
-
-def bruto_rows(entries, colors=BAND_COLORS, width=30):
-    """`entries` = [(nome, magnitude bruta, nivel relativo 0..1), ...] — o nivel so decide
-    o quanto a barra acende (mesmo criterio do espectrograma: relativo ao pico do
-    instante, SEM suavizar — por isso mostra a versao "crua"/tremida, antes da media
-    movel que vira o "final"). O numero impresso do lado e a magnitude bruta de verdade,
-    sem escala nem teto."""
-    return [_meter_row(name, level, f'{mag:6.3f}', colors, width) for name, mag, level in entries]
-
-
-def final_rows(meters, colors=BAND_COLORS, width=30):
-    """`meters` = [(nome, nivel 0..1), ...] — nivel final ja suavizado, o que realmente
-    vai pro shader."""
-    return [_meter_row(name, val, f'{val:.2f}', colors, width) for name, val in meters]
-
-
-def band_magnitudes(spectrum, freqs, bars):
-    """Divide o espectro em `bars` faixas log (30Hz-Nyquist) e devolve, por faixa,
-    (frequencia do topo da faixa, magnitude media bruta — mesma unidade/sem teto de
-    bass_raw/mid_raw/treble_raw)."""
-    # ponytail: no grave, as faixas log ficam mais estreitas que a resolucao real da FFT
-    # (44100/1024 ~= 43Hz por bin) — sem isso, uma faixa vazia virava 0.0 (-120dB fixo,
-    # artefato, nao silencio de verdade). Faixa vazia usa o bin mais proximo do centro dela.
-    edges = np.logspace(np.log10(30), np.log10(freqs[-1]), bars + 1)
-    out = []
-    for lo, hi in zip(edges[:-1], edges[1:]):
-        mask = (freqs >= lo) & (freqs < hi)
-        if mask.any():
-            mag = spectrum[mask].mean()
-        else:
-            mag = spectrum[np.argmin(np.abs(freqs - (lo + hi) / 2))]
-        out.append((hi, mag))
-    return out
-
-
-def spectrum_bands(spectrum, freqs, bars, range_db=40.0):
-    """Por faixa, (frequencia do topo, nivel 0..1) — dB RELATIVO ao pico do frame atual,
-    nao a uma referencia fixa: se auto-calibra a qualquer volume/fonte, mas por isso
-    sempre tem uma faixa em 100% (a mais forte do instante), mesmo em silencio.
-    `range_db` = quantos dB abaixo do pico ainda aparecem, o resto vira 0."""
-    mags = band_magnitudes(spectrum, freqs, bars)
-    peak_db = 20 * np.log10(max(m for _, m in mags) + 1e-6)
-    out = []
-    for hi, mag in mags:
-        db = 20 * np.log10(mag + 1e-6)
-        level = np.clip((db - peak_db + range_db) / range_db, 0.0, 1.0)
-        out.append((hi, level))
-    return out
-
-
-def spectrum_column(spectrum, freqs, bars=24, width=30):
-    """Espectrograma vertical em NIVEL RELATIVO (0-100%, ao pico do proprio frame): boa
-    pra comparar as faixas de frequencia ENTRE SI agora. Uma linha por faixa, mais aguda
-    em cima, mais grave embaixo. Hz e % vem coloridos pela faixa de FREQ_BANDS."""
-    lines = []
-    for hi, level in reversed(spectrum_bands(spectrum, freqs, bars)):
-        filled = int(round(level * width))
-        _, c = freq_band(hi)
-        bar = tricolor_bar(filled, width, base_color=c)
-        lines.append(f'{c}{int(round(hi)):>{LABEL_W - 2}}Hz\033[0m  {bar}  {c}{level * 100:5.1f}%\033[0m')
-    return lines
-
-
-def spectrum_column_db(spectrum, freqs, bars=24, width=30, db_min=-60.0, db_max=40.0):
-    """Espectrograma vertical em dB ABSOLUTO (sem normalizar pelo pico do frame): o
-    numero sobe e desce de verdade com o volume real — em silencio, tudo fica baixo, ao
-    contrario da versao percentual (que sempre tem uma faixa em 100%). `db_min`/`db_max`
-    so recortam a barra visual; o dB impresso ao lado e o valor exato, sem clamp. Hz e dB
-    vem coloridos pela faixa de FREQ_BANDS, mesmo esquema do spectrum_column."""
-    lines = []
-    for hi, mag in reversed(band_magnitudes(spectrum, freqs, bars)):
-        db = 20 * np.log10(mag + 1e-6)
-        level = np.clip((db - db_min) / (db_max - db_min), 0.0, 1.0)
-        filled = int(round(level * width))
-        _, c = freq_band(hi)
-        bar = tricolor_bar(filled, width, base_color=c)
-        lines.append(f'{c}{int(round(hi)):>{LABEL_W - 2}}Hz\033[0m  {bar}  {c}{db:6.1f}dB\033[0m')
-    return lines
 
 
 _RADIAL_MASK_CACHE = {}
@@ -495,25 +484,6 @@ def frame_color_spectrum(frame, w, h, bars=20, max_side=96):
     return out
 
 
-COLOR_SPECTRUM_RED = _rgb(255, 70, 70)
-COLOR_SPECTRUM_GREEN = _rgb(70, 220, 70)
-COLOR_SPECTRUM_BLUE = _rgb(90, 150, 255)
-
-
-def frame_spectrum_rows(frame, w, h, bars=20, width=6):
-    """Uma linha por faixa de frequencia espacial (frame_color_spectrum), com 3 barrinhas
-    curtas lado a lado — R, G, B — cada uma na cor real do canal que representa. Sem
-    numero de porcentagem por canal (a cor + tamanho da barra ja bastam) — largura curta
-    de proposito, pra caber do lado do espectrograma de audio sem estourar o terminal."""
-    lines = []
-    for radius, lr, lg, lb in frame_color_spectrum(frame, w, h, bars):
-        r_bar = tricolor_bar(int(round(lr * width)), width, base_color=COLOR_SPECTRUM_RED)
-        g_bar = tricolor_bar(int(round(lg * width)), width, base_color=COLOR_SPECTRUM_GREEN)
-        b_bar = tricolor_bar(int(round(lb * width)), width, base_color=COLOR_SPECTRUM_BLUE)
-        lines.append(f'{int(radius):>4}px {r_bar}{g_bar}{b_bar}')
-    return lines
-
-
 def rgb_to_hsv_np(arr):
     """Mesma formula do colorsys.rgb_to_hsv, vetorizada (arr HxWx3, 0..255) — um loop por
     pixel em Python seria lento demais pra rodar a cada ~230ms dentro do audio_thread.
@@ -530,39 +500,6 @@ def rgb_to_hsv_np(arr):
     hue = np.where(maxc == r, bc - gc, np.where(maxc == g, 2.0 + rc - bc, 4.0 + gc - rc))
     hue = np.where(delta <= 1e-6, 0.0, (hue / 6.0) % 1.0)
     return hue, sat, maxc
-
-
-def hue_histogram_rows(hue, sat, bins=12, width=24):
-    """Histograma de matiz (hue, 0-360°) — o espectrograma de imagem mais parecido em
-    espirito com o de audio: cada faixa E literalmente uma cor (nao so um numero), do
-    mesmo jeito que cada faixa do espectro de audio e uma frequencia. Pesa cada pixel pela
-    propria SATURACAO — um pixel cinza/sem cor tem hue matematico mas nao "e" nenhuma cor
-    de verdade, entao conta pouco."""
-    counts, edges = np.histogram(hue.ravel(), bins=bins, range=(0.0, 1.0), weights=sat.ravel())
-    peak = counts.max() + 1e-9
-    lines = []
-    for i in range(bins):
-        center = (edges[i] + edges[i + 1]) / 2
-        r, g, b = colorsys.hsv_to_rgb(center, 1.0, 1.0)
-        color = _rgb(int(r * 255), int(g * 255), int(b * 255))
-        bar = tricolor_bar(int(round(counts[i] / peak * width)), width, base_color=color)
-        lines.append(f'{int(round(center * 360)):>4}°  {bar}')
-    return lines
-
-
-def brightness_histogram_rows(val, bins=16, width=24):
-    """Histograma de brilho (canal V do HSV, 0..1) — quantos pixels em cada faixa de
-    brilho, claro em cima / escuro embaixo (mesmo sentido grave-embaixo do espectro de
-    audio). Cada barra em tom de cinza igual ao brilho que ela representa."""
-    counts, edges = np.histogram(val.ravel(), bins=bins, range=(0.0, 1.0))
-    peak = counts.max() + 1e-9
-    lines = []
-    for i in reversed(range(bins)):
-        center = (edges[i] + edges[i + 1]) / 2
-        gray = int(center * 255)
-        bar = tricolor_bar(int(round(counts[i] / peak * width)), width, base_color=_rgb(gray, gray, gray))
-        lines.append(f'{gray:>3}  {bar}')
-    return lines
 
 
 def gradient(val):
@@ -599,60 +536,6 @@ def brightness_entropy(val, bins=32):
     return float(-(p * np.log2(p)).sum()) / np.log2(bins)
 
 
-def frame_meter_rows(arr, val, sat, gx, gy, prev_val, img_peaks, width=24):
-    """Medidores globais de 1 numero (nao-espectrograma) da imagem que NAO tem versao em
-    grid em `spatial_grids_section` (brilho, saturacao, temp., contraste, nitidez,
-    entropia, bordas e movimento tem grid — ficariam repetidos aqui, entao so aparecem la):
-    simetria (metade esquerda vs. direita espelhada, escala heuristica *4 — sem teto
-    natural, e so "o quanto" comparado ao maximo raramente atingido numa foto real);
-    clipping (% de pixels estourados/escurecidos); correlacao entre canais R/G/B (baixa =
-    imagem bem colorida, alta = quase monocromatica); e centro de massa do brilho (onde na
-    tela esta o "peso" visual, 0,0 = canto superior esquerdo).
-
-    Ainda assim CALCULA (mas nao imprime) nitidez/bordas/movimento, porque essas tres
-    atualizam `img_peaks` (auto-gain por pico decaindo) e movimento atualiza `prev_val[0]`
-    — estado que `spatial_grids_section` precisa ler pra normalizar o grid dela; sem rodar
-    esse calculo aqui, o grid ficaria sem peso nenhum pra comparar. `prev_val` e uma lista
-    de 1 elemento (estado entre chamadas); devolve as linhas prontas."""
-    hw = val.shape[1] // 2
-    sym_diff = float(np.abs(val[:, :hw] - val[:, val.shape[1] - hw:][:, ::-1]).mean())
-    symmetry_level = max(0.0, 1.0 - sym_diff * 4.0)
-
-    sharpness_raw = laplacian_variance(val)
-    img_peaks['sharpness'] = max(sharpness_raw, img_peaks['sharpness'] * tuning.PEAK_DECAY, 1e-6)
-
-    edge_raw = float(np.sqrt(gx ** 2 + gy ** 2).mean())
-    img_peaks['edge'] = max(edge_raw, img_peaks['edge'] * tuning.PEAK_DECAY, 1e-6)
-
-    if prev_val[0] is not None and prev_val[0].shape == val.shape:
-        motion_raw = float(np.abs(val - prev_val[0]).mean())
-    else:
-        motion_raw = 0.0
-    img_peaks['motion'] = max(motion_raw, img_peaks['motion'] * tuning.PEAK_DECAY, 1e-6)
-    prev_val[0] = val
-
-    overexposed = float((val > 0.95).mean())
-    underexposed = float((val < 0.05).mean())
-
-    r, g, b = arr[..., 0].ravel(), arr[..., 1].ravel(), arr[..., 2].ravel()
-    with np.errstate(invalid='ignore'):
-        corr_rg = float(np.nan_to_num(np.corrcoef(r, g)[0, 1]))
-        corr_rb = float(np.nan_to_num(np.corrcoef(r, b)[0, 1]))
-        corr_gb = float(np.nan_to_num(np.corrcoef(g, b)[0, 1]))
-
-    yy, xx = np.indices(val.shape)
-    total = float(val.sum()) + 1e-9
-    cx = float((xx * val).sum()) / total / max(1, val.shape[1] - 1)
-    cy = float((yy * val).sum()) / total / max(1, val.shape[0] - 1)
-
-    return [
-        _meter_row('Simetria', symmetry_level, f'{symmetry_level:.2f}', {}, width),
-        f'{"Clipping":>{LABEL_W}}  estourado {overexposed * 100:4.1f}%   escuro {underexposed * 100:4.1f}%',
-        f'{"Correlação":>{LABEL_W}}  R↔G {corr_rg:+.2f}  R↔B {corr_rb:+.2f}  G↔B {corr_gb:+.2f}',
-        f'{"Centro":>{LABEL_W}}  x={cx:.2f}  y={cy:.2f}  (0,0 = canto sup-esq)',
-    ]
-
-
 def colorfulness(arr):
     """Metrica classica (Hasler & Susstrunk, 2003) de "quao colorida" a imagem e — mais
     rigorosa que so a saturacao media, usa a dispersao dos canais opostos rg (R-G) e yb
@@ -683,68 +566,6 @@ def hue_range_fraction(hue, sat, lo_deg=0.0, hi_deg=50.0, sat_min=0.15):
     return float(((deg >= lo_deg) & (deg < hi_deg)).mean())
 
 
-def color_stats_rows(arr, hue, sat, prev_dominant, img_peaks, width=24):
-    """Medidores especificos de COR (nao brilho/estrutura — esses estao em
-    `frame_meter_rows`): cor media (media de verdade dos pixels — diferente da cor
-    dominante, que e a MODA/mais frequente, calculada em `dominant_color`; podem divergir
-    bastante — um fundo grande e uniforme puxa a moda, mas nao necessariamente a media);
-    coloridez (Hasler & Susstrunk, auto-gain via `img_peaks`); paleta (cores unicas
-    quantizadas, complexidade sem k-means); mudanca de cor (distancia euclidiana em RGB
-    entre a cor media desse frame e do frame anterior — 0..1 natural (255*sqrt(3) e o
-    maximo teorico) — a versao "cor" do medidor Movimento, que so olha brilho); e tons
-    quentes/pele (fracao dos pixels coloridos numa faixa de matiz). `prev_dominant` e uma
-    lista de 1 elemento (estado entre chamadas, RGB 0..255); devolve as linhas prontas."""
-    cf_raw = colorfulness(arr)
-    img_peaks['colorfulness'] = max(cf_raw, img_peaks['colorfulness'] * tuning.PEAK_DECAY, 1e-6)
-    cf_level = min(1.0, cf_raw / img_peaks['colorfulness'])
-
-    mr, mg, mb = (int(round(c)) for c in arr.mean(axis=(0, 1)))
-    mean_swatch = f'\033[48;2;{mr};{mg};{mb}m      \033[0m'
-
-    total_px = arr.shape[0] * arr.shape[1]
-    n_unique = unique_colors(arr)
-    unique_level = min(1.0, n_unique / total_px)
-
-    cur_mean = np.array([mr, mg, mb], dtype=np.float32)
-    if prev_dominant[0] is not None:
-        color_change = min(1.0, float(np.linalg.norm(cur_mean - prev_dominant[0])) / (255.0 * np.sqrt(3)))
-    else:
-        color_change = 0.0
-    prev_dominant[0] = cur_mean
-
-    warm_frac = hue_range_fraction(hue, sat)
-
-    return [
-        f'{"Cor média":>{LABEL_W}}  {mean_swatch}  RGB({mr},{mg},{mb})',
-        _meter_row('Coloridez', cf_level, f'{cf_level:.2f}', {}, width),
-        f'{"Paleta":>{LABEL_W}}  {n_unique} / {total_px} px ({unique_level * 100:.1f}%)',
-        _meter_row('Mud. cor', color_change, f'{color_change:.2f}', {}, width),
-        _meter_row('Tom quente', warm_frac, f'{warm_frac:.2f}', {}, width),
-    ]
-
-
-def edge_orientation_rows(gx, gy, bins=9, width=20):
-    """Histograma de ORIENTACAO de borda (angulo da linha, 0-180° — 0 e 180 sao a mesma
-    orientacao, por isso mod 180 em vez de 360) — nao e "quanta borda tem" (isso e o
-    medidor `Bordas` do RESUMO), e "pra que lado as bordas apontam": cena com muita linha
-    horizontal (ex. horizonte) vs. vertical (ex. predios) vs. diagonal. Pesado pela
-    MAGNITUDE do gradiente, mesmo esquema do hue_histogram_rows (area lisa sem borda conta
-    pouco). Cor de cada faixa mapeia o angulo pra uma cor (so pra distinguir visualmente,
-    sem significado de matiz de verdade)."""
-    mag = np.sqrt(gx ** 2 + gy ** 2)
-    angle = np.degrees(np.arctan2(gy, gx)) % 180.0
-    counts, edges = np.histogram(angle.ravel(), bins=bins, range=(0.0, 180.0), weights=mag.ravel())
-    peak = counts.max() + 1e-9
-    lines = []
-    for i in range(bins):
-        center = (edges[i] + edges[i + 1]) / 2
-        r, g, b = colorsys.hsv_to_rgb(center / 180.0, 0.8, 1.0)
-        color = _rgb(int(r * 255), int(g * 255), int(b * 255))
-        bar = tricolor_bar(int(round(counts[i] / peak * width)), width, base_color=color)
-        lines.append(f'{int(round(center)):>3}°  {bar}')
-    return lines
-
-
 def cell_reduce(fn, h, w, grid=3):
     """Aplica `fn(y0,y1,x0,x1)` numa area HxW dividida num grid `grid`x`grid` (ultima
     celula de cada eixo pega o resto, pra cobrir a imagem toda mesmo quando o tamanho nao
@@ -759,114 +580,113 @@ def cell_reduce(fn, h, w, grid=3):
     return out
 
 
-def gray_bg(level):
-    g = int(round(np.clip(level, 0.0, 1.0) * 255))
-    return f'\033[48;2;{g};{g};{g}m'
+def image_dash_data(arr, hue, sat, val, gx, gy, frame, w, h, dominant, peaks, prev_val, prev_mean, grid=3):
+    """Fonte unica de verdade do dash de imagem: dict de numeros (resumo escalar + grid 3x3
+    por metrica + 4 histogramas). `peaks` (auto-gain), `prev_val` e `prev_mean` (deltas de
+    movimento/cor) sao estado mutavel entre chamadas."""
+    # --- resumo escalar ---
+    hw = val.shape[1] // 2
+    sym_diff = float(np.abs(val[:, :hw] - val[:, val.shape[1] - hw:][:, ::-1]).mean())
+    symmetry = max(0.0, 1.0 - sym_diff * 4.0)
 
+    peaks['sharpness'] = max(laplacian_variance(val), peaks['sharpness'] * tuning.PEAK_DECAY, 1e-6)
+    peaks['edge'] = max(float(np.sqrt(gx ** 2 + gy ** 2).mean()), peaks['edge'] * tuning.PEAK_DECAY, 1e-6)
+    motion_raw = (float(np.abs(val - prev_val[0]).mean())
+                  if prev_val[0] is not None and prev_val[0].shape == val.shape else 0.0)
+    peaks['motion'] = max(motion_raw, peaks['motion'] * tuning.PEAK_DECAY, 1e-6)
+    prev_before = prev_val[0]
+    prev_val[0] = val
 
-def temp_bg(level):
-    """level = R-B medio normalizado (-1..1, mesma unidade do medidor `Temp. cor`) — cinza
-    neutro no meio, esquenta pra laranja ou esfria pra azul conforme o sinal (mesma escala
-    heuristica *3 do medidor global)."""
-    t = min(1.0, abs(level) * 3.0)
-    base = (255, 140, 80) if level > 0 else (120, 170, 255)
-    r, g, b = (int(128 + (c - 128) * t) for c in base)
-    return f'\033[48;2;{r};{g};{b}m'
+    over = float((val > 0.95).mean())
+    under = float((val < 0.05).mean())
+    rr, gg, bb = arr[..., 0].ravel(), arr[..., 1].ravel(), arr[..., 2].ravel()
+    with np.errstate(invalid='ignore'):
+        corr_rg = float(np.nan_to_num(np.corrcoef(rr, gg)[0, 1]))
+        corr_rb = float(np.nan_to_num(np.corrcoef(rr, bb)[0, 1]))
+        corr_gb = float(np.nan_to_num(np.corrcoef(gg, bb)[0, 1]))
+    yy, xx = np.indices(val.shape)
+    tot = float(val.sum()) + 1e-9
+    cx = float((xx * val).sum()) / tot / max(1, val.shape[1] - 1)
+    cy = float((yy * val).sum()) / tot / max(1, val.shape[0] - 1)
 
+    cf_raw = colorfulness(arr)
+    peaks['colorfulness'] = max(cf_raw, peaks['colorfulness'] * tuning.PEAK_DECAY, 1e-6)
+    cf_level = min(1.0, cf_raw / peaks['colorfulness'])
+    mr, mg, mb = (int(round(c)) for c in arr.mean(axis=(0, 1)))
+    total_px = arr.shape[0] * arr.shape[1]
+    n_uni = unique_colors(arr)
+    cur_mean = np.array([mr, mg, mb], dtype=np.float32)
+    color_change = (min(1.0, float(np.linalg.norm(cur_mean - prev_mean[0])) / (255.0 * np.sqrt(3)))
+                    if prev_mean[0] is not None else 0.0)
+    prev_mean[0] = cur_mean
+    warm = hue_range_fraction(hue, sat)
 
-def grid_rows(levels, color_fn=gray_bg, cell_w=4):
-    """`levels`: array (grid,grid) ja normalizado (0..1 pra gray_bg, -1..1 pra temp_bg).
-    Devolve `grid` linhas, um bloco colorido por celula lado a lado."""
-    return [' '.join(f'{color_fn(v)}{" " * cell_w}\033[0m' for v in row) for row in levels]
-
-
-def grid_total(levels):
-    """Media dos 9 blocos de um grid, em modulo, 0..1 — o "quanto no total" desse metro
-    (mesmo numero que o medidor escalar equivalente mostraria)."""
-    return float(np.clip(np.abs(levels).mean(), 0.0, 1.0))
-
-
-def bipolar_bar(t, width, cold_color, warm_color):
-    """Barra horizontal CENTRADA em zero (`t` de -1 a 1, sem modulo — TEMP. e a unica
-    metrica com sinal de verdade, as outras sao 0..1). O meio da barra e o zero; positivo
-    enche pra DIREITA (`warm_color`), negativo enche pra ESQUERDA (`cold_color`). O
-    caractere central fica marcado mesmo quando t=0, pra sempre dar pra ver onde fica o
-    zero."""
-    t = max(-1.0, min(1.0, t))
-    mid = width // 2
-    filled = int(round(abs(t) * mid))
-    chars = []
-    for i in range(width):
-        if t > 0 and mid <= i < mid + filled:
-            chars.append(f'{warm_color}█\033[0m')
-        elif t < 0 and mid - filled <= i < mid:
-            chars.append(f'{cold_color}█\033[0m')
-        elif i == mid:
-            chars.append('\033[2m│\033[0m')
-        else:
-            chars.append('\033[2m░\033[0m')
-    return ''.join(chars)
-
-
-def spatial_grids_section(arr, val, sat, gx, gy, prev_val_before, img_peaks, grid=3, cell_w=4):
-    """A versao "onde" de cada medidor escalar do RESUMO, todos lado a lado num grid
-    espacial (3x3 por padrao) — diferente do resto (que sao listas 1D tipo espectrograma),
-    isso e um mapa 2D: mostra ONDE na tela esta o brilho/detalhe/movimento, nao so quanto
-    no total. Normaliza cada celula com a MESMA regra do medidor escalar equivalente
-    (auto-gain de pico via `img_peaks` pra Bordas/Nitidez/Movimento, escala fixa pra
-    Contraste, 0..1 natural pra Brilho/Saturacao/Entropia) — a media dos 9 blocos de cada
-    grid fica proxima do numero que o medidor global (RESUMO) mostra pro mesmo frame.
-    `prev_val_before` precisa ser o V do frame ANTERIOR capturado ANTES de chamar
-    `frame_meter_rows` (que sobrescreve esse estado) — senao o grid de Movimento compara o
-    frame com ele mesmo."""
-    h, w = val.shape
+    # --- grids 3x3 por metrica (brilho/saturacao/temp/contraste/nitidez/entropia/bordas/movimento) ---
+    vh, vw = val.shape
     gh, gw = gx.shape
-
-    brilho = cell_reduce(lambda y0, y1, x0, x1: val[y0:y1, x0:x1].mean(), h, w, grid)
-    sat_c = cell_reduce(lambda y0, y1, x0, x1: sat[y0:y1, x0:x1].mean(), h, w, grid)
+    brilho = cell_reduce(lambda y0, y1, x0, x1: val[y0:y1, x0:x1].mean(), vh, vw, grid)
+    sat_c = cell_reduce(lambda y0, y1, x0, x1: sat[y0:y1, x0:x1].mean(), vh, vw, grid)
     temp_c = cell_reduce(lambda y0, y1, x0, x1: (arr[y0:y1, x0:x1, 0].mean()
-                                                  - arr[y0:y1, x0:x1, 2].mean()) / 255.0, h, w, grid)
-    contrast_c = cell_reduce(lambda y0, y1, x0, x1: min(1.0, float(val[y0:y1, x0:x1].std()) * 2.5), h, w, grid)
-    sharp_raw = cell_reduce(lambda y0, y1, x0, x1: laplacian_variance(val[y0:y1, x0:x1]), h, w, grid)
-    sharp_c = np.minimum(1.0, sharp_raw / img_peaks['sharpness'])
-    entropy_c = cell_reduce(lambda y0, y1, x0, x1: brightness_entropy(val[y0:y1, x0:x1]), h, w, grid)
-    edge_raw = cell_reduce(lambda y0, y1, x0, x1: np.sqrt(gx[y0:y1, x0:x1] ** 2 + gy[y0:y1, x0:x1] ** 2).mean(),
-                            gh, gw, grid)
-    edge_c = np.minimum(1.0, edge_raw / img_peaks['edge'])
-    if prev_val_before is not None and prev_val_before.shape == val.shape:
-        motion_raw = cell_reduce(lambda y0, y1, x0, x1: float(np.abs(
-            val[y0:y1, x0:x1] - prev_val_before[y0:y1, x0:x1]).mean()), h, w, grid)
+                                                  - arr[y0:y1, x0:x1, 2].mean()) / 255.0, vh, vw, grid)
+    contrast_c = cell_reduce(lambda y0, y1, x0, x1: min(1.0, float(val[y0:y1, x0:x1].std()) * 2.5), vh, vw, grid)
+    sharp_c = np.minimum(1.0, cell_reduce(lambda y0, y1, x0, x1: laplacian_variance(val[y0:y1, x0:x1]),
+                                          vh, vw, grid) / peaks['sharpness'])
+    entropy_c = cell_reduce(lambda y0, y1, x0, x1: brightness_entropy(val[y0:y1, x0:x1]), vh, vw, grid)
+    edge_c = np.minimum(1.0, cell_reduce(lambda y0, y1, x0, x1: np.sqrt(
+        gx[y0:y1, x0:x1] ** 2 + gy[y0:y1, x0:x1] ** 2).mean(), gh, gw, grid) / peaks['edge'])
+    if prev_before is not None and prev_before.shape == val.shape:
+        motion_c = np.minimum(1.0, cell_reduce(lambda y0, y1, x0, x1: float(np.abs(
+            val[y0:y1, x0:x1] - prev_before[y0:y1, x0:x1]).mean()), vh, vw, grid) / peaks['motion'])
     else:
-        motion_raw = np.zeros((grid, grid))
-    motion_c = np.minimum(1.0, motion_raw / img_peaks['motion'])
+        motion_c = np.zeros((grid, grid))
 
-    metrics = [('BRILHO', brilho, gray_bg), ('SATURAÇÃO', sat_c, gray_bg), ('TEMP.', temp_c, temp_bg),
-               ('CONTRASTE', contrast_c, gray_bg), ('NITIDEZ', sharp_c, gray_bg), ('ENTROPIA', entropy_c, gray_bg),
-               ('BORDAS', edge_c, gray_bg), ('MOVIMENTO', motion_c, gray_bg)]
+    def _grid(name, cells, bipolar=False):
+        total = (float(np.clip(cells.mean(), -1.0, 1.0)) if bipolar
+                 else float(np.clip(np.abs(cells).mean(), 0.0, 1.0)))
+        return {'name': name, 'bipolar': bipolar, 'total': round(total, 3),
+                'cells': [[round(float(v), 3) for v in row] for row in cells]}
 
-    block_w = grid * cell_w + (grid - 1)  # celulas + os espacos que grid_rows poe entre elas
-    # titulo JA com o valor total (ex. "BRILHO 30%"), a barra do total logo abaixo do
-    # titulo, e so depois o grid espacial em si — nessa ordem: quanto no total primeiro,
-    # onde na tela depois. TEMP. e a unica com sinal de verdade (quente/frio) — em vez da
-    # barra 0..1 padrao, usa uma barra CENTRADA em zero (azul p/ frio, esquerda; vermelho
-    # p/ quente, direita), igual foi pedido.
-    header_parts, bar_parts = [], []
-    for name, levels, color_fn in metrics:
-        if name == 'TEMP.':
-            t = float(np.clip(levels.mean(), -1.0, 1.0))
-            label = f'{name} {t:+.2f}'
-            bar = bipolar_bar(t, block_w, cold_color=_rgb(90, 150, 255), warm_color=_rgb(255, 90, 90))
-        else:
-            t = grid_total(levels)
-            label = f'{name} {t:.2f}'
-            bar = tricolor_bar(int(round(t * block_w)), block_w, base_color=NO_BAND_COLOR)
-        header_parts.append(f'{label:^{block_w}}')
-        bar_parts.append(bar)
-    header = '  '.join(header_parts)
-    total_bar_row = '  '.join(bar_parts)
-    per_metric_rows = [grid_rows(levels, color_fn, cell_w) for _, levels, color_fn in metrics]
-    rows = ['  '.join(pm[r] for pm in per_metric_rows) for r in range(grid)]
-    return [header, total_bar_row] + rows
+    grids = [_grid('BRILHO', brilho), _grid('SATURAÇÃO', sat_c), _grid('TEMP.', temp_c, True),
+             _grid('CONTRASTE', contrast_c), _grid('NITIDEZ', sharp_c), _grid('ENTROPIA', entropy_c),
+             _grid('BORDAS', edge_c), _grid('MOVIMENTO', motion_c)]
+
+    # --- histogramas ---
+    hc, he = np.histogram(hue.ravel(), bins=12, range=(0.0, 1.0), weights=sat.ravel())
+    hcent = (he[:-1] + he[1:]) / 2
+    hue_hist = [{'deg': int(round(cn * 360)), 'level': round(float(c / (hc.max() + 1e-9)), 3),
+                 'rgb': [int(v * 255) for v in colorsys.hsv_to_rgb(cn, 1.0, 1.0)]}
+                for c, cn in zip(hc, hcent)]
+
+    bc, be = np.histogram(val.ravel(), bins=16, range=(0.0, 1.0))
+    bcent = (be[:-1] + be[1:]) / 2
+    bright_hist = [{'gray': int(cn * 255), 'level': round(float(c / (bc.max() + 1e-9)), 3)}
+                   for c, cn in reversed(list(zip(bc, bcent)))]  # claro em cima
+
+    color_spectrum = [{'radius': int(rad), 'r': round(float(lr), 3), 'g': round(float(lg), 3),
+                       'b': round(float(lb), 3)}
+                      for rad, lr, lg, lb in frame_color_spectrum(frame, w, h)]
+
+    ang = np.degrees(np.arctan2(gy, gx)) % 180.0
+    oc, oe = np.histogram(ang.ravel(), bins=9, range=(0.0, 180.0),
+                          weights=np.sqrt(gx ** 2 + gy ** 2).ravel())
+    ocent = (oe[:-1] + oe[1:]) / 2
+    edge_orient = [{'deg': int(round(cn)), 'level': round(float(c / (oc.max() + 1e-9)), 3),
+                    'rgb': [int(v * 255) for v in colorsys.hsv_to_rgb(cn / 180.0, 0.8, 1.0)]}
+                   for c, cn in zip(oc, ocent)]
+
+    return {
+        'dominant': [int(dominant[0] * 255), int(dominant[1] * 255), int(dominant[2] * 255)],
+        'summary': {
+            'symmetry': round(symmetry, 3), 'overexposed': round(over, 3), 'underexposed': round(under, 3),
+            'corr_rg': round(corr_rg, 3), 'corr_rb': round(corr_rb, 3), 'corr_gb': round(corr_gb, 3),
+            'cx': round(cx, 3), 'cy': round(cy, 3), 'mean_rgb': [mr, mg, mb],
+            'colorfulness': round(cf_level, 3), 'palette_unique': n_uni, 'palette_total': total_px,
+            'palette_level': round(min(1.0, n_uni / total_px), 3),
+            'color_change': round(color_change, 3), 'warm': round(warm, 3),
+        },
+        'grids': grids, 'hue_hist': hue_hist, 'bright_hist': bright_hist,
+        'color_spectrum': color_spectrum, 'edge_orient': edge_orient,
+    }
 
 
 def pick_audio_source(name=None):
@@ -876,68 +696,94 @@ def pick_audio_source(name=None):
     return sink + '.monitor'
 
 
-IMG_TERM_COLS, IMG_TERM_ROWS = 150, 55  # geometria fixa da janela nova de analise de imagem
+# --- troca de entrada pelo dashboard: enumerar + aplicar (dash_server chama via callbacks) ---
 
-
-def open_terminal_window(title):
-    """Abre um terminal novo so pra exibir o que a gente escrever num FIFO — devolve o file
-    object aberto pra escrita (repassa pro print(..., file=...) de quem for usar). None se
-    nao achar terminal/DISPLAY (a funcao chamadora cai pra nao mostrar essa parte, sem travar
-    o programa). ponytail: so gnome-terminal (o que tem instalado nessa maquina) — cada
-    emulator tem flag de geometria/execucao diferente, suportar todos e trabalho demais pra
-    um script pessoal. Troca o comando abaixo se seu ambiente usar outro (konsole, kitty...)."""
-    if not shutil.which('gnome-terminal') or not os.environ.get('DISPLAY'):
-        print(f'sem gnome-terminal ou $DISPLAY: "{title}" fica desligado')
-        return None
-    fifo_path = f'/tmp/native_synth_{title.replace(" ", "_")}_{os.getpid()}.fifo'
-    os.mkfifo(fifo_path)
-    cmd = f"cat '{fifo_path}'; echo; read -p 'terminal encerrado — enter pra fechar'"
-    subprocess.Popen(['gnome-terminal', f'--title={title}', '--full-screen',
-                       f'--geometry={IMG_TERM_COLS}x{IMG_TERM_ROWS}', '--', 'bash', '-c', cmd])
-    stream = open(fifo_path, 'w', buffering=1)  # bloqueia ate o terminal abrir o fifo pra leitura
-    os.remove(fifo_path)  # tira o nome do filesystem; o fd em si continua valido pros dois lados
-    return stream
-
-
-def redraw(stream, lines, prev_line_count, term_cols):
-    """Desenha `lines` num terminal com redraw incremental (sobe o cursor e reescreve so o
-    bloco, sem piscar). `prev_line_count` e uma lista de 1 elemento — estado mutavel entre
-    chamadas, um por stream (cada terminal tem o seu). ponytail: "subir cursor N linhas" so
-    funciona se nenhuma linha QUEBRAR na tela (janela mais estreita que o conteudo) — senao
-    1 linha logica vira 2+ fisicas e o calculo erra, corrompendo o topo do bloco. Se algo
-    nao couber em `term_cols`, cai pro clear completo (\033[2J) so nesse frame."""
-    if not prev_line_count[0]:
-        print('\033[?1049h', end='', file=stream)  # tela alternada, sem sujar o scrollback
-    fits = all(visible_len(line) <= term_cols for line in lines)
-    if fits and prev_line_count[0]:
-        print(f'\033[{prev_line_count[0]}A', end='', file=stream)  # sobe pro topo do bloco anterior
-        extra = max(0, prev_line_count[0] - len(lines))
-        # \n no final de cada linha (inclusive a ultima) — sem isso o cursor fica EM CIMA da
-        # ultima linha, nao embaixo, e o "sobe cursor" erra por 1 toda vez
-        out = ''.join('\033[K' + line + '\n' for line in lines)
-        out += '\033[K\n' * extra  # bloco novo ficou menor que o anterior — limpa a sobra
-        print(out, end='', flush=True, file=stream)
-        prev_line_count[0] = len(lines) + extra
-    else:
-        print('\033[2J\033[H' + '\n'.join(lines), end='', flush=True, file=stream)
-        prev_line_count[0] = len(lines)
-
-
-def close_alt_screen(stream, prev_line_count):
-    if prev_line_count[0]:
-        print('\033[?1049l', end='', flush=True, file=stream)  # sai da tela alternada
-
-
-def audio_thread(device, img_stream=None):
+def _list_audio_sources():
     try:
-        proc = subprocess.Popen(
-            ['parec', '--device=' + device, '--format=s16le', '--rate=44100',
-             '--channels=1', '--latency-msec=50'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
+        out = subprocess.check_output(['pactl', 'list', 'short', 'sources'], text=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return []
+    res = []
+    for line in out.splitlines():
+        parts = line.split('\t')
+        if len(parts) >= 2:
+            name = parts[1]
+            short = (name.replace('alsa_output.', '').replace('alsa_input.', '')
+                     .replace('.monitor', ' (monitor)'))
+            res.append({'id': name, 'name': short})
+    return res
+
+
+def _list_video_inputs():
+    res = [{'kind': 'webcam', 'id': f'webcam:{d}', 'name': d}
+           for d in sorted(glob.glob('/dev/video*'))]
+    try:
+        for m in get_monitors():
+            res.append({'kind': 'screen', 'id': f"screen:{m['name']}",
+                        'name': f"tela {m['name']} {m['w']}x{m['h']}" + (' *' if m['primary'] else '')})
+    except Exception:
+        pass
+    return res
+
+
+def _video_from_id(ident):
+    """'webcam:/dev/videoN' ou 'screen:<monitor>' -> dict state['video']. Sempre escala pra
+    WIDTH x HEIGHT atuais (nao muda a resolucao de saida ao vivo)."""
+    kind, _, rest = ident.partition(':')
+    if kind == 'webcam':
+        return {'mode': 'webcam', 'device': rest or '/dev/video0', 'region': None}
+    try:
+        m = pick_monitor(rest or None)
+    except SystemExit:
+        m = None
+    if m:
+        r = {'name': m['name'], 'w': m['w'], 'h': m['h'], 'x': m['x'], 'y': m['y']}
+    else:
+        sw, sh = get_screen_size()
+        r = {'name': 'tela toda', 'w': sw, 'h': sh, 'x': 0, 'y': 0}
+    return {'mode': 'screen', 'device': None, 'region': r}
+
+
+def _video_id(v):
+    """dict state['video'] -> id no formato das opcoes ('webcam:/dev/videoN' | 'screen:<nome>')."""
+    if not v:
+        return ''
+    return (f"webcam:{v['device']}" if v.get('mode') == 'webcam'
+            else f"screen:{(v.get('region') or {}).get('name', '')}")
+
+
+def list_inputs():
+    return {'audio': _list_audio_sources(), 'video': _list_video_inputs(),
+            'current': {'audio': state.get('audio_source', ''),
+                        'video': state.get('video_id') or _video_id(state.get('video'))}}
+
+
+def set_input(kind, ident):
+    if kind == 'audio':
+        state['audio_source'] = ident
+    elif kind == 'video':
+        state['video'] = _video_from_id(ident)  # video_thread ve o dict novo e re-spawna o ffmpeg
+        state['video_id'] = ident               # id "canonico" pro dash sincronizar os selects
+    else:
+        raise ValueError(f'kind desconhecido: {kind}')
+
+
+def _spawn_parec(device):
+    return subprocess.Popen(
+        ['parec', '--device=' + device, '--format=s16le', '--rate=44100',
+         '--channels=1', '--latency-msec=50'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+
+
+def audio_thread(device):
+    state['audio_source'] = device  # fonte da verdade a partir daqui (o dash troca via set_input)
+    try:
+        proc = _spawn_parec(device)
     except FileNotFoundError:
         print('sem audio: "parec" nao encontrado (pacote pulseaudio-utils)')
         return
+    cur_src = device
     print('audio: capturando', device)
     chunk_samples = 1024
     chunk_bytes = chunk_samples * 2
@@ -946,29 +792,29 @@ def audio_thread(device, img_stream=None):
     freqs = np.fft.rfftfreq(chunk_samples, d=1 / rate)
 
     def recompute_bins():
-        # bass_bins/mid_bins/treble_bins dependem de tuning.BASS_MID_HZ/MID_TREBLE_HZ —
-        # precisam ser recalculados toda vez que o tuning.py recarrega
-        return (freqs < tuning.BASS_MID_HZ,
-                (freqs >= tuning.BASS_MID_HZ) & (freqs < tuning.MID_TREBLE_HZ),
-                freqs >= tuning.MID_TREBLE_HZ)
+        # bass_bins/mid_bins/treble_bins dependem de tuning.BASS_MID_HZ/MID_TREBLE_HZ e as 8
+        # faixas finas dos cortes tuning.HZ_* — recalcula tudo quando o tuning.py recarrega
+        return ((freqs < tuning.BASS_MID_HZ,
+                 (freqs >= tuning.BASS_MID_HZ) & (freqs < tuning.MID_TREBLE_HZ),
+                 freqs >= tuning.MID_TREBLE_HZ), freq_bands())
 
-    bass_bins, mid_bins, treble_bins = recompute_bins()
+    (bass_bins, mid_bins, treble_bins), fine_bands = recompute_bins()
     band_smoothing = band_smoothing_map()  # {chave: SMOOTHING daquela banda}, grave->agudo
     tuning_mtime = os.path.getmtime(TUNING_PATH)
+    dash_server_mtime = os.path.getmtime(DASH_SERVER_PATH)
+    dash_data_mtime = os.path.getmtime(DASH_DATA_PATH)
     smooth = {'amp': 0.0, 'bass': 0.0, 'mid': 0.0, 'treble': 0.0, **{k: 0.0 for k in FREQ_BAND_UNIFORM.values()}}
     smoothing_used = dict(smooth)  # ultimo smoothing (attack ou release) aplicado em cada chave
-    band_peaks = {name: 1e-6 for name, _, _, _ in FREQ_BANDS}  # auto-gain: teto recente de cada banda
+    band_peaks = {name: 1e-6 for name, _, _ in fine_bands}  # auto-gain: teto recente de cada banda
     kick_baseline = 0.0
     kick_env = 0.0
     kick_decay_dynamic = tuning.KICK_DECAY  # ate a 1a batida ter intervalo medido, usa o fixo
     kick_chunk_count = 0
     kick_last_hit_chunk = 0
     monitor_frame = [0]
-    prev_line_count = [0]
-    prev_line_count_img = [0]
-    prev_val = [None]  # frame reduzido (canal V) do throttle anterior — pro medidor de movimento
-    prev_dominant = [None]  # cor media (RGB) do throttle anterior — pro medidor de mudanca de cor
-    img_peaks = {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6}  # auto-gain
+    # estado entre throttles pro image_dash_data (auto-gain de pico + deltas de movimento/cor)
+    html_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
+                'prev_val': [None], 'prev_mean': [None]}
     smooth_spectrum = np.zeros(len(freqs))  # espectrograma piscava: era FFT crua, sem suavizar
     try:
         while running:
@@ -979,16 +825,52 @@ def audio_thread(device, img_stream=None):
                 if m != tuning_mtime:
                     tuning_mtime = m
                     importlib.reload(tuning)
-                    bass_bins, mid_bins, treble_bins = recompute_bins()
+                    (bass_bins, mid_bins, treble_bins), fine_bands = recompute_bins()
                     band_smoothing = band_smoothing_map()
                     print('tuning.py recarregado')
+                m = os.path.getmtime(DASH_SERVER_PATH)
+                if m != dash_server_mtime:
+                    dash_server_mtime = m
+                    vm, old_srv = dash_server._cfg.get('video_mode', ''), dash_server._cfg.get('srv')
+                    try:
+                        importlib.reload(dash_server)
+                    except Exception as e:
+                        print(f'dash_server.py com erro, mantendo o anterior:\n{e}')
+                    else:
+                        if old_srv is not None:
+                            old_srv.shutdown()
+                            old_srv.server_close()
+                        dash_server.start(state, tuning, TUNING_PATH, lambda: running,
+                                          audio_source=device, video_mode=vm, open_browser=False,
+                                          on_inputs=list_inputs, on_set_input=set_input,
+                                          on_set_output=set_output)
+                        print('dash_server.py recarregado')
+                m = os.path.getmtime(DASH_DATA_PATH)
+                if m != dash_data_mtime:
+                    dash_data_mtime = m
+                    try:
+                        importlib.reload(dash_data)
+                        print('dash_data.py recarregado')
+                    except Exception as e:
+                        print(f'dash_data.py com erro:\n{e}')
             except FileNotFoundError:
                 pass
+            if state['audio_source'] != cur_src:  # troca pedida pelo dash
+                _kill(proc)
+                cur_src = state['audio_source']
+                proc = _spawn_parec(cur_src)
+                print('audio: fonte ->', cur_src)
+                continue
             data = read_exact(proc.stdout, chunk_bytes)
             if data is None:
+                if not running:
+                    break
                 err = proc.stderr.read().decode(errors='ignore').strip()
-                print('audio parou' + (': ' + err if err else ''))
-                break
+                print('audio parou' + (': ' + err if err else '') + ' — retomando ' + cur_src)
+                time.sleep(0.5)
+                _kill(proc)
+                proc = _spawn_parec(cur_src)
+                continue
             samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
             spectrum = np.abs(np.fft.rfft(samples * window))
             smooth_spectrum = smooth_spectrum * tuning.SMOOTHING + spectrum * (1 - tuning.SMOOTHING)
@@ -1006,7 +888,7 @@ def audio_thread(device, img_stream=None):
             # porque agora controlam uniforms de verdade (u_subbass..u_air). "level" ja
             # vem 0..1 (relativo ao pico ENTRE as 8 bandas, auto-calibrado, sem escala
             # manual por banda) — so falta suavizar igual as outras.
-            named_levels = named_band_levels(spectrum, freqs, FREQ_BANDS, band_peaks, tuning.PEAK_DECAY)
+            named_levels = named_band_levels(spectrum, freqs, fine_bands, band_peaks, tuning.PEAK_DECAY)
             for name, _, level in named_levels:
                 raw[FREQ_BAND_UNIFORM[name]] = level
             for k in smooth:
@@ -1019,7 +901,9 @@ def audio_thread(device, img_stream=None):
                 s = attack if raw[k] > smooth[k] else release
                 smoothing_used[k] = s
                 smooth[k] = smooth[k] * s + raw[k] * (1 - s)
-                state[k] = smooth[k]
+                # BANDS_ENABLED=0 so silencia o que alimenta o shader/dash ("final"); smooth[k]
+                # continua calculado (auto-gain/attack-release nao perdem o fio quando reativa)
+                state[k] = smooth[k] if (k not in FINE_BAND_KEYS or tuning.BANDS_ENABLED) else 0.0
 
             kick_chunk_count += 1
             # bass_raw (sem teto) em vez de raw['bass'] (clampado em 1.0) — com o clamp, se
@@ -1045,115 +929,84 @@ def audio_thread(device, img_stream=None):
                 kick_env *= kick_decay_dynamic
             state['kick'] = kick_env
 
-            # ponytail: monitor pra calibrar as *_SCALE por olho — se o "final" ficar sempre
-            # perto de 1.00, o "bruto" mostra o numero real pra escolher a escala certa
-            # (SCALE ~= 1 / bruto no pico que voce quer que bata 1.0). so imprime 1x a cada
-            # ~230ms (10 chunks de 23ms) pra nao inundar o terminal.
+            # canal com "output" escolhido E "src" bound SUBSTITUI a variavel (kick = onset,
+            # o resto = nivel) por cima do que acabou de ser calculado acima. Sem src, a
+            # variavel original fica como esta — nao ha fallback implicito por nome mais.
+            for slot, ch in enumerate(tuning.CHANNELS[:MAX_CHANNELS]):
+                out = ch.get('output')
+                if out and ch.get('src'):
+                    state[out] = state['chan_hit'][slot] if out == 'kick' else state['chan'][slot]
+
+            # so recalcula/redesenha o dash a cada DASH_EVERY_N_CHUNKS chunks (~14 Hz) — o
+            # resto do loop e a leitura crua do parec, que nao pode atrasar.
             monitor_frame[0] += 1
-            if monitor_frame[0] % 10 == 0:
-                # tabela principal: so as 8 bandas finas (ja calculadas acima, todo chunk),
-                # do agudo pro grave — simetrica agora (8 bruto x 8 final). bass/mid/treble
-                # classico continua rodando e mandando pro shader (u_bass etc.), so nao
-                # aparece mais aqui — as 8 bandas finas cobrem o mesmo espectro com mais
-                # resolucao.
-                merged_colors = {name: color for name, _, _, color in FREQ_BANDS}
-                band_entries = list(reversed(named_levels))  # (nome, mag, nivel) x8, agudo->grave
-                band_final_meters = [(name, state[FREQ_BAND_UNIFORM[name]]) for name, _, _ in band_entries]
-                # amp entra no topo da tabela (nao e banda de frequencia — sem cor propria,
-                # NO_BAND_COLOR — mas cabe na mesma estrutura BRUTO/FINAL/SMOOTH/Δ)
-                all_entries = [('amp', amp_raw, raw['amp'])] + band_entries
-                all_final_meters = [('amp', state['amp'])] + band_final_meters
-                meters_header = (f'{"BRUTO":^50}   {"FINAL":^48}   {"SMOOTH":^20}   {"Δ bruto→final":^20}')
-                bruto_lines = bruto_rows(all_entries, colors=merged_colors)
-                final_lines = final_rows(all_final_meters, colors=merged_colors)
-                # dois graficos extra, colados depois do FINAL: o smoothing REALMENTE usado
-                # nesse chunk (attack ou release, o que valeu) e a diferenca real entre bruto
-                # (cru) e final (suavizado) desse instante — ambos em cinza neutro
-                # (NO_BAND_COLOR), sem cor de banda.
-                meters_side_by_side = []
-                for (b, f), (name, _, level), (_, final_val) in zip(zip(bruto_lines, final_lines),
-                                                                      all_entries, all_final_meters):
-                    s = smoothing_used[FREQ_BAND_UNIFORM.get(name, name)]  # 'amp' ja e a propria chave
-                    smoothing_bar = tricolor_bar(int(round(s * 15)), 15, base_color=NO_BAND_COLOR)
-                    smoothing_part = f'{smoothing_bar} {s:.2f}'
-                    delta = min(1.0, abs(final_val - level))
-                    delta_bar = tricolor_bar(int(round(delta * 15)), 15, base_color=NO_BAND_COLOR)
-                    meters_side_by_side.append(f'{b}   {f}   {smoothing_part}   {delta_bar} {delta:.2f}')
+            if monitor_frame[0] % DASH_EVERY_N_CHUNKS == 0:
+                # audio_dash_data() / image_dash_data() montam os dicts de numeros que o
+                # dash HTML (dash_server -> /events) renderiza. Nao ha mais dash de terminal.
+                bands_raw = [(name, mag, lvl, state[FREQ_BAND_UNIFORM[name]],
+                              smoothing_used[FREQ_BAND_UNIFORM[name]])
+                             for name, mag, lvl in named_levels]  # grave->agudo (ordem freq_bands())
+                state['audio_dash'] = dash_data.audio_dash_data(
+                    bands_raw, amp_raw, raw['amp'], state['amp'], smoothing_used['amp'],
+                    kick_env, kick_decay_dynamic, smooth_spectrum, freqs,
+                    band_lohi=[(lo, hi) for _, lo, hi in fine_bands])  # tint + cinza nos buracos
 
-                # kick: nao e banda de frequencia (nao tem cor propria, nao tem bruto — so o
-                # pulso), entao fica em secao propria, separada da tabela. Sem Δ (nao ha
-                # bruto pra comparar).
-                kick_header = 'KICK'
-                kick_col_header = f'{"":^50}   {"FINAL":^48}   {"DECAY":^20}'
-                kick_pad = ' ' * 50 + '   '
-                kick_final_part = final_rows([('kick', kick_env)], colors=merged_colors)[0]
-                kick_decay_part = (f'{tricolor_bar(int(round(kick_decay_dynamic * 15)), 15, base_color=NO_BAND_COLOR)}'
-                                    f' {kick_decay_dynamic:.2f}')
-                kick_line = f'{kick_pad}{kick_final_part}   {kick_decay_part}'
-                kick_section = [kick_header, kick_col_header, kick_line]
-
-                rel_lines = spectrum_column(smooth_spectrum, freqs)
-                db_lines = spectrum_column_db(smooth_spectrum, freqs)
-                spectro_header = (f'{"ABSOLUTO (dB real, nao normalizado)":^52}   '
-                                   f'{"RELATIVO (% do pico do frame)":^50}')
-                spectro_side_by_side = [f'{d}   {r}' for d, r in zip(db_lines, rel_lines)]
-
-                lines = (
-                    kick_section
-                    + ['', 'FAIXAS DE MIXAGEM', meters_header] + meters_side_by_side
-                    + ['', 'ESPECTROGRAMA', spectro_header] + spectro_side_by_side
-                )
-                term_cols = shutil.get_terminal_size(fallback=(120, 40)).columns
-                redraw(sys.stdout, lines, prev_line_count, term_cols)
-
-                # toda analise de imagem sai do dash principal — vai pra janela de terminal
-                # propria (aberta uma vez em main()), largura maior aqui ja que nao precisa
-                # mais caber espremido do lado de ABSOLUTO/RELATIVO
-                if img_stream is not None:
-                    arr_small = frame_downsample(state['frame'], WIDTH, HEIGHT)
-                    if arr_small is not None:
-                        hue, sat, val = rgb_to_hsv_np(arr_small)
-                        gx, gy = gradient(val)  # calculado uma vez, usado nos medidores + 2 secoes abaixo
-                        dr, dg, db = state['dominant']
-                        r255, g255, b255 = int(dr * 255), int(dg * 255), int(db * 255)
-                        swatch = f'\033[48;2;{r255};{g255};{b255}m      \033[0m'
-                        dominant_line = f'{"Cor dominante":>{LABEL_W}}  {swatch}  RGB({r255},{g255},{b255})'
-                        # os 4 espectrogramas ficam LADO A LADO (nao empilhados) pra caber
-                        # tudo numa tela so, sem precisar rolar — mesmo esquema do dash
-                        # principal (ABSOLUTO/RELATIVO lado a lado). zip_longest porque cada
-                        # um tem um numero de faixas diferente; pad_visible alinha a coluna
-                        # certo mesmo com os codigos ANSI de cor no meio da string.
-                        hue_lines = hue_histogram_rows(hue, sat)
-                        bright_lines = brightness_histogram_rows(val)
-                        color_lines = frame_spectrum_rows(state['frame'], WIDTH, HEIGHT, width=14)
-                        orient_lines = edge_orientation_rows(gx, gy)
-                        col_widths = [max(visible_len(l) for l in col)
-                                      for col in (hue_lines, bright_lines, color_lines, orient_lines)]
-                        headers = ['MATIZ (hue)', 'BRILHO (V)', 'CORES (FFT 2D espacial)', 'ORIENT. BORDA']
-                        col_header = '   '.join(f'{h:^{w}}' for h, w in zip(headers, col_widths))
-                        rows_4col = [
-                            '   '.join(pad_visible(v, w) for v, w in zip(row, col_widths))
-                            for row in zip_longest(hue_lines, bright_lines, color_lines, orient_lines, fillvalue='')
-                        ]
-                        # captura o V do frame anterior ANTES do frame_meter_rows sobrescrever
-                        # (ele guarda o V atual em prev_val[0] no final) — senao o grid de
-                        # Movimento abaixo compara o frame com ele mesmo
-                        prev_val_before = prev_val[0]
-                        meter_lines = frame_meter_rows(arr_small, val, sat, gx, gy, prev_val, img_peaks)
-                        color_lines_stats = color_stats_rows(arr_small, hue, sat, prev_dominant, img_peaks)
-                        grid_lines = spatial_grids_section(arr_small, val, sat, gx, gy, prev_val_before, img_peaks)
-                        img_lines = (
-                            ['RESUMO', dominant_line] + meter_lines + color_lines_stats
-                            + ['', 'ONDE NA TELA (grid 3x3 — mesmos medidores do RESUMO, por regiao)']
-                            + grid_lines
-                            + ['', 'ANÁLISE ESPACIAL', col_header] + rows_4col
-                        )
-                        redraw(img_stream, img_lines, prev_line_count_img, IMG_TERM_COLS)
+                arr_s = frame_downsample(state['frame'], WIDTH, HEIGHT)
+                if arr_s is not None:
+                    hue_s, sat_s, val_s = rgb_to_hsv_np(arr_s)
+                    gx_s, gy_s = gradient(val_s)
+                    state['image'] = image_dash_data(arr_s, hue_s, sat_s, val_s, gx_s, gy_s,
+                                                     state['frame'], WIDTH, HEIGHT, state['dominant'],
+                                                     html_img['peaks'], html_img['prev_val'],
+                                                     html_img['prev_mean'])
     finally:
-        proc.terminate()
-        close_alt_screen(sys.stdout, prev_line_count)
-        if img_stream is not None:
-            close_alt_screen(img_stream, prev_line_count_img)
+        _kill(proc)
+
+
+def channel_thread(slot):
+    """Um canal por INSTRUMENTO (stem isolado), nao por Hz — ver tuning.CHANNELS (lista de
+    tamanho livre, add/remove pelo dash; slot alem do tamanho atual = so nao existe ainda,
+    thread fica ociosa). Sem "src", sem parec/CPU: state['chan'][slot] fica 0 e a variavel de
+    "output" (se houver) NAO e mexida — o calculo original continua valendo. So liga quando
+    uma source e escolhida no dash (aba Audio -> Canais); troca ou volta a "" com o mesmo
+    esquema de respawn ao vivo do audio_thread principal. Analise leve de proposito (nao e FFT
+    de 8 faixas por stem, so faz sentido pra 1 instrumento): RMS suavizado (SMOOTHING) + o
+    mesmo detector de batida baseline/limiar do kick (KICK_THRESHOLD/KICK_DECAY), agora sobre
+    o RMS full-band em vez do grave — um stem isolado ja e "so" aquele instrumento."""
+    chunk_samples = 1024
+    chunk_bytes = chunk_samples * 2
+    proc, cur_src = None, None
+    baseline = env = smooth = 0.0
+    while running:
+        src = chan_cfg(slot).get('src') or ''
+        if src != cur_src:
+            if proc:
+                _kill(proc)
+            proc = _spawn_parec(src) if src else None
+            cur_src = src
+            baseline = env = smooth = 0.0
+            if not src:
+                state['chan'][slot] = state['chan_hit'][slot] = 0.0  # audio_thread assume nesse frame
+        if not proc:
+            time.sleep(0.2)
+            continue
+        data = read_exact(proc.stdout, chunk_bytes)
+        if data is None:
+            if not running:
+                break
+            time.sleep(0.3)
+            _kill(proc)
+            proc = _spawn_parec(cur_src) if cur_src else None
+            continue
+        samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+        amp_raw = float(np.sqrt(np.mean(samples ** 2)))
+        smooth = smooth * tuning.SMOOTHING + min(1.0, amp_raw * 4.0) * (1 - tuning.SMOOTHING)
+        state['chan'][slot] = smooth
+        baseline = baseline * 0.95 + amp_raw * 0.05
+        env = 1.0 if amp_raw > baseline * tuning.KICK_THRESHOLD else env * tuning.KICK_DECAY
+        state['chan_hit'][slot] = env
+    if proc:
+        _kill(proc)
 
 
 def dominant_color(frame, w, h):
@@ -1275,33 +1128,33 @@ def main():
     FRAME_SIZE = WIDTH * HEIGHT * 3
     state['frame'] = np.zeros(FRAME_SIZE, dtype=np.uint8)
 
-    flags = pygame.OPENGL | pygame.DOUBLEBUF
+    # config inicial da saida a partir dos argumentos de linha de comando — mesma forma que
+    # set_output()/o dash usam pra pedir uma troca ao vivo (ver resolve_output/open_window)
+    out_cfg = {'monitor': '', 'fullscreen': False, 'w': WIDTH, 'h': HEIGHT}
     if args.monitor is not None:
         mon = pick_monitor(args.monitor if args.monitor != '' else None)
-        WIN_W, WIN_H = mon['w'], mon['h']
-        os.environ['SDL_VIDEO_WINDOW_POS'] = f"{mon['x']},{mon['y']}"
-        flags |= pygame.NOFRAME
-        print(f"janela fixada em {mon['name']} ({WIN_W}x{WIN_H}+{mon['x']}+{mon['y']})")
+        out_cfg = {'monitor': mon['name'], 'fullscreen': True, 'w': mon['w'], 'h': mon['h']}
     elif args.fullscreen:
-        WIN_W, WIN_H = screen_size
-        flags |= pygame.FULLSCREEN | pygame.NOFRAME
-    else:
-        WIN_W, WIN_H = WIDTH, HEIGHT
+        out_cfg = {'monitor': '', 'fullscreen': True, 'w': 0, 'h': 0}
 
     pygame.init()
-    pygame.display.set_mode((WIN_W, WIN_H), flags)
-    pygame.display.set_caption('native_synth — ESC ou fechar a janela pra sair')
-    glViewport(0, 0, WIN_W, WIN_H)
+    WIN_W, WIN_H, out_pos, out_mode, vbo, tex = open_window(out_cfg)
+    state['output_req'] = dict(out_cfg)  # o que o dash pode reescrever; comeca igual ao que abriu
 
-    vbo = glGenBuffers(1)
-    glBindBuffer(GL_ARRAY_BUFFER, vbo)
-    glBufferData(GL_ARRAY_BUFFER, np.array([-1, -1, 3, -1, -1, 3], dtype=np.float32), GL_STATIC_DRAW)
-
-    tex = glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, tex)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    # detalhes da SAIDA pro dashboard (onde/tamanho a imagem sintetizada aparece)
+    try:
+        monitors = get_monitors()
+    except Exception:
+        monitors = []
+    state['output'] = {
+        'content_w': WIDTH, 'content_h': HEIGHT,   # resolucao do render (textura)
+        'window_w': WIN_W, 'window_h': WIN_H,      # resolucao da janela de saida
+        'mode': out_mode, 'pos': list(out_pos),
+        'monitor': out_cfg['monitor'], 'fullscreen': out_cfg['fullscreen'],
+        'fps_target': 30, 'fps': 0.0,
+        'shader': os.path.basename(FRAG_PATH), 'shader_status': 'ok',
+        'monitors': monitors,
+    }
 
     with open(FRAG_PATH) as f:
         frag_src = f.read()
@@ -1325,6 +1178,8 @@ def main():
         uniforms['dominant'] = glGetUniformLocation(prog, 'u_dominant')
         for name in FREQ_BAND_UNIFORM.values():
             uniforms[name] = glGetUniformLocation(prog, 'u_' + name)
+        uniforms['chan'] = [glGetUniformLocation(prog, f'u_chan[{i}]') for i in range(MAX_CHANNELS)]
+        uniforms['chan_hit'] = [glGetUniformLocation(prog, f'u_chan_hit[{i}]') for i in range(MAX_CHANNELS)]
         glUniform1i(uniforms['tex0'], 0)
 
     program = build_program(frag_src)
@@ -1334,16 +1189,33 @@ def main():
         threading.Thread(target=window_capture_thread, args=(capture_region['id'],), daemon=True).start()
     else:
         threading.Thread(target=video_thread, args=(mode, capture_region, args.device), daemon=True).start()
-    img_stream = open_terminal_window('espectrograma de cores — native_synth')
-    threading.Thread(target=audio_thread, args=(pick_audio_source(args.audio), img_stream), daemon=True).start()
+    audio_src = pick_audio_source(args.audio)
+    threading.Thread(target=audio_thread, args=(audio_src,), daemon=True).start()
+    for slot in range(MAX_CHANNELS):
+        threading.Thread(target=channel_thread, args=(slot,), daemon=True).start()
     threading.Thread(target=dominant_color_thread, daemon=True).start()
+    dash_server.start(state, tuning, TUNING_PATH, lambda: running,
+                      audio_source=audio_src, video_mode='screen' if args.screen else 'webcam',
+                      on_inputs=list_inputs, on_set_input=set_input, on_set_output=set_output)
 
     t0 = time.perf_counter()
     clock = pygame.time.Clock()
+    frame_n = 0
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 running = False
+
+        # troca de saida pedida pelo dash (monitor/tela cheia/dimensao, barra "saida" no topo)
+        # — reabre a janela e regera vbo/tex/program (ver open_window: pode ou nao ter perdido
+        # o contexto GL, regera de qualquer jeito pra nao arriscar)
+        if state['output_req'] != out_cfg:
+            out_cfg = dict(state['output_req'])
+            WIN_W, WIN_H, out_pos, out_mode, vbo, tex = open_window(out_cfg)
+            program = build_program(frag_src)
+            use_program(program)
+            state['output'].update(mode=out_mode, window_w=WIN_W, window_h=WIN_H, pos=list(out_pos),
+                                    monitor=out_cfg['monitor'], fullscreen=out_cfg['fullscreen'])
 
         # hot reload: mesmo esquema do webcam.html, so que olhando mtime em vez de repollar por HTTP
         try:
@@ -1356,9 +1228,12 @@ def main():
                     new_program = build_program(new_src)
                     glDeleteProgram(program)
                     program = new_program
+                    frag_src = new_src  # se a saida trocar de janela depois, recompila ISSO, nao o original
                     use_program(program)
+                    state['output']['shader_status'] = 'ok'
                     print('shader recarregado')
                 except RuntimeError as e:
+                    state['output']['shader_status'] = 'erro (mantendo anterior)'
                     print('erro no shader, mantendo o anterior:\n', e)
         except FileNotFoundError:
             pass
@@ -1377,11 +1252,17 @@ def main():
         glUniform3f(uniforms['dominant'], *state['dominant'])
         for name in FREQ_BAND_UNIFORM.values():
             glUniform1f(uniforms[name], state[name])
+        for i in range(MAX_CHANNELS):
+            glUniform1f(uniforms['chan'][i], state['chan'][i])
+            glUniform1f(uniforms['chan_hit'][i], state['chan_hit'][i])
 
         glClear(GL_COLOR_BUFFER_BIT)
         glDrawArrays(GL_TRIANGLES, 0, 3)
         pygame.display.flip()
         clock.tick(30)
+        frame_n += 1
+        if frame_n % 15 == 0:
+            state['output']['fps'] = round(clock.get_fps(), 1)
 
     # da um instante pras threads daemon (audio_thread) notarem running=False e rodarem
     # seu "finally" (ex. sair da tela alternada) antes do processo sumir de baixo delas
@@ -1390,4 +1271,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        dash_server.stop()  # fecha o socket ja -> o dash detecta a queda e mostra "encerrado"

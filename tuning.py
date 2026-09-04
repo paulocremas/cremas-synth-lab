@@ -10,6 +10,25 @@ so que pro lado Python em vez do shader).
 BASS_MID_HZ = 150
 MID_TREBLE_HZ = 4000
 
+# range (Hz) [lo, hi] de cada uma das 8 faixas de mixagem finas (Sub-bass..Air) que controlam
+# u_subbass..u_air. Editado pela secao "Ranges das faixas" no dash de audio.
+# HZ_OVERLAP: 0 = crossover (faixas contiguas — mexer num limite move o vizinho, nao ha
+# sobreposicao); 1 = livre (cada faixa tem seu lo/hi; podem se sobrepor ou deixar buraco).
+# BANDS_ENABLED: 0 desliga as 8 faixas (u_subbass..u_air ficam 0 no shader; o dash continua
+# mostrando os numeros crus, so nao alimenta mais o shader) — pro checkbox "ativar" no dash.
+HZ_OVERLAP = 0
+BANDS_ENABLED = 1
+FREQ_BAND_HZ = [
+    [20, 105],  # Sub-bass
+    [105, 393],  # Low-mid
+    [393, 1468],  # Midrange
+    [1468, 3173],  # High-mid
+    [3173, 5358],  # Presence
+    [5358, 6607],  # Treble
+    [6607, 8208],  # Brilliance
+    [8208, 20000],  # Air
+]
+
 # ponytail: escalas calibradas ouvindo musica real nessa maquina (saida Bluetooth) —
 # cada banda tem energia natural bem diferente (grave sempre mais forte que agudo).
 # se ficar sempre 0 ou sempre grudado em 1, ajusta esses numeros pro seu volume/fonte.
@@ -21,14 +40,14 @@ TREBLE_SCALE = 30.0
 # envelope (attack/release): perto de 1.0 = mais suave/lento, perto de 0 = segue cru.
 # SMOOTHING = valor global, usado por amp/bass/mid/treble classico e pelo espectrograma
 # (nao sao uma banda especifica, entao nao tem "posicao" pra interpolar).
-SMOOTHING = 0.9
+SMOOTHING = 0.87
 
 # as 8 bandas finas (Sub-bass..Air) NAO usam o SMOOTHING acima — cada uma usa um valor
 # de RELEASE interpolado entre esses dois extremos, conforme a posicao dela (grave->agudo)
 # na lista FREQ_BANDS: grave decai rapido (RELEASE baixo, pega a proxima batida rapido),
 # agudo fica estavel (RELEASE alto, menos tremido/ruidoso). Sub-bass usa SMOOTHING_MIN,
 # Air usa SMOOTHING_MAX, as do meio interpolam linear entre os dois.
-SMOOTHING_MIN = 0.7   # banda mais grave (Sub-bass)
+SMOOTHING_MIN = 0.95   # banda mais grave (Sub-bass)
 SMOOTHING_MAX = 0.95  # banda mais aguda (Air)
 
 # attack/release assimetrico: o RELEASE (subida acima, por banda, ou SMOOTHING global pra
@@ -50,7 +69,7 @@ PEAK_DECAY = 0.999
 # quando o valor CRU pula bem acima dessa media, dispara um "envelope de percussao" —
 # sobe pra 1.0 na hora (ataque instantaneo, nao tem o que suavizar aqui) e decai sozinho.
 KICK_DECAY = 0.8          # usado so ANTES da primeira batida (sem intervalo medido ainda)
-KICK_THRESHOLD = 1.5      # grave cru precisa passar X vezes a media recente pra contar como batida
+KICK_THRESHOLD = 2.6      # grave cru precisa passar X vezes a media recente pra contar como batida
 
 # aquecimento: kick_baseline comeca em 0.0 e demora uns chunks pra representar o "chao" de
 # verdade da musica — antes disso, qualquer som ja passa de "0 x THRESHOLD" e dispara falso
@@ -65,5 +84,17 @@ KICK_WARMUP_CHUNKS = 20
 # mais). Os limites abaixo protegem contra tempos extremos.
 KICK_FADE_FLOOR = 0.05      # "considerado apagado" quando o envelope cai abaixo disso
 KICK_DECAY_FRACTION = 0.7   # decai ate o FADE_FLOOR em X% do intervalo entre batidas
-KICK_DECAY_MIN = 0.5        # decay mais rapido permitido (musica muito rapida)
+KICK_DECAY_MIN = 0.54        # decay mais rapido permitido (musica muito rapida)
 KICK_DECAY_MAX = 0.95       # decay mais lento permitido (batida isolada, tempo espacado)
+
+# canais por INSTRUMENTO (lista de tamanho livre, ate 8 — adiciona/remove pelo dash, aba
+# Audio -> Canais) — paralelo as 8 faixas de frequencia acima, nao substitui: e outro jeito de
+# alimentar o shader, por stem em vez de por Hz. Cada entrada: {"name", "src", "output"}.
+# "src" vazio = canal ocioso (sem parec); com o nome de uma source do PulseAudio, ganha parec
+# proprio (native_synth.channel_thread). "output" vazio = canal so aparece no array
+# u_chan/u_chan_hit do shader; com o nome de uma variavel existente (kick, amp, bass, mid,
+# treble, subbass, lowmid, midrange, highmid, presence, treble_hi, brilho, air) o canal
+# SUBSTITUI o valor calculado por ela ENQUANTO tiver "src" bound — sem src, a variavel
+# original (FFT do mix principal) continua normal, sem fallback implicito por nome.
+CHANNELS = [
+]
