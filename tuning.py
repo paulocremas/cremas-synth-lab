@@ -18,15 +18,21 @@ MID_TREBLE_HZ = 4000
 # mostrando os numeros crus, so nao alimenta mais o shader) — pro checkbox "ativar" no dash.
 HZ_OVERLAP = 0
 BANDS_ENABLED = 1
+
+# OUT_ANALYSIS_ENABLED: liga a leitura da imagem sintetizada (pos-shader) pros mesmos
+# medidores do Source Image (cor dominante, brilho, grids, histogramas), ~5x/s — tab
+# "Output Image" no dash. Desliga por padrao: e' leitura de GPU (glReadPixels), custa
+# CPU/GPU a mais mesmo raro; liga so quando for de fato calibrar/usar essa aba.
+OUT_ANALYSIS_ENABLED = 1
 FREQ_BAND_HZ = [
-    [20, 105],  # Sub-bass
-    [105, 393],  # Low-mid
-    [393, 1468],  # Midrange
-    [1468, 3173],  # High-mid
-    [3173, 5358],  # Presence
-    [5358, 6607],  # Treble
-    [6607, 8208],  # Brilliance
-    [8208, 20000],  # Air
+    [21, 88],  # Sub-bass
+    [88, 342],  # Low-mid
+    [342, 1313],  # Midrange
+    [1313, 3130],  # High-mid
+    [3130, 4815],  # Presence
+    [4815, 7684],  # Treble
+    [7684, 11233],  # Brilliance
+    [11233, 20000],  # Air
 ]
 
 # ponytail: escalas calibradas ouvindo musica real nessa maquina (saida Bluetooth) —

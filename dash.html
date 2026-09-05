@@ -1,13 +1,14 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>native_synth — dash</title>
+<title>PRISMA!</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <!--
   Dashboard interativo do native_synth. Serve por dash_server.py (http://127.0.0.1:8765).
   - EventSource('/events'): stream do state (~14 Hz, DASH_EVERY_N_CHUNKS no native_synth;
     SSE re-poll a 20 Hz). d.audio = dash_data.audio_dash_data(); d.image = native_synth.image_dash_data().
   - <input type=range>: potenciometro digital nativo; POST /knob reescreve tuning.py
-  - ?panel=audio | ?panel=image  -> mostra so uma secao (pras duas abas que abrem sozinhas)
+  - Uma aba so, com tabs Audio/Image no header (troca so o data-panel do body, ver CSS).
+    ?panel=audio | ?panel=image -> forca uma secao fixa, usado pelos popups (shift+click na tab).
   - live-reload: editou este arquivo -> a aba recarrega sozinha (html_mtime no stream)
   Sem framework, sem CDN — mesma pegada do webcam.html.
 -->
@@ -21,6 +22,8 @@
   header button { background: #222; color: #bbb; border: 1px solid #444; border-radius: 4px;
                   padding: 3px 8px; cursor: pointer; font: inherit; }
   header button:hover { background: #2c2c2c; color: #fff; }
+  .tabs button.active { background: #2c2c2c; color: #fff; border-color: #4a8; }
+  body.popup .tabs { display: none; }
   #rate { margin-left: auto; font-size: 11px; color: #888; }
   #conn { font-size: 11px; color: #6a6; }
   #conn.down { color: #c55; }
@@ -121,13 +124,22 @@
   .hrow.rgb { grid-template-columns: 46px 1fr 1fr 1fr; }
   .hrow .hl { text-align: right; font-size: 10px; color: #888; }
 
-  body[data-panel="audio"] #image, body[data-panel="image"] #audio { display: none; }
+  main > section { display: none; }
+  body[data-panel="audio"] #audio,
+  body[data-panel="image"] #image,
+  body[data-panel="output-image"] #output-image,
+  body[data-panel="output-lights"] #output-lights { display: block; }
+  .soon { color: #666; font-size: 12px; max-width: 46em; }
 </style>
 
 <header>
   <b>native_synth</b> dash
-  <button onclick="pop('audio')">Audio Input &#8599;</button>
-  <button onclick="pop('image')">Image Input &#8599;</button>
+  <span class="tabs" title="shift+click abre a aba num popup a parte">
+    <button class="tab" data-tab="audio" onclick="tabClick(event, 'audio')">Source Audio</button>
+    <button class="tab" data-tab="image" onclick="tabClick(event, 'image')">Source Image</button>
+    <button class="tab" data-tab="output-image" onclick="tabClick(event, 'output-image')">Output Image</button>
+    <button class="tab" data-tab="output-lights" onclick="tabClick(event, 'output-lights')">Output Lights</button>
+  </span>
   <span id="rate">— Hz</span>
   <span id="conn" class="down">offline</span>
 </header>
@@ -199,6 +211,37 @@
     <h2>Análise espacial</h2>
     <div class="hists" id="hists"></div>
   </section>
+
+  <section id="output-image">
+    <h2>Output Image &mdash; a imagem sintetizada (image.frag), como fonte</h2>
+    <label class="ovl"><input type="checkbox" id="outimg-cb"> calcular (~5x/s; lê a imagem já
+      sintetizada e roda os mesmos medidores do Source Image nela — desligado por padrão porque
+      custa GPU a mais, mesmo raro)</label>
+    <p class="note">Vai calibrar o output do mesmo jeito que Source Audio calibra o áudio hoje
+      (ranges, suavização, evitar estouro/sobreposição de cor) antes de virar controle de
+      <b>Output Lights</b>. Sem o checkbox acima ligado (e o app reiniciado desde que essa aba
+      apareceu), os números abaixo ficam zerados.</p>
+
+    <h2>Resumo</h2>
+    <div class="io">
+      dominante <span class="swatch" id="out-sw-dom"></span> <span id="out-dom-rgb">&mdash;</span>
+      &nbsp;&nbsp; média <span class="swatch" id="out-sw-mean"></span> <span id="out-mean-rgb">&mdash;</span>
+    </div>
+    <div id="out-img-meters"></div>
+    <div id="out-img-text"></div>
+
+    <h2>Onde na tela (grid 3&times;3 &mdash; mesmos medidores, por região)</h2>
+    <div class="grids" id="out-grids"></div>
+
+    <h2>Análise espacial</h2>
+    <div class="hists" id="out-hists"></div>
+  </section>
+
+  <section id="output-lights">
+    <h2>Output Lights &mdash; luzes de palco</h2>
+    <p class="soon">Ainda não implementado. Vai consumir o Output Image (e, futuramente, talvez
+      também o Source Audio direto p/ ritmo) e traduzir em DMX/luzes.</p>
+  </section>
 </main>
 
 <script>
@@ -207,11 +250,27 @@ const $ = s => document.querySelector(s);
 // volta (select-audio/video, canais, saida) — por TEMPO, nao por foco (ver comentario onde e usado)
 const TOUCH_MS = 600;
 const panel = new URLSearchParams(location.search).get('panel');
-if (panel) document.body.dataset.panel = panel;
-document.title = panel === 'image' ? 'Image Input'
-              : panel === 'audio' ? 'Audio Input'
-              : 'native_synth — dash';
+if (panel) document.body.classList.add('popup');
+const TAB_TITLES = { audio: 'Source Audio', image: 'Source Image',
+                     'output-image': 'Output Image', 'output-lights': 'Output Lights' };
+document.title = TAB_TITLES[panel] || 'PRISMA!';
 function pop(p){ window.open('?panel=' + p, p, 'width=960,height=940'); }
+// shift+click numa tab: popup a parte (janela pequena, width/height fixo).
+// ctrl/cmd+click: aba nova do navegador (sem width/height -> o navegador ja abre como aba).
+// click normal: so troca a aba nesta janela.
+function tabClick(e, p){
+  if (e.shiftKey) return pop(p);
+  if (e.ctrlKey || e.metaKey) return window.open('?panel=' + p, '_blank');
+  showTab(p);
+}
+// aba unica: alterna a secao visivel (guarda a ultima escolha p/ recarregar no mesmo lugar);
+// nos popups (?panel=), o botao de tab some via CSS e o painel fica fixo no que veio da URL.
+function showTab(p){
+  document.body.dataset.panel = p;
+  localStorage.setItem('dashPanel', p);
+  document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === p));
+}
+showTab(panel || localStorage.getItem('dashPanel') || 'audio');
 
 const fmt = v => String(parseFloat(Number(v).toFixed(4)));
 const rgbStr = a => a ? `rgb(${a[0]},${a[1]},${a[2]})` : '#888';
@@ -371,27 +430,38 @@ $('#out-w').addEventListener('change', sendOutput);
 $('#out-h').addEventListener('input', () => { outTouched = performance.now(); });
 $('#out-h').addEventListener('change', sendOutput);
 
+// ============ OUTPUT IMAGE (calculo pos-shader, ver tuning.OUT_ANALYSIS_ENABLED) ============
+let outimgTouched = 0;
+$('#outimg-cb').addEventListener('mousedown', () => { outimgTouched = performance.now(); });
+$('#outimg-cb').addEventListener('change', () => {
+  outimgTouched = performance.now();
+  fetch('/out-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: $('#outimg-cb').checked }) });
+});
+
 // ============ IMAGEM ============
-let imgEls = null;
-function buildImage(im){
+// parametrizado por prefixo de id (''  = Source Image; 'out-' = Output Image) pra nao duplicar
+// os ~120 linhas de montagem/render — imgScopes guarda os elementos ja criados de cada aba.
+const imgScopes = {};
+function buildImage(im, p){
   const M = {};
-  M.symmetry     = simpleMeter($('#img-meters'), 'simetria');
-  M.colorfulness = simpleMeter($('#img-meters'), 'coloridez');
-  M.color_change = simpleMeter($('#img-meters'), 'mud. cor');
-  M.warm         = simpleMeter($('#img-meters'), 'tom quente');
-  M.palette_level= simpleMeter($('#img-meters'), 'paleta');
+  M.symmetry     = simpleMeter($('#' + p + 'img-meters'), 'simetria');
+  M.colorfulness = simpleMeter($('#' + p + 'img-meters'), 'coloridez');
+  M.color_change = simpleMeter($('#' + p + 'img-meters'), 'mud. cor');
+  M.warm         = simpleMeter($('#' + p + 'img-meters'), 'tom quente');
+  M.palette_level= simpleMeter($('#' + p + 'img-meters'), 'paleta');
 
   const T = {};
   for (const key of ['clipping','corr','centro']){
     const d = document.createElement('div'); d.className = 'txtrow';
-    $('#img-text').appendChild(d); T[key] = d;
+    $('#' + p + 'img-text').appendChild(d); T[key] = d;
   }
 
   // 8 grids 3x3
   const G = im.grids.map(g => {
     const box = document.createElement('div'); box.className = 'gbox';
     box.innerHTML = `<div class="gh"><span>${g.name}</span><span class="gtot">0</span></div><div class="g3"></div>`;
-    $('#grids').appendChild(box);
+    $('#' + p + 'grids').appendChild(box);
     const g3 = box.querySelector('.g3');
     const cells = [];
     for (let i = 0; i < 9; i++){ const c = document.createElement('div'); g3.appendChild(c); cells.push(c); }
@@ -402,7 +472,7 @@ function buildImage(im){
   function histCol(title){
     const col = document.createElement('div'); col.className = 'hist';
     col.innerHTML = `<h4>${title}</h4>`;
-    $('#hists').appendChild(col); return col;
+    $('#' + p + 'hists').appendChild(col); return col;
   }
   function histRows(col, items, rgbClass){
     return items.map(it => {
@@ -430,55 +500,56 @@ function buildImage(im){
   const orientCol = histCol('orientação de borda');
   const orientRows = histRows(orientCol, im.edge_orient);
 
-  imgEls = { M, T, G, hueRows, brightRows, specRows, orientRows };
+  imgScopes[p] = { M, T, G, hueRows, brightRows, specRows, orientRows };
 }
-function renderImage(im){
+function renderImage(im, p=''){
   if (!im || !im.grids) return;
-  if (!imgEls) buildImage(im);
+  if (!imgScopes[p]) buildImage(im, p);
+  const els = imgScopes[p];
   const s = im.summary;
 
-  $('#sw-dom').style.background = rgbStr(im.dominant);
-  $('#dom-rgb').textContent = `RGB(${im.dominant.join(',')})`;
-  $('#sw-mean').style.background = rgbStr(s.mean_rgb);
-  $('#mean-rgb').textContent = `RGB(${s.mean_rgb.join(',')})`;
+  $('#' + p + 'sw-dom').style.background = rgbStr(im.dominant);
+  $('#' + p + 'dom-rgb').textContent = `RGB(${im.dominant.join(',')})`;
+  $('#' + p + 'sw-mean').style.background = rgbStr(s.mean_rgb);
+  $('#' + p + 'mean-rgb').textContent = `RGB(${s.mean_rgb.join(',')})`;
 
-  const M = imgEls.M;
+  const M = els.M;
   const setM = (o, v) => { o.fill.style.width = pct(v); o.val.textContent = v.toFixed(2); };
   setM(M.symmetry, s.symmetry); setM(M.colorfulness, s.colorfulness);
   setM(M.color_change, s.color_change); setM(M.warm, s.warm); setM(M.palette_level, s.palette_level);
   M.palette_level.val.textContent = (s.palette_level * 100).toFixed(1) + '%';
 
-  imgEls.T.clipping.innerHTML = `<span class="lbl">clipping</span>estourado <b>${(s.overexposed*100).toFixed(1)}%</b> &nbsp; escuro <b>${(s.underexposed*100).toFixed(1)}%</b>`;
-  imgEls.T.corr.innerHTML = `<span class="lbl">correlação</span>R↔G <b>${s.corr_rg.toFixed(2)}</b> &nbsp; R↔B <b>${s.corr_rb.toFixed(2)}</b> &nbsp; G↔B <b>${s.corr_gb.toFixed(2)}</b>`;
-  imgEls.T.centro.innerHTML = `<span class="lbl">centro</span>x <b>${s.cx.toFixed(2)}</b> &nbsp; y <b>${s.cy.toFixed(2)}</b> &nbsp; (0,0 = sup-esq) &nbsp;·&nbsp; paleta <b>${s.palette_unique}</b>/${s.palette_total}px`;
+  els.T.clipping.innerHTML = `<span class="lbl">clipping</span>estourado <b>${(s.overexposed*100).toFixed(1)}%</b> &nbsp; escuro <b>${(s.underexposed*100).toFixed(1)}%</b>`;
+  els.T.corr.innerHTML = `<span class="lbl">correlação</span>R↔G <b>${s.corr_rg.toFixed(2)}</b> &nbsp; R↔B <b>${s.corr_rb.toFixed(2)}</b> &nbsp; G↔B <b>${s.corr_gb.toFixed(2)}</b>`;
+  els.T.centro.innerHTML = `<span class="lbl">centro</span>x <b>${s.cx.toFixed(2)}</b> &nbsp; y <b>${s.cy.toFixed(2)}</b> &nbsp; (0,0 = sup-esq) &nbsp;·&nbsp; paleta <b>${s.palette_unique}</b>/${s.palette_total}px`;
 
   im.grids.forEach((g, gi) => {
-    const G = imgEls.G[gi];
+    const G = els.G[gi];
     G.tot.textContent = g.bipolar ? (g.total >= 0 ? '+' : '') + g.total.toFixed(2) : g.total.toFixed(2);
     let k = 0;
     for (const row of g.cells) for (const v of row){ G.cells[k++].style.background = cellBg(v, g.bipolar); }
   });
 
   im.hue_hist.forEach((h, i) => {
-    imgEls.hueRows[i].hl.textContent = h.deg + '°';
-    imgEls.hueRows[i].fill.style.width = pct(h.level);
-    imgEls.hueRows[i].fill.style.background = rgbStr(h.rgb);
+    els.hueRows[i].hl.textContent = h.deg + '°';
+    els.hueRows[i].fill.style.width = pct(h.level);
+    els.hueRows[i].fill.style.background = rgbStr(h.rgb);
   });
   im.bright_hist.forEach((h, i) => {
-    imgEls.brightRows[i].hl.textContent = h.gray;
-    imgEls.brightRows[i].fill.style.width = pct(h.level);
-    imgEls.brightRows[i].fill.style.background = `rgb(${h.gray},${h.gray},${h.gray})`;
+    els.brightRows[i].hl.textContent = h.gray;
+    els.brightRows[i].fill.style.width = pct(h.level);
+    els.brightRows[i].fill.style.background = `rgb(${h.gray},${h.gray},${h.gray})`;
   });
   im.color_spectrum.forEach((h, i) => {
-    imgEls.specRows[i].hl.textContent = h.radius + 'px';
-    imgEls.specRows[i].fills[0].style.width = pct(h.r);
-    imgEls.specRows[i].fills[1].style.width = pct(h.g);
-    imgEls.specRows[i].fills[2].style.width = pct(h.b);
+    els.specRows[i].hl.textContent = h.radius + 'px';
+    els.specRows[i].fills[0].style.width = pct(h.r);
+    els.specRows[i].fills[1].style.width = pct(h.g);
+    els.specRows[i].fills[2].style.width = pct(h.b);
   });
   im.edge_orient.forEach((h, i) => {
-    imgEls.orientRows[i].hl.textContent = h.deg + '°';
-    imgEls.orientRows[i].fill.style.width = pct(h.level);
-    imgEls.orientRows[i].fill.style.background = rgbStr(h.rgb);
+    els.orientRows[i].hl.textContent = h.deg + '°';
+    els.orientRows[i].fill.style.width = pct(h.level);
+    els.orientRows[i].fill.style.background = rgbStr(h.rgb);
   });
 }
 
@@ -652,6 +723,10 @@ function startDrag(thumb, i, edge){
 }
 function beginDrag(thumb, i, edge, ev, snap){
     ev.preventDefault(); thumb.setPointerCapture(ev.pointerId); dragRow = i;
+    // esconde o hover-hint: o snap chama move() direto no pointerdown, sem passar pelo
+    // pointermove do bar (que e' quem normalmente esconde o hint) — sem isso ele fica
+    // "grudado" mostrando o valor antigo em cima do label do proprio thumb.
+    rangeRows[i].bar.querySelector('.hzhint').hidden = true;
     const rect = rangeRows[i].bar.getBoundingClientRect();
     // costura "grudada" com a vizinha de cima? entao arrastar o hi leva o lo dela junto
     const linkedNext = !isOv() && edge === 'hi' && i < 7 &&
@@ -896,6 +971,8 @@ function render(d){
   renderChannels(d.channels);
   renderOutput(d.output);
   renderImage(d.image);
+  renderImage(d.out_image, 'out-');
+  if (performance.now() - outimgTouched > TOUCH_MS) $('#outimg-cb').checked = !!d.out_analysis_enabled;
 
   for (const [name, o] of Object.entries(knobEls)){
     if (name === activeKnob) continue;

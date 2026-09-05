@@ -122,6 +122,20 @@ def set_band_ranges(overlap, ranges, tuning_path=None, enabled=None):
     return out
 
 
+def set_out_analysis(enabled, tuning_path=None):
+    """Reescreve OUT_ANALYSIS_ENABLED em tuning.py — checkbox "calcular" na tab Output Image
+    (liga a leitura pos-shader pros mesmos medidores do Source Image, ver native_synth.main)."""
+    enabled = 1 if enabled else 0
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(r'(?m)^OUT_ANALYSIS_ENABLED = [01]', f'OUT_ANALYSIS_ENABLED = {enabled}', src)
+        if n != 1:
+            raise KeyError(f'tuning.py: OUT_ANALYSIS_ENABLED x{n} (esperava 1)')
+        open(path, 'w').write(src)
+    return enabled
+
+
 def set_channels(channels, tuning_path=None):
     """Reescreve o bloco CHANNELS inteiro em tuning.py. `channels`: 0.._MAX_CHAN
     {"name","src","output"} — lista de TAMANHO LIVRE (add/remove pelo dash, sem slot fixo).
@@ -151,6 +165,8 @@ def _payload():
     return {
         'audio': _state.get('audio_dash', {}),   # kick / bands / spectrum — ver dash_data.audio_dash_data
         'image': _state.get('image', {}),
+        'out_image': _state.get('out_image', {}),
+        'out_analysis_enabled': int(getattr(_tuning, 'OUT_ANALYSIS_ENABLED', 0)),
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
@@ -241,6 +257,14 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
+        if path == '/out-analysis':
+            try:
+                b = json.loads(raw.decode())
+                out = set_out_analysis(b.get('enabled'))
+                self._send(200, 'application/json', json.dumps({'enabled': out}).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
         if path == '/output':
             fn = _cfg.get('on_set_output')
             try:
@@ -297,11 +321,10 @@ def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mod
     # poll_interval curto: stop() (shutdown) volta em ~0.1s em vez de 0.5s -> hot-reload sem glitch
     threading.Thread(target=lambda: srv.serve_forever(poll_interval=0.1), daemon=True).start()
     url = f'http://127.0.0.1:{port}'
-    print(f'dash: {url}  (?panel=audio | ?panel=image)')
+    print(f'dash: {url}  (tabs Audio/Image no header, ou ?panel=audio | ?panel=image p/ popup)')
     if open_browser:
-        try:  # abre uma aba pra audio e outra pra imagem; nao-fatal se nao houver navegador
-            webbrowser.open(f'{url}/?panel=audio', new=2)
-            webbrowser.open(f'{url}/?panel=image', new=2)
+        try:  # uma aba so; audio/image trocam por tab no header (botoes de popup continuam disponiveis)
+            webbrowser.open(url, new=2)
         except webbrowser.Error:
             pass
 
@@ -361,6 +384,13 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert outc2 == [] and 'CHANNELS = [\n]' in open(p).read(), (outc2, open(p).read())
     outc3 = set_channels([{'name': 'a', 'src': '', 'output': ''}], p)  # reescreve de novo, sem sobra
     assert len(outc3) == 1, outc3
+
+    # --- toggle Output Image ---
+    open(p, 'w').write('OUT_ANALYSIS_ENABLED = 0\n')
+    assert set_out_analysis(1, p) == 1
+    assert 'OUT_ANALYSIS_ENABLED = 1' in open(p).read()
+    assert set_out_analysis(0, p) == 0
+    assert 'OUT_ANALYSIS_ENABLED = 0' in open(p).read()
 
     os.remove(p)
     print('dash_server self-check ok')

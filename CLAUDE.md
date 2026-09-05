@@ -28,8 +28,10 @@ Entender cada ferramenta isolada primeiro, comparar onde o vocabulário se repet
   do dash, sem reiniciar o processo — não é mais só via `--monitor`/`--fullscreen` na CLI
   (que continuam valendo como valor inicial). Lembra o tamanho de antes do fullscreen.
 - **Dashboard HTML** (substituiu os dashes de terminal): `dash_server.py` (HTTP+SSE stdlib) +
-  `dash_data.py` (funções puras) + `dash.html`. Abre 2 abas no navegador ("Audio Input" /
-  "Image Input"), sincronizadas ao vivo. Regula tudo ao vivo, grava em `tuning.py`: knobs,
+  `dash_data.py` (funções puras) + `dash.html`. Abre 1 aba só ("PRISMA!"), com tabs "Source Audio" /
+  "Source Image" / "Output Image" / "Output Lights" no header (troca a seção visível; as duas
+  últimas ainda placeholder); shift+click numa tab abre ela em janela própria
+  (`?panel=audio` / `?panel=image`), sincronizadas ao vivo. Regula tudo ao vivo, grava em `tuning.py`: knobs,
   ranges das 8 faixas (com toggle `BANDS_ENABLED` e overlap), canais, fonte de áudio/vídeo,
   saída de vídeo. Sincronização entre abas/janelas usa um guard por TEMPO (`TOUCH_MS` em
   `dash.html`), não por foco — foco sozinho não prova edição em andamento (um `<select>` pode

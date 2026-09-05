@@ -55,7 +55,7 @@ state = {'frame': np.zeros(FRAME_SIZE, dtype=np.uint8), 'amp': 0.0, 'bass': 0.0,
          'kick': 0.0, 'dominant': (0.5, 0.5, 0.5),
          # faixas finas de mixagem (Sub-bass..Air) — controlam u_subbass..u_air no shader
          'subbass': 0.0, 'lowmid': 0.0, 'midrange': 0.0, 'highmid': 0.0, 'presence': 0.0,
-         'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {},
+         'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {}, 'out_image': {},
          'audio_source': '', 'video': None, 'video_label': '', 'video_id': '', 'output': {},
          # canais por instrumento (ver tuning.CHANNELS) — controlam u_chan/u_chan_hit no shader
          'chan': [0.0] * MAX_CHANNELS, 'chan_hit': [0.0] * MAX_CHANNELS}
@@ -1201,6 +1201,13 @@ def main():
     t0 = time.perf_counter()
     clock = pygame.time.Clock()
     frame_n = 0
+    # estado entre throttles pro image_dash_data do OUTPUT (auto-gain/motion separados do
+    # Source Image — ver tuning.OUT_ANALYSIS_ENABLED). OUT_ANALYSIS_EVERY_N_FRAMES=6 a 30fps
+    # e' ~5Hz: de sobra pros medidores (nao precisam de mais que isso), barato o bastante pra
+    # nao derrubar o fps do glReadPixels (ele trava esperando a GPU acabar de desenhar).
+    OUT_ANALYSIS_EVERY_N_FRAMES = 6
+    out_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
+               'prev_val': [None], 'prev_mean': [None]}
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
@@ -1258,6 +1265,28 @@ def main():
 
         glClear(GL_COLOR_BUFFER_BIT)
         glDrawArrays(GL_TRIANGLES, 0, 3)
+
+        # Output Image (ver CLAUDE.md): mesmos medidores do Source Image, so que na imagem
+        # JA sintetizada — precisa ler antes do flip trocar o buffer. So' quando ligado
+        # (checkbox "calcular" na tab) e throttled, senao o glReadPixels (sincrono, espera
+        # a GPU) derruba o fps sozinho.
+        if tuning.OUT_ANALYSIS_ENABLED and frame_n % OUT_ANALYSIS_EVERY_N_FRAMES == 0:
+            out_buf = glReadPixels(0, 0, WIN_W, WIN_H, GL_RGB, GL_UNSIGNED_BYTE)
+            # OpenGL le de baixo pra cima (origem no canto inferior-esquerdo) — inverte de
+            # volta pra topo->baixo, senao os grids 3x3 (e o cy do resumo) saem de cabeca
+            # pra baixo comparado ao que a tela mostra e ao Source Image (ffmpeg, topo->baixo).
+            out_frame = np.ascontiguousarray(
+                np.frombuffer(out_buf, dtype=np.uint8).reshape(WIN_H, WIN_W, 3)[::-1]).reshape(-1)
+            arr_s = frame_downsample(out_frame, WIN_W, WIN_H)
+            if arr_s is not None:
+                hue_s, sat_s, val_s = rgb_to_hsv_np(arr_s)
+                gx_s, gy_s = gradient(val_s)
+                out_dom = dominant_color(arr_s.astype(np.uint8), arr_s.shape[1], arr_s.shape[0])
+                state['out_image'] = image_dash_data(arr_s, hue_s, sat_s, val_s, gx_s, gy_s,
+                                                      out_frame, WIN_W, WIN_H, out_dom,
+                                                      out_img['peaks'], out_img['prev_val'],
+                                                      out_img['prev_mean'])
+
         pygame.display.flip()
         clock.tick(30)
         frame_n += 1
