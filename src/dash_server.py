@@ -21,6 +21,8 @@ import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import dash_data  # parse_fx_manifest (mesma pasta src/)
+
 _HERE = os.path.dirname(os.path.abspath(__file__))          # src/
 _ROOT = os.path.dirname(_HERE)                              # raiz do repo
 _HTML = os.path.join(_ROOT, 'dash.html')
@@ -203,6 +205,18 @@ def _list_shaders(setname=None):
     return out
 
 
+def _shader_manifests(names):
+    """{caminho: [nomes do cabecalho // fx:]} — os sliders de forca de cada shader."""
+    out = {}
+    for rel in names:
+        try:
+            with open(os.path.join(_SHADERS, rel)) as f:
+                out[rel] = dash_data.parse_fx_manifest(f.read(4000))
+        except OSError:
+            out[rel] = []
+    return out
+
+
 def _all_shaders():
     """image.frag + TODOS os .frag sob presets/ (qualquer set) — pra validar set_shader."""
     out = ['image.frag'] if os.path.isfile(os.path.join(_SHADERS, 'image.frag')) else []
@@ -281,6 +295,11 @@ def delete_shader_set(name, tuning_path=None):
         _write_keys('SHADER_KEYS', keys, path)
     if _active_shader_set() == name and name != 'default':
         set_active_shader_set('default', path)
+    pre = f'presets/{name}/'
+    _remap_shader_layers({o['file']: (None if name == 'default' or
+                                      'presets/default/' + o['file'][len(pre):] not in _all_shaders()
+                                      else 'presets/default/' + o['file'][len(pre):])
+                          for o in _current_shader_layers() if o['file'].startswith(pre)}, path)
     cur = getattr(_tuning, 'SHADER', '')
     if name == 'default' and cur.startswith('presets/default/'):
         set_shader('image.frag', path)
@@ -313,6 +332,8 @@ def rename_shader(name, newname, tuning_path=None, presets_dir=None):
         if getattr(_tuning, 'SHADER', '') == name:
             set_shader(new_rel, path)
         _rekey('SHADER_KEYS', name, new_rel, path)
+        _remap_shader_layers({name: new_rel}, path)
+        _remap_scenes(shaders={name: new_rel}, tuning_path=path)
     return new_rel
 
 
@@ -330,6 +351,8 @@ def delete_shader(name, tuning_path=None, presets_dir=None):
         if getattr(_tuning, 'SHADER', '') == name:
             set_shader('image.frag', path)
         _rekey('SHADER_KEYS', name, None, path)
+        _remap_shader_layers({name: None}, path)
+        _remap_scenes(shaders={name: None}, tuning_path=path)
     return name
 
 
@@ -536,8 +559,12 @@ def set_media(items, setname=None, tuning_path=None, media_dir=None):
                       **_bounce_field(dict(m, kind=kind))})
     _write_media(keep + clean, tuning_path)
     moved = {old: m['file'] for old, m in zip([str(it.get('file', '')) for it in items], clean) if old != m['file']}
+    renamed = {cur[str(it.get('file', ''))]['name']: m['name'] for it, m in zip(items, clean)
+               if cur[str(it.get('file', ''))]['name'] != m['name']}
     if moved:
         _remap_overlays(moved, tuning_path)
+    if moved or renamed:
+        _remap_scenes(files=moved, names=renamed, tuning_path=tuning_path)
     return [dict(m, set=setname) for m in clean]
 
 
@@ -584,6 +611,7 @@ def delete_media(name, setname=None, tuning_path=None, media_dir=None):
         os.remove(fpath)
     _rekey('MEDIA_KEYS', name, None, path)
     _remap_overlays({hit['file']: None}, path)
+    _remap_scenes(files={hit['file']: None}, names={name: None}, tuning_path=path)
     fn = _cfg.get('on_set_input')
     if fn and (_state.get('video') or {}).get('mode') == 'media' \
             and (_state.get('video') or {}).get('name') == name:
@@ -595,6 +623,11 @@ def delete_media(name, setname=None, tuning_path=None, media_dir=None):
 # Ordem = de baixo pra cima, na ordem em que foram marcadas (a ultima marcada fica por cima).
 # Vivo em _state['overlays'] (o native_synth compoe por frame em cima da fonte atual); gravado
 # em tuning.OVERLAYS so quando save=True (soltar o slider / marcar/desmarcar) — igual o FX.
+# modos de mistura das camadas de SHADER (camada de midia ignora). A ordem e' o indice que o
+# native_synth passa pro shader de mistura (u_mode) — nao reordenar.
+LAYER_BLENDS = ['normal', 'soma', 'tela', 'multiplicar', 'clarear']
+
+
 def _norm_overlays(items):
     out, seen = [], set()
     for it in items or []:
@@ -602,43 +635,516 @@ def _norm_overlays(items):
         if not f or '..' in f or f in seen:
             continue
         seen.add(f)
-        out.append({'file': f, 'opacity': round(max(0.0, min(1.0, float(it.get('opacity', 1.0)))), 3)})
+        o = {'file': f, 'opacity': round(max(0.0, min(1.0, float(it.get('opacity', 1.0)))), 3)}
+        if it.get('blend') in LAYER_BLENDS[1:]:   # 'normal' (padrao) nao vai pro tuning.py
+            o['blend'] = it['blend']
+        out.append(o)
     return out
 
 
-def set_overlays(items, save=False, tuning_path=None):
-    """Aplica a lista de camadas ao vivo; save=True tambem reescreve o bloco OVERLAYS do
-    tuning.py (acrescenta no fim se o tuning.py e antigo e ainda nao tem o bloco)."""
+def _set_layers(key, var, items, save, tuning_path, comment):
+    """Mecanica comum das camadas (midia e shader): _state[key] ao vivo; save=True reescreve o
+    bloco `var = [...]` do tuning.py (acrescenta no fim se o tuning.py ainda nao tem o bloco)."""
     clean = _norm_overlays(items)
     if _state is not None:
-        _state['overlays'] = clean
+        _state[key] = clean
     if save:
         body = '\n'.join('    ' + json.dumps(o) + ',' for o in clean)
-        block = f'OVERLAYS = [\n{body}\n]' if clean else 'OVERLAYS = [\n]'
+        block = f'{var} = [\n{body}\n]' if clean else f'{var} = [\n]'
         path = tuning_path or _cfg['tuning_path']
         with _knob_lock:
             src = open(path).read()
-            src, n = re.subn(r'(?ms)^OVERLAYS = \[.*?^\]', block, src)
+            src, n = re.subn(rf'(?ms)^{var} = \[.*?^\]', block, src)
             if n == 0:
-                src = src.rstrip('\n') + '\n\n# camadas de midia por cima da fonte (dash, aba Visuals)\n' + block + '\n'
+                src = src.rstrip('\n') + f'\n\n# {comment}\n' + block + '\n'
             open(path, 'w').write(src)
         if _tuning is not None:
-            _tuning.OVERLAYS = [dict(o) for o in clean]
+            setattr(_tuning, var, [dict(o) for o in clean])
     return clean
 
 
-def _current_overlays():
-    ov = _state.get('overlays') if _state is not None else None
-    return list(ov) if ov is not None else _norm_overlays(getattr(_tuning, 'OVERLAYS', []))
+def _current_layers(key, var):
+    ov = _state.get(key) if _state is not None else None
+    return list(ov) if ov is not None else _norm_overlays(getattr(_tuning, var, []))
 
 
-def _remap_overlays(mapping, tuning_path=None):
+def _remap_layers(key, var, setter, mapping, tuning_path=None):
     """{file_antigo: file_novo | None} -> atualiza as camadas (renomear move, apagar tira)."""
-    cur = _current_overlays()
+    cur = _current_layers(key, var)
     if not any(o['file'] in mapping for o in cur):
         return
     new = [dict(o, file=mapping[o['file']]) if o['file'] in mapping else o for o in cur]
-    set_overlays([o for o in new if o['file']], save=True, tuning_path=tuning_path)
+    setter([o for o in new if o['file']], save=True, tuning_path=tuning_path)
+
+
+def set_overlays(items, save=False, tuning_path=None):
+    return _set_layers('overlays', 'OVERLAYS', items, save, tuning_path,
+                       'camadas de midia por cima da fonte (dash, aba Visuals)')
+
+
+def _current_overlays():
+    return _current_layers('overlays', 'OVERLAYS')
+
+
+def _remap_overlays(mapping, tuning_path=None):
+    _remap_layers('overlays', 'OVERLAYS', set_overlays, mapping, tuning_path)
+
+
+# ---------------- camadas de SHADER: SHADER_LAYERS = [{file, opacity}] ----------------
+# Mesmo esquema das camadas de midia, so que `file` e' um caminho de shader (igual SHADER:
+# 'image.frag' | 'presets/<set>/x.frag'). O native_synth desenha o SHADER ativo e depois cada
+# camada, com a MESMA imagem de entrada e os mesmos uniforms, por cima (alpha = opacidade).
+def set_shader_layers(items, save=False, tuning_path=None):
+    return _set_layers('shader_layers', 'SHADER_LAYERS', items, save, tuning_path,
+                       'camadas de shader por cima do shader ativo (dash, aba Visuals)')
+
+
+def _current_shader_layers():
+    return _current_layers('shader_layers', 'SHADER_LAYERS')
+
+
+def _remap_shader_layers(mapping, tuning_path=None):
+    _remap_layers('shader_layers', 'SHADER_LAYERS', set_shader_layers, mapping, tuning_path)
+
+
+# ---------------- LIGAÇÕES fonte -> shaders: BINDINGS = {fonte: {shaders, fx}} ----------------
+# A saida e' SO o que esta marcado em OVERLAYS (fontes vivas + midias, de baixo pra cima). Cada
+# fonte passa pela SUA pilha: BINDINGS[fonte]['shaders'] = [{file, opacity, blend?}] (mesmo
+# formato das camadas; ordem = de baixo pra cima) e BINDINGS[fonte]['fx'] = {shader: {nome: 0..1}}
+# (forca de cada efeito DAQUELE shader NAQUELA fonte). Chave da fonte = a mesma de OVERLAYS:
+# 'webcam:/dev/videoN' | 'screen:<monitor>' | arquivo de midia ('default/x.mp4'). Fica lembrado
+# mesmo com a fonte desmarcada. Vivo em _state['bindings'].
+def _norm_bindings(b):
+    out = {}
+    for key, v in dict(b or {}).items():
+        key = str(key).replace('\\', '/').lstrip('/')
+        if not key or '..' in key or not isinstance(v, dict):
+            continue
+        fx = {}
+        for sh, lv in dict(v.get('fx') or {}).items():
+            if '..' in str(sh) or not isinstance(lv, dict):
+                continue
+            fx[str(sh)] = {str(n): round(max(0.0, min(1.0, float(x))), 4) for n, x in lv.items()}
+        out[key] = {'shaders': _norm_overlays(v.get('shaders')), 'fx': fx}
+    return out
+
+
+def set_bindings(b, save=False, tuning_path=None):
+    """Aplica as ligacoes ao vivo; save=True reescreve o bloco BINDINGS (acrescenta se nao tem)."""
+    clean = _norm_bindings(b)
+    if _state is not None:
+        _state['bindings'] = clean
+    if save:
+        body = '\n'.join(f'    {json.dumps(k, ensure_ascii=False)}: {json.dumps(v, ensure_ascii=False)},'
+                         for k, v in clean.items())
+        block = f'BINDINGS = {{\n{body}\n}}' if clean else 'BINDINGS = {\n}'
+        path = tuning_path or _cfg['tuning_path']
+        with _knob_lock:
+            src = open(path).read()
+            src, n = re.subn(r'(?ms)^BINDINGS = \{.*?^\}', lambda _: block, src)
+            if n == 0:
+                src = src.rstrip('\n') + ('\n\n# fonte/midia -> shaders dela (+ forca dos efeitos), dash aba'
+                                          ' Visuals > Sets\n') + block + '\n'
+            open(path, 'w').write(src)
+        if _tuning is not None:
+            _tuning.BINDINGS = json.loads(json.dumps(clean))
+    return clean
+
+
+def _current_bindings():
+    b = _state.get('bindings') if _state is not None else None
+    return json.loads(json.dumps(b)) if b is not None else _norm_bindings(getattr(_tuning, 'BINDINGS', {}))
+
+
+def _remap_bindings(bindings, files=None, shaders=None):
+    """Renomear/apagar na Biblioteca dentro de um dict de ligacoes (devolve um novo)."""
+    files, shaders = files or {}, shaders or {}
+    out = {}
+    for key, v in bindings.items():
+        nk = files.get(key, key)
+        if not nk:
+            continue
+        out[nk] = {'shaders': [dict(o, file=shaders[o['file']]) if o['file'] in shaders else o
+                               for o in v.get('shaders', []) if shaders.get(o['file'], 1)],
+                   'fx': {shaders.get(sh, sh): lv for sh, lv in v.get('fx', {}).items() if shaders.get(sh, 1)}}
+    return out
+
+
+def _remap_live_bindings(files=None, shaders=None, tuning_path=None):
+    cur = _current_bindings()
+    new = _remap_bindings(cur, files, shaders)
+    if new != cur:
+        set_bindings(new, save=True, tuning_path=tuning_path)
+
+
+def _media_by(field, value):
+    return next((m for m in getattr(_tuning, 'MEDIA', []) if m.get(field) == value), None)
+
+
+def _source_key_of_input(ident):
+    """id de /input ('media:<nome>' | 'webcam:..' | 'screen:..') -> chave de fonte (OVERLAYS)."""
+    ident = str(ident or '')
+    if ident.startswith('media:'):
+        m = _media_by('name', ident[6:])
+        return m['file'] if m else ''
+    return '' if ident == 'media' else ident
+
+
+def _input_of_source_key(key):
+    """chave de fonte -> id de /input (pra a captura/analise seguir a fonte SELECIONADA)."""
+    key = str(key or '')
+    if key.startswith(('webcam:', 'screen:')) or not key:
+        return key
+    m = _media_by('file', key)
+    return 'media:' + m['name'] if m else ''
+
+
+def _current_selected():
+    """fonte SELECIONADA (a que a lista de efeitos mostra; nao mexe na saida)."""
+    sel = (_state or {}).get('selected')
+    if sel:
+        return sel
+    v = (_state or {}).get('video') or {}
+    if v.get('mode') == 'media' and v.get('name'):
+        return _source_key_of_input('media:' + v['name'])
+    return (_state or {}).get('video_id', '') or ''
+
+
+def set_source_fit(key, fit, tuning_path=None):
+    """preencher ('fill' = estica pra cobrir a saida) / encaixar ('fit' = inteira, com margens) de
+    uma CAMERA/TELA -> bloco SOURCE_FIT (so guarda os 'fit'; ausente = 'fill'). Midia guarda o
+    dela no item de MEDIA (POST /media). Vale em todos os sets, igual o da midia."""
+    key = str(key or '')
+    if not key.startswith(('webcam:', 'screen:')):
+        raise ValueError(f'nao e camera/tela: {key!r}')
+    cur = dict(getattr(_tuning, 'SOURCE_FIT', None) or {})
+    if fit == 'fit':
+        cur[key] = 'fit'
+    else:
+        cur.pop(key, None)
+    body = '\n'.join(f'    {json.dumps(k)}: "fit",' for k in sorted(cur))
+    block = f'SOURCE_FIT = {{\n{body}\n}}' if cur else 'SOURCE_FIT = {\n}'
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(r'(?ms)^SOURCE_FIT = \{.*?^\}', lambda _: block, src)
+        if n == 0:
+            src = src.rstrip('\n') + ('\n\n# camera/tela: "fit" = encaixa com margens (ausente = estica pra'
+                                      ' preencher), dash aba Visuals > Sets\n') + block + '\n'
+        open(path, 'w').write(src)
+    if _tuning is not None:
+        _tuning.SOURCE_FIT = cur
+    fn = _cfg.get('on_set_input')     # a capturada (selecionada) respawna com o -vf novo
+    if fn and (_state or {}).get('video_id') == key:
+        fn('video', key)
+    return 'fit' if fit == 'fit' else 'fill'
+
+
+def select_source(key):
+    """Seleciona a fonte (clique no nome): a lista de efeitos passa a ser a dela, e a captura/
+    analise (aba Source Image) segue ela. NAO muda a saida — so o que esta marcado conta."""
+    key = str(key or '')
+    ident = _input_of_source_key(key)
+    if not ident:
+        raise ValueError(f'fonte desconhecida: {key!r}')
+    if _state is not None:
+        _state['selected'] = key
+    fn = _cfg.get('on_set_input')
+    if fn:
+        fn('video', ident)
+    return key
+
+
+# ---------------- DISPONÍVEIS por set: pool = {'sources': [...], 'shaders': [...]} ----------------
+# Quais fontes/midias e quais shaders o set ATIVO oferece. Lista ausente = TUDO (set antigo, ou
+# nunca editado). Tirar do set esconde do editor E da saida (o native filtra), mas as ligacoes
+# (BINDINGS) e a marcacao (OVERLAYS) ficam lembradas — voltar ao set traz como estava. Vivo em
+# _state['pool'] (o apply_scene poe o do set); gravado so dentro do set (campo 'pool').
+def _norm_pool(p):
+    if not isinstance(p, dict):
+        return None
+    out = {}
+    for k in ('sources', 'shaders'):
+        if isinstance(p.get(k), list):
+            seen = []
+            for x in p[k]:
+                x = str(x or '')
+                if x and '..' not in x and x not in seen:
+                    seen.append(x)
+            out[k] = seen
+    return out or None
+
+
+def _current_pool():
+    return _norm_pool((_state or {}).get('pool'))
+
+
+def set_pool(pool):
+    """Troca o que o set ativo oferece (o dash manda a lista explicita inteira) e auto-salva."""
+    if _state is not None:
+        _state['pool'] = _norm_pool(pool)
+    save_active_scene()
+    return _current_pool()
+
+
+def _pool_add(kind, key):
+    """Arquivo NOVO na Biblioteca (upload / + criar .frag) entra no set ativo, se a lista dele e'
+    explicita (lista ausente = tudo, ja entra)."""
+    pool = _current_pool()
+    if pool and kind in pool and key not in pool[kind]:
+        pool[kind].append(key)
+        set_pool(pool)
+
+
+def _remap_pool(pool, files=None, shaders=None):
+    if not pool:
+        return pool
+    files, shaders = files or {}, shaders or {}
+    out = dict(pool)
+    if 'sources' in out:
+        out['sources'] = [files.get(k, k) for k in out['sources'] if files.get(k, k)]
+    if 'shaders' in out:
+        out['shaders'] = [shaders.get(k, k) for k in out['shaders'] if shaders.get(k, k)]
+    return out
+
+
+# ---------------- SETS (cenas): SCENES = [{...}], SCENE = "<nome do ativo>" ----------------
+# Um set guarda TUDO que o Visuals mostra: 'sources' (as fontes/midias MARCADAS = a saida, igual
+# OVERLAYS), 'bindings' (os shaders + forcas de cada fonte, igual BINDINGS) e 'selected' (a fonte
+# selecionada na lista). O set ATIVO e' o estado ao vivo: toda edicao auto-salva nele
+# (save_active_scene). Set no formato antigo (fonte principal + shader global) e' convertido na
+# leitura (_upgrade_scene). Trocar de set = apply_scene (o native_synth
+# chama no fim de um frame, pra capturar a imagem que sai e rodar a transicao de ENTRADA do set
+# — campo 'transition': '' = TRANSITION_DEFAULT, 'none' = corte seco, '<x>.glsl').
+# Tecla (campo 'key') troca de set na janela do native_synth ou no dash.
+_applying = [False]   # dentro do apply_scene: os setters nao auto-salvam (o set ja e' a fonte)
+
+
+def _upgrade_scene(sc):
+    """Formato antigo -> novo: a fonte principal vira uma fonte MARCADA (embaixo, 100%) e a pilha
+    antiga (shader principal + camadas de shader, com o FX global) vira a pilha de CADA fonte
+    marcada — o visual fica o mais proximo possivel do que era."""
+    if 'sources' in sc:
+        return sc
+    sources = _norm_overlays(sc.get('overlays'))
+    main = _source_key_of_input(sc.get('video', ''))
+    if main and not any(o['file'] == main for o in sources):
+        sources.insert(0, {'file': main, 'opacity': 1.0})
+    stack = ([{'file': sc['shader'], 'opacity': 1.0}] if sc.get('shader') else []) + \
+        _norm_overlays(sc.get('shader_layers'))
+    fx = {o['file']: dict(sc.get('fx') or {}) for o in stack} if sc.get('fx') else {}
+    return {'name': sc.get('name', ''), 'key': sc.get('key', ''), 'transition': sc.get('transition', ''),
+            'selected': main or (sources[0]['file'] if sources else ''), 'sources': sources,
+            'bindings': _norm_bindings({o['file']: {'shaders': stack, 'fx': fx} for o in sources})}
+
+
+def _read_scenes():
+    return [_upgrade_scene(dict(sc)) for sc in (getattr(_tuning, 'SCENES', None) or [])]
+
+
+def _active_scene_name():
+    return str(getattr(_tuning, 'SCENE', '') or '')
+
+
+def _write_scenes(scenes, active=None, tuning_path=None):
+    """Reescreve SCENES (e SCENE se `active`); acrescenta os blocos se o tuning.py e' antigo.
+    json.dumps serve de literal Python aqui: set so tem str/numero/lista/dict (sem bool/None)."""
+    body = '\n'.join('    ' + json.dumps(sc, ensure_ascii=False) + ',' for sc in scenes)
+    block = f'SCENES = [\n{body}\n]' if scenes else 'SCENES = [\n]'
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(r'(?ms)^SCENES = \[.*?^\]', lambda _: block, src)
+        if n == 0:
+            src = src.rstrip('\n') + ('\n\n# SETS (cenas) da aba Visuals: fonte + camadas + shader + camadas'
+                                      ' de shader + forca dos efeitos (dash, sub-aba Sets)\n') + block + '\n'
+        if active is not None:
+            line = f'SCENE = {json.dumps(active, ensure_ascii=False)}'
+            src, n = re.subn(r'(?m)^SCENE = .*$', lambda _: line, src)
+            if n == 0:
+                src = src.rstrip('\n') + '\n' + line + '\n'
+        open(path, 'w').write(src)
+    if _tuning is not None:
+        _tuning.SCENES = [dict(sc) for sc in scenes]
+        if active is not None:
+            _tuning.SCENE = active
+    return scenes
+
+
+def scene_capture():
+    """O estado ao vivo, nos campos de um set ('pool' None = tudo disponivel -> campo some)."""
+    return {'selected': _current_selected(), 'sources': _current_overlays(), 'bindings': _current_bindings(),
+            'pool': _current_pool()}
+
+
+def _scene_with(sc, cap):
+    """sc atualizado com o capturado; campo None sai (json 'null' nao e' Python no tuning.py)."""
+    new = dict(sc, **cap)
+    return {k: v for k, v in new.items() if v is not None}
+
+
+def save_active_scene(tuning_path=None):
+    """Auto-save: copia o estado ao vivo pro set ativo (chamado depois de cada edicao)."""
+    if _applying[0] or _tuning is None or _state is None:
+        return
+    name = _active_scene_name()
+    scenes = _read_scenes()
+    for sc in scenes:
+        if sc.get('name') == name:
+            new = _scene_with(sc, scene_capture())
+            if new != sc:
+                sc.update(new)
+                _write_scenes(scenes, tuning_path=tuning_path)
+            return
+
+
+def _find_scene(name, scenes=None):
+    sc = next((x for x in (scenes if scenes is not None else _read_scenes()) if x.get('name') == name), None)
+    if sc is None:
+        raise ValueError(f'set desconhecido: {name!r}')
+    return sc
+
+
+def apply_scene(name, tuning_path=None):
+    """Carrega o set `name` no estado ao vivo e marca como ativo. Devolve o set."""
+    scenes = _read_scenes()
+    sc = _find_scene(name, scenes)
+    path = tuning_path or _cfg['tuning_path']
+    _applying[0] = True
+    try:
+        _write_scenes(scenes, active=name, tuning_path=path)
+        if _state is not None:
+            _state['pool'] = _norm_pool(sc.get('pool'))
+        set_overlays(sc.get('sources') or [], save=True, tuning_path=path)
+        set_bindings(sc.get('bindings') or {}, save=True, tuning_path=path)
+        if sc.get('selected'):
+            try:
+                select_source(sc['selected'])
+            except ValueError:
+                pass                                    # fonte sumiu (camera desplugada, midia apagada)
+    finally:
+        _applying[0] = False
+    return sc
+
+
+def request_scene(name):
+    """Pedido de troca vindo do dash / tecla: valida e deixa pro loop GL aplicar no fim do
+    frame (ele captura a imagem que sai pra transicao). Sem loop GL (testes): aplica direto."""
+    _find_scene(name)
+    if _state is not None and _state.get('gl_running'):
+        _state['scene_pending'] = {'name': name, 'transition': True}
+    else:
+        apply_scene(name)
+    return name
+
+
+def create_scene(name, tuning_path=None):
+    """Set novo = copia do estado ao vivo; vira o ativo (sem transicao: a imagem e' a mesma)."""
+    name = str(name).strip()
+    if not name:
+        raise ValueError('nome vazio')
+    scenes = _read_scenes()
+    if any(sc.get('name') == name for sc in scenes):
+        raise ValueError(f'set ja existe: {name}')
+    scenes.append(_scene_with({'name': name, 'key': '', 'transition': ''}, scene_capture()))
+    _write_scenes(scenes, active=name, tuning_path=tuning_path)
+    return name
+
+
+def rename_scene(name, newname, tuning_path=None):
+    newname = str(newname).strip()
+    scenes = _read_scenes()
+    sc = _find_scene(name, scenes)
+    if not newname:
+        raise ValueError('nome vazio')
+    if newname != name and any(x.get('name') == newname for x in scenes):
+        raise ValueError(f'set ja existe: {newname}')
+    sc['name'] = newname
+    active = newname if _active_scene_name() == name else None
+    _write_scenes(scenes, active=active, tuning_path=tuning_path)
+    return newname
+
+
+def delete_scene(name, tuning_path=None):
+    """Apaga um set (tem que sobrar pelo menos 1). Se era o ativo, vai pro primeiro que sobrou."""
+    scenes = _read_scenes()
+    _find_scene(name, scenes)
+    if len(scenes) <= 1:
+        raise ValueError('precisa sobrar pelo menos um set')
+    scenes = [x for x in scenes if x.get('name') != name]
+    was_active = _active_scene_name() == name
+    _write_scenes(scenes, tuning_path=tuning_path)
+    if was_active:
+        request_scene(scenes[0]['name'])
+    return name
+
+
+def set_scene_key(name, key, tuning_path=None):
+    """Tecla (a-z/0-9) do set; '' desvincula. Tecla e' unica: sai de outro set que a tinha."""
+    key = str(key or '').lower()
+    if key and not re.fullmatch(r'[a-z0-9]', key):
+        raise ValueError(f'tecla invalida: {key!r}')
+    scenes = _read_scenes()
+    sc = _find_scene(name, scenes)
+    for x in scenes:
+        if key and x.get('key') == key:
+            x['key'] = ''
+    sc['key'] = key
+    _write_scenes(scenes, tuning_path=tuning_path)
+    return key
+
+
+def set_scene_transition(name, tn, tuning_path=None):
+    """Transicao de ENTRADA do set: '' (padrao), 'none' (corte seco) ou um .glsl existente."""
+    tn = str(tn or '')
+    if tn not in ('', 'none') and tn not in _list_transitions():
+        raise ValueError(f'transicao desconhecida: {tn!r}')
+    scenes = _read_scenes()
+    _find_scene(name, scenes)['transition'] = tn
+    _write_scenes(scenes, tuning_path=tuning_path)
+    return tn
+
+
+def scene_transition_name(name):
+    """Nome do .glsl de entrada do set (resolvendo o padrao), ou 'none'."""
+    try:
+        tn = str(_find_scene(name).get('transition', '') or '')
+    except ValueError:
+        return 'none'
+    return tn or str(getattr(_tuning, 'TRANSITION_DEFAULT', 'none') or 'none')
+
+
+def _remap_scenes(files=None, shaders=None, names=None, trans=None, tuning_path=None):
+    """Renomear/apagar na Biblioteca -> atualiza as referencias em TODOS os sets e nas ligacoes
+    vivas. files: {file de midia: novo | None}; shaders: {caminho: novo | None};
+    trans: {x.glsl: novo | ''}. (`names` sobrou do formato antigo: midia agora e' chave por file.)"""
+    files, shaders, trans = files or {}, shaders or {}, trans or {}
+    if files or shaders:
+        _remap_live_bindings(files, shaders, tuning_path)
+        if _state is not None and _state.get('pool'):
+            _state['pool'] = _remap_pool(_state['pool'], files, shaders)
+    scenes = _read_scenes()
+    changed = False
+    for sc in scenes:
+        before = json.dumps(sc, sort_keys=True)
+        sc['sources'] = [dict(o, file=files[o['file']]) if o.get('file') in files else o
+                         for o in sc.get('sources') or [] if files.get(o.get('file'), 1)]
+        sc['bindings'] = _remap_bindings(sc.get('bindings') or {}, files, shaders)
+        if sc.get('pool'):
+            sc['pool'] = _remap_pool(sc['pool'], files, shaders)
+        if sc.get('selected') in files:
+            sc['selected'] = files[sc['selected']] or ''
+        if sc.get('transition') in trans:
+            sc['transition'] = trans[sc['transition']]
+        changed |= json.dumps(sc, sort_keys=True) != before
+    if changed:
+        _write_scenes(scenes, tuning_path=tuning_path)
+
+
+def _scenes_payload():
+    return {'list': [{'name': sc.get('name', ''), 'key': sc.get('key', ''),
+                      'transition': sc.get('transition', '')} for sc in _read_scenes()],
+            'active': _active_scene_name()}
 
 
 def set_active_media_set(name, tuning_path=None, media_dir=None):
@@ -788,8 +1294,9 @@ def delete_transition(name, tuning_path=None, trans_dir=None):
 
 
 def _rename_transition_refs(old, new, tuning_path=None):
-    """Troca `old` por `new` em TRANSITION_DEFAULT e nos itens de MEDIA (apagar -> '')."""
+    """Troca `old` por `new` em TRANSITION_DEFAULT, nos itens de MEDIA e nos sets (apagar -> '')."""
     path = tuning_path or _cfg['tuning_path']
+    _remap_scenes(trans={old: new}, tuning_path=path)
     if str(getattr(_tuning, 'TRANSITION_DEFAULT', '')) == old:
         set_transition_default(new or 'none', path)
     media = [dict(m) for m in getattr(_tuning, 'MEDIA', [])]
@@ -924,18 +1431,17 @@ def _payload():
             'levels': [round(v, 3) for v in _state.get('chan', [])[:len(getattr(_tuning, 'CHANNELS', []))]],
             'hits': [round(v, 3) for v in _state.get('chan_hit', [])[:len(getattr(_tuning, 'CHANNELS', []))]],
         },
-        # potenciometros de efeito (aba Efeitos): manifest = nomes do shader ativo,
-        # levels = valor 0..1 ao vivo por nome, saved = o que esta gravado em tuning.FX.
-        'shader': getattr(_tuning, 'SHADER', 'image.frag'),
-        'fx': {'manifest': _state.get('fx_manifest', []),
-               'levels': {k: round(v, 4) for k, v in _state.get('fx', {}).items()},
-               'saved': dict(getattr(_tuning, 'FX', {}))},
         # galeria de midia (aba Visuals): so o item ATIVO vai no stream (pro highlight seguir
         # tecla/dropdown); a lista em si o dash busca em /media (init + apos cada edicao) — assim
         # o objeto que um <input> de renomear referencia nao e trocado embaixo dele a 20 Hz.
         'media_active': _media_active_name(),
         # videos com rebate sendo pre-renderizados agora (file relativo a media/, igual MEDIA)
         'overlays': _current_overlays(),   # camadas vivas (sincroniza abas/janelas do dash)
+        'bindings': _current_bindings(),  # shaders + forcas por fonte (sincroniza abas do dash)
+        'selected': _current_selected(),  # fonte selecionada (lista de efeitos mostra a dela)
+        'source_fit': dict(getattr(_tuning, 'SOURCE_FIT', None) or {}),   # camera/tela em 'fit'
+        'pool': _current_pool(),          # disponiveis no set ativo (None = tudo)
+        'scene': _active_scene_name(),   # set ativo (a lista vem de /scenes)
         'bounce_busy': [os.path.relpath(p, _media_dir()).replace(os.sep, '/')
                         for p in _state.get('bounce_busy', [])],
         'html_mtime': os.path.getmtime(_HTML),   # cliente recarrega a aba quando muda
@@ -977,7 +1483,7 @@ class _Handler(BaseHTTPRequestHandler):
         elif path == '/shaders':  # glob aqui, nao no _payload de 20 Hz (igual /inputs)
             s = _active_shader_set()
             self._send(200, 'application/json', json.dumps(
-                {'list': _list_shaders(s), 'current': getattr(_tuning, 'SHADER', 'image.frag'),
+                {'list': _list_shaders(s), 'manifests': _shader_manifests(_list_shaders(s)),
                  'keys': _read_keys_for('SHADER_KEYS', s),
                  'set': s, 'sets': _list_shader_sets()}).encode())
         elif path == '/media':
@@ -988,6 +1494,8 @@ class _Handler(BaseHTTPRequestHandler):
                  'set': s, 'sets': _list_media_sets()}).encode())
         elif path == '/transitions':
             self._send(200, 'application/json', json.dumps(_transitions_payload()).encode())
+        elif path == '/scenes':
+            self._send(200, 'application/json', json.dumps(_scenes_payload()).encode())
         elif path == '/events':
             self._sse()
         else:
@@ -1039,18 +1547,11 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
-        if path == '/shader':
-            try:
-                b = json.loads(raw.decode())
-                out = set_shader(b['name'])
-                self._send(200, 'application/json', json.dumps({'shader': out}).encode())
-            except (KeyError, ValueError, TypeError) as e:
-                self._send(400, 'text/plain', str(e).encode())
-            return
         if path == '/new-shader':
             try:
                 b = json.loads(raw.decode())
                 rel = new_shader(b['name'])
+                _pool_add('shaders', rel)
                 self._send(200, 'application/json', json.dumps({'shader': rel}).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
@@ -1127,6 +1628,7 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 q = urllib.parse.parse_qs(self.path.partition('?')[2])
                 entry = add_media(q.get('name', [''])[0], data=raw)
+                _pool_add('sources', entry['file'])
                 self._send(200, 'application/json', json.dumps(entry).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
@@ -1151,16 +1653,61 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 b = json.loads(raw.decode())
                 out = set_overlays(b['overlays'], save=bool(b.get('save')))
+                if b.get('save'):
+                    save_active_scene()
                 self._send(200, 'application/json', json.dumps(out).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
-        if path == '/fx':
+        if path in ('/scene', '/scene-new', '/scene-rename', '/scene-del', '/scene-key', '/scene-transition'):
             try:
                 b = json.loads(raw.decode())
-                out = set_fx(b['fx'])
-                _state.setdefault('fx', {}).update(out)  # aplica ja, sem esperar o reload do tuning.py
+                if path == '/scene':
+                    request_scene(b['name'])
+                elif path == '/scene-new':
+                    create_scene(b['name'])
+                elif path == '/scene-rename':
+                    rename_scene(b['name'], b['newname'])
+                elif path == '/scene-del':
+                    delete_scene(b['name'])
+                elif path == '/scene-key':
+                    set_scene_key(b['name'], b.get('key', ''))
+                else:
+                    set_scene_transition(b['name'], b.get('transition', ''))
+                self._send(200, 'application/json', json.dumps(_scenes_payload()).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/bindings':  # {bindings: {fonte: {shaders, fx}}, save: bool} — igual /overlays
+            try:
+                b = json.loads(raw.decode())
+                out = set_bindings(b['bindings'], save=bool(b.get('save')))
+                if b.get('save'):
+                    save_active_scene()
                 self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/pool':  # {pool: {sources?: [...], shaders?: [...]}} — disponiveis no set ativo
+            try:
+                out = set_pool(json.loads(raw.decode())['pool'])
+                self._send(200, 'application/json', json.dumps({'pool': out}).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/source-fit':  # {src: 'webcam:..' | 'screen:..', fit: 'fill' | 'fit'}
+            try:
+                b = json.loads(raw.decode())
+                out = set_source_fit(b['src'], b.get('fit'))
+                self._send(200, 'application/json', json.dumps({'fit': out}).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/select':  # {src: chave da fonte} — so a selecao (lista de efeitos + captura)
+            try:
+                out = select_source(json.loads(raw.decode())['src'])
+                save_active_scene()
+                self._send(200, 'application/json', json.dumps({'selected': out}).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
@@ -1244,6 +1791,102 @@ def _migrate_default_to_folder(tuning_path=None):
         _write_media(media, path)
 
 
+def _migrate_to_scenes(tuning_path=None, media_dir=None, shaders_dir=None):
+    """One-shot (roda se o tuning.py ainda nao tem SCENES): 'set' deixou de ser PASTA e virou
+    CENA. 1) junta as pastas media/<x>/ e presets/<x>/ na default (Biblioteca unica; mesmo nome
+    de arquivo = mesmo item, fica 1; .frag de mesmo nome com outro conteudo ganha sufixo -<x>) e
+    reescreve MEDIA / SHADER / camadas; 2) cria os sets: 'default' = estado atual e um set por
+    pasta de midia antiga (fonte = a midia tocando se era dela, senao a 1a dela)."""
+    if _tuning is None or hasattr(_tuning, 'SCENES'):
+        return
+    path = tuning_path or _cfg['tuning_path']
+    md = _media_dir(media_dir)
+    sh = shaders_dir or _SHADERS
+    was_set = getattr(_tuning, 'MEDIA_SET', 'default')   # antes de voltar pro 'default' la embaixo
+    # --- midia
+    folders = sorted(d for d in os.listdir(md) if os.path.isdir(os.path.join(md, d)) and d != 'default') \
+        if os.path.isdir(md) else []
+    os.makedirs(os.path.join(md, 'default'), exist_ok=True)
+    fmap = {}                                       # file antigo -> file novo
+    for d in folders:
+        for f in sorted(os.listdir(os.path.join(md, d))):
+            src = os.path.join(md, d, f)
+            if not os.path.isfile(src):
+                continue
+            dest = os.path.join(md, 'default', f)
+            os.remove(src) if os.path.exists(dest) else os.rename(src, dest)
+            fmap[f'{d}/{f}'] = f'default/{f}'
+        shutil.rmtree(os.path.join(md, d), ignore_errors=True)
+    old_media = [dict(m) for m in getattr(_tuning, 'MEDIA', [])]
+    new_media, by_file, nmap, taken = [], {}, {}, set()
+    folder_first = {}                               # pasta antiga -> nome (novo) da 1a midia dela
+    for m in old_media:
+        f = str(m.get('file', '')).replace('\\', '/').lstrip('/')
+        nf = fmap.get(f, f)
+        folder = f.split('/')[0] if '/' in f else 'default'
+        if nf in by_file:                           # duplicata: vira o item que ja existe
+            nmap[m.get('name', '')] = by_file[nf]['name']
+        else:
+            nm = base = str(m.get('name', '')) or os.path.splitext(os.path.basename(nf))[0]
+            i = 2
+            while nm in taken:
+                nm, i = f'{base}-{i}', i + 1
+            taken.add(nm)
+            nmap[m.get('name', '')] = nm
+            by_file[nf] = dict(m, name=nm, file=nf)
+            new_media.append(by_file[nf])
+        folder_first.setdefault(folder, by_file[nf]['name'])
+    if fmap or len(new_media) != len(old_media):
+        _write_media(new_media, path)
+    # --- shaders
+    pdir = os.path.join(sh, 'presets')
+    smap = {}
+    for d in sorted(os.listdir(pdir)) if os.path.isdir(pdir) else []:
+        if d == 'default' or not os.path.isdir(os.path.join(pdir, d)):
+            continue
+        os.makedirs(os.path.join(pdir, 'default'), exist_ok=True)
+        for f in sorted(glob.glob(os.path.join(pdir, d, '*.frag'))):
+            b = os.path.basename(f)
+            dest = os.path.join(pdir, 'default', b)
+            if os.path.exists(dest) and open(dest).read() == open(f).read():
+                os.remove(f)
+            else:
+                if os.path.exists(dest):
+                    b = f'{os.path.splitext(b)[0]}-{d}.frag'
+                    dest = os.path.join(pdir, 'default', b)
+                os.rename(f, dest)
+            smap[f'presets/{d}/{os.path.basename(f)}'] = f'presets/default/{b}'
+        shutil.rmtree(os.path.join(pdir, d), ignore_errors=True)
+    if getattr(_tuning, 'SHADER', '') in smap:
+        set_shader(smap[_tuning.SHADER], path)
+    _remap_overlays(fmap, path)
+    _remap_shader_layers(smap, path)
+    for setter, var in ((set_active_media_set, 'MEDIA_SET'), (set_active_shader_set, 'SHADER_SET')):
+        if getattr(_tuning, var, 'default') != 'default':
+            try:
+                setter('default', path)
+            except (KeyError, ValueError):
+                pass
+    # --- sets
+    v = (_state or {}).get('video') or {}
+    main = 'media:' + nmap.get(v['name'], v['name']) if v.get('mode') == 'media' and v.get('name') \
+        else ((_state or {}).get('video_id') or 'webcam:/dev/video0')
+    old = {'overlays': _current_overlays(), 'shader': getattr(_tuning, 'SHADER', 'image.frag'),
+           'shader_layers': _current_shader_layers(),
+           'fx': {str(k): round(float(x), 4) for k, x in ((_state or {}).get('fx') or {}).items()}}
+    scenes = [_upgrade_scene({'name': 'default', 'key': '', 'transition': '', 'video': main, **old})]
+    for d in folders:
+        vid = main if d == was_set and main.startswith('media:') else \
+            ('media:' + folder_first[d] if d in folder_first else main)
+        scenes.append(_upgrade_scene({'name': d, 'key': '', 'transition': '', 'video': vid, **old}))
+    active = was_set if was_set in folders else 'default'
+    _write_scenes(scenes, active=active, tuning_path=path)
+    sc0 = next(sc for sc in scenes if sc['name'] == active)
+    set_overlays(sc0['sources'], save=True, tuning_path=path)      # o vivo = o set ativo
+    set_bindings(sc0['bindings'], save=True, tuning_path=path)
+    print(f'dash: sets -> cenas ({", ".join(sc["name"] for sc in scenes)}); ativo: {active}')
+
+
 def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mode='',
           port=8765, open_browser=True, on_inputs=None, on_set_input=None, on_set_output=None):
     """Sobe o servidor num thread daemon. Degrada sem travar o synth se a porta estiver ocupada.
@@ -1259,6 +1902,10 @@ def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mod
         _migrate_default_to_folder()
     except (OSError, KeyError, ValueError) as e:
         print(f'dash: migracao default->pasta pulada ({e})')
+    try:
+        _migrate_to_scenes()
+    except (OSError, KeyError, ValueError) as e:
+        print(f'dash: migracao pastas->sets pulada ({e})')
     try:
         srv = ThreadingHTTPServer(('127.0.0.1', port), _Handler)
     except OSError as e:
@@ -1522,6 +2169,21 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert [o['file'] for o in _current_overlays()] == ['Show1/outro.png']
     assert 'clip2' not in open(p).read().split('OVERLAYS = [')[1]
     set_overlays([], save=True, tuning_path=p); _sync(); _state.pop('overlays', None)
+    # camadas de SHADER: mesmo mecanismo, bloco proprio (SHADER_LAYERS); remap renomeia/tira
+    set_shader_layers([{'file': 'presets/default/a.frag', 'opacity': 0.4},
+                       {'file': '../x.frag'}, {'file': 'image.frag', 'opacity': -1}], save=True, tuning_path=p); _sync()
+    ns = {}; exec(open(p).read(), ns)
+    assert ns['SHADER_LAYERS'] == [{'file': 'presets/default/a.frag', 'opacity': 0.4},
+                                   {'file': 'image.frag', 'opacity': 0.0}], ns['SHADER_LAYERS']
+    assert ns['OVERLAYS'] == [], 'camada de shader nao pode mexer nas de midia'
+    set_shader_layers([{'file': 'image.frag', 'opacity': 0.5, 'blend': 'tela'},
+                       {'file': 'presets/default/a.frag', 'blend': 'xyz'}], tuning_path=p)
+    assert _state['shader_layers'] == [{'file': 'image.frag', 'opacity': 0.5, 'blend': 'tela'},
+                                       {'file': 'presets/default/a.frag', 'opacity': 1.0}], _state['shader_layers']
+    set_shader_layers(ns['SHADER_LAYERS'], tuning_path=p)
+    _remap_shader_layers({'presets/default/a.frag': 'presets/default/b.frag', 'image.frag': None}, p); _sync()
+    assert _current_shader_layers() == [{'file': 'presets/default/b.frag', 'opacity': 0.4}], _current_shader_layers()
+    set_shader_layers([], save=True, tuning_path=p); _sync(); _state.pop('shader_layers', None)
     # tecla no set ativo (Show1)
     _tuning.MEDIA_SET = 'Show1'
     assert bind_media_key('outro', 'n', p, md) == {'Show1': {'outro': 'n'}}; _sync()
@@ -1562,6 +2224,140 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert str(_tuning.TRANSITION_DEFAULT) == 'none', _tuning.TRANSITION_DEFAULT
     shutil.rmtree(td)
     globals()['_tuning'] = None
+
+    # --- SETS (cenas): migracao pastas->sets, auto-save, apply, teclas, transicao, remap ---
+    import types as _ts
+    root = tempfile.mkdtemp()
+    _g0 = (_SHADERS, _MEDIA, _TRANS, _cfg.get('on_set_input'))
+    globals().update(_SHADERS=os.path.join(root, 'shaders'), _MEDIA=os.path.join(root, 'media'),
+                     _TRANS=os.path.join(root, 'transitions'))
+    for d in ('shaders/presets/default', 'shaders/presets/show', 'media/default', 'media/prn', 'transitions'):
+        os.makedirs(os.path.join(root, d))
+    for rel, txt in (('shaders/image.frag', 'i'), ('shaders/presets/default/a.frag', 'A'),
+                     ('shaders/presets/show/a.frag', 'B'), ('shaders/presets/show/b.frag', 'b'),
+                     ('media/default/v.mp4', 'v'), ('media/prn/v.mp4', 'v'), ('media/prn/w.png', 'w'),
+                     ('transitions/fade.glsl', 'f')):
+        open(os.path.join(root, rel), 'w').write(txt)
+    p2 = tempfile.mktemp(suffix='.py')
+    open(p2, 'w').write('SHADER = "presets/show/b.frag"\nSHADER_SET = "show"\nMEDIA_SET = "prn"\n'
+                        'TRANSITION_DEFAULT = "none"\nFX = {\n}\nMEDIA = [\n]\n')
+    globals()['_tuning'] = _ts.SimpleNamespace(
+        SHADER='presets/show/b.frag', SHADER_SET='show', MEDIA_SET='prn', TRANSITION_DEFAULT='none', FX={},
+        MEDIA=[{'name': 'v', 'file': 'default/v.mp4', 'kind': 'video'},
+               {'name': 'v2', 'file': 'prn/v.mp4', 'kind': 'video'},
+               {'name': 'w', 'file': 'prn/w.png', 'kind': 'image'}],
+        OVERLAYS=[{'file': 'prn/w.png', 'opacity': 0.5}],
+        SHADER_LAYERS=[{'file': 'presets/show/a.frag', 'opacity': 0.3}])
+    st = {'video': {'mode': 'media', 'name': 'w'}, 'video_id': 'media', 'fx': {'tint': 0.5}}
+    globals()['_state'] = st
+    calls = []
+    _cfg['on_set_input'] = lambda k, i: calls.append(i)
+    _tp0, _cfg['tuning_path'] = _cfg['tuning_path'], p2   # setters sem tuning_path (set_pool...) -> temp
+    _migrate_to_scenes(p2)
+    assert sorted(os.listdir(_MEDIA)) == ['default'] and sorted(os.listdir(os.path.join(_MEDIA, 'default'))) == ['v.mp4', 'w.png']
+    assert sorted(os.listdir(os.path.join(_SHADERS, 'presets'))) == ['default']
+    assert sorted(os.listdir(os.path.join(_SHADERS, 'presets', 'default'))) == ['a-show.frag', 'a.frag', 'b.frag']
+    ns = {}; exec(open(p2).read(), ns)
+    assert [(m['name'], m['file']) for m in ns['MEDIA']] == [('v', 'default/v.mp4'), ('w', 'default/w.png')], ns['MEDIA']
+    assert ns['SHADER'] == 'presets/default/b.frag' and ns['SHADER_SET'] == 'default' and ns['MEDIA_SET'] == 'default'
+    assert ns['OVERLAYS'] == [{'file': 'default/w.png', 'opacity': 0.5}], ns['OVERLAYS']
+    assert ns['SHADER_LAYERS'] == [{'file': 'presets/default/a-show.frag', 'opacity': 0.3}], ns['SHADER_LAYERS']
+    assert [sc['name'] for sc in ns['SCENES']] == ['default', 'prn'] and ns['SCENE'] == 'prn', (ns['SCENES'], ns['SCENE'])
+    # formato novo: a principal antiga (w) vira fonte marcada; a pilha antiga vai pra cada fonte
+    prn = ns['SCENES'][1]
+    assert prn['selected'] == 'default/w.png' and prn['sources'] == [{'file': 'default/w.png', 'opacity': 0.5}], prn
+    stack = prn['bindings']['default/w.png']['shaders']
+    assert stack == [{'file': 'presets/default/b.frag', 'opacity': 1.0},
+                     {'file': 'presets/default/a-show.frag', 'opacity': 0.3}], stack
+    assert prn['bindings']['default/w.png']['fx']['presets/default/b.frag'] == {'tint': 0.5}, prn['bindings']
+    assert ns['OVERLAYS'] == prn['sources'] and ns['BINDINGS'] == prn['bindings'], 'o vivo devia ser o set ativo'
+    _migrate_to_scenes(p2)                                  # idempotente: ja tem SCENES
+    assert len(_tuning.SCENES) == 2
+    # set no formato ANTIGO no tuning (sem 'sources') e' convertido na leitura
+    legacy = _upgrade_scene({'name': 'L', 'video': 'webcam:/dev/video4', 'overlays': [],
+                             'shader': 'image.frag', 'shader_layers': [], 'fx': {}})
+    assert legacy['sources'] == [{'file': 'webcam:/dev/video4', 'opacity': 1.0}] and legacy['selected'] == 'webcam:/dev/video4'
+    assert legacy['bindings'] == {'webcam:/dev/video4': {'shaders': [{'file': 'image.frag', 'opacity': 1.0}], 'fx': {}}}
+    # auto-save so no ativo (prn): troca a pilha da fonte e a forca de um efeito
+    bnd = _current_bindings()
+    bnd['default/w.png']['fx']['presets/default/b.frag']['tint'] = 0.9
+    bnd['webcam:/dev/video0'] = {'shaders': [{'file': 'presets/default/a.frag', 'opacity': 0.7, 'blend': 'tela'}], 'fx': {}}
+    set_bindings(bnd, save=True, tuning_path=p2)
+    save_active_scene(p2)
+    assert _find_scene('prn')['bindings']['default/w.png']['fx']['presets/default/b.frag'] == {'tint': 0.9}
+    assert 'webcam:/dev/video0' in _find_scene('prn')['bindings'], 'relacao de fonte desmarcada devia ser lembrada'
+    assert _find_scene('default')['bindings']['default/w.png']['fx']['presets/default/b.frag'] == {'tint': 0.5}
+    # preencher/encaixar de camera/tela: bloco SOURCE_FIT so com os 'fit'; a capturada respawna
+    st['video_id'] = 'webcam:/dev/video0'
+    assert set_source_fit('webcam:/dev/video0', 'fit', p2) == 'fit' and calls[-1] == 'webcam:/dev/video0'
+    set_source_fit('screen:HDMI-1', 'fit', p2)
+    ns = {}; exec(open(p2).read(), ns)
+    assert ns['SOURCE_FIT'] == {'screen:HDMI-1': 'fit', 'webcam:/dev/video0': 'fit'}, ns['SOURCE_FIT']
+    set_source_fit('screen:HDMI-1', 'fill', p2)
+    assert _tuning.SOURCE_FIT == {'webcam:/dev/video0': 'fit'}
+    try:
+        set_source_fit('default/w.png', 'fit', p2); assert False, 'midia nao usa SOURCE_FIT'
+    except ValueError:
+        pass
+    # selecionar: so a lista/captura (on_set_input), nao a saida
+    select_source('webcam:/dev/video0')
+    assert calls[-1] == 'webcam:/dev/video0' and _current_overlays() == prn['sources']
+    try:
+        select_source('default/nao-existe.png'); assert False, 'selecionou fonte inexistente'
+    except ValueError:
+        pass
+    save_active_scene(p2)
+    assert _find_scene('prn')['selected'] == 'webcam:/dev/video0'
+    # disponiveis por set: lista explicita some da tela/saida mas lembra; None = tudo (campo some)
+    assert 'pool' not in _find_scene('prn'), 'set sem pool nao devia ganhar campo null'
+    set_pool({'sources': ['default/w.png', 'default/w.png'], 'shaders': ['presets/default/a-show.frag']})
+    assert _find_scene('prn')['pool'] == {'sources': ['default/w.png'], 'shaders': ['presets/default/a-show.frag']}
+    assert 'webcam:/dev/video0' in _find_scene('prn')['bindings'], 'tirar do set nao apaga a ligacao'
+    _pool_add('shaders', 'presets/default/novo.frag')
+    assert _find_scene('prn')['pool']['shaders'][-1] == 'presets/default/novo.frag'
+    assert 'pool' not in _find_scene('default')
+    # criar = copia do vivo e vira ativo; tecla unica
+    create_scene('B', p2)
+    assert _active_scene_name() == 'B' and _find_scene('B')['bindings'] == _find_scene('prn')['bindings']
+    set_scene_key('B', 'x', p2); set_scene_key('prn', 'X', p2)
+    assert _find_scene('B')['key'] == '' and _find_scene('prn')['key'] == 'x'
+    set_scene_transition('prn', 'fade.glsl', p2)
+    assert scene_transition_name('prn') == 'fade.glsl' and scene_transition_name('B') == 'none'
+    try:
+        set_scene_transition('prn', 'nope.glsl', p2); assert False, 'aceitou transicao inexistente'
+    except ValueError:
+        pass
+    # aplicar: fontes marcadas + ligacoes + selecao; o apply NAO auto-salva no caminho
+    apply_scene('default', p2)
+    assert _current_pool() is None, 'set sem pool = tudo'
+    assert calls[-1] == 'media:w' and _active_scene_name() == 'default', calls
+    assert _current_bindings() == _find_scene('default')['bindings'] and _current_overlays() == _find_scene('default')['sources']
+    assert _find_scene('B')['selected'] == 'webcam:/dev/video0', 'apply nao devia gravar em outro set'
+    # Biblioteca renomeia/apaga -> sets E ligacoes vivas seguem
+    _remap_scenes(files={'default/w.png': 'default/w2.png'}, tuning_path=p2)
+    sc = _find_scene('prn')
+    assert sc['sources'][0]['file'] == 'default/w2.png' and 'default/w2.png' in sc['bindings'], sc
+    assert 'default/w2.png' in _current_bindings()
+    _remap_scenes(shaders={'presets/default/b.frag': None}, tuning_path=p2)
+    assert [o['file'] for o in _find_scene('prn')['bindings']['default/w2.png']['shaders']] == ['presets/default/a-show.frag']
+    assert 'presets/default/b.frag' not in _find_scene('prn')['bindings']['default/w2.png']['fx']
+    assert _find_scene('prn')['pool']['sources'] == ['default/w2.png'], 'renomear segue no pool'
+    assert 'presets/default/b.frag' not in _find_scene('prn')['pool']['shaders']
+    rename_transition('fade.glsl', 'glow', p2, _TRANS)
+    assert _find_scene('prn')['transition'] == 'glow.glsl'
+    rename_scene('prn', 'Show 1', p2)
+    assert _find_scene('Show 1')['key'] == 'x'
+    delete_scene('B', p2); delete_scene('Show 1', p2)
+    try:
+        delete_scene('default', p2); assert False, 'apagou o ultimo set'
+    except ValueError:
+        pass
+    ns = {}; exec(open(p2).read(), ns)               # o tuning.py continua Python valido
+    assert [sc['name'] for sc in ns['SCENES']] == ['default'] and ns['SCENE'] == 'default'
+    globals().update(_SHADERS=_g0[0], _MEDIA=_g0[1], _TRANS=_g0[2], _tuning=None, _state={})
+    _cfg['on_set_input'] = _g0[3]
+    _cfg['tuning_path'] = _tp0
+    shutil.rmtree(root); os.remove(p2)
 
     os.remove(p)
     print('dash_server self-check ok')

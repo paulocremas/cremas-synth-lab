@@ -132,6 +132,20 @@
   body[data-panel="output-lights"] #output-lights { display: block; }
   .soon { color: #666; font-size: 12px; max-width: 46em; }
   #shader-list, #media-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-width: 520px; }
+  .subtabs { display: flex; gap: 6px; margin: 4px 0 10px; }
+  .subtabs .ibtn.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
+  .vsub { display: none; }
+  body[data-vsub="sets"] #vis-sets, body[data-vsub="lib"] #vis-lib { display: block; }
+  .editing { color: #999; font-size: 12px; margin: 14px 0 0; padding: 6px 8px; border-left: 2px solid #4a8; }
+  .editing b { color: #fff; }
+  h3.subh { font-size: 11px; color: #888; font-weight: normal; letter-spacing: .08em; text-transform: uppercase;
+            margin: 10px 0 4px; }
+  .selname { color: #4a8; text-transform: none; letter-spacing: normal; }
+  .sh-row > .name.picked { border-color: #58c; color: #fff; }
+  .sh-row .ibtn.rm { color: #777; padding: 0 6px; }
+  .sh-row .ibtn.rm:hover { color: #c55; border-color: #533; }
+  .addrow { margin: 4px 0 2px 24px; }
+  .addrow select.insel { color: #8a8; }
   .setbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; font-size: 11px; color: #999; }
   .setbar select.insel { max-width: 160px; }
   .setbar input.insel { width: 90px; }
@@ -143,6 +157,7 @@
   .sh-row .ovl input[type=range] { width: 70px; }
   .sh-row .ovl .pct { width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
   .sh-row .ovl .ord { min-width: 12px; color: #6a6; font-weight: bold; }
+  .sh-row .ovl select.blend { font-size: 11px; padding: 1px 2px; }
   .sh-row > .name.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
   .sh-row .keycap { min-width: 15px; text-align: center; color: #4a8; font-size: 11px; }
   .sh-gear { min-width: 22px; }
@@ -196,7 +211,6 @@
 
 <div id="iobar">
   <label>áudio <select id="sel-audio" class="insel"></select></label>
-  <label>image <select id="sel-video" class="insel"></select></label>
   <button class="ibtn" onclick="loadInputs()" title="recarregar lista">&#8635;</button>
   <label>saída <select id="out-mon" class="insel"></select></label>
   <label>dimensão <input type="number" id="out-w" class="insel" style="width:60px" min="160" step="10">
@@ -270,55 +284,95 @@
   </section>
 
   <section id="effects">
-    <h2 class="withbtn">Mídia &mdash; imagens e vídeos como fonte de imagem
-      <button class="ibtn" onclick="loadMedia()" title="recarregar">&#8635;</button></h2>
-    <p class="note">No dropdown <b>image</b> do topo, <b>Media</b> é uma fonte só; qual item
-      toca se escolhe <b>aqui</b> (clique) ou por <b>tecla</b> (engrenagem → vincula; vale na janela
-      do native_synth e em qualquer lugar do dash). Vídeo roda em loop.
-      <b>preencher</b> = cobre o output cortando o excesso; desmarcado = encaixa inteiro com barras.
-      <b>set</b> = "pasta"; os atalhos valem só no set selecionado. Arquivos em <b>media/</b>;
-      grava <b>MEDIA</b> / <b>MEDIA_SET(S)</b> / <b>MEDIA_KEYS</b> em tuning.py.</p>
-    <div id="media-set-bar" class="setbar"></div>
-    <div id="media-list"></div>
-    <input type="file" id="media-file" hidden
-      accept="image/*,video/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.mp4,.mov,.mkv,.webm,.avi,.m4v">
-    <button class="ibtn" onclick="mediaFile()">+ imagem ou vídeo</button>
-    <span id="media-msg"></span>
+    <!-- sub-abas: Sets (cenas; editar o set ativo) | Biblioteca (arquivos: adicionar/remover). Ver showSub(). -->
+    <div class="subtabs">
+      <button class="ibtn" data-vsub="sets" onclick="showSub('sets')">Sets</button>
+      <button class="ibtn" data-vsub="lib" onclick="showSub('lib')">Biblioteca</button>
+    </div>
 
-    <h2 class="withbtn">Transições &mdash; como entrar em cada mídia
-      <button class="ibtn" onclick="loadTransitions()" title="recarregar">&#8635;</button></h2>
-    <p class="note">Arquivos <b>.glsl</b> em <b>transitions/</b> (estilo gl-transitions: uma
-      <b>vec4 transition(vec2 uv)</b> com <b>getFromColor</b>/<b>getToColor</b>/<b>progress</b>;
-      cabeçalho <b>// ms: N</b> = duração). Na troca de mídia, um passe GPU mistura a imagem que
-      sai com a que entra e alimenta o shader normal &mdash; o preset nem sabe. Cada item da
-      galeria de mídia acima escolhe a sua (ou <b>(padrão)</b> / <b>corte seco</b>). Grava
-      <b>TRANSITION_DEFAULT</b> + o campo <b>transition</b> de cada item de MEDIA.</p>
-    <div class="txtrow"><span class="lbl">padrão</span> <select id="trans-default" class="insel"></select></div>
-    <div id="trans-list"></div>
-    <input type="text" id="new-trans-name" class="insel" placeholder="nome da nova transição"
-      style="width:180px" onkeydown="if(event.key==='Enter')newTransition()">
-    <button class="ibtn" onclick="newTransition()" title="cria transitions/<nome>.glsl (template crossfade)">+ criar .glsl</button>
-    <span id="new-trans-msg"></span>
+    <div id="vis-sets" class="vsub">
+      <h2 class="withbtn">Sets &mdash; cenas
+        <button class="ibtn" onclick="loadScenes()" title="recarregar">&#8635;</button></h2>
+      <p class="note">Um <b>set</b> guarda tudo desta aba: quais fontes/mídias estão marcadas (a
+        saída), os shaders de cada uma com opacidade e modo, e a força dos efeitos. <b>Clique</b> num
+        set pra entrar nele (com a <b>transição</b> escolhida na linha; <b>(padrão)</b> segue a da
+        Biblioteca). O set ativo <b>auto-salva</b>: tudo que você mexer abaixo grava nele. <b>+ set</b>
+        copia o estado atual num set novo. Engrenagem: renomear, tecla, apagar. Grava <b>SCENES</b> / <b>SCENE</b>.</p>
+      <div id="scene-list"></div>
+      <input type="text" id="new-scene-name" class="insel" placeholder="nome do novo set"
+        style="width:180px" onkeydown="if(event.key==='Enter')newScene()">
+      <button class="ibtn" onclick="newScene()" title="cria um set com o estado atual e entra nele">+ set</button>
+      <span id="new-scene-msg"></span>
+      <p class="editing">editando o set <b id="scene-cur">&mdash;</b> &mdash; tudo abaixo grava nele</p>
 
-    <h2 class="withbtn">Shader ativo &mdash; galeria de presets
-      <button class="ibtn" onclick="loadShaders()" title="recarregar lista de arquivos">&#8635;</button></h2>
-    <p class="note">Arquivos <b>.frag</b> em <b>shaders/</b>: <b>image.frag</b> (base) +
-      <b>presets/&lt;set&gt;/*.frag</b> — cada <b>set</b> é uma subpasta. Clicar troca ao vivo.
-      A engrenagem de cada preset: renomear, apagar, e vincular uma tecla (vale só no set ativo,
-      na janela do native_synth ou no dash). Grava <b>SHADER</b> / <b>SHADER_SET</b> / <b>SHADER_KEYS</b>.</p>
-    <div id="shader-set-bar" class="setbar"></div>
-    <div id="shader-list"></div>
-    <input type="text" id="new-fx-name" class="insel" placeholder="nome do novo efeito"
-      style="width:180px" onkeydown="if(event.key==='Enter')newShader()">
-    <button class="ibtn" onclick="newShader()" title="cria shaders/presets/&lt;nome&gt;.frag (template minimo) e o deixa ativo">+ criar .frag</button>
-    <span id="new-fx-msg"></span>
+      <h2 class="withbtn">Imagem &mdash; fontes e mídias
+        <button class="ibtn" onclick="loadInputs(); loadMedia()" title="recarregar listas">&#8635;</button></h2>
+      <p class="note"><b>×</b> tira a fonte/mídia/shader <b>deste set</b> (some daqui e da saída, mas o
+        que estava configurado fica lembrado); <b>+ adicionar ao set…</b> traz de volta. Arquivo novo da
+        Biblioteca entra no set ativo.</p>
+      <p class="note">A saída é <b>só o que está marcado</b> (<b>camada</b>): cada fonte/mídia marcada
+        entra por cima das anteriores, com a opacidade do slider (o número é a posição, 1 = mais
+        embaixo). <b>Clique no nome</b> = selecionar: a lista de efeitos abaixo passa a ser a
+        <i>dessa</i> fonte/mídia (não muda a saída), e a aba Source Image analisa ela.
+        <b>preencher</b> = estica a imagem pra cobrir a saída (desmarcado = encaixa inteira, com
+        margens); <b>rebate</b> (vídeo) = vai e volta em loop. Esses dois são da fonte/arquivo: valem
+        em todos os sets.</p>
+      <h3 class="subh">Fontes</h3>
+      <div id="video-list"></div>
+      <h3 class="subh">Mídias</h3>
+      <div id="media-pick"></div>
 
-    <h2>Potenciômetros de efeito &mdash; grava em tuning.py (FX)</h2>
-    <p class="note">Um por efeito nomeado no cabeçalho <b>// fx:</b> do shader ativo.
-      0 = desligado, 1 = cheio. O shader multiplica a intensidade de cada efeito por
-      <b>u_fx_&lt;nome&gt;</b>. Um controlador MIDI vai poder mexer nesses mesmos valores
-      quando for ligado (ainda não implementado).</p>
-    <div id="fx-list"></div>
+      <h2>Efeitos de <span id="sel-name" class="selname">&mdash;</span></h2>
+      <p class="note">Os shaders <b>desta</b> fonte/mídia (cada uma tem os seus, lembrados mesmo
+        desmarcada). <b>camada</b> = aplica o shader sobre ela; slider = opacidade; menu = modo de
+        mistura (<b>normal</b> cobre, 100% esconde o de baixo; <b>tela</b>/<b>soma</b>/<b>clarear</b>
+        acendem por cima sem apagar; <b>multiplicar</b> escurece). Sem nenhum marcado, ela entra crua.
+        <b>Clique no nome</b> = mostra a força dos efeitos desse shader abaixo.</p>
+      <div id="shader-list"></div>
+
+      <h2>Força dos efeitos &mdash; <span id="fx-title" class="selname">&mdash;</span></h2>
+      <p class="note">Um slider por efeito do cabeçalho <b>// fx:</b> do shader (0 = desligado,
+        1 = cheio) &mdash; vira <b>u_fx_&lt;nome&gt;</b>. Vale para esse shader <b>nessa</b> fonte/mídia.</p>
+      <div id="fx-list"></div>
+    </div>
+
+    <div id="vis-lib" class="vsub">
+      <h2 class="withbtn">Mídia &mdash; imagens e vídeos
+        <button class="ibtn" onclick="loadMedia()" title="recarregar">&#8635;</button></h2>
+      <p class="note">Arquivos em <b>media/</b>. Engrenagem: renomear, excluir (sai também dos sets
+        que a usam). <b>preencher</b> e <b>rebate</b> ficam na lista de Mídias da sub-aba Sets.
+        Grava <b>MEDIA</b>.</p>
+      <div id="media-list"></div>
+      <input type="file" id="media-file" hidden
+        accept="image/*,video/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.mp4,.mov,.mkv,.webm,.avi,.m4v">
+      <button class="ibtn" onclick="mediaFile()">+ imagem ou vídeo</button>
+      <span id="media-msg"></span>
+
+      <h2 class="withbtn">Efeitos &mdash; arquivos .frag
+        <button class="ibtn" onclick="loadShaders()" title="recarregar lista de arquivos">&#8635;</button></h2>
+      <p class="note">Arquivos em <b>shaders/</b>: <b>image.frag</b> (base) + <b>presets/default/*.frag</b>.
+        Cabeçalho <b>// fx: a, b</b> = sliders de força. Editar o arquivo aplica ao vivo.
+        "+ criar .frag" gera um template e o põe como shader do set ativo.</p>
+      <div id="shader-admin"></div>
+      <input type="text" id="new-fx-name" class="insel" placeholder="nome do novo efeito"
+        style="width:180px" onkeydown="if(event.key==='Enter')newShader()">
+      <button class="ibtn" onclick="newShader()" title="cria shaders/presets/default/&lt;nome&gt;.frag (template minimo) e o deixa ativo">+ criar .frag</button>
+      <span id="new-fx-msg"></span>
+
+      <h2 class="withbtn">Transições &mdash; entre sets
+        <button class="ibtn" onclick="loadTransitions()" title="recarregar">&#8635;</button></h2>
+      <p class="note">Arquivos <b>.glsl</b> em <b>transitions/</b> (estilo gl-transitions: uma
+        <b>vec4 transition(vec2 uv)</b> com <b>getFromColor</b>/<b>getToColor</b>/<b>progress</b>;
+        cabeçalho <b>// ms: N</b> = duração). Na troca de set, mistura a imagem final do set que sai
+        com a do que entra. Cada set escolhe a sua (ou <b>(padrão)</b>, definido aqui). Grava
+        <b>TRANSITION_DEFAULT</b>.</p>
+      <div class="txtrow"><span class="lbl">padrão</span> <select id="trans-default" class="insel"></select></div>
+      <div id="trans-list"></div>
+      <input type="text" id="new-trans-name" class="insel" placeholder="nome da nova transição"
+        style="width:180px" onkeydown="if(event.key==='Enter')newTransition()">
+      <button class="ibtn" onclick="newTransition()" title="cria transitions/<nome>.glsl (template crossfade)">+ criar .glsl</button>
+      <span id="new-trans-msg"></span>
+    </div>
   </section>
 
   <section id="output-image">
@@ -1110,48 +1164,126 @@ function askConfirm(msg, onYes){
 $('#confirm-yes').onclick = () => { const cb = _confirmYes; _confirmYes = null; confirmpop.close(); if (cb) cb(); };
 confirmpop.addEventListener('click', e => { if (e.target === confirmpop) confirmpop.close(); });
 
-// ---- barra de SET (galeria de shader / de midia): <select> + criar + apagar ----
-function renderSetBar(box, sets, active, prefix){
-  box.innerHTML = '';
-  const sel = document.createElement('select'); sel.className = 'insel';
-  for (const s of (sets || ['default'])){
-    const o = document.createElement('option'); o.value = o.textContent = s;
-    if (s === active) o.selected = true;
-    sel.appendChild(o);
-  }
-  sel.onchange = () => shaderPost(prefix, { name: sel.value });     // shaderPost serve p/ os 2 (POST + reload certo via done)
-  const nin = document.createElement('input'); nin.className = 'insel'; nin.placeholder = 'novo set';
-  const doNew = () => { const v = nin.value.trim(); if (v){ nin.value = ''; shaderPost(prefix + '-new', { name: v }).catch(e => alert('set: ' + e)); } };
-  nin.onkeydown = e => { if (e.key === 'Enter') doNew(); };
-  const nb = document.createElement('button'); nb.className = 'ibtn'; nb.textContent = '+ set'; nb.onclick = doNew;
-  const db = document.createElement('button'); db.className = 'ibtn del'; db.textContent = '🗑 set';
-  // "default" sempre existe (e o fallback): apagar = ESVAZIAR a pasta. Set nomeado: os arquivos
-  // voltam pro default e a pasta some.
-  const msg = active === 'default'
-    ? 'Esvaziar o set “default”? Apaga os arquivos e as entradas dele — a pasta continua (é o fallback).'
-    : `Apagar o set “${active}”? Os arquivos dele voltam pro “default”.`;
-  db.onclick = () => askConfirm(msg,
-    () => shaderPost(prefix + '-del', { name: active }).catch(e => alert('set: ' + e)));
-  box.append('set ', sel, nin, nb, db);
+// ============ VISUALS: sub-abas Sets | Biblioteca ============
+// Sets = cenas (tuning.SCENES): editar o set ATIVO (auto-salva no servidor a cada edicao).
+// Biblioteca = os arquivos (midia, .frag, .glsl): adicionar / renomear / remover.
+function showSub(sub){
+  if (sub !== 'lib') sub = 'sets';
+  document.body.dataset.vsub = sub;
+  document.querySelectorAll('.subtabs .ibtn').forEach(b => b.classList.toggle('active', b.dataset.vsub === sub));
+  try { localStorage.setItem('visSub', sub); } catch (e) {}
 }
-// shaderPost/mediaPost sabem qual loader chamar pelo prefixo do url
+showSub(new URLSearchParams(location.search).get('sub')   // ?sub=lib|sets (popup/link) > lembrado
+        || (() => { try { return localStorage.getItem('visSub'); } catch (e) { return null; } })());
+
+// shaderPost: POST + recarrega shaders E midia (renomear/apagar mexe nas duas listas dos sets)
 function shaderPost(url, body, done){
   return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
     .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
-    .then(() => {
-      if (url.startsWith('/media')){ mediaSig = ''; mediaTouched = performance.now(); loadMedia(); }
-      else { shaderSig = ''; loadShaders(); }
-      if (done) done();
-    });
+    .then(() => { shaderSig = shaderAdminSig = ''; loadShaders(); if (done) done(); });
 }
-let lastShaderList = [], lastShaderKeys = {}, lastShaderSets = ['default'], lastShaderSet = 'default',
-    shaderSig = '', shaderOpen = '';  // preset com engrenagem aberta
+
+// ============ SETS (cenas) ============
+let lastScenes = [], activeScene = '', sceneSig = '', sceneOpen = '';
+function loadScenes(){
+  fetch('/scenes').then(r => r.json()).then(gotScenes).catch(() => {});
+}
+function gotScenes(d){
+  lastScenes = d.list || []; activeScene = d.active || '';
+  sceneSig = ''; renderScenes();
+}
+function scenePost(url, body){
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+    .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+    .then(gotScenes);
+}
+function renderScenes(){
+  $('#scene-cur').textContent = activeScene || '—';
+  const sig = JSON.stringify([lastScenes, activeScene, sceneOpen, lastTrans, lastTransDefault]);
+  if (sig === sceneSig) return;
+  sceneSig = sig;
+  const box = $('#scene-list'); box.innerHTML = '';
+  if (!lastScenes.length) box.innerHTML = '<div class="txtrow">&mdash; nenhum set. Use "+ set".</div>';
+  const dname = lastTransDefault === 'none' ? 'corte seco' : lastTransDefault.replace(/\.glsl$/, '');
+  for (const sc of lastScenes){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (sc.name === activeScene ? ' active' : '');
+    b.textContent = sc.name;
+    b.onclick = () => scenePost('/scene', { name: sc.name }).catch(e => alert('set: ' + e));
+    row.appendChild(b);
+
+    const cap = document.createElement('span'); cap.className = 'keycap';
+    cap.textContent = (sc.key || '').toUpperCase();
+    row.appendChild(cap);
+
+    const tsel = document.createElement('select');
+    tsel.className = 'insel'; tsel.style.maxWidth = '150px';
+    tsel.title = 'transição de ENTRADA deste set';
+    for (const [val, lbl] of [['', `(padrão: ${dname})`], ['none', 'corte seco'],
+                              ...lastTrans.map(f => [f, f.replace(/\.glsl$/, '')])]){
+      const o = document.createElement('option'); o.value = val; o.textContent = lbl;
+      if (val === (sc.transition || '')) o.selected = true;
+      tsel.appendChild(o);
+    }
+    tsel.onchange = () => scenePost('/scene-transition', { name: sc.name, transition: tsel.value })
+      .catch(e => alert('transição: ' + e));
+    row.appendChild(tsel);
+
+    const gear = document.createElement('button');
+    gear.className = 'ibtn sh-gear' + (sceneOpen === sc.name ? ' open' : '');
+    gear.textContent = '⚙'; gear.title = 'renomear / tecla / apagar';
+    gear.onclick = () => { sceneOpen = sceneOpen === sc.name ? '' : sc.name; sceneSig = ''; renderScenes(); };
+    row.appendChild(gear);
+    box.appendChild(row);
+    if (sceneOpen === sc.name) box.appendChild(scenePanel(sc));
+  }
+}
+function scenePanel(sc){
+  const p = document.createElement('div'); p.className = 'sh-panel';
+  const ren = document.createElement('input'); ren.className = 'insel'; ren.value = sc.name;
+  const doRen = () => { const nn = ren.value.trim(); if (nn && nn !== sc.name)
+    scenePost('/scene-rename', { name: sc.name, newname: nn }).then(() => { sceneOpen = ''; })
+      .catch(e => alert('não renomeou: ' + e)); };
+  ren.onkeydown = e => { if (e.key === 'Enter') doRen(); };
+  const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
+  p.append('nome ', ren, rb);
+  // tecla: captura UMA tecla (a-z / 0-9) e vincula na hora; Backspace/Delete desvincula.
+  // limitado a alfanumérico pq é o que o pygame.key.name do native_synth também dá.
+  const ki = document.createElement('input'); ki.className = 'insel keyin'; ki.maxLength = 1; ki.placeholder = '—';
+  ki.value = (sc.key || '').toUpperCase();
+  ki.onkeydown = e => {
+    if (e.key === 'Tab' || e.key === 'Escape') return;
+    e.preventDefault();
+    let k = '';
+    if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) k = e.key.toLowerCase();
+    else if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+    scenePost('/scene-key', { name: sc.name, key: k }).catch(err => alert('tecla: ' + err));
+  };
+  p.append('tecla ', ki);
+  const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
+  del.onclick = () => askConfirm(`Apagar o set “${sc.name}”? (os arquivos da Biblioteca ficam)`,
+    () => { sceneOpen = ''; scenePost('/scene-del', { name: sc.name }).catch(e => alert('não apagou: ' + e)); });
+  p.appendChild(del);
+  return p;
+}
+function newScene(){
+  const inp = $('#new-scene-name'), msg = $('#new-scene-msg');
+  const name = inp.value.trim();
+  if (!name) return inp.focus();
+  msg.textContent = ''; msg.className = '';
+  scenePost('/scene-new', { name }).then(() => { inp.value = ''; })
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+}
+
+// ============ EFEITOS: shader principal + camadas (Sets) / arquivos .frag (Biblioteca) ============
+let lastShaderList = [], shaderSig = '', shaderAdminSig = '', shaderOpen = '';
 function loadShaders(){
   fetch('/shaders').then(r => r.json()).then(d => {
-    lastShaderList = d.list || []; lastShaderKeys = d.keys || {};
-    lastShaderSets = d.sets || ['default']; lastShaderSet = d.set || 'default';
-    renderSetBar($('#shader-set-bar'), lastShaderSets, lastShaderSet, '/shader-set');
-    renderShaderList(d.current);
+    lastShaderList = d.list || []; lastManifests = d.manifests || {};
+    shaderSig = ''; renderShaderList();
+    fxSig = ''; renderFx();
+    renderShaderAdmin();
   });
 }
 function newShader(){
@@ -1162,94 +1294,180 @@ function newShader(){
   shaderPost('/new-shader', { name }, () => { inp.value = ''; })   // criado + ja ativo
     .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
 }
-function renderShaderList(current){
-  const sig = JSON.stringify([lastShaderList, lastShaderKeys, current, shaderOpen]);
+// LIGAÇÕES fonte -> shaders (BINDINGS): {fonte: {shaders: [{file, opacity, blend}], fx: {shader: {nome: v}}}}.
+// A lista de efeitos mostra/edita a pilha da fonte SELECIONADA (lastSelected). Mesmo esquema das
+// camadas de midia: slider atualiza NO LUGAR (layerEls), grava ao soltar; o sig so muda quando a
+// pilha muda (nao a opacidade), pra nao matar um arrasto no meio.
+let lastBindings = {}, lastSelected = '', lastManifests = {}, fxShader = '';
+let layerEls = {}, layerDrag = '', bindT = null, bindTouched = 0;
+try { fxShader = localStorage.getItem('fxShader') || ''; } catch (e) {}
+function selBinding(create){
+  if (!lastSelected) return null;
+  if (!lastBindings[lastSelected] && create) lastBindings[lastSelected] = { shaders: [], fx: {} };
+  return lastBindings[lastSelected] || null;
+}
+function sendBindings(save){
+  bindTouched = performance.now();
+  clearTimeout(bindT); bindT = null;
+  fetch('/bindings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bindings: lastBindings, save }) });
+}
+function sendBindingsLive(){   // arrasto: no maximo ~25 POST/s, sem gravar no tuning.py
+  bindTouched = performance.now();
+  if (!bindT) bindT = setTimeout(() => { bindT = null; sendBindings(false); }, 40);
+}
+function syncLayerSliders(){
+  if (performance.now() - bindTouched < TOUCH_MS) return;
+  const stack = (selBinding(false) || {}).shaders || [];
+  for (const [file, el] of Object.entries(layerEls)){
+    if (file === layerDrag) continue;
+    const o = stack.find(x => x.file === file);
+    if (o){ el.inp.value = Math.round(o.opacity * 100); el.pct.textContent = el.inp.value + '%';
+            el.bsel.value = o.blend || 'normal'; }
+  }
+}
+const LAYER_BLENDS = [['normal', 'normal'], ['soma', 'soma'], ['tela', 'tela (screen)'],
+                      ['multiplicar', 'multiplicar'], ['clarear', 'clarear (max)']];
+function layerControl(file){
+  const stack = (selBinding(false) || {}).shaders || [];
+  const oi = stack.findIndex(o => o.file === file);
+  const ov = document.createElement('label'); ov.className = 'ovl';
+  const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
+  oc.disabled = !lastSelected;
+  oc.title = 'camada: aplica este shader na fonte/mídia selecionada, por cima dos já marcados';
+  const ord = document.createElement('span'); ord.className = 'ord';
+  ord.textContent = oi >= 0 ? String(oi + 1) : '';
+  ord.title = 'posição (1 = logo acima da imagem crua)';
+  const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
+  orng.value = oi >= 0 ? Math.round(stack[oi].opacity * 100) : 100;
+  orng.disabled = oi < 0; orng.title = 'opacidade';
+  const pct = document.createElement('span'); pct.className = 'pct';
+  pct.textContent = oi >= 0 ? orng.value + '%' : '';
+  // modo de mistura (ver LAYER_BLEND_SRC no native_synth): novo entra em 'normal' a 100% = o
+  // efeito puro; 'tela'/'soma' acendem por cima da imagem sem apagar
+  const bsel = document.createElement('select'); bsel.className = 'insel blend';
+  for (const [v, t] of LAYER_BLENDS){
+    const op = document.createElement('option'); op.value = v; op.textContent = t; bsel.appendChild(op);
+  }
+  bsel.value = oi >= 0 ? (stack[oi].blend || 'normal') : 'normal';
+  bsel.disabled = oi < 0; bsel.title = 'modo de mistura com o que está embaixo';
+  bsel.onchange = () => {
+    const o = ((selBinding(false) || {}).shaders || []).find(x => x.file === file); if (!o) return;
+    o.blend = bsel.value; sendBindings(true);
+  };
+  oc.onchange = () => {
+    const bnd = selBinding(true);
+    if (oc.checked) bnd.shaders.push({ file, opacity: +orng.value / 100, blend: bsel.value });
+    else bnd.shaders = bnd.shaders.filter(o => o.file !== file);
+    sendBindings(true); shaderSig = ''; renderShaderList();
+  };
+  orng.onpointerdown = () => { layerDrag = file; bindTouched = performance.now(); };
+  orng.oninput = () => {
+    const o = ((selBinding(false) || {}).shaders || []).find(x => x.file === file); if (!o) return;
+    o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
+    sendBindingsLive();
+  };
+  orng.onchange = () => { layerDrag = ''; sendBindings(true); };
+  ov.append(oc, ord, 'camada', orng, pct, bsel);
+  layerEls[file] = { inp: orng, pct, bsel };
+  return ov;
+}
+function pickShader(name){
+  fxShader = name;
+  try { localStorage.setItem('fxShader', name); } catch (e) {}
+  shaderSig = ''; renderShaderList(); fxSig = ''; renderFx();
+}
+function shortShader(name){ return name.startsWith('presets/') ? name.replace(/^presets\/[^/]+\//, '') : name; }
+function renderShaderList(){
+  if (performance.now() - bindTouched < TOUCH_MS && shaderSig) return;   // acabei de mexer
+  const stack = (selBinding(false) || {}).shaders || [];
+  const sig = JSON.stringify([lastShaderList, lastSelected, fxShader, stack.map(o => o.file), lastPool]);
   if (sig === shaderSig) return;                 // nada mudou: nao repinta
   shaderSig = sig;
-  const box = $('#shader-list'); box.innerHTML = '';
+  $('#sel-name').textContent = sourceLabel(lastSelected) || '— (selecione uma fonte/mídia)';
+  const box = $('#shader-list'); box.innerHTML = ''; layerEls = {};
+  for (const name of lastShaderList.filter(x => inPool('shaders', x))){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (name === fxShader ? ' picked' : '');
+    b.textContent = shortShader(name);
+    b.title = name + ' — clique: mostra a força dos efeitos dele';
+    b.onclick = () => pickShader(name);
+    row.appendChild(b);
+    row.appendChild(layerControl(name));
+    row.appendChild(rmButton('shaders', name));
+    box.appendChild(row);
+  }
+  box.appendChild(addPicker('shaders', lastShaderList.filter(x => !inPool('shaders', x)).map(x => [x, shortShader(x)])));
+}
+function renderShaderAdmin(){
+  const sig = JSON.stringify([lastShaderList, shaderOpen]);
+  if (sig === shaderAdminSig) return;
+  shaderAdminSig = sig;
+  const box = $('#shader-admin'); box.innerHTML = '';
   for (const name of lastShaderList){
     const isPreset = name.startsWith('presets/');
     const row = document.createElement('div'); row.className = 'sh-row';
-
-    const b = document.createElement('button');
-    b.className = 'ibtn name' + (name === current ? ' active' : '');
-    b.textContent = isPreset ? name.slice(8) : name;
-    b.title = name;
-    b.onclick = () => shaderPost('/shader', { name });
-    row.appendChild(b);
-
-    const cap = document.createElement('span'); cap.className = 'keycap';
-    cap.textContent = (lastShaderKeys[name] || '').toUpperCase();
-    row.appendChild(cap);
-
-    const gear = document.createElement('button');
-    gear.className = 'ibtn sh-gear' + (shaderOpen === name ? ' open' : '');
-    gear.textContent = '⚙';
-    gear.title = 'renomear / apagar / tecla';
-    gear.onclick = () => { shaderOpen = shaderOpen === name ? '' : name; shaderSig = ''; renderShaderList(current); };
-    row.appendChild(gear);
+    const nm = document.createElement('span'); nm.className = 'name'; nm.style.padding = '3px 8px';
+    nm.textContent = isPreset ? name.replace(/^presets\/[^/]+\//, '') : name + '  (base)';
+    nm.title = name;
+    row.appendChild(nm);
+    if (isPreset){
+      const gear = document.createElement('button');
+      gear.className = 'ibtn sh-gear' + (shaderOpen === name ? ' open' : '');
+      gear.textContent = '⚙'; gear.title = 'renomear / apagar';
+      gear.onclick = () => { shaderOpen = shaderOpen === name ? '' : name; shaderAdminSig = ''; renderShaderAdmin(); };
+      row.appendChild(gear);
+    }
     box.appendChild(row);
-
-    if (shaderOpen === name) box.appendChild(shaderPanel(name, isPreset));
+    if (shaderOpen === name) box.appendChild(shaderPanel(name));
   }
 }
-function shaderPanel(name, isPreset){
+function shaderPanel(name){
   const p = document.createElement('div'); p.className = 'sh-panel';
-  if (isPreset){
-    const ren = document.createElement('input');
-    ren.className = 'insel'; ren.value = name.slice(8).replace(/\.frag$/, '');
-    const doRename = () => shaderPost('/rename-shader', { name, newname: ren.value })
-      .catch(e => alert('não renomeou: ' + e));
-    ren.onkeydown = e => { if (e.key === 'Enter') doRename(); };
-    const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear';
-    rb.onclick = doRename;
-    p.append('nome ', ren, rb);
-  }
-  // tecla: captura UMA tecla (a-z / 0-9) e vincula na hora; Backspace/Delete desvincula.
-  // limitado a alfanumérico pq é o que o pygame.key.name do native_synth também dá.
-  const ki = document.createElement('input');
-  ki.className = 'insel keyin'; ki.maxLength = 1; ki.placeholder = '—';
-  ki.value = (lastShaderKeys[name] || '').toUpperCase();
-  ki.onkeydown = e => {
-    if (e.key === 'Tab' || e.key === 'Escape') return;   // deixa sair do campo
-    e.preventDefault();
-    let k = '';
-    if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) k = e.key.toLowerCase();
-    else if (e.key !== 'Backspace' && e.key !== 'Delete') return;   // ignora modificadores etc.
-    shaderPost('/shader-key', { name, key: k }).catch(err => alert('tecla: ' + err));
-  };
-  p.append('tecla ', ki);
-  if (isPreset){
-    const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
-    del.onclick = () => {
-      if (!del.classList.contains('arm')){ del.classList.add('arm'); del.textContent = 'confirmar?'; return; }
-      shaderPost('/delete-shader', { name }, () => { shaderOpen = ''; }).catch(e => alert('não apagou: ' + e));
-    };
-    p.appendChild(del);
-  }
+  const ren = document.createElement('input');
+  ren.className = 'insel'; ren.value = name.replace(/^presets\/[^/]+\//, '').replace(/\.frag$/, '');
+  const doRename = () => shaderPost('/rename-shader', { name, newname: ren.value }, () => { shaderOpen = ''; })
+    .catch(e => alert('não renomeou: ' + e));
+  ren.onkeydown = e => { if (e.key === 'Enter') doRename(); };
+  const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear';
+  rb.onclick = doRename;
+  p.append('nome ', ren, rb);
+  const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
+  del.onclick = () => askConfirm(`Apagar “${name}”? Sai também dos sets que o usam.`,
+    () => shaderPost('/delete-shader', { name }, () => { shaderOpen = ''; }).catch(e => alert('não apagou: ' + e)));
+  p.appendChild(del);
   return p;
 }
 
-// ============ MÍDIA (galeria de imagens/vídeos como input de imagem) ============
-let lastMedia = [], lastMediaKeys = {}, lastMediaSets = ['default'], lastMediaSet = 'default',
-    mediaSig = '', mediaOpen = '', mediaTouched = 0;
+// ============ MÍDIA: principal + camadas (Sets) / arquivos (Biblioteca) ============
+let lastMedia = [], mediaSig = '', mediaAdminSig = '', mediaOpen = '', mediaTouched = 0;
+let lastBounceBusy = [];   // files (relativos a media/) com rebate sendo preparado agora — vem do stream
 function loadMedia(){
   fetch('/media').then(r => r.json()).then(d => {
-    lastMedia = d.list || []; lastMediaKeys = d.keys || {};
+    lastMedia = d.list || [];
     if (d.overlays) lastOverlays = d.overlays;
-    lastMediaSets = d.sets || ['default']; lastMediaSet = d.set || 'default';
-    renderSetBar($('#media-set-bar'), lastMediaSets, lastMediaSet, '/media-set');
-    renderMediaList(d.current || '');
+    mediaSig = ''; renderMediaList();
+    renderMediaAdmin();
+    shaderSig = ''; renderShaderList();          // o nome da fonte selecionada pode ser midia
   });
 }
-function selectMedia(name){
-  mediaTouched = performance.now();
-  setInput('video', 'media:' + name);
-  selTouched.video = performance.now();   // impede o dropdown de brigar com a troca
-  mediaSig = ''; setTimeout(loadMedia, 60);
+// SELECIONAR uma fonte/midia (clique no nome): so' troca qual pilha de efeitos a lista mostra
+// (e o que a aba Source Image analisa). A saida e' so o que esta marcado.
+function selectSource(key){
+  lastSelected = key; selTouched.src = performance.now();
+  mediaSig = videoSig = shaderSig = fxSig = '';
+  renderMediaList(); renderVideoList(); renderShaderList(); renderFx();
+  fetch('/select', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ src: key }) });
 }
-let mediaLastCurrent = '';
-let lastBounceBusy = [];
+function sourceLabel(key){
+  if (!key) return '';
+  const m = lastMedia.find(x => x.file === key);
+  if (m) return m.name;
+  const v = lastVideoInputs.find(x => x.id === key);
+  return v ? v.name : key;
+}
 // CAMADAS (overlay): [{file, opacity}] de baixo pra cima, na ordem em que foram marcadas. Vem de
 // /media e do stream; o slider se atualiza NO LUGAR (ovlEls) sem rebuild da lista — o sig so
 // muda quando a lista de camadas muda, nao a opacidade, pra nao matar um arrasto no meio.
@@ -1264,108 +1482,157 @@ function sendOverlaysLive(){   // arrasto: no maximo ~25 POST/s, sem gravar no t
   mediaTouched = performance.now();
   if (!ovlT) ovlT = setTimeout(() => { ovlT = null; sendOverlays(false); }, 40);
 }
+// controle de camada (checkbox + ordem + slider) de UMA entrada de OVERLAYS: item de midia
+// (file) ou fonte viva ('webcam:..' | 'screen:..', lista "Fonte de imagem"). Marcar/desmarcar
+// repinta as duas listas (a ordem e' uma so pras duas).
+function ovlControl(file, title){
+  const oi = lastOverlays.findIndex(o => o.file === file);
+  const ov = document.createElement('label'); ov.className = 'ovl';
+  const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
+  oc.title = title;
+  const ord = document.createElement('span'); ord.className = 'ord';
+  ord.textContent = oi >= 0 ? String(oi + 1) : '';
+  ord.title = 'posição da camada (1 = mais embaixo)';
+  const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
+  orng.value = oi >= 0 ? Math.round(lastOverlays[oi].opacity * 100) : 50;
+  orng.disabled = oi < 0; orng.title = 'opacidade da camada';
+  const pct = document.createElement('span'); pct.className = 'pct';
+  pct.textContent = oi >= 0 ? orng.value + '%' : '';
+  oc.onchange = () => {
+    if (oc.checked) lastOverlays.push({ file, opacity: +orng.value / 100 });
+    else lastOverlays = lastOverlays.filter(o => o.file !== file);
+    sendOverlays(true); mediaSig = ''; videoSig = ''; renderMediaList(); renderVideoList();
+  };
+  orng.onpointerdown = () => { ovlDrag = file; mediaTouched = performance.now(); };
+  orng.oninput = () => {
+    const o = lastOverlays.find(x => x.file === file); if (!o) return;
+    o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
+    sendOverlaysLive();
+  };
+  orng.onchange = () => { ovlDrag = ''; sendOverlays(true); };
+  ov.append(oc, ord, 'camada', orng, pct);
+  ovlEls[file] = { inp: orng, pct };
+  return ov;
+}
 function syncOvlSliders(){
   if (performance.now() - mediaTouched < TOUCH_MS) return;
   for (const [file, el] of Object.entries(ovlEls)){
+    if (!el.inp.isConnected){ delete ovlEls[file]; continue; }
     if (file === ovlDrag) continue;
     const o = lastOverlays.find(x => x.file === file);
     if (o){ el.inp.value = Math.round(o.opacity * 100); el.pct.textContent = el.inp.value + '%'; }
   }
-}   // files (relativos a media/) com rebate sendo preparado agora — vem do stream
-function renderMediaList(current){
-  if (current === undefined) current = mediaLastCurrent; else mediaLastCurrent = current;
+}
+// DISPONÍVEIS no set ativo (pool): {sources?: [chaves], shaders?: [arquivos]}; lista ausente =
+// tudo. "×" tira do set (some daqui e da saida, mas marcacao/efeitos ficam lembrados); o
+// "+ adicionar ao set…" de cada grupo traz de volta. Sempre manda a lista explicita inteira.
+let lastPool = null, poolTouched = 0;
+function allOf(kind){
+  return kind === 'shaders' ? lastShaderList.slice()
+    : lastVideoInputs.filter(x => x.kind !== 'media').map(x => x.id).concat(lastMedia.map(m => m.file));
+}
+function inPool(kind, key){ const l = (lastPool || {})[kind]; return !l || l.includes(key); }
+function setPool(kind, list){
+  poolTouched = performance.now();
+  lastPool = Object.assign({}, lastPool || {}, { [kind]: list });
+  mediaSig = videoSig = shaderSig = ''; renderMediaList(); renderVideoList(); renderShaderList();
+  fetch('/pool', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pool: lastPool }) });
+}
+function rmButton(kind, key){
+  const b = document.createElement('button'); b.className = 'ibtn rm'; b.textContent = '×';
+  b.title = 'tirar deste set (some daqui e da saída; volta pelo "+ adicionar ao set")';
+  b.onclick = () => setPool(kind, ((lastPool || {})[kind] || allOf(kind)).filter(k => k !== key));
+  return b;
+}
+function addPicker(kind, items){   // items: [[chave, rotulo]] que NAO estao no set
+  const row = document.createElement('div'); row.className = 'addrow';
+  if (!items.length) return row;
+  const sel = document.createElement('select'); sel.className = 'insel';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '+ adicionar ao set…'; sel.appendChild(o0);
+  for (const [k, lbl] of items){ const o = document.createElement('option'); o.value = k; o.textContent = lbl; sel.appendChild(o); }
+  sel.onchange = () => { if (sel.value) setPool(kind, ((lastPool || {})[kind] || allOf(kind)).concat([sel.value])); };
+  row.appendChild(sel);
+  return row;
+}
+// preencher / rebate: configuracao da FONTE (midia: item de MEDIA; camera/tela: SOURCE_FIT), vale
+// em todos os sets — mas mora nas listas da aba Sets, junto do resto do que mexe na imagem.
+// preencher = estica pra cobrir a saida; desmarcado = encaixa inteira, com margens pretas.
+function fitControl(filled, onchange){
+  const fit = document.createElement('label'); fit.className = 'fit';
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = filled;
+  cb.title = 'preencher: estica a imagem pra cobrir a saída / desmarcado: encaixa inteira, com margens';
+  cb.onchange = () => onchange(cb.checked ? 'fill' : 'fit');
+  fit.append(cb, 'preencher');
+  return fit;
+}
+function rebateSlot(){       // vaga invisivel do tamanho do "rebate", pra coluna alinhar
+  const ph = document.createElement('label'); ph.className = 'fit'; ph.style.visibility = 'hidden';
+  const pc = document.createElement('input'); pc.type = 'checkbox';
+  ph.append(pc, 'rebate');
+  return ph;
+}
+function mediaOpts(m){
+  const box = document.createDocumentFragment();
+  box.appendChild(fitControl(m.fit !== 'fit', f => { m.fit = f; sendMedia(); }));
+  if (m.kind === 'video'){   // rebate: ida inteira + volta inteira em loop, desacelerando na virada
+    const bl = document.createElement('label'); bl.className = 'fit';
+    const bc = document.createElement('input'); bc.type = 'checkbox'; bc.checked = !!m.bounce;
+    bc.title = 'rebate: passa o vídeo pra frente e depois de trás pra frente, em loop, '
+             + 'desacelerando perto de cada virada. Na 1ª vez prepara uma versão (alguns segundos; '
+             + 'enquanto isso toca normal).';
+    bc.onchange = () => { m.bounce = bc.checked; sendMedia(); };
+    bl.append(bc, lastBounceBusy.includes(m.file) ? 'rebate (preparando…)' : 'rebate');
+    box.appendChild(bl);
+  } else {
+    box.appendChild(rebateSlot());
+  }
+  return box;
+}
+function renderMediaList(){
   if (performance.now() - mediaTouched < TOUCH_MS && mediaSig) return;   // acabei de mexer
-  const sig = JSON.stringify([lastMedia, lastMediaKeys, current, mediaOpen, lastTrans, lastBounceBusy,
-                             lastOverlays.map(o => o.file)]);
+  const sig = JSON.stringify([lastMedia, lastSelected, lastOverlays.map(o => o.file), lastBounceBusy, lastPool]);
   if (sig === mediaSig) return;
   mediaSig = sig;
-  const box = $('#media-list'); box.innerHTML = ''; ovlEls = {};
-  if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Use "+ imagem ou vídeo".</div>';
-  for (const m of lastMedia){
+  const box = $('#media-pick'); box.innerHTML = '';
+  if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Adicione na sub-aba Biblioteca.</div>';
+  for (const m of lastMedia.filter(x => inPool('sources', x.file))){
     const row = document.createElement('div'); row.className = 'sh-row';
-
     const typ = document.createElement('span'); typ.className = 'mtype';
     typ.textContent = m.kind === 'video' ? '🎬' : '🖼';
     typ.title = m.kind === 'video' ? 'vídeo' : 'imagem';
-    row.appendChild(typ);
-
     const b = document.createElement('button');
-    b.className = 'ibtn name' + (m.name === current ? ' active' : '');   // `current` = nome da mídia ativa (ou '')
+    b.className = 'ibtn name' + (m.file === lastSelected ? ' active' : '');
     b.textContent = m.name;
-    b.onclick = () => selectMedia(m.name);
-    row.appendChild(b);
-
-    const cap = document.createElement('span'); cap.className = 'keycap';
-    cap.textContent = (lastMediaKeys[m.name] || '').toUpperCase();
-    row.appendChild(cap);
-
-    // camada: marca = entra POR CIMA das ja marcadas; slider = opacidade (vivo; grava ao soltar)
-    const oi = lastOverlays.findIndex(o => o.file === m.file);
-    const ov = document.createElement('label'); ov.className = 'ovl';
-    const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
-    oc.title = 'camada: sobrepõe esta mídia à imagem, por cima das já marcadas (na ordem em que marcar)';
-    const ord = document.createElement('span'); ord.className = 'ord';
-    ord.textContent = oi >= 0 ? String(oi + 1) : '';
-    ord.title = 'posição da camada (1 = mais embaixo)';
-    const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
-    orng.value = oi >= 0 ? Math.round(lastOverlays[oi].opacity * 100) : 50;
-    orng.disabled = oi < 0; orng.title = 'opacidade da camada';
-    const pct = document.createElement('span'); pct.className = 'pct';
-    pct.textContent = oi >= 0 ? orng.value + '%' : '';
-    oc.onchange = () => {
-      if (oc.checked) lastOverlays.push({ file: m.file, opacity: +orng.value / 100 });
-      else lastOverlays = lastOverlays.filter(o => o.file !== m.file);
-      sendOverlays(true); mediaSig = ''; renderMediaList();
-    };
-    orng.onpointerdown = () => { ovlDrag = m.file; mediaTouched = performance.now(); };
-    orng.oninput = () => {
-      const o = lastOverlays.find(x => x.file === m.file); if (!o) return;
-      o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
-      sendOverlaysLive();
-    };
-    orng.onchange = () => { ovlDrag = ''; sendOverlays(true); };
-    ov.append(oc, ord, 'camada', orng, pct);
-    row.appendChild(ov);
-    ovlEls[m.file] = { inp: orng, pct };
-
-    const fit = document.createElement('label'); fit.className = 'fit';
-    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = m.fit !== 'fit';
-    cb.title = 'preencher (cobre cortando) / desmarcado = encaixa com barras';
-    cb.onchange = () => { m.fit = cb.checked ? 'fill' : 'fit'; sendMedia(); };
-    fit.append(cb, 'preencher');
-    row.appendChild(fit);
-
-    if (m.kind === 'video'){   // rebate: ida inteira + volta inteira em loop, desacelerando na virada
-      const bl = document.createElement('label'); bl.className = 'fit';
-      const bc = document.createElement('input'); bc.type = 'checkbox'; bc.checked = !!m.bounce;
-      bc.title = 'rebate: passa o vídeo pra frente e depois de trás pra frente, em loop, '
-               + 'desacelerando perto de cada virada. Na 1ª vez prepara uma versão (alguns segundos; '
-               + 'enquanto isso toca normal).';
-      bc.onchange = () => { m.bounce = bc.checked; sendMedia(); };
-      bl.append(bc, lastBounceBusy.includes(m.file) ? 'rebate (preparando…)' : 'rebate');
-      row.appendChild(bl);
-    }
-
-    const tsel = document.createElement('select');
-    tsel.className = 'insel'; tsel.style.maxWidth = '120px';
-    tsel.title = 'transição de entrada desta mídia';
-    for (const [val, lbl] of [['', '(padrão)'], ['none', 'corte seco'],
-                              ...lastTrans.map(f => [f, f.replace(/\.glsl$/, '')])]){
-      const o = document.createElement('option'); o.value = val; o.textContent = lbl;
-      if (val === (m.transition || '')) o.selected = true;
-      tsel.appendChild(o);
-    }
-    tsel.onchange = () => { m.transition = tsel.value; sendMedia(); };
-    row.appendChild(tsel);
+    b.title = 'selecionar (mostra os efeitos desta mídia)';
+    b.onclick = () => selectSource(m.file);
+    row.append(typ, b, ovlControl(m.file, 'camada: sobrepõe esta mídia à imagem, por cima das já marcadas (na ordem em que marcar)'),
+               mediaOpts(m), rmButton('sources', m.file));
+    box.appendChild(row);
+  }
+  box.appendChild(addPicker('sources', lastMedia.filter(x => !inPool('sources', x.file)).map(x => [x.file, x.name])));
+}
+function renderMediaAdmin(){
+  const sig = JSON.stringify([lastMedia, mediaOpen]);
+  if (sig === mediaAdminSig) return;
+  mediaAdminSig = sig;
+  const box = $('#media-list'); box.innerHTML = '';
+  if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Use "+ imagem ou vídeo".</div>';
+  for (const m of lastMedia){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const typ = document.createElement('span'); typ.className = 'mtype';
+    typ.textContent = m.kind === 'video' ? '🎬' : '🖼';
+    typ.title = m.kind === 'video' ? 'vídeo' : 'imagem';
+    const nm = document.createElement('span'); nm.className = 'name'; nm.style.padding = '3px 8px';
+    nm.textContent = m.name; nm.title = m.file;
+    row.append(typ, nm);
 
     const gear = document.createElement('button');
     gear.className = 'ibtn sh-gear' + (mediaOpen === m.name ? ' open' : '');
-    gear.textContent = '⚙';
-    gear.title = 'renomear / tecla / excluir';
-    gear.onclick = () => { mediaOpen = mediaOpen === m.name ? '' : m.name; mediaSig = ''; renderMediaList(current); };
+    gear.textContent = '⚙'; gear.title = 'renomear / excluir';
+    gear.onclick = () => { mediaOpen = mediaOpen === m.name ? '' : m.name; mediaAdminSig = ''; renderMediaAdmin(); };
     row.appendChild(gear);
     box.appendChild(row);
-
     if (mediaOpen === m.name) box.appendChild(mediaPanel(m));
   }
 }
@@ -1376,44 +1643,26 @@ function mediaPanel(m){
   ren.onkeydown = e => { if (e.key === 'Enter') doRen(); };
   const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
   p.append('nome ', ren, rb);
-
-  const ki = document.createElement('input'); ki.className = 'insel keyin'; ki.maxLength = 1; ki.placeholder = '—';
-  ki.value = (lastMediaKeys[m.name] || '').toUpperCase();
-  ki.onkeydown = e => {
-    if (e.key === 'Tab' || e.key === 'Escape') return;
-    e.preventDefault();
-    let k = '';
-    if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) k = e.key.toLowerCase();
-    else if (e.key !== 'Backspace' && e.key !== 'Delete') return;
-    mediaTouched = performance.now();
-    fetch('/media-key', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: m.name, key: k }) })
-      .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-      .then(() => { mediaSig = ''; loadMedia(); }).catch(err => alert('tecla: ' + err));
-  };
-  p.append('tecla ', ki);
-
   const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'excluir';
-  del.onclick = () => {
-    if (!del.classList.contains('arm')){ del.classList.add('arm'); del.textContent = 'confirmar?'; return; }
+  del.onclick = () => askConfirm(`Excluir “${m.name}”? Apaga o arquivo e tira dos sets que a usam.`, () => {
     mediaTouched = performance.now();
     fetch('/media-del', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: m.name, set: lastMediaSet }) })
+      body: JSON.stringify({ name: m.name }) })
       .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
-      .then(() => { mediaOpen = ''; mediaSig = ''; loadMedia(); }).catch(e => alert('não excluiu: ' + e));
-  };
+      .then(() => { mediaOpen = ''; mediaSig = mediaAdminSig = ''; loadMedia(); }).catch(e => alert('não excluiu: ' + e));
+  });
   p.appendChild(del);
   return p;
 }
 function sendMedia(){
   mediaTouched = performance.now();
   const msg = $('#media-msg'); msg.textContent = ''; msg.className = '';
-  // usa a RESPOSTA do POST (lista limpa do set) — nao um GET depois, que pega o tuning velho
+  // usa a RESPOSTA do POST (lista limpa) — nao um GET depois, que pega o tuning velho
   // enquanto o mtime-reload nao rodou e faz o checkbox "voltar" ~600ms depois.
   fetch('/media', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ media: lastMedia, set: lastMediaSet }) })
+    body: JSON.stringify({ media: lastMedia }) })
     .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-    .then(list => { lastMedia = list; mediaSig = ''; renderMediaList(); })
+    .then(list => { lastMedia = list; mediaSig = mediaAdminSig = ''; renderMediaList(); renderMediaAdmin(); loadScenes(); })
     .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; loadMedia(); });
 }
 function mediaFile(){    // um botão só: o servidor decide imagem/vídeo pela extensão
@@ -1432,24 +1681,21 @@ function mediaFile(){    // um botão só: o servidor decide imagem/vídeo pela 
   inp.click();
 }
 
-// ============ TRANSIÇÕES (galeria de .glsl; a atribuição vive nos <select> da lista de mídia) ============
+// ============ TRANSIÇÕES (galeria de .glsl; cada set escolhe a sua na lista de sets) ============
 let lastTrans = [], lastTransDefault = 'none', transSig = '', transOpen = '';
+function gotTransitions(d){
+  lastTrans = d.list || []; lastTransDefault = d.default || 'none';
+  transSig = ''; renderTransitions();
+  renderScenes();                              // os <select> por set dependem da lista
+}
 function loadTransitions(){
-  fetch('/transitions').then(r => r.json()).then(d => {
-    lastTrans = d.list || []; lastTransDefault = d.default || 'none';
-    transSig = ''; renderTransitions();
-    mediaSig = ''; renderMediaList();          // os <select> por mídia dependem da lista
-  }).catch(() => {});
+  fetch('/transitions').then(r => r.json()).then(gotTransitions).catch(() => {});
 }
 function transPost(url, body){
   return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}) })
     .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-    .then(d => {
-      lastTrans = d.list || []; lastTransDefault = d.default || 'none';
-      transSig = ''; renderTransitions();
-      mediaSig = ''; loadMedia();              // renomear/apagar pode ter mexido nos itens
-    });
+    .then(d => { gotTransitions(d); loadScenes(); });   // renomear/apagar mexe nos sets
 }
 function renderTransitions(){
   const sig = JSON.stringify([lastTrans, lastTransDefault, transOpen]);
@@ -1486,7 +1732,7 @@ function renderTransitions(){
     const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
     p.append('nome ', ren, rb);
     const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
-    del.onclick = () => askConfirm(`Apagar a transição “${f}”? Mídias que a usam voltam pro padrão.`,
+    del.onclick = () => askConfirm(`Apagar a transição “${f}”? Sets que a usam voltam pro padrão.`,
       () => { transOpen = ''; transPost('/delete-transition', { name: f }).catch(e => alert('não apagou: ' + e)); });
     p.appendChild(del);
     box.appendChild(p);
@@ -1501,8 +1747,7 @@ function newTransition(){
     .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
 }
 
-// atalho da aba Visuals em QUALQUER parte do dash: tecla de SHADER_KEYS (troca shader) ou de
-// MEDIA_KEYS (troca input de imagem) — mesmas teclas que valem na janela do native_synth.
+// atalho de SET em QUALQUER parte do dash (mesmas teclas que valem na janela do native_synth).
 // Ignora se o foco esta num campo de texto / select / editavel, se ha modificador (nao
 // sequestra Ctrl+R etc.) ou se e' auto-repeat (segurar a tecla).
 function typingInField(el){
@@ -1515,23 +1760,24 @@ document.addEventListener('keydown', e => {
   if (typingInField(e.target)) return;
   const k = e.key.toLowerCase();
   if (!/[a-z0-9]/.test(k)) return;
-  const sh = Object.keys(lastShaderKeys).find(s => lastShaderKeys[s] === k);
-  if (sh){ e.preventDefault(); shaderPost('/shader', { name: sh }); return; }
-  const md = Object.keys(lastMediaKeys).find(n => lastMediaKeys[n] === k);
-  if (md){ e.preventDefault(); selectMedia(md); }
+  const sc = lastScenes.find(x => x.key === k);
+  if (sc){ e.preventDefault(); scenePost('/scene', { name: sc.name }); }
 });
 
-let fxSig = '', fxEls = {}, fxActive = null, fxReleaseT = null, fxFlushT = null, fxSaved = {};
-const fxPending = {};
-function renderFx(fx){
-  if (!fx) return;
-  fxSaved = fx.saved || {};
-  const man = fx.manifest || [];
-  if (JSON.stringify(man) !== fxSig){            // manifest mudou (troca de shader / editou o "// fx:")
-    fxSig = JSON.stringify(man);
+// FORÇA DOS EFEITOS do par (fonte selecionada, shader clicado): BINDINGS[fonte].fx[shader][nome].
+// Nomes = cabecalho "// fx:" do shader (lastManifests, de /shaders). Ausente = 1.0 (cheio).
+let fxSig = '', fxEls = {}, fxActive = null, fxReleaseT = null;
+function renderFx(){
+  const man = lastManifests[fxShader] || [];
+  const sig = JSON.stringify([fxShader, lastSelected, man]);
+  if (sig !== fxSig){
+    fxSig = sig;
+    $('#fx-title').textContent = fxShader ? `${shortShader(fxShader)} em ${sourceLabel(lastSelected) || '—'}` : '—';
     const box = $('#fx-list'); box.innerHTML = ''; fxEls = {};
-    if (!man.length) box.innerHTML = '<div class="txtrow">&mdash; o shader ativo não declara efeitos (sem linha <b>// fx:</b>)</div>';
-    for (const name of man){
+    if (!fxShader) box.innerHTML = '<div class="txtrow">&mdash; clique no nome de um shader acima</div>';
+    else if (!lastSelected) box.innerHTML = '<div class="txtrow">&mdash; selecione uma fonte/mídia</div>';
+    else if (!man.length) box.innerHTML = '<div class="txtrow">&mdash; esse shader não declara efeitos (sem linha <b>// fx:</b>)</div>';
+    else for (const name of man){
       const row = document.createElement('div'); row.className = 'knob';
       row.innerHTML = `<label>${name}</label><input type="range" min="0" max="1" step="0.01"><span class="kv">&mdash;</span>`;
       box.appendChild(row);
@@ -1539,28 +1785,22 @@ function renderFx(fx){
       fxEls[name] = { inp, kv };
       inp.addEventListener('input', () => {
         kv.textContent = fmt(inp.value);
-        fxPending[name] = inp.value; fxActive = name;
+        const bnd = selBinding(true);
+        bnd.fx = bnd.fx || {};
+        (bnd.fx[fxShader] = bnd.fx[fxShader] || {})[name] = parseFloat(inp.value);
+        fxActive = name;
         clearTimeout(fxReleaseT); fxReleaseT = setTimeout(() => fxActive = null, 600);
-        if (!fxFlushT) fxFlushT = setTimeout(fxFlush, 80);
+        sendBindingsLive();
       });
+      inp.addEventListener('change', () => sendBindings(true));
     }
   }
-  const lv = fx.levels || {};
+  const lv = (((selBinding(false) || {}).fx) || {})[fxShader] || {};
   for (const [name, o] of Object.entries(fxEls)){
     if (name === fxActive) continue;             // nao briga com o slider em arrasto
-    const v = name in lv ? lv[name] : (name in fxSaved ? fxSaved[name] : 1.0);
+    const v = name in lv ? lv[name] : 1.0;
     o.inp.value = v; o.kv.textContent = fmt(v);
   }
-}
-function fxFlush(){
-  fxFlushT = null;
-  // manda o mapa INTEIRO (o servidor reescreve o bloco FX todo): grava o dos sliders atuais por
-  // cima do que ja estava salvo — preserva chaves de OUTROS presets que vivem no mesmo FX.
-  const fx = Object.assign({}, fxSaved);
-  for (const [name, o] of Object.entries(fxEls)) fx[name] = parseFloat(o.inp.value);
-  for (const [k, v] of Object.entries(fxPending)){ fx[k] = parseFloat(v); delete fxPending[k]; }
-  fetch('/fx', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fx }) });
 }
 
 function flush(){
@@ -1584,12 +1824,48 @@ function fillSel(sel, items, current){
   }
 }
 let lastAudioSources = [];
+// FONTE DE IMAGEM: lista de linhas (mesmo visual da galeria de midia) em vez de <select>.
+// Lista vem de /inputs; o destaque (ativa) segue o stream (d.inputs.video).
+let lastVideoInputs = [], videoSig = '', lastSourceFit = {}, fitTouched = 0;
+function setSourceFit(id, fit){
+  fitTouched = performance.now();
+  if (fit === 'fit') lastSourceFit[id] = 'fit'; else delete lastSourceFit[id];
+  fetch('/source-fit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ src: id, fit }) });
+}
+const VIDEO_ICON = { webcam: '📷', screen: '🖥', media: '🎞' };
+const VIDEO_KIND = { webcam: 'câmera', screen: 'tela' };
+function renderVideoList(){
+  if (performance.now() - mediaTouched < TOUCH_MS && videoSig) return;   // acabei de mexer numa camada
+  const sig = JSON.stringify([lastVideoInputs, lastSelected, lastOverlays.map(o => o.file), lastSourceFit, lastPool]);
+  if (sig === videoSig) return;
+  videoSig = sig;
+  const box = $('#video-list'); box.innerHTML = '';
+  if (!lastVideoInputs.some(x => x.kind !== 'media')) box.innerHTML = '<div class="txtrow">&mdash; nenhuma fonte encontrada. Use ↻.</div>';
+  const live = lastVideoInputs.filter(x => x.kind !== 'media');   // mídias têm grupo próprio
+  for (const it of live.filter(x => inPool('sources', x.id))){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const typ = document.createElement('span'); typ.className = 'mtype';
+    typ.textContent = VIDEO_ICON[it.kind] || '•'; typ.title = VIDEO_KIND[it.kind] || it.kind;
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (it.id === lastSelected ? ' active' : '');
+    b.textContent = it.name; b.title = it.id + ' — selecionar (mostra os efeitos desta fonte)';
+    b.onclick = () => selectSource(it.id);
+    row.append(typ, b, ovlControl(it.id, 'camada: põe esta fonte na saída, por cima das já marcadas (na ordem em que marcar)'),
+               fitControl(lastSourceFit[it.id] !== 'fit', f => setSourceFit(it.id, f)), rebateSlot(),
+               rmButton('sources', it.id));
+    box.appendChild(row);
+  }
+  box.appendChild(addPicker('sources', live.filter(x => !inPool('sources', x.id)).map(x => [x.id, x.name])));
+}
 function loadInputs(){
   fetch('/inputs').then(r => r.json()).then(d => {
     if (!d.audio && !d.video) return;
     lastAudioSources = d.audio || [];
     fillSel($('#sel-audio'), d.audio || [], (d.current || {}).audio);
-    fillSel($('#sel-video'), d.video || [], (d.current || {}).video);
+    lastVideoInputs = d.video || [];
+    videoSig = ''; renderVideoList();
+    shaderSig = fxSig = ''; renderShaderList(); renderFx();   // o nome da fonte selecionada pode ser camera/tela
     fillAllChannelSelects();
   }).catch(() => {});
 }
@@ -1602,12 +1878,12 @@ function setInput(kind, id){
 // change LOCAL (mesmo TOUCH_MS da barra de saida) — nao por foco: focado sozinho nao prova
 // que o usuario ainda esta escolhendo, e um <select> pode ficar com foco muito depois do
 // dropdown fechar (ex. Esc sem blur), travando a sincronizacao pra sempre ate clicar fora.
-const selTouched = { audio: 0, video: 0 };
+const selTouched = { audio: 0, src: 0 };
 function syncSel(sel, kind, val){
   if (!val || performance.now() - selTouched[kind] < TOUCH_MS || sel.value === val) return;
   if ([...sel.options].some(o => o.value === val)) sel.value = val;
 }
-for (const [id, kind] of [['#sel-audio', 'audio'], ['#sel-video', 'video']]){
+for (const [id, kind] of [['#sel-audio', 'audio']]){
   const sel = $(id);
   sel.addEventListener('mousedown', () => { selTouched[kind] = performance.now(); });
   sel.addEventListener('change', e => { selTouched[kind] = performance.now(); setInput(kind, e.target.value); });
@@ -1616,6 +1892,7 @@ loadInputs();
 loadShaders();
 loadMedia();
 loadTransitions();
+loadScenes();
 
 // ============ STREAM ============
 let htmlMtime = null, msgTimes = [];
@@ -1664,12 +1941,19 @@ function render(d){
   if (a.spectrum) renderSpectro(a.spectrum);
   renderRanges(d.bands_hz);
   renderChannels(d.channels);
-  renderShaderList(d.shader);
+  if (d.bindings && performance.now() - bindTouched >= TOUCH_MS) lastBindings = d.bindings;
+  if (d.selected !== undefined && performance.now() - selTouched.src >= TOUCH_MS) lastSelected = d.selected;
+  if (d.source_fit && performance.now() - fitTouched >= TOUCH_MS) lastSourceFit = d.source_fit;
+  if (d.pool !== undefined && performance.now() - poolTouched >= TOUCH_MS) lastPool = d.pool;
+  renderShaderList();
+  syncLayerSliders();
   lastBounceBusy = d.bounce_busy || [];
   if (d.overlays && performance.now() - mediaTouched >= TOUCH_MS) lastOverlays = d.overlays;
-  renderMediaList(d.media_active || '');
+  renderMediaList();
+  renderVideoList();
+  if (d.scene !== undefined && d.scene !== activeScene) loadScenes();   // trocou de set (tecla / outra aba)
   syncOvlSliders();   // só o highlight segue o stream; a lista vem de /media
-  renderFx(d.fx);
+  renderFx();
   renderOutput(d.output);
   renderImage(d.image);
   renderImage(d.out_image, 'out-');
@@ -1683,7 +1967,6 @@ function render(d){
   }
   if (d.inputs){
     syncSel($('#sel-audio'), 'audio', d.inputs.audio);
-    syncSel($('#sel-video'), 'video', d.inputs.video);
   }
 }
 connect();

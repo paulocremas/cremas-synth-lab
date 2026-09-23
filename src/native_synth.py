@@ -56,29 +56,16 @@ FRAG_PATH = os.path.join(SHADERS_DIR, 'image.frag')
 MAX_CHANNELS = 8  # teto do array u_chan/u_chan_hit no shader; tuning.CHANNELS pode ter menos
 
 
-def resolve_shader_path():
-    """Caminho absoluto do shader ativo (tuning.SHADER, relativo a shaders/ — 'image.frag'
-    ou 'presets/<nome>.frag'). Cai pra image.frag se o escolhido sumiu (preset apagado)."""
-    p = os.path.join(SHADERS_DIR, getattr(tuning, 'SHADER', 'image.frag'))
-    return p if os.path.isfile(p) else FRAG_PATH
-
-
-def seed_fx(manifest):
-    """Garante uma entrada em state['fx'] pra cada nome do manifest (default = tuning.FX ou
-    1.0). Nao mexe em quem ja tem valor — preserva o que o dash/MIDI ja ajustou."""
-    saved = getattr(tuning, 'FX', {})
-    for name in manifest:
-        state['fx'].setdefault(name, float(saved.get(name, 1.0)))
-
 VERT_SRC = """
 attribute vec2 a_pos;
 void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 """
 
-# --- TRANSIÇÕES de mídia (galeria "Transições" no dash). Um arquivo transitions/*.glsl e' so
+# --- TRANSIÇÕES entre SETS (galeria "Transições" no dash). Um arquivo transitions/*.glsl e' so
 # uma func `vec4 transition(vec2 uv)` estilo gl-transitions; aqui embrulhamos num harness com
-# getFromColor (imagem que SAI) / getToColor (a que ENTRA) / progress, e rodamos num passe FBO
-# na troca de midia (ver main()). Cabecalho "// ms: N" = duracao (ausente -> 400).
+# getFromColor (imagem FINAL que sai, capturada da tela) / getToColor (o set novo) / progress,
+# e rodamos como o ultimo passe do frame na troca de set (ver main()). Cabecalho "// ms: N" =
+# duracao (ausente -> 400).
 _TRANS_HEAD = """\
 #ifdef GL_ES
 precision highp float;
@@ -114,19 +101,10 @@ def _transition_ms(path):
     return _trans_ms_cache[key]
 
 
-def _resolve_transition(v):
-    """(caminho_abs, ms) da transicao de ENTRADA da midia `v`, ou (None, 0) = corte seco.
-    Item com 'transition' vazio usa tuning.TRANSITION_DEFAULT; 'none' ou arquivo sumido = seco."""
-    if not v or v.get('mode') != 'media':
-        return (None, 0)
-    ms_set = getattr(tuning, 'MEDIA_SET', 'default')
-    name = v.get('name', '')
-    ent = next((m for m in getattr(tuning, 'MEDIA', [])
-                if m.get('name') == name and _media_set_of(m.get('file', '')) == ms_set), None) \
-        or next((m for m in getattr(tuning, 'MEDIA', []) if m.get('name') == name), None)
-    tn = str((ent or {}).get('transition', '') or '')
-    if not tn:
-        tn = str(getattr(tuning, 'TRANSITION_DEFAULT', 'none') or 'none')
+def _resolve_transition(tn):
+    """(caminho_abs, ms) da transicao `tn` ('<x>.glsl'), ou (None, 0) = corte seco ('none',
+    vazio ou arquivo sumido). Quem resolve '' -> TRANSITION_DEFAULT e' dash_server.scene_transition_name."""
+    tn = str(tn or 'none')
     if tn == 'none':
         return (None, 0)
     p = os.path.join(TRANS_DIR, os.path.basename(tn))
@@ -390,9 +368,6 @@ state = {'frame': np.zeros(FRAME_SIZE, dtype=np.uint8), 'amp': 0.0, 'bass': 0.0,
          'subbass': 0.0, 'lowmid': 0.0, 'midrange': 0.0, 'highmid': 0.0, 'presence': 0.0,
          'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {}, 'out_image': {}, 'bounce_busy': [],
          'audio_source': '', 'video': None, 'video_label': '', 'video_id': '', 'output': {},
-         # potenciometros de efeito: 'fx_manifest' = nomes do "// fx:" do shader ativo,
-         # 'fx' = nivel 0..1 ao vivo por nome (o dash e, no futuro, o MIDI escrevem aqui).
-         'fx': {}, 'fx_manifest': [],
          # canais por instrumento (ver tuning.CHANNELS) — controlam u_chan/u_chan_hit no shader
          'chan': [0.0] * MAX_CHANNELS, 'chan_hit': [0.0] * MAX_CHANNELS,
          # transicao de midia em andamento: None ou {'path','ms','from' (frame A),'t0'} — o
@@ -504,14 +479,6 @@ def open_window(cfg):
 
     tex = _mktex(WIDTH, HEIGHT)                 # input de imagem (state['frame']), re-upado por frame
     tex_prev = _mktex(WIDTH, HEIGHT, alloc=True)  # frame de 1 iteracao atras — detecta movimento (fumaca)
-    tex_a = _mktex(WIDTH, HEIGHT)               # snapshot da imagem que SAI, durante uma transicao
-    fbo_tex = _mktex(WIDTH, HEIGHT, alloc=True) # resultado do passe de transicao -> vira o input do preset
-    fbo = glGenFramebuffers(1)
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo)
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_tex, 0)
-    if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE:
-        print('aviso: FBO de transicao incompleto — transicoes vao aparecer pretas')
-    glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
     # campos da SIMULACAO DE FUMACA (Stable Fluids — ver SIM_*_SRC): velocidade/pressao numa
     # grade menor (SIM_W x SIM_H), tudo ping-pong exceto vorticidade/divergencia (recalculadas
@@ -527,7 +494,7 @@ def open_window(cfg):
     fumaca_tex = [_mktex(WIDTH, HEIGHT, alloc=True), _mktex(WIDTH, HEIGHT, alloc=True)]
 
     print(f'saida: {label} ({win_w}x{win_h}+{pos[0]}+{pos[1]})')
-    return (win_w, win_h, pos, label, vbo, tex, tex_prev, tex_a, fbo, fbo_tex,
+    return (win_w, win_h, pos, label, vbo, tex, tex_prev,
             sim_vel, sim_density, sim_pressure, sim_vort, sim_div, sim_fbo, fumaca_tex)
 
 
@@ -737,21 +704,18 @@ def _bounce_source(path):
 
 
 def _fit_vf(fit, src_w=0, src_h=0):
-    """-vf pra 'fit' (encaixa, barras pretas) ou 'fill' (preenche, corta) a midia no OUTPUT.
-    Corrige o aspecto da JANELA (WIN_W:WIN_H), nao so o da textura WIDTHxHEIGHT: o shader
-    depois estica a textura pra janela, entao a correcao antecipa esse esticao. Sem as dims
-    da fonte (src_w/h=0) cai no scale-estica simples (comportamento de webcam)."""
-    if not (src_w and src_h and WIN_W and WIN_H):
+    """-vf de uma fonte (camera, tela ou midia) no OUTPUT: 'fill' (preencher) = ESTICA pra
+    cobrir a saida inteira (pode distorcer); 'fit' = ENCAIXA inteira sem distorcer, com margens
+    pretas. O 'fit' corrige o aspecto da JANELA (WIN_W:WIN_H), nao so o da textura WIDTHxHEIGHT:
+    o shader depois estica a textura pra janela, entao a correcao antecipa esse esticao. Sem as
+    dims da fonte (src_w/h=0) cai no estica."""
+    if fit != 'fit' or not (src_w and src_h and WIN_W and WIN_H):
         return f'scale={WIDTH}:{HEIGHT},setsar=1'
     ta = WIDTH / HEIGHT
     r = (src_w / src_h) * ta / (WIN_W / WIN_H)   # aspecto alvo DENTRO da textura
-    if fit == 'fit':                              # contain: cabe em WIDTHxHEIGHT, resto preto
-        tw, th = (WIDTH, WIDTH / r) if r >= ta else (HEIGHT * r, HEIGHT)
-        tw, th = int(round(tw)), int(round(th))
-        return f'scale={tw}:{th},pad={WIDTH}:{HEIGHT}:({WIDTH}-{tw})/2:({HEIGHT}-{th})/2:black,setsar=1'
-    tw, th = (HEIGHT * r, HEIGHT) if r >= ta else (WIDTH, WIDTH / r)   # cover: enche, corta
-    tw, th = max(int(round(tw)), WIDTH), max(int(round(th)), HEIGHT)
-    return f'scale={tw}:{th},crop={WIDTH}:{HEIGHT}:({tw}-{WIDTH})/2:({th}-{HEIGHT})/2,setsar=1'
+    tw, th = (WIDTH, WIDTH / r) if r >= ta else (HEIGHT * r, HEIGHT)
+    tw, th = int(round(tw)), int(round(th))
+    return f'scale={tw}:{th},pad={WIDTH}:{HEIGHT}:({WIDTH}-{tw})/2:({HEIGHT}-{th})/2:black,setsar=1'
 
 
 # opcao 2: -fflags nobuffer corta a fila interna do ffmpeg (menos latencia ate o 1o frame no
@@ -770,7 +734,7 @@ def _spawn_ffmpeg(v):
         display = os.environ.get('DISPLAY', ':0') + f"+{r['x']},{r['y']}"
         cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-f', 'x11grab',
                '-framerate', '30', '-video_size', f"{r['w']}x{r['h']}", '-i', display,
-               '-vf', f'scale={WIDTH}:{HEIGHT}', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
+               '-vf', _fit_vf(v.get('fit', 'fill'), r['w'], r['h']), '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
     elif v['mode'] == 'media':
         vf = _fit_vf(v.get('fit', 'fill'), *(_probe_dims(v['path']) or (0, 0)))
         if v.get('media_kind') == 'video':  # loop infinito, em tempo real
@@ -792,8 +756,8 @@ def _spawn_ffmpeg(v):
         cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-f', 'v4l2', '-framerate', '30']
         if v['device'] == '/dev/video0':  # so a webcam de verdade precisa forcar o formato
             cmd += ['-input_format', 'yuyv422']
-        cmd += ['-video_size', f'{WIDTH}x{HEIGHT}', '-i', v['device'],
-                '-vf', f'scale={WIDTH}:{HEIGHT}', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
+        cmd += ['-video_size', f'{WIDTH}x{HEIGHT}', '-i', v['device'],   # pede WIDTHxHEIGHT -> e' o aspecto dela
+                '-vf', _fit_vf(v.get('fit', 'fill'), WIDTH, HEIGHT), '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
 
@@ -939,15 +903,41 @@ def _sync_pool():
 # estiver la, senao ganha um ffmpeg proprio aqui (_ovl, mesmo _pool_reader); imagem usa o
 # _still_cache (aquecido aqui, fora do loop GL). _composite mistura tudo por cima da fonte
 # atual no loop GL, antes do shader/transicao/analise — nenhum deles sabe que ha camadas.
-_ovl = {}  # path -> entry igual a do _pool (so video fora do pool)
+# Camada tambem pode ser uma FONTE VIVA (id 'webcam:/dev/videoN' | 'screen:<monitor>', marcada
+# na lista "Fonte de imagem"): ganha um ffmpeg proprio em _ovl (chave = o id). Se ela ja e' a
+# fonte principal, reaproveita state['frame'] (v4l2 e' exclusivo: abrir 2x da "busy").
+_ovl = {}  # path (ou id de fonte viva) -> entry igual a do _pool (so video fora do pool)
+
+
+def _is_live(key):
+    return isinstance(key, str) and key.startswith(('webcam:', 'screen:'))
+
+
+def _release_ovl(v):
+    """Antes de a fonte principal abrir `v`: se uma camada segura o mesmo device, solta ja
+    (e espera o ffmpeg sair) — senao o v4l2 da busy. O _sync_overlays seguinte nao a recria
+    (a fonte principal passa a alimentar essa camada)."""
+    if v.get('mode') != 'webcam':
+        return
+    e = _ovl.pop(f"webcam:{v['device']}", None)
+    if e:
+        e['run'] = False
+        _kill(e['proc'])
 
 
 def _overlay_items():
-    """[(item de MEDIA, opacidade)] das camadas validas do set ativo, de baixo pra cima."""
+    """[(item de MEDIA | id de fonte viva, opacidade)] das camadas validas, de baixo pra cima.
+    So' as disponiveis no set ativo (state['pool']['sources']; ausente = todas)."""
     ms = getattr(tuning, 'MEDIA_SET', 'default')
     by_file = {m.get('file', ''): m for m in getattr(tuning, 'MEDIA', [])}
+    avail = (state.get('pool') or {}).get('sources')
     out = []
     for o in state.get('overlays') or []:
+        if avail is not None and o.get('file') not in avail:
+            continue
+        if _is_live(o.get('file')):
+            out.append((o['file'], float(o.get('opacity', 1.0))))
+            continue
         m = by_file.get(o.get('file', ''))
         if m and _media_set_of(m.get('file', '')) == ms and \
                 os.path.isfile(os.path.join(MEDIA_DIR, m.get('file', ''))):
@@ -960,6 +950,11 @@ def _sync_overlays():
     win = (WIN_W, WIN_H)
     want = {}
     for m, _ in _overlay_items():
+        if _is_live(m):
+            if m != state.get('video_id'):       # a principal ja alimenta essa camada
+                want[m] = _ovl[m]['v'] if m in _ovl and _ovl[m]['v'].get('fit') == _live_fit(m) \
+                    else _video_from_id(m)
+            continue
         v = _media_v(m)
         if v['media_kind'] == 'video':
             if v['path'] not in _pool:
@@ -976,28 +971,48 @@ def _sync_overlays():
             e['thr'] = threading.Thread(target=_pool_reader, args=(e,), daemon=True)
             e['thr'].start()
             _ovl[path] = e
-            print('camada +', v['name'])
+            print('camada +', _video_label(v))
 
 
-def _composite(base):
-    """fonte atual + camadas por cima (alpha = opacidade de cada uma). Sem camada: `base` intacto."""
-    out = None
+def _source_frames():
+    """[(chave, opacidade, frame)] das fontes MARCADAS com frame pronto, de baixo pra cima.
+    chave = a de OVERLAYS/BINDINGS (id da fonte viva ou file da midia)."""
+    out = []
     for m, a in _overlay_items():
         if a <= 0:
             continue
-        v = _media_v(m)
-        if v['media_kind'] == 'video':
-            e = _ovl.get(v['path']) or _pool.get(v['path'])
-            f = e['frame'] if e else None
+        if _is_live(m):
+            e = _ovl.get(m)
+            f = state['frame'] if m == state.get('video_id') else (e['frame'] if e else None)
+            if f is None or len(f) != FRAME_SIZE:
+                continue
+            out.append((m, a, f))
         else:
-            f = _still_cache.get((v['path'], v['fit'], WIN_W, WIN_H))
-        if f is None or len(f) != FRAME_SIZE:
-            continue                          # camada ainda esquentando: pula esse frame
-        if out is None:
-            out = base.astype(np.uint16)
+            f = _overlay_frame(m)
+            if f is not None:
+                out.append((m['file'], a, f))
+    return out
+
+
+def _composite(frames):
+    """Mistura na CPU das fontes marcadas (preto + cada uma por cima com a opacidade dela) — so'
+    pra analise de imagem / fumaca / cor dominante. A SAIDA e' feita na GPU (ver main)."""
+    out = np.zeros(FRAME_SIZE, np.uint16)
+    for _, a, f in frames:
         a8 = int(round(min(1.0, a) * 256))
         out = (out * (256 - a8) + f * np.uint16(a8)) >> 8
-    return base if out is None else out.astype(np.uint8)
+    return out.astype(np.uint8)
+
+
+def _overlay_frame(m):
+    """frame atual de uma camada de MIDIA (None = ainda esquentando: pula esse frame)."""
+    v = _media_v(m)
+    if v['media_kind'] == 'video':
+        e = _ovl.get(v['path']) or _pool.get(v['path'])
+        f = e['frame'] if e else None
+    else:
+        f = _still_cache.get((v['path'], v['fit'], WIN_W, WIN_H))
+    return f if f is not None and len(f) == FRAME_SIZE else None
 
 
 def _await_first(proc, timeout=2.0):
@@ -1045,16 +1060,18 @@ def video_thread(mode, region=None, device='/dev/video0'):
                 pool_sig = sig
                 _sync_pool()
             # camadas: depois do pool (video que ja esta no pool nao ganha ffmpeg proprio)
-            osig = (sig, tuple(o.get('file', '') for o in state.get('overlays') or []))
+            osig = (sig, state.get('video_id'), tuple(o.get('file', '') for o in state.get('overlays') or []),
+                    tuple(sorted((getattr(tuning, 'SOURCE_FIT', None) or {}).items())),
+                    tuple((state.get('pool') or {}).get('sources') or ()))
             if osig != ovl_sig:
                 ovl_sig = osig
                 _sync_overlays()
 
-            win_moved = cur.get('mode') == 'media' and (WIN_W, WIN_H) != cur_win
+            win_moved = (cur.get('mode') == 'media' or cur.get('fit') == 'fit') and (WIN_W, WIN_H) != cur_win
 
             if state['video'] != cur:
                 newcur = dict(state['video'])
-                a_frame = state.get('frame_comp', state['frame'])  # imagem que SAI (com camadas), pro passe de transicao
+                _release_ovl(newcur)                          # camada segurando essa webcam? solta
                 if _is_still(newcur):                         # imagem: buffer do cache, ~0ms
                     if proc:
                         _kill(proc)
@@ -1078,10 +1095,6 @@ def video_thread(mode, region=None, device='/dev/video0'):
                 cur = newcur
                 cur_win = (WIN_W, WIN_H)
                 _labels(cur)
-                # transicao de ENTRADA dessa midia (ou corte seco) — o loop GL faz o blend
-                tpath, tms = _resolve_transition(cur)
-                if tpath and a_frame is not None and len(a_frame) == FRAME_SIZE:
-                    state['transition'] = {'path': tpath, 'ms': tms, 'from': a_frame, 't0': None}
                 print('video: fonte ->', _video_label(cur))
                 continue
 
@@ -1577,13 +1590,20 @@ def _media_entry(name):
             or next((m for m in items if m.get('name') == name), None))
 
 
+def _live_fit(ident):
+    """'fill' (estica, padrao) | 'fit' (encaixa com margens) de uma camera/tela: tuning.SOURCE_FIT
+    (o dash grava; midia guarda o dela no proprio item de MEDIA)."""
+    return 'fit' if (getattr(tuning, 'SOURCE_FIT', None) or {}).get(ident) == 'fit' else 'fill'
+
+
 def _video_from_id(ident):
     """'webcam:/dev/videoN' | 'screen:<monitor>' | 'media' (item ativo/1o) | 'media:<nome>'
     (item especifico, vindo da aba Visuals / atalho) -> dict state['video']. Sempre escala pra
     WIDTH x HEIGHT atuais (nao muda a resolucao de saida ao vivo)."""
     kind, _, rest = ident.partition(':')
     if kind == 'webcam':
-        return {'mode': 'webcam', 'device': rest or '/dev/video0', 'region': None}
+        return {'mode': 'webcam', 'device': rest or '/dev/video0', 'region': None,
+                'fit': _live_fit('webcam:' + (rest or '/dev/video0'))}
     if kind == 'media':
         media = getattr(tuning, 'MEDIA', [])
         if rest:
@@ -1604,7 +1624,7 @@ def _video_from_id(ident):
     else:
         sw, sh = get_screen_size()
         r = {'name': 'tela toda', 'w': sw, 'h': sh, 'x': 0, 'y': 0}
-    return {'mode': 'screen', 'device': None, 'region': r}
+    return {'mode': 'screen', 'device': None, 'region': r, 'fit': _live_fit(ident)}
 
 
 def _video_id(v):
@@ -1694,12 +1714,6 @@ def audio_thread(device):
                     importlib.reload(tuning)
                     (bass_bins, mid_bins, treble_bins), fine_bands = recompute_bins()
                     band_release, band_attack, band_peakdecay = band_tweak_maps()
-                    # reseed dos potenciometros de efeito a partir do FX gravado. ponytail:
-                    # sobrescreve tudo do manifest — sem MIDI ainda, o dash e' a unica outra
-                    # fonte e ele acabou de gravar esse mesmo valor. Quando o midi_thread
-                    # entrar, pular aqui as chaves com CC bound (ver seam no plano).
-                    for n in state['fx_manifest']:
-                        state['fx'][n] = float(getattr(tuning, 'FX', {}).get(n, state['fx'].get(n, 1.0)))
                     print('tuning.py recarregado')
                 m = os.path.getmtime(DASH_SERVER_PATH)
                 if m != dash_server_mtime:
@@ -1993,6 +2007,60 @@ def build_sim_programs():
     return {'adv': adv, 'vort': vort, 'conf': conf, 'div': div, 'pres': pres, 'proj': proj, 'dens': dens}
 
 
+# --- MISTURA DAS CAMADAS DE SHADER (ver layer_program no main): cada camada e' desenhada numa
+# textura propria e misturada com o acumulado (base) aqui, com opacidade u_a e modo u_mode —
+# indice de dash_server.LAYER_BLENDS: 0 normal, 1 soma, 2 tela, 3 multiplicar, 4 clarear.
+# Modo 0 com a=1 = copia simples de u_layer (blit final na tela; com u_flip, a fonte crua).
+LAYER_BLEND_SRC = """
+#ifdef GL_ES
+precision mediump float;
+#endif
+uniform vec2 u_res;
+uniform sampler2D u_base;
+uniform sampler2D u_layer;
+uniform float u_a;
+uniform int u_mode;
+uniform int u_flip;   // 1 = u_layer e' a fonte CRUA (textura topo->baixo, como os presets leem)
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_res;
+    vec3 b = texture2D(u_base, uv).rgb;
+    vec3 l = texture2D(u_layer, u_flip == 1 ? vec2(uv.x, 1.0 - uv.y) : uv).rgb;
+    vec3 m = l;
+    if (u_mode == 1) m = min(b + l, 1.0);
+    else if (u_mode == 2) m = 1.0 - (1.0 - b) * (1.0 - l);
+    else if (u_mode == 3) m = b * l;
+    else if (u_mode == 4) m = max(b, l);
+    gl_FragColor = vec4(mix(b, m, u_a), 1.0);
+}
+"""
+LAYER_BLEND_UNIT_BASE, LAYER_BLEND_UNIT_LAYER = 5, 6   # fora das unidades do preset (0..4)
+
+
+def build_layer_blend_program():
+    p = build_program(LAYER_BLEND_SRC)
+    _use_basic(p)
+    u = _locs(p, 'u_res', 'u_base', 'u_layer', 'u_a', 'u_mode', 'u_flip')
+    glUniform1i(u['u_base'], LAYER_BLEND_UNIT_BASE)
+    glUniform1i(u['u_layer'], LAYER_BLEND_UNIT_LAYER)
+    return p, u
+
+
+def make_layer_targets(w, h):
+    """1 FBO + 6 texturas do tamanho da janela: out[0]/out[1] (a saida acumulada, ping-pong),
+    src[0]/src[1] (o resultado da fonte da vez, ping-pong), layer (o shader da vez) e from (a
+    imagem final do set que SAI, pra transicao de set). Recriado quando a janela muda (main)."""
+    texs = glGenTextures(6)
+    for t in texs:
+        glBindTexture(GL_TEXTURE_2D, t)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
+    return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
+            'src': [texs[2], texs[3]], 'layer': texs[4], 'from': texs[5]}
+
+
 def build_fumaca_program():
     """Programa da FUMAÇA procedural (ver SMOKE_SRC) — 1 programa so', sem sub-passes."""
     p = build_program(SMOKE_SRC)
@@ -2089,7 +2157,7 @@ def main():
         out_cfg = {'monitor': '', 'fullscreen': True, 'w': 0, 'h': 0}
 
     pygame.init()
-    (WIN_W, WIN_H, out_pos, out_mode, vbo, tex, tex_prev, tex_a, fbo, fbo_tex,
+    (WIN_W, WIN_H, out_pos, out_mode, vbo, tex, tex_prev,
      sim_vel, sim_density, sim_pressure, sim_vort, sim_div, sim_fbo, fumaca_tex) = open_window(out_cfg)
     state['output_req'] = dict(out_cfg)  # o que o dash pode reescrever; comeca igual ao que abriu
 
@@ -2108,19 +2176,16 @@ def main():
         'monitors': monitors,
     }
 
-    shader_path = resolve_shader_path()
-    with open(shader_path) as f:
-        frag_src = f.read()
-    frag_mtime = os.path.getmtime(shader_path)
-    state['fx_manifest'] = dash_data.parse_fx_manifest(frag_src)
-    seed_fx(state['fx_manifest'])
-    if 'overlays' not in state:   # camadas gravadas (dash, aba Visuals) — depois o dash e' quem mexe
+    # SAIDA = fontes marcadas (OVERLAYS) + a pilha de shaders de cada uma (BINDINGS) — gravadas
+    # pelo dash (aba Visuals > Sets); depois o dash e' quem mexe no vivo
+    if 'overlays' not in state:
         state['overlays'] = dash_server._norm_overlays(getattr(tuning, 'OVERLAYS', []))
-    state['output']['shader'] = os.path.basename(shader_path)
+    if 'bindings' not in state:
+        state['bindings'] = dash_server._norm_bindings(getattr(tuning, 'BINDINGS', {}))
 
     uniforms = {}
 
-    def use_program(prog):
+    def use_program(prog, manifest):
         glUseProgram(prog)
         loc = glGetAttribLocation(prog, 'a_pos')
         glEnableVertexAttribArray(loc)
@@ -2142,20 +2207,64 @@ def main():
         uniforms['chan_hit'] = [glGetUniformLocation(prog, f'u_chan_hit[{i}]') for i in range(MAX_CHANNELS)]
         # potenciometros de efeito: um uniform u_fx_<nome> por nome do manifest do shader ativo.
         # nome sem uniform correspondente no GLSL -> loc -1 -> glUniform1f(-1, x) e' no-op.
-        uniforms['fx'] = {n: glGetUniformLocation(prog, 'u_fx_' + n) for n in state['fx_manifest']}
+        uniforms['fx'] = {n: glGetUniformLocation(prog, 'u_fx_' + n) for n in manifest}
         glUniform1i(uniforms['tex0'], 0)
         glUniform1i(uniforms['tex_smoke'], 3)
         glUniform1i(uniforms['tex_fumaca'], 4)
 
-    program = build_program(frag_src)
-    use_program(program)
     # cache de programa por arquivo de shader: compila 1x, voltar num shader ja usado e' so
-    # glUseProgram (troca em ~0ms). Invalidado por mtime (editou o .frag) e por troca de janela
-    # (contexto GL novo). (mtime, program, src, manifest) por caminho.
-    prog_cache = {shader_path: (frag_mtime, program, frag_src, state['fx_manifest'])}
+    # glUseProgram. Invalidado por mtime (editou o .frag = hot-reload) e por troca de janela
+    # (contexto GL novo). (mtime, program, src, manifest) por caminho absoluto.
+    prog_cache = {}
+
+    # --- programa de um shader da pilha de uma fonte (state['bindings'][fonte]['shaders']):
+    # prog_cache (compila 1x, hot-reload por mtime); erro de compilacao = shader pulado (lembra o
+    # mtime, nao insiste) e aparece em state['output']['shader_status'].
+    layer_bad = {}
+
+    def layer_program(rel):
+        lp = os.path.join(SHADERS_DIR, rel)
+        try:
+            mt = os.path.getmtime(lp)
+        except OSError:
+            return None
+        hit = prog_cache.get(lp)
+        if hit and hit[0] == mt:
+            return hit
+        if layer_bad.get(lp) == mt:
+            return None
+        try:
+            with open(lp) as lf:
+                src = lf.read()
+            prog = build_program(src)
+        except (RuntimeError, OSError) as e:
+            print('erro no shader', rel, '->\n', e)
+            state['output']['shader_status'] = f'erro em {os.path.basename(rel)}'
+            layer_bad[lp] = mt
+            return None
+        if hit:
+            glDeleteProgram(hit[1])
+        manifest = dash_data.parse_fx_manifest(src)
+        prog_cache[lp] = (mt, prog, src, manifest)
+        state['output']['shader_status'] = 'ok'
+        return prog_cache[lp]
+
+    blend_prog, blend_u = build_layer_blend_program()
+    ltargets = [None]   # make_layer_targets(...) sob demanda (camada ativa ou transicao de set)
+
+    def layer_targets():
+        if not ltargets[0] or ltargets[0]['size'] != (WIN_W, WIN_H):
+            ltargets[0] = make_layer_targets(WIN_W, WIN_H)
+        return ltargets[0]
+
+    # troca de SET (dash_server.request_scene / tecla -> state['scene_pending']): aplicada no FIM
+    # de um frame — a tela ainda tem a imagem final do set que sai, copiada pra ltargets 'from'.
+    # Nos frames seguintes o set novo desenha no FBO e o ultimo passe mistura from -> novo com o
+    # .glsl de entrada do set (scene_tr). Transicao 'none'/sumida = corte seco.
+    scene_tr = None
 
     # --- passe de TRANSIÇÃO: programa proprio por arquivo transitions/*.glsl (cache por mtime;
-    # None = compilou com erro, nao insiste). uso: ver o bloco "state['transition']" no loop.
+    # None = compilou com erro, nao insiste). uso: troca de SET (bloco "scene_pending" no loop).
     tuni = {}
     trans_cache = {}
 
@@ -2195,7 +2304,6 @@ def main():
     # nao presets do usuario, sem hot-reload.
     sim_progs = build_sim_programs()
     p_fumaca, u_fumaca = build_fumaca_program()
-    use_program(program)  # volta pro preset — o loop so' re-chama use_program() se o shader mudar
     sim_idx = 0  # ping-pong: sim_vel[sim_idx]/sim_density[sim_idx] = "atual", [1-sim_idx] = escrita
     sim_last_t = [time.perf_counter()]  # p/ calcular o dt real da simulacao (frame a frame)
     fumaca_idx = 0  # ping-pong: fumaca_tex[fumaca_idx] = "atual", [1-fumaca_idx] = escrita
@@ -2214,6 +2322,9 @@ def main():
     dash_server.start(state, tuning, TUNING_PATH, lambda: running,
                       audio_source=audio_src, video_mode='screen' if args.screen else 'webcam',
                       on_inputs=list_inputs, on_set_input=set_input, on_set_output=set_output)
+    state['gl_running'] = True   # dash_server.request_scene passa a deixar a troca pro loop (fim do frame)
+    if getattr(tuning, 'SCENE', None):   # abre no set ativo (sem transicao)
+        state['scene_pending'] = {'name': tuning.SCENE, 'transition': False}
 
     t0 = time.perf_counter()
     clock = pygame.time.Clock()
@@ -2230,122 +2341,39 @@ def main():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 running = False
             elif event.type == pygame.KEYDOWN:
-                # atalhos da aba Visuals: tecla -> shader ou -> midia, SO do set ativo
-                # (SHADER_KEYS[SHADER_SET] / MEDIA_KEYS[MEDIA_SET]). dash_server.set_shader /
-                # set_input escrevem tuning.py E ja patcham o modulo tuning (mesmo objeto) — o
-                # hot-reload do shader abaixo e o video_thread pegam a mudanca no proximo frame.
+                # atalho de SET (campo 'key' de tuning.SCENES): pede a troca; ela e' aplicada
+                # no fim deste frame (bloco "scene_pending" antes do flip), com transicao
                 kname = pygame.key.name(event.key)
-                smap = getattr(tuning, 'SHADER_KEYS', {}).get(getattr(tuning, 'SHADER_SET', 'default'), {})
-                mmap = getattr(tuning, 'MEDIA_KEYS', {}).get(getattr(tuning, 'MEDIA_SET', 'default'), {})
-                shit = next((s for s, k in smap.items() if k == kname), None)
-                mhit = next((n for n, k in mmap.items() if k == kname), None)
-                if shit:
-                    try:
-                        dash_server.set_shader(shit, TUNING_PATH)
-                        print(f'tecla {kname!r} -> shader {shit}')
-                    except (KeyError, ValueError) as e:
-                        print(f'tecla {kname!r}: {e}')
-                if mhit:
-                    set_input('video', f'media:{mhit}')
-                    print(f'tecla {kname!r} -> mídia {mhit}')
+                hit = next((sc['name'] for sc in getattr(tuning, 'SCENES', None) or []
+                            if sc.get('key') and sc.get('key') == kname), None)
+                if hit:
+                    state['scene_pending'] = {'name': hit, 'transition': True}
+                    print(f'tecla {kname!r} -> set {hit}')
 
         # troca de saida pedida pelo dash (monitor/tela cheia/dimensao, barra "saida" no topo)
         # — reabre a janela e regera vbo/tex/program (contexto GL pode ter sumido -> prog_cache
         # todo invalido, limpa)
         if state['output_req'] != out_cfg:
             out_cfg = dict(state['output_req'])
-            (WIN_W, WIN_H, out_pos, out_mode, vbo, tex, tex_prev, tex_a, fbo, fbo_tex,
+            (WIN_W, WIN_H, out_pos, out_mode, vbo, tex, tex_prev,
              sim_vel, sim_density, sim_pressure, sim_vort, sim_div, sim_fbo, fumaca_tex) = open_window(out_cfg)
-            program = build_program(frag_src)
-            use_program(program)
             sim_progs = build_sim_programs()  # contexto GL novo -> os programas velhos tambem ja eram
             p_fumaca, u_fumaca = build_fumaca_program()
-            use_program(program)  # volta pro preset
             prog_cache.clear()
-            prog_cache[shader_path] = (frag_mtime, program, frag_src, state.get('fx_manifest', []))
             trans_cache.clear()          # contexto GL novo -> programas de transicao invalidos
-            state['transition'] = None   # e o snapshot de A (tex_a) sumiu junto
+            layer_bad.clear()            # camadas de shader recompilam no proximo frame
+            blend_prog, blend_u = build_layer_blend_program()
+            ltargets[0] = None           # FBO/texturas das camadas eram do contexto velho
+            scene_tr = None              # o snapshot (ltargets 'from') era do contexto velho
             state['output'].update(mode=out_mode, window_w=WIN_W, window_h=WIN_H, pos=list(out_pos),
                                     monitor=out_cfg['monitor'], fullscreen=out_cfg['fullscreen'])
 
-        # troca de shader: por CAMINHO (tuning.SHADER, mexido pelo dash/tecla) ou por MTIME
-        # (editou o .frag). Cache hit = so glUseProgram, ~0ms; miss = compila e guarda.
-        try:
-            new_path = resolve_shader_path()
-            mtime = os.path.getmtime(new_path)
-            if (new_path, mtime) != (shader_path, frag_mtime):
-                shader_path, frag_mtime = new_path, mtime
-                hit = prog_cache.get(new_path)
-                if hit and hit[0] == mtime:
-                    _, program, frag_src, manifest = hit
-                    state['fx_manifest'] = manifest
-                    seed_fx(manifest)
-                    use_program(program)
-                    state['output']['shader'] = os.path.basename(new_path)
-                    state['output']['shader_status'] = 'ok'
-                else:
-                    with open(new_path) as f:
-                        new_src = f.read()
-                    try:
-                        new_program = build_program(new_src)
-                        old = prog_cache.pop(new_path, None)   # versao anterior desse arquivo (editado)
-                        if old:
-                            glDeleteProgram(old[1])
-                        manifest = dash_data.parse_fx_manifest(new_src)
-                        prog_cache[new_path] = (mtime, new_program, new_src, manifest)
-                        program, frag_src = new_program, new_src
-                        state['fx_manifest'] = manifest
-                        seed_fx(manifest)
-                        use_program(program)  # le state['fx_manifest'] p/ os locs de u_fx_*
-                        state['output']['shader'] = os.path.basename(new_path)
-                        state['output']['shader_status'] = 'ok'
-                        print('shader:', os.path.basename(new_path))
-                    except RuntimeError as e:
-                        state['output']['shader_status'] = 'erro (mantendo anterior)'
-                        print('erro no shader, mantendo o anterior:\n', e)
-        except FileNotFoundError:
-            pass
-
-        # --- passe de TRANSIÇÃO: se ha uma em andamento, mistura A (tex_a, snapshot) e B (tex,
-        # frame vivo) com o .glsl escolhido num FBO -> input_tex. Senao, input_tex = tex (normal).
-        tr = state.get('transition')
-        input_tex = tex
-        frame_in = _composite(state['frame'])   # fonte + camadas (overlay); sem camada = o proprio frame
+        src_frames = _source_frames()             # fontes MARCADAS com frame pronto (a saida)
+        frame_in = _composite(src_frames)         # mistura na CPU: so' pra fumaca / analise / cor dominante
         state['frame_comp'] = frame_in
-        if tr:
-            if tr['t0'] is None:
-                tr['t0'] = time.perf_counter()
-                glActiveTexture(GL_TEXTURE1)
-                glBindTexture(GL_TEXTURE_2D, tex_a)
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, tr['from'])
-            prog_t = trans_program(tr['path'])
-            prog = (time.perf_counter() - tr['t0']) / max(0.001, tr['ms'] / 1000.0)
-            if prog_t is None or prog >= 1.0:
-                state['transition'] = None                # acabou (ou nao compilou) -> corte seco
-            else:
-                glActiveTexture(GL_TEXTURE0)
-                glBindTexture(GL_TEXTURE_2D, tex)         # B = frame vivo
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, frame_in)
-                glActiveTexture(GL_TEXTURE1)
-                glBindTexture(GL_TEXTURE_2D, tex_a)       # A = snapshot
-                glBindFramebuffer(GL_FRAMEBUFFER, fbo)
-                glViewport(0, 0, WIDTH, HEIGHT)
-                use_trans_program(prog_t)
-                glUniform2f(tuni['res'], WIDTH, HEIGHT)
-                glUniform1f(tuni['progress'], min(1.0, max(0.0, prog)))
-                glUniform1i(tuni['to'], 0)
-                glUniform1i(tuni['from'], 1)
-                glClear(GL_COLOR_BUFFER_BIT)
-                glDrawArrays(GL_TRIANGLES, 0, 3)
-                glBindFramebuffer(GL_FRAMEBUFFER, 0)
-                glViewport(0, 0, WIN_W, WIN_H)
-                use_program(program)                     # volta pro preset
-                input_tex = fbo_tex
-
         glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, input_tex)
-        if input_tex == tex:                              # sem transicao: sobe o frame vivo
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, frame_in)
+        glBindTexture(GL_TEXTURE_2D, tex)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, frame_in)
 
         # --- passe da FUMACA (Stable Fluids — ver SIM_*_SRC / Caos.frag EFEITO 6): 7 sub-passes
         # numa grade menor (SIM_W x SIM_H). Roda sempre, mesmo se o preset ativo nao usar
@@ -2456,9 +2484,6 @@ def main():
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0)
         glViewport(0, 0, WIN_W, WIN_H)
-        use_program(program)
-        glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, input_tex)  # restaura o input do preset (pode ser o fbo_tex da transicao)
         glActiveTexture(GL_TEXTURE3)
         glBindTexture(GL_TEXTURE_2D, dw)         # silhueta (sim de fluido) deste frame -> u_texture_smoke
         glActiveTexture(GL_TEXTURE4)
@@ -2467,24 +2492,107 @@ def main():
         sim_idx = 1 - sim_idx      # o resultado (vw/dw, fisicamente no slot 1-sim_idx) vira o "atual" no proximo frame
         fumaca_idx = 1 - fumaca_idx
 
-        glUniform2f(uniforms['res'], WIN_W, WIN_H)
-        glUniform1f(uniforms['time'], time.perf_counter() - t0)
-        glUniform1f(uniforms['amp'], state['amp'])
-        glUniform1f(uniforms['bass'], state['bass'])
-        glUniform1f(uniforms['mid'], state['mid'])
-        glUniform1f(uniforms['treble'], state['treble'])
-        glUniform1f(uniforms['kick'], state['kick'])
-        glUniform3f(uniforms['dominant'], *state['dominant'])
-        for name in FREQ_BAND_UNIFORM.values():
-            glUniform1f(uniforms[name], state[name])
-        for i in range(MAX_CHANNELS):
-            glUniform1f(uniforms['chan'][i], state['chan'][i])
-            glUniform1f(uniforms['chan_hit'][i], state['chan_hit'][i])
-        for n, loc in uniforms['fx'].items():
-            glUniform1f(loc, state['fx'].get(n, 1.0))
+        now_t = time.perf_counter() - t0
 
+        def set_uniforms(fx):
+            glUniform2f(uniforms['res'], WIN_W, WIN_H)
+            glUniform1f(uniforms['time'], now_t)
+            glUniform1f(uniforms['amp'], state['amp'])
+            glUniform1f(uniforms['bass'], state['bass'])
+            glUniform1f(uniforms['mid'], state['mid'])
+            glUniform1f(uniforms['treble'], state['treble'])
+            glUniform1f(uniforms['kick'], state['kick'])
+            glUniform3f(uniforms['dominant'], *state['dominant'])
+            for name in FREQ_BAND_UNIFORM.values():
+                glUniform1f(uniforms[name], state[name])
+            for i in range(MAX_CHANNELS):
+                glUniform1f(uniforms['chan'][i], state['chan'][i])
+                glUniform1f(uniforms['chan_hit'][i], state['chan_hit'][i])
+            for n, loc in uniforms['fx'].items():
+                glUniform1f(loc, fx.get(n, 1.0))
+
+        # --- SAIDA: so' as fontes MARCADAS (src_frames, de baixo pra cima), cada uma pela SUA
+        # pilha (state['bindings'][fonte]): a fonte crua -> cada shader marcado desenha com ela de
+        # u_texture_0 (forcas u_fx_* daquele par fonte/shader) e mistura por cima (opacidade +
+        # modo, LAYER_BLEND_SRC) -> o resultado entra na saida com a opacidade da fonte. Saida
+        # comeca preta. No fim: saida -> tela (copia, ou transicao de set misturando com 'from').
+        if scene_tr and time.perf_counter() - scene_tr['t0'] >= scene_tr['ms'] / 1000.0:
+            scene_tr = None
+        lt = layer_targets()
+
+        def blend_into(dst, base, layer, a, mode, flip=0):
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0)
+            _use_basic(blend_prog)
+            glUniform2f(blend_u['u_res'], WIN_W, WIN_H)
+            glUniform1f(blend_u['u_a'], a)
+            glUniform1i(blend_u['u_mode'], mode)
+            glUniform1i(blend_u['u_flip'], flip)
+            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
+            glBindTexture(GL_TEXTURE_2D, base)
+            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_LAYER)
+            glBindTexture(GL_TEXTURE_2D, layer)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+
+        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['out'][0], 0)
         glClear(GL_COLOR_BUFFER_BIT)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
+        oi = 0
+        bindings = state.get('bindings') or {}
+        sh_avail = (state.get('pool') or {}).get('shaders')   # disponiveis no set (None = todos)
+        for key, src_a, frame in src_frames:
+            glActiveTexture(GL_TEXTURE0)                 # a fonte crua -> u_texture_0 dos shaders
+            glBindTexture(GL_TEXTURE_2D, tex)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, frame)
+            si = 0
+            blend_into(lt['src'][0], tex, tex, 1.0, 0, flip=1)
+            b = bindings.get(key) or {}
+            for o in b.get('shaders') or []:
+                a = min(1.0, float(o.get('opacity', 0)))
+                if sh_avail is not None and o['file'] not in sh_avail:
+                    a = 0
+                h = layer_program(o['file']) if a > 0 else None
+                if not h:
+                    continue
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
+                use_program(h[1], h[3])
+                set_uniforms((b.get('fx') or {}).get(o['file']) or {})
+                glActiveTexture(GL_TEXTURE0)
+                glBindTexture(GL_TEXTURE_2D, tex)
+                glClear(GL_COLOR_BUFFER_BIT)
+                glDrawArrays(GL_TRIANGLES, 0, 3)
+                mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
+                blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode)
+                si = 1 - si
+            blend_into(lt['out'][1 - oi], lt['out'][oi], lt['src'][si], min(1.0, src_a), 0)
+            oi = 1 - oi
+        glBindFramebuffer(GL_FRAMEBUFFER, 0)
+        if scene_tr:                                    # transicao de set: from -> saida nova
+            use_trans_program(scene_tr['prog'])
+            glUniform2f(tuni['res'], WIN_W, WIN_H)
+            glUniform1f(tuni['progress'], min(1.0, (time.perf_counter() - scene_tr['t0'])
+                                              / max(0.001, scene_tr['ms'] / 1000.0)))
+            glUniform1i(tuni['from'], LAYER_BLEND_UNIT_BASE)
+            glUniform1i(tuni['to'], LAYER_BLEND_UNIT_LAYER)
+            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
+            glBindTexture(GL_TEXTURE_2D, lt['from'])
+            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_LAYER)
+            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+            glClear(GL_COLOR_BUFFER_BIT)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+        else:                                           # copia (modo 0, a=1) a saida pra tela
+            glClear(GL_COLOR_BUFFER_BIT)
+            _use_basic(blend_prog)
+            glUniform2f(blend_u['u_res'], WIN_W, WIN_H)
+            glUniform1f(blend_u['u_a'], 1.0)
+            glUniform1i(blend_u['u_mode'], 0)
+            glUniform1i(blend_u['u_flip'], 0)
+            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
+            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_LAYER)
+            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+        glActiveTexture(GL_TEXTURE0)
+        state['output']['shader'] = f'{len(src_frames)} fonte(s)'
 
         # Output Image (ver CLAUDE.md): mesmos medidores do Source Image, so que na imagem
         # JA sintetizada — precisa ler antes do flip trocar o buffer. So' quando ligado
@@ -2506,6 +2614,25 @@ def main():
                                                       out_frame, WIN_W, WIN_H, out_dom,
                                                       out_img['peaks'], out_img['prev_val'],
                                                       out_img['prev_mean'])
+
+        pend = state.pop('scene_pending', None)
+        if pend:
+            if pend.get('transition'):                  # guarda a imagem final que SAI
+                lt = layer_targets()
+                glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
+                glBindTexture(GL_TEXTURE_2D, lt['from'])
+                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, WIN_W, WIN_H)
+                glActiveTexture(GL_TEXTURE0)
+            try:
+                dash_server.apply_scene(pend['name'])
+                print('set ->', pend['name'])
+            except (KeyError, ValueError, OSError) as e:
+                print('set: nao aplicou', pend.get('name'), '->', e)
+            else:
+                tpath, tms = _resolve_transition(dash_server.scene_transition_name(pend['name'])) \
+                    if pend.get('transition') else (None, 0)
+                prog_t = trans_program(tpath) if tpath else None
+                scene_tr = {'prog': prog_t, 'ms': tms, 't0': time.perf_counter()} if prog_t else None
 
         pygame.display.flip()
         clock.tick(30)
@@ -2563,7 +2690,7 @@ def _selfcheck():
     MEDIA_DIR = _md0
     print('native_synth pool self-check ok')
 
-    # --- transicoes: harness, // ms:, e resolucao (item -> default -> none -> arquivo sumido) ---
+    # --- transicoes: harness, // ms:, e resolucao (arquivo -> none -> arquivo sumido) ---
     w = _wrap_transition('vec4 transition(vec2 uv){ return getToColor(uv); }')
     assert 'getFromColor' in w and 'getToColor' in w and 'void main' in w, w
     global TRANS_DIR
@@ -2571,16 +2698,10 @@ def _selfcheck():
     open(os.path.join(TRANS_DIR, 'fade.glsl'), 'w').write('// ms: 250\nvec4 transition(vec2 uv){return vec4(0.0);}\n')
     assert _transition_ms(os.path.join(TRANS_DIR, 'fade.glsl')) == 250
     _tk = {k: getattr(tuning, k, None) for k in ('MEDIA', 'MEDIA_SET', 'TRANSITION_DEFAULT')}
-    tuning.MEDIA = [{'name': 'v', 'file': 'default/v.mp4', 'kind': 'video', 'transition': 'fade.glsl'},
-                   {'name': 'w', 'file': 'default/w.mp4', 'kind': 'video', 'transition': ''},
-                   {'name': 'z', 'file': 'default/z.mp4', 'kind': 'video', 'transition': 'none'}]
-    tuning.MEDIA_SET, tuning.TRANSITION_DEFAULT = 'default', 'fade.glsl'
-    assert _resolve_transition({'mode': 'media', 'name': 'v'})[1] == 250            # item aponta
-    assert _resolve_transition({'mode': 'media', 'name': 'w'})[1] == 250            # "" -> default
-    assert _resolve_transition({'mode': 'media', 'name': 'z'}) == (None, 0)         # "none" -> seco
-    tuning.TRANSITION_DEFAULT = 'sumiu.glsl'
-    assert _resolve_transition({'mode': 'media', 'name': 'w'}) == (None, 0)         # arquivo sumido
-    assert _resolve_transition({'mode': 'webcam'}) == (None, 0)                     # nao-midia
+    assert _resolve_transition('fade.glsl')[1] == 250
+    assert _resolve_transition('none') == (None, 0) and _resolve_transition('') == (None, 0)
+    assert _resolve_transition('sumiu.glsl') == (None, 0)                           # arquivo sumido
+    assert _resolve_transition('../fade.glsl')[0] == os.path.join(TRANS_DIR, 'fade.glsl')  # basename: sem sair da pasta
     for k, val in _tk.items():
         setattr(tuning, k, val) if val is not None else delattr(tuning, k)
     TRANS_DIR = _td0
@@ -2602,17 +2723,33 @@ def _selfcheck():
     _still_cache[key('default/a.png')] = np.full(FRAME_SIZE, 200, np.uint8)
     _still_cache[key('default/b.png')] = np.full(FRAME_SIZE, 0, np.uint8)
     _still_cache[key('S2/c.png')] = np.full(FRAME_SIZE, 255, np.uint8)
-    base = np.full(FRAME_SIZE, 100, np.uint8)
+    comp = lambda: _composite(_source_frames())
     state['overlays'] = []
-    assert _composite(base) is base, 'sem camada devia devolver a propria base'
+    assert _source_frames() == [] and int(comp().max()) == 0, 'nada marcado = preto'
     state['overlays'] = [{'file': 'default/a.png', 'opacity': 0.5}]
-    assert abs(int(_composite(base)[0]) - 150) <= 1, _composite(base)[0]         # 100 -> 200 a 50%
+    assert abs(int(comp()[0]) - 100) <= 1, comp()[0]                             # 0 -> 200 a 50%
+    assert [k for k, _, _ in _source_frames()] == ['default/a.png']
     state['overlays'] = [{'file': 'default/a.png', 'opacity': 1.0}, {'file': 'default/b.png', 'opacity': 0.5}]
-    assert abs(int(_composite(base)[0]) - 100) <= 1, _composite(base)[0]         # a cobre; b (0) a 50% por cima
+    assert abs(int(comp()[0]) - 100) <= 1, comp()[0]                             # a cobre; b (0) a 50% por cima
     state['overlays'] = [{'file': 'default/b.png', 'opacity': 0.5}, {'file': 'default/a.png', 'opacity': 1.0}]
-    assert int(_composite(base)[0]) == 200, 'ordem: a ultima marcada fica por cima'
+    assert int(comp()[0]) == 200, 'ordem: a ultima marcada fica por cima'
     state['overlays'] = [{'file': 'S2/c.png', 'opacity': 1.0}, {'file': 'default/v.mp4', 'opacity': 1.0}]
-    assert _composite(base) is base, 'camada de outro set / video sem frame ainda devia ser pulada'
+    assert _source_frames() == [], 'camada de outro set / video sem frame ainda devia ser pulada'
+    # fonte viva: se e' a capturada (selecionada), usa state['frame']; senao o frame do _ovl
+    _f0, _v0 = state.get('frame'), state.get('video_id')
+    state['frame'] = np.full(FRAME_SIZE, 200, np.uint8); state['video_id'] = 'webcam:/dev/video9'
+    state['overlays'] = [{'file': 'webcam:/dev/video9', 'opacity': 0.5}]
+    assert _overlay_items() == [('webcam:/dev/video9', 0.5)], _overlay_items()
+    assert abs(int(comp()[0]) - 100) <= 1, comp()[0]
+    state['overlays'] = [{'file': 'screen:HDMI-9', 'opacity': 1.0}]
+    assert _source_frames() == [], 'tela sem ffmpeg ainda devia ser pulada'
+    _ovl['screen:HDMI-9'] = {'frame': np.zeros(FRAME_SIZE, np.uint8)}
+    assert [k for k, _, _ in _source_frames()] == ['screen:HDMI-9'] and int(comp()[0]) == 0
+    state['pool'] = {'sources': ['default/a.png']}                               # fora do set = fora da saida
+    state['overlays'] = [{'file': 'screen:HDMI-9', 'opacity': 1.0}, {'file': 'default/a.png', 'opacity': 1.0}]
+    assert [k for k, _, _ in _source_frames()] == ['default/a.png'], _source_frames()
+    state.pop('pool')
+    _ovl.pop('screen:HDMI-9'); state['frame'], state['video_id'] = _f0, _v0
     for k, val in _tk.items():
         setattr(tuning, k, val) if val is not None else delattr(tuning, k)
     for f in ('default/a.png', 'default/b.png', 'S2/c.png'):
