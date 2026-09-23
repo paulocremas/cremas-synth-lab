@@ -912,10 +912,7 @@ def _desired_pool():
     for m in items[:cap]:
         p = os.path.join(MEDIA_DIR, m.get('file', ''))
         if os.path.isfile(p):
-            out.append((p, {'mode': 'media', 'device': None, 'region': None, 'name': m.get('name', ''),
-                            'path': p, 'media_kind': 'video',
-                            'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
-                            'bounce': bool(m.get('bounce'))}))
+            out.append((p, _media_v(m)))
     return out
 
 
@@ -937,6 +934,72 @@ def _sync_pool():
             print('video pool +', v['name'])
 
 
+# --- CAMADAS (overlay): state['overlays'] = [{file, opacity}] de baixo pra cima (dash grava;
+# ver dash_server.set_overlays). Cada camada precisa de um frame vivo: video usa o do pool se
+# estiver la, senao ganha um ffmpeg proprio aqui (_ovl, mesmo _pool_reader); imagem usa o
+# _still_cache (aquecido aqui, fora do loop GL). _composite mistura tudo por cima da fonte
+# atual no loop GL, antes do shader/transicao/analise — nenhum deles sabe que ha camadas.
+_ovl = {}  # path -> entry igual a do _pool (so video fora do pool)
+
+
+def _overlay_items():
+    """[(item de MEDIA, opacidade)] das camadas validas do set ativo, de baixo pra cima."""
+    ms = getattr(tuning, 'MEDIA_SET', 'default')
+    by_file = {m.get('file', ''): m for m in getattr(tuning, 'MEDIA', [])}
+    out = []
+    for o in state.get('overlays') or []:
+        m = by_file.get(o.get('file', ''))
+        if m and _media_set_of(m.get('file', '')) == ms and \
+                os.path.isfile(os.path.join(MEDIA_DIR, m.get('file', ''))):
+            out.append((m, float(o.get('opacity', 1.0))))
+    return out
+
+
+def _sync_overlays():
+    """Alinha _ovl com as camadas atuais (idempotente) e aquece o cache das imagens."""
+    win = (WIN_W, WIN_H)
+    want = {}
+    for m, _ in _overlay_items():
+        v = _media_v(m)
+        if v['media_kind'] == 'video':
+            if v['path'] not in _pool:
+                want[v['path']] = v
+        else:
+            _decode_still(v)                  # ~100ms na 1a vez; depois e' cache
+    for path, e in list(_ovl.items()):
+        if path not in want or e['win'] != win or e['v'] != want[path]:
+            e['run'] = False
+            _ovl.pop(path, None)
+    for path, v in want.items():
+        if path not in _ovl:
+            e = {'v': v, 'proc': _spawn_ffmpeg(v), 'frame': None, 'win': win, 'run': True}
+            e['thr'] = threading.Thread(target=_pool_reader, args=(e,), daemon=True)
+            e['thr'].start()
+            _ovl[path] = e
+            print('camada +', v['name'])
+
+
+def _composite(base):
+    """fonte atual + camadas por cima (alpha = opacidade de cada uma). Sem camada: `base` intacto."""
+    out = None
+    for m, a in _overlay_items():
+        if a <= 0:
+            continue
+        v = _media_v(m)
+        if v['media_kind'] == 'video':
+            e = _ovl.get(v['path']) or _pool.get(v['path'])
+            f = e['frame'] if e else None
+        else:
+            f = _still_cache.get((v['path'], v['fit'], WIN_W, WIN_H))
+        if f is None or len(f) != FRAME_SIZE:
+            continue                          # camada ainda esquentando: pula esse frame
+        if out is None:
+            out = base.astype(np.uint16)
+        a8 = int(round(min(1.0, a) * 256))
+        out = (out * (256 - a8) + f * np.uint16(a8)) >> 8
+    return base if out is None else out.astype(np.uint8)
+
+
 def _await_first(proc, timeout=2.0):
     """Espera o 1o frame completo de `proc` (ate timeout s). np.uint8[FRAME_SIZE] ou None."""
     end = time.monotonic() + timeout
@@ -956,6 +1019,7 @@ def video_thread(mode, region=None, device='/dev/video0'):
     cur = dict(state['video'])
     cur_win = (WIN_W, WIN_H)
     pool_sig = None
+    ovl_sig = None
     proc = None
 
     def _pooled(v):
@@ -980,12 +1044,17 @@ def video_thread(mode, region=None, device='/dev/video0'):
             if sig != pool_sig:
                 pool_sig = sig
                 _sync_pool()
+            # camadas: depois do pool (video que ja esta no pool nao ganha ffmpeg proprio)
+            osig = (sig, tuple(o.get('file', '') for o in state.get('overlays') or []))
+            if osig != ovl_sig:
+                ovl_sig = osig
+                _sync_overlays()
 
             win_moved = cur.get('mode') == 'media' and (WIN_W, WIN_H) != cur_win
 
             if state['video'] != cur:
                 newcur = dict(state['video'])
-                a_frame = state['frame']                      # imagem que SAI, pro passe de transicao
+                a_frame = state.get('frame_comp', state['frame'])  # imagem que SAI (com camadas), pro passe de transicao
                 if _is_still(newcur):                         # imagem: buffer do cache, ~0ms
                     if proc:
                         _kill(proc)
@@ -1077,9 +1146,10 @@ def video_thread(mode, region=None, device='/dev/video0'):
     finally:
         if proc:
             _kill(proc)
-        for e in list(_pool.values()):
+        for e in list(_pool.values()) + list(_ovl.values()):
             e['run'] = False
         _pool.clear()
+        _ovl.clear()
 
 
 def window_capture_thread(win_id):
@@ -1489,6 +1559,16 @@ def _media_set_of(file):
     return head.split('/')[0] if head else 'default'
 
 
+def _media_v(m):
+    """item de MEDIA -> dict state['video'] (mesmo formato pra fonte principal, pool e camadas)."""
+    video = m.get('kind') == 'video'
+    return {'mode': 'media', 'device': None, 'region': None, 'name': m.get('name', ''),
+            'path': os.path.join(MEDIA_DIR, m.get('file', '')),
+            'media_kind': 'video' if video else 'image',
+            'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
+            'bounce': video and bool(m.get('bounce'))}
+
+
 def _media_entry(name):
     """item de MEDIA por nome — prefere o do set ativo (nomes so sao unicos DENTRO do set)."""
     items = getattr(tuning, 'MEDIA', [])
@@ -1513,11 +1593,7 @@ def _video_from_id(ident):
             m = (_media_entry(cur.get('name')) if cur.get('mode') == 'media' else None) \
                 or (media[0] if media else None)
         if m:
-            return {'mode': 'media', 'device': None, 'region': None, 'name': m.get('name', ''),
-                    'path': os.path.join(MEDIA_DIR, m.get('file', '')),
-                    'media_kind': 'video' if m.get('kind') == 'video' else 'image',
-                    'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
-                    'bounce': m.get('kind') == 'video' and bool(m.get('bounce'))}
+            return _media_v(m)
         return {'mode': 'webcam', 'device': '/dev/video0', 'region': None}  # sem midia -> webcam
     try:
         m = pick_monitor(rest or None)
@@ -1748,12 +1824,12 @@ def audio_thread(device):
                     kick_env, kick_decay_dynamic, smooth_spectrum, freqs,
                     band_lohi=[(lo, hi) for _, lo, hi in fine_bands])  # tint + cinza nos buracos
 
-                arr_s = frame_downsample(state['frame'], WIDTH, HEIGHT)
+                arr_s = frame_downsample(state.get('frame_comp', state['frame']), WIDTH, HEIGHT)
                 if arr_s is not None:
                     hue_s, sat_s, val_s = rgb_to_hsv_np(arr_s)
                     gx_s, gy_s = gradient(val_s)
                     state['image'] = image_dash_data(arr_s, hue_s, sat_s, val_s, gx_s, gy_s,
-                                                     state['frame'], WIDTH, HEIGHT, state['dominant'],
+                                                     state.get('frame_comp', state['frame']), WIDTH, HEIGHT, state['dominant'],
                                                      html_img['peaks'], html_img['prev_val'],
                                                      html_img['prev_mean'])
     finally:
@@ -1826,7 +1902,7 @@ def dominant_color_thread():
     # mesmo, nao precisa recalcular 30x/segundo — um sleep pequeno ja poupa CPU.
     while running:
         try:
-            state['dominant'] = dominant_color(state['frame'], WIDTH, HEIGHT)
+            state['dominant'] = dominant_color(state.get('frame_comp', state['frame']), WIDTH, HEIGHT)
         except ValueError:
             pass  # frame ainda no tamanho antigo bem no instante de um resize/troca de fonte
         time.sleep(0.1)
@@ -2038,6 +2114,8 @@ def main():
     frag_mtime = os.path.getmtime(shader_path)
     state['fx_manifest'] = dash_data.parse_fx_manifest(frag_src)
     seed_fx(state['fx_manifest'])
+    if 'overlays' not in state:   # camadas gravadas (dash, aba Visuals) — depois o dash e' quem mexe
+        state['overlays'] = dash_server._norm_overlays(getattr(tuning, 'OVERLAYS', []))
     state['output']['shader'] = os.path.basename(shader_path)
 
     uniforms = {}
@@ -2232,6 +2310,8 @@ def main():
         # frame vivo) com o .glsl escolhido num FBO -> input_tex. Senao, input_tex = tex (normal).
         tr = state.get('transition')
         input_tex = tex
+        frame_in = _composite(state['frame'])   # fonte + camadas (overlay); sem camada = o proprio frame
+        state['frame_comp'] = frame_in
         if tr:
             if tr['t0'] is None:
                 tr['t0'] = time.perf_counter()
@@ -2245,7 +2325,7 @@ def main():
             else:
                 glActiveTexture(GL_TEXTURE0)
                 glBindTexture(GL_TEXTURE_2D, tex)         # B = frame vivo
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, state['frame'])
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, frame_in)
                 glActiveTexture(GL_TEXTURE1)
                 glBindTexture(GL_TEXTURE_2D, tex_a)       # A = snapshot
                 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
@@ -2265,7 +2345,7 @@ def main():
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, input_tex)
         if input_tex == tex:                              # sem transicao: sobe o frame vivo
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, state['frame'])
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, frame_in)
 
         # --- passe da FUMACA (Stable Fluids — ver SIM_*_SRC / Caos.frag EFEITO 6): 7 sub-passes
         # numa grade menor (SIM_W x SIM_H). Roda sempre, mesmo se o preset ativo nao usar
@@ -2383,7 +2463,7 @@ def main():
         glBindTexture(GL_TEXTURE_2D, dw)         # silhueta (sim de fluido) deste frame -> u_texture_smoke
         glActiveTexture(GL_TEXTURE4)
         glBindTexture(GL_TEXTURE_2D, fw)         # fumaca (procedural) deste frame -> u_texture_fumaca
-        prev_frame_buf[0] = state['frame'].copy()
+        prev_frame_buf[0] = frame_in.copy()
         sim_idx = 1 - sim_idx      # o resultado (vw/dw, fisicamente no slot 1-sim_idx) vira o "atual" no proximo frame
         fumaca_idx = 1 - fumaca_idx
 
@@ -2505,6 +2585,41 @@ def _selfcheck():
         setattr(tuning, k, val) if val is not None else delattr(tuning, k)
     TRANS_DIR = _td0
     print('native_synth transitions self-check ok')
+
+    # --- camadas: ordem de baixo pra cima, opacidade, set ativo, camada fria pulada ---
+    _md0, MEDIA_DIR = MEDIA_DIR, tempfile.mkdtemp()
+    os.makedirs(os.path.join(MEDIA_DIR, 'default'))
+    os.makedirs(os.path.join(MEDIA_DIR, 'S2'))
+    for f in ('default/a.png', 'default/b.png', 'default/v.mp4', 'S2/c.png'):
+        open(os.path.join(MEDIA_DIR, f), 'wb').write(b'x')
+    _tk = {k: getattr(tuning, k, None) for k in ('MEDIA', 'MEDIA_SET')}
+    tuning.MEDIA = [{'name': 'a', 'file': 'default/a.png', 'kind': 'image'},
+                   {'name': 'b', 'file': 'default/b.png', 'kind': 'image'},
+                   {'name': 'v', 'file': 'default/v.mp4', 'kind': 'video'},
+                   {'name': 'c', 'file': 'S2/c.png', 'kind': 'image'}]
+    tuning.MEDIA_SET = 'default'
+    key = lambda f: (os.path.join(MEDIA_DIR, f), 'fill', WIN_W, WIN_H)
+    _still_cache[key('default/a.png')] = np.full(FRAME_SIZE, 200, np.uint8)
+    _still_cache[key('default/b.png')] = np.full(FRAME_SIZE, 0, np.uint8)
+    _still_cache[key('S2/c.png')] = np.full(FRAME_SIZE, 255, np.uint8)
+    base = np.full(FRAME_SIZE, 100, np.uint8)
+    state['overlays'] = []
+    assert _composite(base) is base, 'sem camada devia devolver a propria base'
+    state['overlays'] = [{'file': 'default/a.png', 'opacity': 0.5}]
+    assert abs(int(_composite(base)[0]) - 150) <= 1, _composite(base)[0]         # 100 -> 200 a 50%
+    state['overlays'] = [{'file': 'default/a.png', 'opacity': 1.0}, {'file': 'default/b.png', 'opacity': 0.5}]
+    assert abs(int(_composite(base)[0]) - 100) <= 1, _composite(base)[0]         # a cobre; b (0) a 50% por cima
+    state['overlays'] = [{'file': 'default/b.png', 'opacity': 0.5}, {'file': 'default/a.png', 'opacity': 1.0}]
+    assert int(_composite(base)[0]) == 200, 'ordem: a ultima marcada fica por cima'
+    state['overlays'] = [{'file': 'S2/c.png', 'opacity': 1.0}, {'file': 'default/v.mp4', 'opacity': 1.0}]
+    assert _composite(base) is base, 'camada de outro set / video sem frame ainda devia ser pulada'
+    for k, val in _tk.items():
+        setattr(tuning, k, val) if val is not None else delattr(tuning, k)
+    for f in ('default/a.png', 'default/b.png', 'S2/c.png'):
+        _still_cache.pop(key(f), None)
+    state['overlays'] = []
+    MEDIA_DIR = _md0
+    print('native_synth overlay self-check ok')
 
 
 if __name__ == '__main__':

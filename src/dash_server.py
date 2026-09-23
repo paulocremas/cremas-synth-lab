@@ -535,6 +535,9 @@ def set_media(items, setname=None, tuning_path=None, media_dir=None):
                       'transition': str(m.get('transition', '') or ''),
                       **_bounce_field(dict(m, kind=kind))})
     _write_media(keep + clean, tuning_path)
+    moved = {old: m['file'] for old, m in zip([str(it.get('file', '')) for it in items], clean) if old != m['file']}
+    if moved:
+        _remap_overlays(moved, tuning_path)
     return [dict(m, set=setname) for m in clean]
 
 
@@ -580,11 +583,62 @@ def delete_media(name, setname=None, tuning_path=None, media_dir=None):
     if os.path.isfile(fpath):
         os.remove(fpath)
     _rekey('MEDIA_KEYS', name, None, path)
+    _remap_overlays({hit['file']: None}, path)
     fn = _cfg.get('on_set_input')
     if fn and (_state.get('video') or {}).get('mode') == 'media' \
             and (_state.get('video') or {}).get('name') == name:
         fn('video', 'webcam:/dev/video0')
     return name
+
+
+# ---------------- camadas (overlay) de midia: OVERLAYS = [{file, opacity}] ----------------
+# Ordem = de baixo pra cima, na ordem em que foram marcadas (a ultima marcada fica por cima).
+# Vivo em _state['overlays'] (o native_synth compoe por frame em cima da fonte atual); gravado
+# em tuning.OVERLAYS so quando save=True (soltar o slider / marcar/desmarcar) — igual o FX.
+def _norm_overlays(items):
+    out, seen = [], set()
+    for it in items or []:
+        f = str((it or {}).get('file', '')).replace('\\', '/').lstrip('/')
+        if not f or '..' in f or f in seen:
+            continue
+        seen.add(f)
+        out.append({'file': f, 'opacity': round(max(0.0, min(1.0, float(it.get('opacity', 1.0)))), 3)})
+    return out
+
+
+def set_overlays(items, save=False, tuning_path=None):
+    """Aplica a lista de camadas ao vivo; save=True tambem reescreve o bloco OVERLAYS do
+    tuning.py (acrescenta no fim se o tuning.py e antigo e ainda nao tem o bloco)."""
+    clean = _norm_overlays(items)
+    if _state is not None:
+        _state['overlays'] = clean
+    if save:
+        body = '\n'.join('    ' + json.dumps(o) + ',' for o in clean)
+        block = f'OVERLAYS = [\n{body}\n]' if clean else 'OVERLAYS = [\n]'
+        path = tuning_path or _cfg['tuning_path']
+        with _knob_lock:
+            src = open(path).read()
+            src, n = re.subn(r'(?ms)^OVERLAYS = \[.*?^\]', block, src)
+            if n == 0:
+                src = src.rstrip('\n') + '\n\n# camadas de midia por cima da fonte (dash, aba Visuals)\n' + block + '\n'
+            open(path, 'w').write(src)
+        if _tuning is not None:
+            _tuning.OVERLAYS = [dict(o) for o in clean]
+    return clean
+
+
+def _current_overlays():
+    ov = _state.get('overlays') if _state is not None else None
+    return list(ov) if ov is not None else _norm_overlays(getattr(_tuning, 'OVERLAYS', []))
+
+
+def _remap_overlays(mapping, tuning_path=None):
+    """{file_antigo: file_novo | None} -> atualiza as camadas (renomear move, apagar tira)."""
+    cur = _current_overlays()
+    if not any(o['file'] in mapping for o in cur):
+        return
+    new = [dict(o, file=mapping[o['file']]) if o['file'] in mapping else o for o in cur]
+    set_overlays([o for o in new if o['file']], save=True, tuning_path=tuning_path)
 
 
 def set_active_media_set(name, tuning_path=None, media_dir=None):
@@ -881,6 +935,7 @@ def _payload():
         # o objeto que um <input> de renomear referencia nao e trocado embaixo dele a 20 Hz.
         'media_active': _media_active_name(),
         # videos com rebate sendo pre-renderizados agora (file relativo a media/, igual MEDIA)
+        'overlays': _current_overlays(),   # camadas vivas (sincroniza abas/janelas do dash)
         'bounce_busy': [os.path.relpath(p, _media_dir()).replace(os.sep, '/')
                         for p in _state.get('bounce_busy', [])],
         'html_mtime': os.path.getmtime(_HTML),   # cliente recarrega a aba quando muda
@@ -929,7 +984,7 @@ class _Handler(BaseHTTPRequestHandler):
             s = _active_media_set()
             self._send(200, 'application/json', json.dumps(
                 {'list': _read_media(s), 'keys': _read_keys_for('MEDIA_KEYS', s),
-                 'current': _media_active_name(),
+                 'current': _media_active_name(), 'overlays': _current_overlays(),
                  'set': s, 'sets': _list_media_sets()}).encode())
         elif path == '/transitions':
             self._send(200, 'application/json', json.dumps(_transitions_payload()).encode())
@@ -1088,6 +1143,14 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 b = json.loads(raw.decode())
                 out = bind_media_key(b['name'], b.get('key', ''))
+                self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/overlays':  # {overlays: [{file, opacity}], save: bool} — ao vivo; save grava
+            try:
+                b = json.loads(raw.decode())
+                out = set_overlays(b['overlays'], save=bool(b.get('save')))
                 self._send(200, 'application/json', json.dumps(out).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
@@ -1441,6 +1504,24 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert _read_media('Show1', md)[1]['bounce'] is True
     set_media([{'name': 'outro', 'file': 'Show1/outro.png'}, {'name': 'clip', 'file': 'Show1/clip.mov'}], None, p, md); _sync()
     assert all('bounce' not in m for m in _read_media('Show1', md))
+    # camadas: normaliza (clamp, sem duplicata), grava (acrescenta o bloco se o tuning.py e antigo),
+    # segue o arquivo ao renomear e some ao apagar
+    assert 'OVERLAYS' not in open(p).read()
+    set_overlays([{'file': 'Show1/outro.png', 'opacity': 2}, {'file': 'Show1/clip.mov', 'opacity': 0.3},
+                  {'file': 'Show1/outro.png'}], save=True, tuning_path=p); _sync()
+    ns = {}; exec(open(p).read(), ns)
+    assert ns['OVERLAYS'] == [{'file': 'Show1/outro.png', 'opacity': 1.0},
+                              {'file': 'Show1/clip.mov', 'opacity': 0.3}], ns['OVERLAYS']
+    set_overlays([{'file': 'Show1/clip.mov', 'opacity': 0.5}], tuning_path=p)   # so ao vivo
+    assert _state['overlays'] == [{'file': 'Show1/clip.mov', 'opacity': 0.5}]
+    assert 'Show1/outro.png' in open(p).read(), 'ao vivo nao devia gravar'
+    set_overlays(ns['OVERLAYS'], save=True, tuning_path=p); _sync()
+    set_media([{'name': 'outro', 'file': 'Show1/outro.png'}, {'name': 'clip2', 'file': 'Show1/clip.mov'}], None, p, md); _sync()
+    assert [o['file'] for o in _current_overlays()] == ['Show1/outro.png', 'Show1/clip2.mov'], _current_overlays()
+    delete_media('clip2', None, p, md); _sync()
+    assert [o['file'] for o in _current_overlays()] == ['Show1/outro.png']
+    assert 'clip2' not in open(p).read().split('OVERLAYS = [')[1]
+    set_overlays([], save=True, tuning_path=p); _sync(); _state.pop('overlays', None)
     # tecla no set ativo (Show1)
     _tuning.MEDIA_SET = 'Show1'
     assert bind_media_key('outro', 'n', p, md) == {'Show1': {'outro': 'n'}}; _sync()

@@ -51,6 +51,15 @@ Entender cada ferramenta isolada primeiro, comparar onde o vocabulário se repet
     `framerate` blend) em `~/.cache/prisma/bounce/` — o resto do pipeline toca esse arquivo sem
     saber. Enquanto renderiza, toca o original (`state['bounce_busy']` → "preparando…" no dash) e
     troca sozinho quando fica pronto. Teto `BOUNCE_MAX_S` (o `reverse` segura o clipe na RAM).
+    **Camadas (overlay)**: checkbox "camada" + slider de opacidade por item. Marcar empilha POR
+    CIMA das já marcadas (ordem de seleção; número = posição, 1 = embaixo). Vivo em
+    `state['overlays']` (`[{file, opacity}]`, POST `/overlays`, arrasto = `save:false`), gravado
+    em `tuning.OVERLAYS` ao soltar/marcar (bloco acrescentado se o `tuning.py` não tiver).
+    `_composite` mistura por cima da fonte atual no loop GL (uint16, ~2 ms/camada) →
+    `state['frame_comp']`, que é o que sobe pro shader, entra na transição e na análise de imagem.
+    Frame de cada camada: vídeo = entrada do `_pool` ou um ffmpeg próprio em `_ovl`; imagem =
+    `_still_cache`. Só camadas do set ativo; renomear/apagar mídia atualiza a lista. Sem alpha
+    (PNG transparente vira opaco — o pipeline é rgb24).
     **Troca rápida**: imagem parada decodifica 1x pro `_still_cache` (troca = swap de ponteiro,
     sem ffmpeg rodando à toa; `prewarm_stills` aquece tudo no start). Vídeo: `tuning.VIDEO_POOL`
     mantém um `ffmpeg -re` por vídeo do set ativo numa thread (`_pool_reader`) → troca entre

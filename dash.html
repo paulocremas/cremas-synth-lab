@@ -139,6 +139,10 @@
   .sh-row > .name { flex: 1; text-align: left; }
   .sh-row .mtype { font-size: 13px; line-height: 1; width: 18px; text-align: center; filter: grayscale(.15); }
   .sh-row .fit { font-size: 11px; color: #999; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+  .sh-row .ovl { font-size: 11px; color: #999; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+  .sh-row .ovl input[type=range] { width: 70px; }
+  .sh-row .ovl .pct { width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+  .sh-row .ovl .ord { min-width: 12px; color: #6a6; font-weight: bold; }
   .sh-row > .name.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
   .sh-row .keycap { min-width: 15px; text-align: center; color: #4a8; font-size: 11px; }
   .sh-gear { min-width: 22px; }
@@ -1232,6 +1236,7 @@ let lastMedia = [], lastMediaKeys = {}, lastMediaSets = ['default'], lastMediaSe
 function loadMedia(){
   fetch('/media').then(r => r.json()).then(d => {
     lastMedia = d.list || []; lastMediaKeys = d.keys || {};
+    if (d.overlays) lastOverlays = d.overlays;
     lastMediaSets = d.sets || ['default']; lastMediaSet = d.set || 'default';
     renderSetBar($('#media-set-bar'), lastMediaSets, lastMediaSet, '/media-set');
     renderMediaList(d.current || '');
@@ -1244,14 +1249,37 @@ function selectMedia(name){
   mediaSig = ''; setTimeout(loadMedia, 60);
 }
 let mediaLastCurrent = '';
-let lastBounceBusy = [];   // files (relativos a media/) com rebate sendo preparado agora — vem do stream
+let lastBounceBusy = [];
+// CAMADAS (overlay): [{file, opacity}] de baixo pra cima, na ordem em que foram marcadas. Vem de
+// /media e do stream; o slider se atualiza NO LUGAR (ovlEls) sem rebuild da lista — o sig so
+// muda quando a lista de camadas muda, nao a opacidade, pra nao matar um arrasto no meio.
+let lastOverlays = [], ovlEls = {}, ovlDrag = '', ovlT = null;
+function sendOverlays(save){
+  mediaTouched = performance.now();
+  clearTimeout(ovlT); ovlT = null;
+  fetch('/overlays', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ overlays: lastOverlays, save }) });
+}
+function sendOverlaysLive(){   // arrasto: no maximo ~25 POST/s, sem gravar no tuning.py
+  mediaTouched = performance.now();
+  if (!ovlT) ovlT = setTimeout(() => { ovlT = null; sendOverlays(false); }, 40);
+}
+function syncOvlSliders(){
+  if (performance.now() - mediaTouched < TOUCH_MS) return;
+  for (const [file, el] of Object.entries(ovlEls)){
+    if (file === ovlDrag) continue;
+    const o = lastOverlays.find(x => x.file === file);
+    if (o){ el.inp.value = Math.round(o.opacity * 100); el.pct.textContent = el.inp.value + '%'; }
+  }
+}   // files (relativos a media/) com rebate sendo preparado agora — vem do stream
 function renderMediaList(current){
   if (current === undefined) current = mediaLastCurrent; else mediaLastCurrent = current;
   if (performance.now() - mediaTouched < TOUCH_MS && mediaSig) return;   // acabei de mexer
-  const sig = JSON.stringify([lastMedia, lastMediaKeys, current, mediaOpen, lastTrans, lastBounceBusy]);
+  const sig = JSON.stringify([lastMedia, lastMediaKeys, current, mediaOpen, lastTrans, lastBounceBusy,
+                             lastOverlays.map(o => o.file)]);
   if (sig === mediaSig) return;
   mediaSig = sig;
-  const box = $('#media-list'); box.innerHTML = '';
+  const box = $('#media-list'); box.innerHTML = ''; ovlEls = {};
   if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Use "+ imagem ou vídeo".</div>';
   for (const m of lastMedia){
     const row = document.createElement('div'); row.className = 'sh-row';
@@ -1270,6 +1298,35 @@ function renderMediaList(current){
     const cap = document.createElement('span'); cap.className = 'keycap';
     cap.textContent = (lastMediaKeys[m.name] || '').toUpperCase();
     row.appendChild(cap);
+
+    // camada: marca = entra POR CIMA das ja marcadas; slider = opacidade (vivo; grava ao soltar)
+    const oi = lastOverlays.findIndex(o => o.file === m.file);
+    const ov = document.createElement('label'); ov.className = 'ovl';
+    const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
+    oc.title = 'camada: sobrepõe esta mídia à imagem, por cima das já marcadas (na ordem em que marcar)';
+    const ord = document.createElement('span'); ord.className = 'ord';
+    ord.textContent = oi >= 0 ? String(oi + 1) : '';
+    ord.title = 'posição da camada (1 = mais embaixo)';
+    const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
+    orng.value = oi >= 0 ? Math.round(lastOverlays[oi].opacity * 100) : 50;
+    orng.disabled = oi < 0; orng.title = 'opacidade da camada';
+    const pct = document.createElement('span'); pct.className = 'pct';
+    pct.textContent = oi >= 0 ? orng.value + '%' : '';
+    oc.onchange = () => {
+      if (oc.checked) lastOverlays.push({ file: m.file, opacity: +orng.value / 100 });
+      else lastOverlays = lastOverlays.filter(o => o.file !== m.file);
+      sendOverlays(true); mediaSig = ''; renderMediaList();
+    };
+    orng.onpointerdown = () => { ovlDrag = m.file; mediaTouched = performance.now(); };
+    orng.oninput = () => {
+      const o = lastOverlays.find(x => x.file === m.file); if (!o) return;
+      o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
+      sendOverlaysLive();
+    };
+    orng.onchange = () => { ovlDrag = ''; sendOverlays(true); };
+    ov.append(oc, ord, 'camada', orng, pct);
+    row.appendChild(ov);
+    ovlEls[m.file] = { inp: orng, pct };
 
     const fit = document.createElement('label'); fit.className = 'fit';
     const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = m.fit !== 'fit';
@@ -1609,7 +1666,9 @@ function render(d){
   renderChannels(d.channels);
   renderShaderList(d.shader);
   lastBounceBusy = d.bounce_busy || [];
-  renderMediaList(d.media_active || '');   // só o highlight segue o stream; a lista vem de /media
+  if (d.overlays && performance.now() - mediaTouched >= TOUCH_MS) lastOverlays = d.overlays;
+  renderMediaList(d.media_active || '');
+  syncOvlSliders();   // só o highlight segue o stream; a lista vem de /media
   renderFx(d.fx);
   renderOutput(d.output);
   renderImage(d.image);
