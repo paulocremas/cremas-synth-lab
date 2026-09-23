@@ -411,6 +411,7 @@ def bind_shader_key(name, key, tuning_path=None):
 
 
 # ---------------- galeria de midia (aba Visuais): MEDIA + MEDIA_KEYS ----------------
+# espelhado no accept= do <input id="media-file"> do dash.html — manter os dois iguais
 _MEDIA_EXT = {'image': {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'},
               'video': {'.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v'}}
 _MEDIA_MAX = 400 * 1024 * 1024  # teto do upload (bytes) — leitura do body inteira na memoria
