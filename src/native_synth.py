@@ -659,8 +659,8 @@ def _probe_dims(path):
 # resto do pipeline (loop -stream_loop, pool, _fit_vf) toca esse arquivo sem saber de nada.
 # ponytail: o filtro reverse segura o clipe inteiro na RAM (reduzido a <=640px, ~0.35-0.46 MB
 # por frame) -> teto BOUNCE_MAX_S; video mais longo toca normal. Upgrade: reverter em pedacos.
-BOUNCE_RAMP_S = 1.2    # duracao (s de video original) da desaceleracao antes/depois de cada virada
-BOUNCE_SLOW = 0.25     # velocidade na virada (1 = normal): 0.25 = 4x mais lento no ponto de rebate
+BOUNCE_RAMP_S = 0.8    # duracao (s de video original) da desaceleracao antes/depois de cada virada
+BOUNCE_SLOW = 0.5      # velocidade na virada (1 = normal): 0.5 = 2x mais lento no ponto de rebate
 BOUNCE_MAX_S = 60
 BOUNCE_DIR = os.path.join(os.environ.get('XDG_CACHE_HOME') or os.path.expanduser('~/.cache'),
                           'prisma', 'bounce')
