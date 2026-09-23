@@ -388,7 +388,7 @@ state = {'frame': np.zeros(FRAME_SIZE, dtype=np.uint8), 'amp': 0.0, 'bass': 0.0,
          'kick': 0.0, 'dominant': (0.5, 0.5, 0.5),
          # faixas finas de mixagem (Sub-bass..Air) — controlam u_subbass..u_air no shader
          'subbass': 0.0, 'lowmid': 0.0, 'midrange': 0.0, 'highmid': 0.0, 'presence': 0.0,
-         'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {}, 'out_image': {},
+         'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {}, 'out_image': {}, 'bounce_busy': [],
          'audio_source': '', 'video': None, 'video_label': '', 'video_id': '', 'output': {},
          # potenciometros de efeito: 'fx_manifest' = nomes do "// fx:" do shader ativo,
          # 'fx' = nivel 0..1 ao vivo por nome (o dash e, no futuro, o MIDI escrevem aqui).
@@ -652,6 +652,90 @@ def _probe_dims(path):
     return _dims_cache[path]
 
 
+# --- REBATE (item de MEDIA com "bounce": true): o video passa inteiro pra frente, depois inteiro
+# de tras pra frente, em loop — e desacelera perto de cada virada (fim da ida / comeco da volta,
+# e o mesmo na volta->ida) pra quina nao ficar seca. Pre-renderiza UMA vez (ffmpeg: reverse +
+# setpts com rampa + framerate blend pra suavizar a camera lenta) num cache fora de media/, e o
+# resto do pipeline (loop -stream_loop, pool, _fit_vf) toca esse arquivo sem saber de nada.
+# ponytail: o filtro reverse segura o clipe inteiro na RAM (reduzido a <=640px, ~0.35-0.46 MB
+# por frame) -> teto BOUNCE_MAX_S; video mais longo toca normal. Upgrade: reverter em pedacos.
+BOUNCE_RAMP_S = 1.2    # duracao (s de video original) da desaceleracao antes/depois de cada virada
+BOUNCE_SLOW = 0.25     # velocidade na virada (1 = normal): 0.25 = 4x mais lento no ponto de rebate
+BOUNCE_MAX_S = 60
+BOUNCE_DIR = os.path.join(os.environ.get('XDG_CACHE_HOME') or os.path.expanduser('~/.cache'),
+                          'prisma', 'bounce')
+_bounce_jobs = {}  # caminho do original -> 'busy' | 'fail'
+_media_procs = {}  # caminho do original -> {Popen} tocando ele agora (pra trocar pro rebate pronto)
+
+
+def _bounce_path(path):
+    """arquivo de cache do rebate de `path` — muda se o original ou os parametros mudarem."""
+    import hashlib
+    st = os.stat(path)
+    key = f'{os.path.abspath(path)}|{st.st_mtime_ns}|{st.st_size}|{BOUNCE_RAMP_S}|{BOUNCE_SLOW}|v1'
+    return os.path.join(BOUNCE_DIR, hashlib.sha1(key.encode()).hexdigest()[:16] + '.mp4')
+
+
+def _ease_pts(dur):
+    """expressao do setpts: tempo de saida em funcao do tempo T do video. Rampa de R segundos em
+    cada ponta; dentro dela o custo por segundo de video (1/velocidade) sobe linear de 1 ate
+    1/BOUNCE_SLOW na virada -> tempo = integral = termo quadratico. Meio = velocidade normal."""
+    r = min(BOUNCE_RAMP_S, dur / 3)
+    c = 1 / BOUNCE_SLOW - 1
+    a = r + c * r / 2                     # tempo gasto na rampa inicial
+    e = dur - r                           # onde comeca a rampa final
+    return (f"'if(lt(T,{r}),T+{c}*(T-T*T/(2*{r})),"
+            f"if(lt(T,{e}),{a}+T-{r},"
+            f"{a}+{e - r}+(T-{e})+{c}*(T-{e})*(T-{e})/(2*{r})))/TB'")
+
+
+def _render_bounce(path, out):
+    try:
+        dur = float(subprocess.check_output(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path],
+            stderr=subprocess.DEVNULL, timeout=10).decode().strip())
+        if not 0.3 < dur <= BOUNCE_MAX_S:
+            raise ValueError(f'duracao {dur:.1f}s fora de (0.3, {BOUNCE_MAX_S}]s')
+        ease = _ease_pts(dur)
+        graph = ('[0:v]fps=30,scale=640:640:force_original_aspect_ratio=decrease:force_divisible_by=2,'
+                 'setsar=1,split[a][b];'
+                 f'[b]reverse,setpts=PTS-STARTPTS,setpts={ease}[rv];'
+                 f'[a]setpts=PTS-STARTPTS,setpts={ease}[fw];'
+                 '[fw][rv]concat=n=2:v=1:a=0,framerate=fps=30[out]')
+        os.makedirs(BOUNCE_DIR, exist_ok=True)
+        tmp = out + '.part.mp4'
+        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', path, '-filter_complex', graph,
+                        '-map', '[out]', '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
+                        '-pix_fmt', 'yuv420p', tmp], check=True, timeout=600)
+        os.replace(tmp, out)
+        _bounce_jobs.pop(path, None)
+        print('rebate pronto:', os.path.basename(path))
+        for p in list(_media_procs.get(path, ())):  # quem toca o original morre -> respawna no rebate
+            p.terminate()
+    except (subprocess.SubprocessError, ValueError, OSError) as ex:
+        _bounce_jobs[path] = 'fail'
+        print(f'rebate falhou ({os.path.basename(path)}): {ex} — tocando normal')
+    finally:
+        state['bounce_busy'] = [p for p, s in _bounce_jobs.items() if s == 'busy']
+
+
+def _bounce_source(path):
+    """caminho a tocar pra um item com rebate: o cache se pronto; senao dispara o render (1x, em
+    thread) e devolve o original enquanto isso."""
+    try:
+        out = _bounce_path(path)
+    except OSError:
+        return path
+    if os.path.isfile(out):
+        return out
+    if path not in _bounce_jobs:
+        _bounce_jobs[path] = 'busy'
+        state['bounce_busy'] = [p for p, s in _bounce_jobs.items() if s == 'busy']
+        print('rebate: preparando', os.path.basename(path), '...')
+        threading.Thread(target=_render_bounce, args=(path, out), daemon=True).start()
+    return path
+
+
 def _fit_vf(fit, src_w=0, src_h=0):
     """-vf pra 'fit' (encaixa, barras pretas) ou 'fill' (preenche, corta) a midia no OUTPUT.
     Corrige o aspecto da JANELA (WIN_W:WIN_H), nao so o da textura WIDTHxHEIGHT: o shader
@@ -690,8 +774,17 @@ def _spawn_ffmpeg(v):
     elif v['mode'] == 'media':
         vf = _fit_vf(v.get('fit', 'fill'), *(_probe_dims(v['path']) or (0, 0)))
         if v.get('media_kind') == 'video':  # loop infinito, em tempo real
+            src = _bounce_source(v['path']) if v.get('bounce') else v['path']
             cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-stream_loop', '-1', '-re',
-                   '-i', v['path'], '-vf', vf, '-r', '30', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
+                   '-i', src, '-vf', vf, '-r', '30', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            if src == v['path'] and v.get('bounce'):  # rebate ainda renderizando: lembra do proc
+                procs = _media_procs.setdefault(v['path'], set())
+                procs.difference_update({q for q in procs if q.poll() is not None})
+                procs.add(p)
+                if _bounce_jobs.get(v['path']) != 'busy':  # ficou pronto nesse meio-tempo
+                    p.terminate()
+            return p
         else:                               # imagem parada: repete o mesmo frame a 30 fps
             cmd = ['ffmpeg', '-loglevel', 'error', '-loop', '1', '-framerate', '30',
                    '-i', v['path'], '-vf', vf, '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
@@ -821,7 +914,8 @@ def _desired_pool():
         if os.path.isfile(p):
             out.append((p, {'mode': 'media', 'device': None, 'region': None, 'name': m.get('name', ''),
                             'path': p, 'media_kind': 'video',
-                            'fit': 'fit' if m.get('fit') == 'fit' else 'fill'}))
+                            'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
+                            'bounce': bool(m.get('bounce'))}))
     return out
 
 
@@ -831,7 +925,7 @@ def _sync_pool():
     want = _desired_pool()
     want_paths = {p for p, _ in want}
     for path, e in list(_pool.items()):
-        if path not in want_paths or e['win'] != win:
+        if path not in want_paths or e['win'] != win or e['v'] != dict(want)[path]:
             e['run'] = False
             _pool.pop(path, None)
     for path, v in want:
@@ -881,8 +975,8 @@ def video_thread(mode, region=None, device='/dev/video0'):
             # pool: reconstroi quando muda set / lista de video / tamanho de janela / os flags
             sig = (getattr(tuning, 'MEDIA_SET', 'default'), (WIN_W, WIN_H),
                    getattr(tuning, 'VIDEO_POOL', 0), getattr(tuning, 'VIDEO_POOL_MAX', 4),
-                   tuple(m.get('file', '') for m in getattr(tuning, 'MEDIA', [])
-                         if m.get('kind') == 'video'))
+                   tuple((m.get('file', ''), m.get('fit'), bool(m.get('bounce')))
+                         for m in getattr(tuning, 'MEDIA', []) if m.get('kind') == 'video'))
             if sig != pool_sig:
                 pool_sig = sig
                 _sync_pool()
@@ -1422,7 +1516,8 @@ def _video_from_id(ident):
             return {'mode': 'media', 'device': None, 'region': None, 'name': m.get('name', ''),
                     'path': os.path.join(MEDIA_DIR, m.get('file', '')),
                     'media_kind': 'video' if m.get('kind') == 'video' else 'image',
-                    'fit': 'fit' if m.get('fit') == 'fit' else 'fill'}
+                    'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
+                    'bounce': m.get('kind') == 'video' and bool(m.get('bounce'))}
         return {'mode': 'webcam', 'device': '/dev/video0', 'region': None}  # sem midia -> webcam
     try:
         m = pick_monitor(rest or None)

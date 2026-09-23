@@ -44,6 +44,13 @@ Entender cada ferramenta isolada primeiro, comparar onde o vocabulário se repet
     cacheado) + `_fit_vf` pré-distorcem o `-vf` do ffmpeg pra que, depois do shader esticar a
     textura 640×480 pra `WIN_W×WIN_H`, a imagem fique sem distorção (barras no eixo curto / corte
     no longo). `video_thread` respawna a mídia quando a janela muda de tamanho.
+    **Rebate** (só vídeo, checkbox por item → `"bounce": 1` no item de `MEDIA`; `1`, não `True`,
+    porque o bloco é escrito via `json.dumps`): ida inteira + volta inteira em loop, desacelerando
+    perto de cada virada (`BOUNCE_RAMP_S`/`BOUNCE_SLOW` no topo do bloco de rebate em
+    `native_synth.py`). Pré-renderizado 1x pelo ffmpeg (`reverse` + `setpts` com rampa +
+    `framerate` blend) em `~/.cache/prisma/bounce/` — o resto do pipeline toca esse arquivo sem
+    saber. Enquanto renderiza, toca o original (`state['bounce_busy']` → "preparando…" no dash) e
+    troca sozinho quando fica pronto. Teto `BOUNCE_MAX_S` (o `reverse` segura o clipe na RAM).
     **Troca rápida**: imagem parada decodifica 1x pro `_still_cache` (troca = swap de ponteiro,
     sem ffmpeg rodando à toa; `prewarm_stills` aquece tudo no start). Vídeo: `tuning.VIDEO_POOL`
     mantém um `ffmpeg -re` por vídeo do set ativo numa thread (`_pool_reader`) → troca entre

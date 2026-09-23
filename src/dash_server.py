@@ -474,8 +474,15 @@ def _read_media(setname=None, media_dir=None):
         out.append({'name': name, 'file': file, 'set': mset,
                     'kind': 'video' if m.get('kind') == 'video' else 'image',
                     'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
-                    'transition': str(m.get('transition', '') or '')})
+                    'transition': str(m.get('transition', '') or ''),
+                    **_bounce_field(m)})
     return out
+
+
+def _bounce_field(m):
+    """{'bounce': True} so em video com rebate ligado — ausente = desligado (nao suja os itens
+    antigos do tuning.py nem as comparacoes dos testes)."""
+    return {'bounce': True} if m.get('kind') == 'video' and m.get('bounce') else {}
 
 
 def _write_media(allm, tuning_path=None):
@@ -484,7 +491,9 @@ def _write_media(allm, tuning_path=None):
     clean = [{'name': m['name'], 'file': m['file'],
               'kind': 'video' if m.get('kind') == 'video' else 'image',
               'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
-              'transition': str(m.get('transition', '') or '')} for m in allm]
+              'transition': str(m.get('transition', '') or ''),
+              # 1, nao True: o bloco sai via json.dumps e `true` nao e Python valido no tuning.py
+              **({'bounce': 1} if _bounce_field(m) else {})} for m in allm]
     body = '\n'.join('    ' + json.dumps(m) + ',' for m in clean)
     block = f'MEDIA = [\n{body}\n]' if clean else 'MEDIA = [\n]'
     path = tuning_path or _cfg['tuning_path']
@@ -520,9 +529,11 @@ def set_media(items, setname=None, tuning_path=None, media_dir=None):
         file = _media_rel(setname, nm + os.path.splitext(src_item['file'])[1])
         if file != src_item['file'] and not os.path.exists(os.path.join(d, file)):
             os.rename(os.path.join(d, src_item['file']), os.path.join(d, file))
-        clean.append({'name': nm, 'file': file, 'kind': m.get('kind') or src_item['kind'],
+        kind = m.get('kind') or src_item['kind']
+        clean.append({'name': nm, 'file': file, 'kind': kind,
                       'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
-                      'transition': str(m.get('transition', '') or '')})
+                      'transition': str(m.get('transition', '') or ''),
+                      **_bounce_field(dict(m, kind=kind))})
     _write_media(keep + clean, tuning_path)
     return [dict(m, set=setname) for m in clean]
 
@@ -869,6 +880,9 @@ def _payload():
         # tecla/dropdown); a lista em si o dash busca em /media (init + apos cada edicao) — assim
         # o objeto que um <input> de renomear referencia nao e trocado embaixo dele a 20 Hz.
         'media_active': _media_active_name(),
+        # videos com rebate sendo pre-renderizados agora (file relativo a media/, igual MEDIA)
+        'bounce_busy': [os.path.relpath(p, _media_dir()).replace(os.sep, '/')
+                        for p in _state.get('bounce_busy', [])],
         'html_mtime': os.path.getmtime(_HTML),   # cliente recarrega a aba quando muda
     }
 
@@ -1417,6 +1431,16 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert out[0] == {'name': 'outro', 'file': 'Show1/outro.png', 'kind': 'image', 'fit': 'fit',
                       'transition': 'wipe.glsl', 'set': 'Show1'}, out
     assert os.path.isfile(os.path.join(md, 'Show1', 'outro.png')) and len(_read_media('default', md)) == 2
+    # rebate: so em video, liga/desliga, e o tuning.py gravado continua sendo Python valido
+    add_media('clip.mov', data=b'v', tuning_path=p, media_dir=md); _sync()
+    out = set_media([{'name': 'outro', 'file': 'Show1/outro.png', 'bounce': True},
+                     {'name': 'clip', 'file': 'Show1/clip.mov', 'bounce': True}], None, p, md); _sync()
+    assert 'bounce' not in out[0] and out[1]['bounce'], out
+    ns = {}; exec(open(p).read(), ns)
+    assert [m.get('bounce') for m in ns['MEDIA'] if m['file'].startswith('Show1/')] == [None, 1], ns['MEDIA']
+    assert _read_media('Show1', md)[1]['bounce'] is True
+    set_media([{'name': 'outro', 'file': 'Show1/outro.png'}, {'name': 'clip', 'file': 'Show1/clip.mov'}], None, p, md); _sync()
+    assert all('bounce' not in m for m in _read_media('Show1', md))
     # tecla no set ativo (Show1)
     _tuning.MEDIA_SET = 'Show1'
     assert bind_media_key('outro', 'n', p, md) == {'Show1': {'outro': 'n'}}; _sync()

@@ -1244,10 +1244,11 @@ function selectMedia(name){
   mediaSig = ''; setTimeout(loadMedia, 60);
 }
 let mediaLastCurrent = '';
+let lastBounceBusy = [];   // files (relativos a media/) com rebate sendo preparado agora — vem do stream
 function renderMediaList(current){
   if (current === undefined) current = mediaLastCurrent; else mediaLastCurrent = current;
   if (performance.now() - mediaTouched < TOUCH_MS && mediaSig) return;   // acabei de mexer
-  const sig = JSON.stringify([lastMedia, lastMediaKeys, current, mediaOpen, lastTrans]);
+  const sig = JSON.stringify([lastMedia, lastMediaKeys, current, mediaOpen, lastTrans, lastBounceBusy]);
   if (sig === mediaSig) return;
   mediaSig = sig;
   const box = $('#media-list'); box.innerHTML = '';
@@ -1276,6 +1277,17 @@ function renderMediaList(current){
     cb.onchange = () => { m.fit = cb.checked ? 'fill' : 'fit'; sendMedia(); };
     fit.append(cb, 'preencher');
     row.appendChild(fit);
+
+    if (m.kind === 'video'){   // rebate: ida inteira + volta inteira em loop, desacelerando na virada
+      const bl = document.createElement('label'); bl.className = 'fit';
+      const bc = document.createElement('input'); bc.type = 'checkbox'; bc.checked = !!m.bounce;
+      bc.title = 'rebate: passa o vídeo pra frente e depois de trás pra frente, em loop, '
+               + 'desacelerando perto de cada virada. Na 1ª vez prepara uma versão (alguns segundos; '
+               + 'enquanto isso toca normal).';
+      bc.onchange = () => { m.bounce = bc.checked; sendMedia(); };
+      bl.append(bc, lastBounceBusy.includes(m.file) ? 'rebate (preparando…)' : 'rebate');
+      row.appendChild(bl);
+    }
 
     const tsel = document.createElement('select');
     tsel.className = 'insel'; tsel.style.maxWidth = '120px';
@@ -1596,6 +1608,7 @@ function render(d){
   renderRanges(d.bands_hz);
   renderChannels(d.channels);
   renderShaderList(d.shader);
+  lastBounceBusy = d.bounce_busy || [];
   renderMediaList(d.media_active || '');   // só o highlight segue o stream; a lista vem de /media
   renderFx(d.fx);
   renderOutput(d.output);
