@@ -2337,6 +2337,11 @@ def main():
         frame_n += 1
         if frame_n % 15 == 0:
             state['output']['fps'] = round(clock.get_fps(), 1)
+            # dims originais da midia ativa (botao "tamanho da mídia" no dash). So le o cache:
+            # _probe_dims ja rodou quando a midia abriu; ffprobe aqui travaria o render.
+            v = state['video']
+            dims = _dims_cache.get(v['path']) if v and v.get('mode') == 'media' else None
+            state['output']['media_dims'] = list(dims) if dims else None
 
     # da um instante pras threads daemon (audio_thread) notarem running=False e rodarem
     # seu "finally" (ex. sair da tela alternada) antes do processo sumir de baixo delas

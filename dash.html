@@ -197,6 +197,7 @@
   <label>saída <select id="out-mon" class="insel"></select></label>
   <label>dimensão <input type="number" id="out-w" class="insel" style="width:60px" min="160" step="10">
     &times; <input type="number" id="out-h" class="insel" style="width:60px" min="120" step="10"></label>
+  <button class="ibtn" id="out-fitmedia" disabled title="sem mídia ativa">= mídia</button>
   <label><input type="checkbox" id="out-full"> tela cheia</label>
 </div>
 
@@ -524,8 +525,14 @@ function saveOutSize(w, h){
 function loadOutSize(){
   try { return JSON.parse(localStorage.getItem('outSize')); } catch { return null; }
 }
+let lastOutput = null;
 function renderOutputBar(o){
   if (!o || !o.window_w) return;
+  lastOutput = o;
+  const md = o.media_dims, fb = $('#out-fitmedia');
+  fb.disabled = !md;
+  fb.title = md ? `janela do tamanho da mídia (${md[0]}×${md[1]}; reduz mantendo a proporção se não couber no monitor)`
+                : 'sem mídia ativa';
   if (!o.fullscreen) saveOutSize(o.window_w, o.window_h);
   if (performance.now() - outTouched < TOUCH_MS) return;
   fillOutMon(o.monitors || [], o.monitor || '');
@@ -550,6 +557,20 @@ $('#out-full').addEventListener('change', () => {
     if (prev && prev.w && prev.h){ $('#out-w').value = prev.w; $('#out-h').value = prev.h; }
   }
   $('#out-w').disabled = $('#out-h').disabled = full;
+  sendOutput();
+});
+// "= mídia": janela com as dims originais da midia ativa (o.media_dims, via ffprobe). Midia
+// maior que o monitor (ex. 4K num 1080p) reduz mantendo a proporcao; nunca amplia.
+$('#out-fitmedia').addEventListener('click', () => {
+  const o = lastOutput, md = o && o.media_dims;
+  if (!md) return;
+  const mons = o.monitors || [];
+  const mon = mons.find(m => m.name === $('#out-mon').value) || mons.find(m => m.primary) || mons[0];
+  const k = mon ? Math.min(1, mon.w / md[0], mon.h / md[1]) : 1;
+  $('#out-w').value = Math.round(md[0] * k);
+  $('#out-h').value = Math.round(md[1] * k);
+  $('#out-full').checked = false;
+  $('#out-w').disabled = $('#out-h').disabled = false;
   sendOutput();
 });
 $('#out-w').addEventListener('input', () => { outTouched = performance.now(); });
