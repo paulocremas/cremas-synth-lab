@@ -4,7 +4,17 @@ Fonte unica de verdade do dash de audio: o audio_thread chama audio_dash_data() 
 o dict em state['audio_dash']; tanto o dash de terminal quanto o payload HTTP so renderizam
 esse mesmo dict. Sem import de native_synth (evita circular) — so numpy.
 """
+import re
+
 import numpy as np
+
+
+def parse_fx_manifest(src):
+    """Nomes dos potenciometros de efeito que um shader expoe, do comentario-cabecalho
+    "// fx: nome1, nome2, ..." (aba Efeitos do dash). Sem essa linha -> []. Cada nome vira
+    o uniform u_fx_<nome> no GLSL (0..1, 1.0 = cheio) e um slider no dash."""
+    m = re.search(r'(?m)^//\s*fx:\s*(.+)$', src or '')
+    return [s.strip() for s in m.group(1).split(',') if s.strip()] if m else []
 
 # espelha FREQ_BANDS (native_synth.py) pro lado web/JSON — nome, [lo, hi] default, cor.
 _FREQ_BANDS = [
@@ -77,6 +87,10 @@ def audio_dash_data(bands_raw, amp_raw, amp_raw_level, amp_final, amp_smoothing,
 
 
 if __name__ == '__main__':  # self-check (roda: python dash_data.py)
+    assert parse_fx_manifest('// fx: wave, grain ,vignette\nfoo bar') == ['wave', 'grain', 'vignette']
+    assert parse_fx_manifest('//fx:wave') == ['wave']
+    assert parse_fx_manifest('nada aqui') == [] and parse_fx_manifest('') == []
+
     freqs = np.fft.rfftfreq(1024, d=1 / 44100)
     spec = np.full(len(freqs), 0.01)
     spec[5:15] = 1.0  # pico no grave

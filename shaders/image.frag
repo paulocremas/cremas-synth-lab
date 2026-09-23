@@ -1,3 +1,8 @@
+// fx: wave, flow, rgbsplit, channels, scanlines, grain, vignette, grayscale, layer
+// ^ manifest lido por dash_data.parse_fx_manifest: cada nome vira o uniform u_fx_<nome>
+//   (0..1, 1.0 = cheio) e um potenciometro na aba "Efeitos" do dash. Multiplica a
+//   intensidade do efeito correspondente lah embaixo.
+
 #ifdef GL_ES
 precision mediump float;
 #endif
@@ -30,6 +35,18 @@ uniform float u_air;
 uniform float u_chan[8];      // nivel 0..1 por canal
 uniform float u_chan_hit[8];  // onset 0..1 por canal (so quem tem stem ligado dispara)
 
+// potenciometros de efeito (aba "Efeitos" do dash -> tuning.FX -> state['fx']). 0 = efeito
+// desligado, 1 = cheio. Nao declarados aqui = uniform ausente = no-op silencioso no GL.
+uniform float u_fx_wave;
+uniform float u_fx_flow;
+uniform float u_fx_rgbsplit;
+uniform float u_fx_channels;
+uniform float u_fx_scanlines;
+uniform float u_fx_grain;
+uniform float u_fx_vignette;
+uniform float u_fx_grayscale;
+uniform float u_fx_layer;
+
 // ruído branco pontual — equivale a WhiteNoise do SC: hash de uma posição -> 0..1
 float random(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
@@ -41,7 +58,7 @@ void main() {
     vec2 st0 = st; // UV congelada ANTES de qualquer efeito — a imagem "seca" pro EFEITO 8
 
     // ===== EFEITO 1: ONDA — distorce a coordenada de leitura (imagem "derrete"/ondula) =====
-    float wave_amount = 0.03 * u_subbass * u_kick; // <- edita aqui. 0 = desligado. testa 0.01 a 0.05
+    float wave_amount = 0.03 * u_subbass * u_kick * u_fx_wave; // <- edita aqui. 0 = desligado. testa 0.01 a 0.05
     st.x += sin(st.y * 0.05 + u_time * 0.1) * wave_amount * 0.5;
     // st.y += sin(st.x * 0.10 + u_time * 2.5) * wave_amount * 0.5;
 
@@ -50,14 +67,14 @@ void main() {
     vec2 em = vec2(0.5, 0.5);                      // <- edita aqui: posição do emissor (0..1 na tela)
     vec2 ev = st - em;
     float er = length(ev) + 1e-4;
-    float flow_amt = (0.003 * 10.0 * u_kick) + 0.02 * u_subbass;         // <- edita aqui. 0 = desligado
+    float flow_amt = ((0.003 * 10.0 * u_kick) + 0.02 * u_subbass) * u_fx_flow;  // <- edita aqui. 0 = desligado
     float turb = 0.5 + random(floor(st * 60.0 + u_time));           // campo de ruído = turbulência
     float pulse = fract(er * 4.0 - u_time * (0.3 + u_kick));       // anéis saindo do emissor
     st += (ev / er) * flow_amt * turb * pulse;
 
     // ===== EFEITO 2: RGB SPLIT — lê cada canal com um deslocamento diferente (fantasmas coloridos) =====
     // 'split' = distância entre os fantasmas; abre no kick
-    float split = 0.02 * u_subbass * u_kick;         // <- edita aqui. 0 = desligado. testa 0.002 a 0.03
+    float split = 0.02 * u_subbass * u_kick * u_fx_rgbsplit;  // <- edita aqui. 0 = desligado. testa 0.002 a 0.03
     float r = texture2D(u_texture_0, st + vec2(split, 0.0)).r;
     float g = texture2D(u_texture_0, st).g;
     float b = texture2D(u_texture_0, st - vec2(split, 0.0)).b;
@@ -66,32 +83,32 @@ void main() {
     // ===== EFEITO 9: CANAIS — canal 0 da um flash no hit; 1..3 somam um tint sutil =====
     // so acende se voce criar canais no dash (aba Audio -> Canais) — lista comeca vazia.
     // se o canal 0 tiver "saida" = kick, o flash aqui e o MESMO numero que move u_kick acima
-    col += vec3(u_chan[1], u_chan[2], u_chan[3]) * 0.05;  // <- edita aqui. 0 = desligado
-    col *= 1.0 + 0.15 * u_chan_hit[0];                    // <- edita aqui. 0 = desligado
+    col += vec3(u_chan[1], u_chan[2], u_chan[3]) * 0.05 * u_fx_channels;  // <- edita aqui. 0 = desligado
+    col *= 1.0 + 0.15 * u_chan_hit[0] * u_fx_channels;                    // <- edita aqui. 0 = desligado
 
     // ===== EFEITO 3: SCANLINES — oscilador NO ESPAÇO (sin de st.y): linhas horizontais =====
     // freq = quantas linhas cabem na tela; amplitude sobe com o mid
     float scan_freq = 20.0;                       // <- edita aqui (nº de linhas)
-    float scan_amt  = 0.15 * u_mid;                // <- edita aqui. 0 = desligado
+    float scan_amt  = 0.15 * u_mid * u_fx_scanlines;   // <- edita aqui. 0 = desligado
     col *= 1.0 - scan_amt * (0.5 + 0.5 * sin(st.y * scan_freq * 6.2831));
 
     // ===== EFEITO 4: GRÃO — ruído branco somado por pixel, pisca com o agudo =====
-    float grain_amt = 0.06 + 0.015 * u_treble;      // <- edita aqui. 0 = desligado
+    float grain_amt = (0.06 + 0.015 * u_treble) * u_fx_grain;   // <- edita aqui. 0 = desligado
     col += (random(gl_FragCoord.xy + u_time) - 0.5) * grain_amt;
 
     // ===== EFEITO 5: VINHETA — filtro espacial radial: escurece quanto mais longe do centro =====
-    float vig = 1.4;                               // <- edita aqui. 0 = desligado, 1 = borda preta
+    float vig = 1.4 * u_fx_vignette;              // <- edita aqui. 0 = desligado, 1 = borda preta
     vec2 d = st - 20.5;
     col *= 0.1 - vig * dot(d, d) * 2.0;
 
     // ===== EFEITO 6: GRAYSCALE — colapsa RGB num só valor (luminância perceptual, Rec. 601) =====
     float gray = dot(col, vec3(0.299 * u_treble, 0.587, 0.114 * u_subbass)); // <- edita aqui. 0 = desligado, 1 = P&B total
-    float gray_mix = -15.0 * u_highmid;                          // <- edita aqui. 0 = colorido, 1 = P&B total
+    float gray_mix = -15.0 * u_highmid * u_fx_grayscale;         // <- edita aqui. 0 = colorido, 1 = P&B total
     col = mix(col, vec3(gray), gray_mix);
 
     // ===== EFEITO 8: OPACIDADE DA CAMADA — funde a pilha de efeitos com a imagem crua =====
     vec3 orig = texture2D(u_texture_0, st0).rgb;
-    float layer = 0.6;    // <- edita aqui. 0 = só original de fundo, 1 = só efeito, 0.5 = meio a meio
+    float layer = 0.6 * u_fx_layer;    // <- edita aqui. 0 = só original de fundo, 1 = só efeito, 0.5 = meio a meio
     col = mix(orig, col, layer);
 
     gl_FragColor = vec4(col, 1.0);

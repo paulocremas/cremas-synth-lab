@@ -57,7 +57,7 @@
   .chanrow .rm { padding: 1px 5px; }
   #ranges-wrap.dim { opacity: .45; }
 
-  .faixas { display: grid; grid-template-columns: 92px repeat(4, minmax(120px, 1fr)); gap: 4px 12px; align-items: center; }
+  .faixas { display: grid; grid-template-columns: 92px repeat(4, minmax(108px, 1fr)) 26px; gap: 4px 12px; align-items: center; }
   .faixas .head, .spectro .head { color: #888; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
                   border-bottom: 1px solid #2a2a2a; padding-bottom: 3px; }
   .faixas .name { text-align: right; color: #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -127,9 +127,54 @@
   main > section { display: none; }
   body[data-panel="audio"] #audio,
   body[data-panel="image"] #image,
+  body[data-panel="effects"] #effects,
   body[data-panel="output-image"] #output-image,
   body[data-panel="output-lights"] #output-lights { display: block; }
   .soon { color: #666; font-size: 12px; max-width: 46em; }
+  #shader-list, #media-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-width: 520px; }
+  .setbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; font-size: 11px; color: #999; }
+  .setbar select.insel { max-width: 160px; }
+  .setbar input.insel { width: 90px; }
+  .sh-row { display: flex; align-items: center; gap: 6px; }
+  .sh-row > .name { flex: 1; text-align: left; }
+  .sh-row .mtype { font-size: 13px; line-height: 1; width: 18px; text-align: center; filter: grayscale(.15); }
+  .sh-row .fit { font-size: 11px; color: #999; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+  .sh-row > .name.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
+  .sh-row .keycap { min-width: 15px; text-align: center; color: #4a8; font-size: 11px; }
+  .sh-gear { min-width: 22px; }
+  .sh-gear.open { border-color: #4a8; color: #fff; }
+  .sh-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 4px 10px;
+              padding: 6px 8px; border-left: 2px solid #333; font-size: 11px; color: #999; }
+  .sh-panel input.insel { width: 130px; }
+  .sh-panel input.keyin { width: 34px; text-align: center; }
+  .sh-panel .del { color: #c55; border-color: #533; }
+  .sh-panel .del.arm { background: #c55; color: #111; }
+  h2.withbtn { display: flex; align-items: center; gap: 10px; }
+  h2.withbtn .ibtn { margin-left: auto; text-transform: none; letter-spacing: normal; }
+  #new-fx-msg, #media-msg, #new-trans-msg { font-size: 11px; }
+  #new-fx-msg.err, #media-msg.err, #new-trans-msg.err { color: #c55; }
+
+  /* engrenagem por faixa/amp/kick -> popup <dialog> com todos os knobs daquele alvo */
+  .fx-gear { justify-self: center; background: none; border: 1px solid #3a3a3a; color: #888;
+             border-radius: 4px; cursor: pointer; font: inherit; padding: 0 4px; line-height: 1.4; }
+  .fx-gear:hover { color: #fff; border-color: #4a8; }
+  h2 .fx-gear { margin-left: 8px; }
+  dialog.tweak { border: 1px solid #444; border-radius: 8px; padding: 0; background: #161616;
+                 color: #ddd; width: min(440px, calc(100vw - 32px)); font: inherit; }
+  dialog.tweak::backdrop { background: rgba(0, 0, 0, .6); }
+  dialog.tweak .th { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+                     border-bottom: 1px solid #2a2a2a; }
+  dialog.tweak .th b { color: #fff; }
+  dialog.tweak .th .ibtn { margin-left: auto; }
+  dialog.tweak .tbody { padding: 6px 14px 16px; }
+  dialog.tweak .tbody .knob { margin: 12px 0; }
+  dialog.tweak .tbody h4 { margin: 14px 0 2px; }
+  /* range Hz no popup: so as caixas lo/hi, centralizadas (a barra visual fica na secao "Ranges") */
+  dialog.tweak .poprange .pr-row { grid-column: 1 / -1; display: flex; align-items: center;
+                                   justify-content: center; gap: 8px; margin-top: 6px; }
+  dialog.tweak .poprange input { width: 78px; background: #1c1c1c; color: #ddd; border: 1px solid #444;
+                                 border-radius: 4px; padding: 3px 4px; font: inherit; text-align: center; }
+  dialog.tweak .poprange .sep { color: #666; }
 </style>
 
 <header>
@@ -137,6 +182,7 @@
   <span class="tabs" title="shift+click abre a aba num popup a parte">
     <button class="tab" data-tab="audio" onclick="tabClick(event, 'audio')">Source Audio</button>
     <button class="tab" data-tab="image" onclick="tabClick(event, 'image')">Source Image</button>
+    <button class="tab" data-tab="effects" onclick="tabClick(event, 'effects')">Visuals</button>
     <button class="tab" data-tab="output-image" onclick="tabClick(event, 'output-image')">Output Image</button>
     <button class="tab" data-tab="output-lights" onclick="tabClick(event, 'output-lights')">Output Lights</button>
   </span>
@@ -146,7 +192,7 @@
 
 <div id="iobar">
   <label>áudio <select id="sel-audio" class="insel"></select></label>
-  <label>vídeo <select id="sel-video" class="insel"></select></label>
+  <label>image <select id="sel-video" class="insel"></select></label>
   <button class="ibtn" onclick="loadInputs()" title="recarregar lista">&#8635;</button>
   <label>saída <select id="out-mon" class="insel"></select></label>
   <label>dimensão <input type="number" id="out-w" class="insel" style="width:60px" min="160" step="10">
@@ -156,13 +202,19 @@
 
 <main>
   <section id="audio">
-    <h2>KICK</h2>
+    <h2>KICK <button class="fx-gear" onclick="openTweak('kick')" title="ajustes do kick">⚙</button></h2>
     <div id="kick"></div>
+
+    <h2>AMP &mdash; RMS do sinal inteiro (não é uma faixa)</h2>
+    <div class="faixas" id="amp">
+      <div class="head"></div><div class="head">bruto</div><div class="head">final</div>
+      <div class="head">smooth</div><div class="head">Δ bruto&rarr;final</div><div class="head"></div>
+    </div>
 
     <h2>Faixas de mixagem</h2>
     <div class="faixas" id="faixas">
       <div class="head"></div><div class="head">bruto</div><div class="head">final</div>
-      <div class="head">smooth</div><div class="head">Δ bruto&rarr;final</div>
+      <div class="head">smooth</div><div class="head">Δ bruto&rarr;final</div><div class="head"></div>
     </div>
 
     <h2>Espectrograma (24 faixas log, agudo &rarr; grave)</h2>
@@ -212,6 +264,57 @@
     <div class="hists" id="hists"></div>
   </section>
 
+  <section id="effects">
+    <h2 class="withbtn">Mídia &mdash; imagens e vídeos como fonte de imagem
+      <button class="ibtn" onclick="loadMedia()" title="recarregar">&#8635;</button></h2>
+    <p class="note">No dropdown <b>image</b> do topo, <b>Media</b> é uma fonte só; qual item
+      toca se escolhe <b>aqui</b> (clique) ou por <b>tecla</b> (engrenagem → vincula; vale na janela
+      do native_synth e em qualquer lugar do dash). Vídeo roda em loop.
+      <b>preencher</b> = cobre o output cortando o excesso; desmarcado = encaixa inteiro com barras.
+      <b>set</b> = "pasta"; os atalhos valem só no set selecionado. Arquivos em <b>media/</b>;
+      grava <b>MEDIA</b> / <b>MEDIA_SET(S)</b> / <b>MEDIA_KEYS</b> em tuning.py.</p>
+    <div id="media-set-bar" class="setbar"></div>
+    <div id="media-list"></div>
+    <input type="file" id="media-file" accept="image/*,video/*" hidden>
+    <button class="ibtn" onclick="mediaFile()">+ imagem ou vídeo</button>
+    <span id="media-msg"></span>
+
+    <h2 class="withbtn">Transições &mdash; como entrar em cada mídia
+      <button class="ibtn" onclick="loadTransitions()" title="recarregar">&#8635;</button></h2>
+    <p class="note">Arquivos <b>.glsl</b> em <b>transitions/</b> (estilo gl-transitions: uma
+      <b>vec4 transition(vec2 uv)</b> com <b>getFromColor</b>/<b>getToColor</b>/<b>progress</b>;
+      cabeçalho <b>// ms: N</b> = duração). Na troca de mídia, um passe GPU mistura a imagem que
+      sai com a que entra e alimenta o shader normal &mdash; o preset nem sabe. Cada item da
+      galeria de mídia acima escolhe a sua (ou <b>(padrão)</b> / <b>corte seco</b>). Grava
+      <b>TRANSITION_DEFAULT</b> + o campo <b>transition</b> de cada item de MEDIA.</p>
+    <div class="txtrow"><span class="lbl">padrão</span> <select id="trans-default" class="insel"></select></div>
+    <div id="trans-list"></div>
+    <input type="text" id="new-trans-name" class="insel" placeholder="nome da nova transição"
+      style="width:180px" onkeydown="if(event.key==='Enter')newTransition()">
+    <button class="ibtn" onclick="newTransition()" title="cria transitions/<nome>.glsl (template crossfade)">+ criar .glsl</button>
+    <span id="new-trans-msg"></span>
+
+    <h2 class="withbtn">Shader ativo &mdash; galeria de presets
+      <button class="ibtn" onclick="loadShaders()" title="recarregar lista de arquivos">&#8635;</button></h2>
+    <p class="note">Arquivos <b>.frag</b> em <b>shaders/</b>: <b>image.frag</b> (base) +
+      <b>presets/&lt;set&gt;/*.frag</b> — cada <b>set</b> é uma subpasta. Clicar troca ao vivo.
+      A engrenagem de cada preset: renomear, apagar, e vincular uma tecla (vale só no set ativo,
+      na janela do native_synth ou no dash). Grava <b>SHADER</b> / <b>SHADER_SET</b> / <b>SHADER_KEYS</b>.</p>
+    <div id="shader-set-bar" class="setbar"></div>
+    <div id="shader-list"></div>
+    <input type="text" id="new-fx-name" class="insel" placeholder="nome do novo efeito"
+      style="width:180px" onkeydown="if(event.key==='Enter')newShader()">
+    <button class="ibtn" onclick="newShader()" title="cria shaders/presets/&lt;nome&gt;.frag (template minimo) e o deixa ativo">+ criar .frag</button>
+    <span id="new-fx-msg"></span>
+
+    <h2>Potenciômetros de efeito &mdash; grava em tuning.py (FX)</h2>
+    <p class="note">Um por efeito nomeado no cabeçalho <b>// fx:</b> do shader ativo.
+      0 = desligado, 1 = cheio. O shader multiplica a intensidade de cada efeito por
+      <b>u_fx_&lt;nome&gt;</b>. Um controlador MIDI vai poder mexer nesses mesmos valores
+      quando for ligado (ainda não implementado).</p>
+    <div id="fx-list"></div>
+  </section>
+
   <section id="output-image">
     <h2>Output Image &mdash; a imagem sintetizada (image.frag), como fonte</h2>
     <label class="ovl"><input type="checkbox" id="outimg-cb"> calcular (~5x/s; lê a imagem já
@@ -244,6 +347,23 @@
   </section>
 </main>
 
+<dialog id="tweakpop" class="tweak">
+  <div class="th"><b id="tweak-title">—</b>
+    <button class="ibtn" onclick="document.getElementById('tweakpop').close()">fechar ✕</button></div>
+  <div class="tbody" id="tweak-body"></div>
+</dialog>
+
+<dialog id="confirmpop" class="tweak">
+  <div class="th"><b>confirmar</b></div>
+  <div class="tbody">
+    <p id="confirm-msg" style="margin: 2px 0 18px; color: #ddd"></p>
+    <div style="display: flex; gap: 8px; justify-content: flex-end">
+      <button class="ibtn" onclick="document.getElementById('confirmpop').close()">cancelar</button>
+      <button class="ibtn" id="confirm-yes" style="background: #c55; color: #111; border-color: #c55">apagar</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 const $ = s => document.querySelector(s);
 // guard compartilhado: ms desde o ultimo "mexi nisso local" antes de aceitar o eco do SSE de
@@ -251,7 +371,7 @@ const $ = s => document.querySelector(s);
 const TOUCH_MS = 600;
 const panel = new URLSearchParams(location.search).get('panel');
 if (panel) document.body.classList.add('popup');
-const TAB_TITLES = { audio: 'Source Audio', image: 'Source Image',
+const TAB_TITLES = { audio: 'Source Audio', image: 'Source Image', effects: 'Visuals',
                      'output-image': 'Output Image', 'output-lights': 'Output Lights' };
 document.title = TAB_TITLES[panel] || 'PRISMA!';
 function pop(p){ window.open('?panel=' + p, p, 'width=960,height=940'); }
@@ -316,25 +436,32 @@ for (const [key, label, col] of [['final','final','#d84'], ['decay','decay','#88
   kickEls[key] = { fill: row.querySelector('.fill'), val: row.querySelector('.val') };
 }
 
-let faixasRows = null;
-function buildFaixas(bands){
-  faixasRows = bands.map(b => {
-    const name = document.createElement('div');
-    name.className = 'name'; name.textContent = b.name; name.style.color = rgbStr(b.rgb);
-    const bruto = cell(), final = cell(), smooth = cell(), delta = cell();
-    $('#faixas').append(name, bruto.el, final.el, smooth.el, delta.el);
-    return { bruto, final, smooth, delta, color: rgbStr(b.rgb) };
-  });
+function faixaRow(parent, b, kind){
+  const name = document.createElement('div');
+  name.className = 'name'; name.textContent = b.name; name.style.color = rgbStr(b.rgb);
+  const bruto = cell(), final = cell(), smooth = cell(), delta = cell();
+  const gear = document.createElement('button');
+  gear.className = 'fx-gear'; gear.textContent = '⚙'; gear.title = 'ajustes de ' + b.name;
+  gear.onclick = () => openTweak(kind || b.name);
+  parent.append(name, bruto.el, final.el, smooth.el, delta.el, gear);
+  return { bruto, final, smooth, delta, color: rgbStr(b.rgb) };
 }
+function fillFaixa(r, b){
+  setCell(r.bruto,  b.raw_level, b.raw_mag.toFixed(3), r.color);
+  setCell(r.final,  b.final,     b.final.toFixed(2),   r.color);
+  setCell(r.smooth, b.smoothing, b.smoothing.toFixed(2), '#777');
+  setCell(r.delta,  b.delta,     b.delta.toFixed(2),   '#777');
+}
+let ampRow = null, faixasRows = null;
 function renderFaixas(bands){
-  if (!faixasRows) buildFaixas(bands);
-  bands.forEach((b, i) => {
-    const r = faixasRows[i];
-    setCell(r.bruto,  b.raw_level, b.raw_mag.toFixed(3), r.color);
-    setCell(r.final,  b.final,     b.final.toFixed(2),   r.color);
-    setCell(r.smooth, b.smoothing, b.smoothing.toFixed(2), '#777');
-    setCell(r.delta,  b.delta,     b.delta.toFixed(2),   '#777');
-  });
+  const amp = bands.find(b => b.name === 'amp');
+  const rest = bands.filter(b => b.name !== 'amp');
+  if (amp){
+    if (!ampRow) ampRow = faixaRow($('#amp'), amp, 'amp');
+    fillFaixa(ampRow, amp);
+  }
+  if (!faixasRows) faixasRows = rest.map(b => faixaRow($('#faixas'), b));
+  rest.forEach((b, i) => fillFaixa(faixasRows[i], b));
 }
 
 let spectroRows = null;
@@ -554,35 +681,109 @@ function renderImage(im, p=''){
 }
 
 // ============ KNOBS ============
-let activeKnob = null, releaseT = null, flushT = null;
+let activeKnob = null, releaseT = null, flushT = null, lastKnobs = null;
 const pending = {}, knobEls = {};
+let KNOB_SPECS = [];
+// um <input range> -> POST /knob (reescreve tuning.py). Serve pra lista geral e pros popups.
+// `color` (opcional) pinta o trilho/bolinha do slider (cor do alvo — faixa, kick).
+function makeKnobRow(s, parent, color){
+  const row = document.createElement('div');
+  row.className = 'knob';
+  row.innerHTML =
+    `<label>${s.name} <small>&mdash; ${s.label}</small></label>` +
+    `<input type="range" min="${s.min}" max="${s.max}" step="${s.step}">` +
+    `<span class="kv">&mdash;</span>`;
+  parent.appendChild(row);
+  const inp = row.querySelector('input'), kv = row.querySelector('.kv');
+  if (color) inp.style.accentColor = color;
+  knobEls[s.name] = { inp, kv };
+  if (lastKnobs && s.name in lastKnobs){ inp.value = lastKnobs[s.name]; kv.textContent = fmt(lastKnobs[s.name]); }
+  inp.addEventListener('input', () => {
+    kv.textContent = fmt(inp.value);
+    pending[s.name] = inp.value;
+    activeKnob = s.name;
+    clearTimeout(releaseT); releaseT = setTimeout(() => activeKnob = null, 600);
+    if (!flushT) flushT = setTimeout(flush, 80);
+  });
+}
 fetch('/knobs').then(r => r.json()).then(specs => {
+  KNOB_SPECS = specs;
   const groups = {};
-  for (const s of specs) (groups[s.group] ||= []).push(s);
-  const GROUP_LABEL = { kick:'KICK', smooth:'SMOOTHING', autogain:'AUTO-GAIN', scale:'ESCALAS / CORTES' };
+  for (const s of specs){ if (!s.popup) (groups[s.group] ||= []).push(s); }  // popup -> so no <dialog>
+  const GROUP_LABEL = { smooth:'SMOOTHING (global)', autogain:'AUTO-GAIN', scale:'ESCALAS / CORTES' };
   for (const g of Object.keys(groups)){
     const h = document.createElement('h3'); h.textContent = GROUP_LABEL[g] || g;
     $('#knoblist').appendChild(h);
-    for (const s of groups[g]){
-      const row = document.createElement('div');
-      row.className = 'knob';
-      row.innerHTML =
-        `<label>${s.name} <small>&mdash; ${s.label}</small></label>` +
-        `<input type="range" min="${s.min}" max="${s.max}" step="${s.step}">` +
-        `<span class="kv">&mdash;</span>`;
-      $('#knoblist').appendChild(row);
-      const inp = row.querySelector('input'), kv = row.querySelector('.kv');
-      knobEls[s.name] = { inp, kv };
-      inp.addEventListener('input', () => {
-        kv.textContent = fmt(inp.value);
-        pending[s.name] = inp.value;
-        activeKnob = s.name;
-        clearTimeout(releaseT); releaseT = setTimeout(() => activeKnob = null, 600);
-        if (!flushT) flushT = setTimeout(flush, 80);
-      });
-    }
+    for (const s of groups[g]) makeKnobRow(s, $('#knoblist'));
   }
 });
+
+// ============ POPUP "ENGRENAGEM" (kick / amp / cada faixa de mixagem) ============
+// <dialog> nativo — modal, Esc fecha, clique fora fecha, NAO e aba nova. kick/amp: os knobs
+// com s.popup daquele alvo (POST /knob). Faixa: as caixas lo/hi do range Hz (escrevem em
+// rangeRows[i] + commitRow -> mesmo POST /bands da secao "Ranges", que tem a barra visual) +
+// os 3 sliders de dinamica (POST /tweaks). Cor do alvo pinta os sliders / e o medidor de kick.
+let lastBandTweaks = {};
+const TWEAK_ROWS = [
+  ['smoothing', 'BAND_SMOOTHING', 'release (perto de 1 = mais suave/lento)', 0.5, 0.99, 0.01],
+  ['attack', 'BAND_ATTACK', 'attack ÷ release (1 = sem soco)', 0.05, 1.0, 0.05],
+  ['peak_decay', 'BAND_PEAK_DECAY', 'memória do teto do auto-gain', 0.9, 0.9999, 0.001],
+];
+const KICK_COLOR = '#d84';   // mesma cor do medidor de kick
+const tweakpop = $('#tweakpop');
+tweakpop.addEventListener('click', e => { if (e.target === tweakpop) tweakpop.close(); });  // clique no backdrop
+function openTweak(kind){
+  const body = $('#tweak-body'); body.innerHTML = '';
+  if (kind === 'kick' || kind === 'amp'){
+    $('#tweak-title').textContent = (kind === 'kick' ? 'KICK' : 'AMP') + ' — todos os ajustes';
+    const col = kind === 'kick' ? KICK_COLOR : '';
+    for (const s of KNOB_SPECS) if (s.popup === kind) makeKnobRow(s, body, col);
+  } else {
+    $('#tweak-title').textContent = kind + ' — ajustes da faixa';
+    buildBandTweak(kind, body);
+  }
+  tweakpop.showModal();
+}
+function buildBandTweak(name, body){
+  const i = (lastBandTweaks.names || []).indexOf(name);
+  if (i < 0) return;
+  const col = BAND_COLORS[name] || '#4a8';
+  // range Hz: so as caixas lo/hi, centralizadas. Escrevem em rangeRows[i] + commitRow -> mesmo
+  // POST /bands da secao "Ranges" (que tem a barra visual). So aparece se rangeRows ja montou.
+  if (rangeRows && rangeRows[i]){
+    const box = document.createElement('div'); box.className = 'knob poprange';
+    box.innerHTML = '<label>Hz <small>&mdash; range da faixa (a barra visual fica na seção “Ranges”)</small></label>';
+    const prow = document.createElement('div'); prow.className = 'pr-row';
+    const lo = document.createElement('input'), hi = document.createElement('input');
+    for (const el of [lo, hi]){ el.type = 'number'; el.min = HZ_LO; el.max = HZ_HI; el.step = 1; }
+    lo.value = rangeRows[i].lo.value; hi.value = rangeRows[i].hi.value;
+    const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '–';
+    prow.append(lo, sep, hi); box.appendChild(prow); body.appendChild(box);
+    lo.addEventListener('change', () => { rangeRows[i].lo.value = +lo.value || HZ_LO; commitRow(i); });
+    hi.addEventListener('change', () => { rangeRows[i].hi.value = +hi.value || HZ_LO; commitRow(i); });
+  }
+  for (const [key, LKEY, label, min, max, step] of TWEAK_ROWS){
+    const row = document.createElement('div'); row.className = 'knob';
+    row.innerHTML = `<label>${key} <small>&mdash; ${label}</small></label>` +
+      `<input type="range" min="${min}" max="${max}" step="${step}"><span class="kv">&mdash;</span>`;
+    body.appendChild(row);
+    const inp = row.querySelector('input'), kv = row.querySelector('.kv');
+    inp.style.accentColor = col;
+    const cur = (lastBandTweaks[key] || [])[i];
+    if (cur != null){ inp.value = cur; kv.textContent = fmt(cur); }
+    inp.addEventListener('input', () => {
+      kv.textContent = fmt(inp.value);
+      clearTimeout(inp._t);
+      inp._t = setTimeout(() => {
+        const arr = (lastBandTweaks[key] || []).slice();
+        if (arr.length !== 8) return;               // stream ainda nao trouxe as 8 -> nao manda incompleto
+        arr[i] = +inp.value;
+        fetch('/tweaks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [LKEY]: arr }) });
+      }, 90);
+    });
+  }
+}
 // ============ RANGES DAS FAIXAS ============
 // Barra log (20 Hz–20 kHz) por faixa com 2 bolinhas (lo/hi) + caixas numericas ao lado,
 // sincronizadas nos dois sentidos. POST /bands manda a config inteira; o servidor normaliza
@@ -871,6 +1072,406 @@ function sendChannels(){
     body: JSON.stringify({ channels }) });
 }
 
+// ============ SHADER (galeria de presets) + FX (potenciometros de efeito) ============
+// ---- confirmacao no proprio site (nao window.confirm): <dialog> modal, Esc/clique-fora cancela ----
+const confirmpop = $('#confirmpop');
+let _confirmYes = null;
+function askConfirm(msg, onYes){
+  $('#confirm-msg').textContent = msg;
+  _confirmYes = onYes;
+  confirmpop.showModal();
+}
+$('#confirm-yes').onclick = () => { const cb = _confirmYes; _confirmYes = null; confirmpop.close(); if (cb) cb(); };
+confirmpop.addEventListener('click', e => { if (e.target === confirmpop) confirmpop.close(); });
+
+// ---- barra de SET (galeria de shader / de midia): <select> + criar + apagar ----
+function renderSetBar(box, sets, active, prefix){
+  box.innerHTML = '';
+  const sel = document.createElement('select'); sel.className = 'insel';
+  for (const s of (sets || ['default'])){
+    const o = document.createElement('option'); o.value = o.textContent = s;
+    if (s === active) o.selected = true;
+    sel.appendChild(o);
+  }
+  sel.onchange = () => shaderPost(prefix, { name: sel.value });     // shaderPost serve p/ os 2 (POST + reload certo via done)
+  const nin = document.createElement('input'); nin.className = 'insel'; nin.placeholder = 'novo set';
+  const doNew = () => { const v = nin.value.trim(); if (v){ nin.value = ''; shaderPost(prefix + '-new', { name: v }).catch(e => alert('set: ' + e)); } };
+  nin.onkeydown = e => { if (e.key === 'Enter') doNew(); };
+  const nb = document.createElement('button'); nb.className = 'ibtn'; nb.textContent = '+ set'; nb.onclick = doNew;
+  const db = document.createElement('button'); db.className = 'ibtn del'; db.textContent = '🗑 set';
+  // "default" sempre existe (e o fallback): apagar = ESVAZIAR a pasta. Set nomeado: os arquivos
+  // voltam pro default e a pasta some.
+  const msg = active === 'default'
+    ? 'Esvaziar o set “default”? Apaga os arquivos e as entradas dele — a pasta continua (é o fallback).'
+    : `Apagar o set “${active}”? Os arquivos dele voltam pro “default”.`;
+  db.onclick = () => askConfirm(msg,
+    () => shaderPost(prefix + '-del', { name: active }).catch(e => alert('set: ' + e)));
+  box.append('set ', sel, nin, nb, db);
+}
+// shaderPost/mediaPost sabem qual loader chamar pelo prefixo do url
+function shaderPost(url, body, done){
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+    .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
+    .then(() => {
+      if (url.startsWith('/media')){ mediaSig = ''; mediaTouched = performance.now(); loadMedia(); }
+      else { shaderSig = ''; loadShaders(); }
+      if (done) done();
+    });
+}
+let lastShaderList = [], lastShaderKeys = {}, lastShaderSets = ['default'], lastShaderSet = 'default',
+    shaderSig = '', shaderOpen = '';  // preset com engrenagem aberta
+function loadShaders(){
+  fetch('/shaders').then(r => r.json()).then(d => {
+    lastShaderList = d.list || []; lastShaderKeys = d.keys || {};
+    lastShaderSets = d.sets || ['default']; lastShaderSet = d.set || 'default';
+    renderSetBar($('#shader-set-bar'), lastShaderSets, lastShaderSet, '/shader-set');
+    renderShaderList(d.current);
+  });
+}
+function newShader(){
+  const inp = $('#new-fx-name'), msg = $('#new-fx-msg');
+  const name = inp.value.trim();
+  if (!name) return inp.focus();
+  msg.textContent = ''; msg.className = '';
+  shaderPost('/new-shader', { name }, () => { inp.value = ''; })   // criado + ja ativo
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+}
+function renderShaderList(current){
+  const sig = JSON.stringify([lastShaderList, lastShaderKeys, current, shaderOpen]);
+  if (sig === shaderSig) return;                 // nada mudou: nao repinta
+  shaderSig = sig;
+  const box = $('#shader-list'); box.innerHTML = '';
+  for (const name of lastShaderList){
+    const isPreset = name.startsWith('presets/');
+    const row = document.createElement('div'); row.className = 'sh-row';
+
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (name === current ? ' active' : '');
+    b.textContent = isPreset ? name.slice(8) : name;
+    b.title = name;
+    b.onclick = () => shaderPost('/shader', { name });
+    row.appendChild(b);
+
+    const cap = document.createElement('span'); cap.className = 'keycap';
+    cap.textContent = (lastShaderKeys[name] || '').toUpperCase();
+    row.appendChild(cap);
+
+    const gear = document.createElement('button');
+    gear.className = 'ibtn sh-gear' + (shaderOpen === name ? ' open' : '');
+    gear.textContent = '⚙';
+    gear.title = 'renomear / apagar / tecla';
+    gear.onclick = () => { shaderOpen = shaderOpen === name ? '' : name; shaderSig = ''; renderShaderList(current); };
+    row.appendChild(gear);
+    box.appendChild(row);
+
+    if (shaderOpen === name) box.appendChild(shaderPanel(name, isPreset));
+  }
+}
+function shaderPanel(name, isPreset){
+  const p = document.createElement('div'); p.className = 'sh-panel';
+  if (isPreset){
+    const ren = document.createElement('input');
+    ren.className = 'insel'; ren.value = name.slice(8).replace(/\.frag$/, '');
+    const doRename = () => shaderPost('/rename-shader', { name, newname: ren.value })
+      .catch(e => alert('não renomeou: ' + e));
+    ren.onkeydown = e => { if (e.key === 'Enter') doRename(); };
+    const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear';
+    rb.onclick = doRename;
+    p.append('nome ', ren, rb);
+  }
+  // tecla: captura UMA tecla (a-z / 0-9) e vincula na hora; Backspace/Delete desvincula.
+  // limitado a alfanumérico pq é o que o pygame.key.name do native_synth também dá.
+  const ki = document.createElement('input');
+  ki.className = 'insel keyin'; ki.maxLength = 1; ki.placeholder = '—';
+  ki.value = (lastShaderKeys[name] || '').toUpperCase();
+  ki.onkeydown = e => {
+    if (e.key === 'Tab' || e.key === 'Escape') return;   // deixa sair do campo
+    e.preventDefault();
+    let k = '';
+    if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) k = e.key.toLowerCase();
+    else if (e.key !== 'Backspace' && e.key !== 'Delete') return;   // ignora modificadores etc.
+    shaderPost('/shader-key', { name, key: k }).catch(err => alert('tecla: ' + err));
+  };
+  p.append('tecla ', ki);
+  if (isPreset){
+    const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
+    del.onclick = () => {
+      if (!del.classList.contains('arm')){ del.classList.add('arm'); del.textContent = 'confirmar?'; return; }
+      shaderPost('/delete-shader', { name }, () => { shaderOpen = ''; }).catch(e => alert('não apagou: ' + e));
+    };
+    p.appendChild(del);
+  }
+  return p;
+}
+
+// ============ MÍDIA (galeria de imagens/vídeos como input de imagem) ============
+let lastMedia = [], lastMediaKeys = {}, lastMediaSets = ['default'], lastMediaSet = 'default',
+    mediaSig = '', mediaOpen = '', mediaTouched = 0;
+function loadMedia(){
+  fetch('/media').then(r => r.json()).then(d => {
+    lastMedia = d.list || []; lastMediaKeys = d.keys || {};
+    lastMediaSets = d.sets || ['default']; lastMediaSet = d.set || 'default';
+    renderSetBar($('#media-set-bar'), lastMediaSets, lastMediaSet, '/media-set');
+    renderMediaList(d.current || '');
+  });
+}
+function selectMedia(name){
+  mediaTouched = performance.now();
+  setInput('video', 'media:' + name);
+  selTouched.video = performance.now();   // impede o dropdown de brigar com a troca
+  mediaSig = ''; setTimeout(loadMedia, 60);
+}
+let mediaLastCurrent = '';
+function renderMediaList(current){
+  if (current === undefined) current = mediaLastCurrent; else mediaLastCurrent = current;
+  if (performance.now() - mediaTouched < TOUCH_MS && mediaSig) return;   // acabei de mexer
+  const sig = JSON.stringify([lastMedia, lastMediaKeys, current, mediaOpen, lastTrans]);
+  if (sig === mediaSig) return;
+  mediaSig = sig;
+  const box = $('#media-list'); box.innerHTML = '';
+  if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Use "+ imagem ou vídeo".</div>';
+  for (const m of lastMedia){
+    const row = document.createElement('div'); row.className = 'sh-row';
+
+    const typ = document.createElement('span'); typ.className = 'mtype';
+    typ.textContent = m.kind === 'video' ? '🎬' : '🖼';
+    typ.title = m.kind === 'video' ? 'vídeo' : 'imagem';
+    row.appendChild(typ);
+
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (m.name === current ? ' active' : '');   // `current` = nome da mídia ativa (ou '')
+    b.textContent = m.name;
+    b.onclick = () => selectMedia(m.name);
+    row.appendChild(b);
+
+    const cap = document.createElement('span'); cap.className = 'keycap';
+    cap.textContent = (lastMediaKeys[m.name] || '').toUpperCase();
+    row.appendChild(cap);
+
+    const fit = document.createElement('label'); fit.className = 'fit';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = m.fit !== 'fit';
+    cb.title = 'preencher (cobre cortando) / desmarcado = encaixa com barras';
+    cb.onchange = () => { m.fit = cb.checked ? 'fill' : 'fit'; sendMedia(); };
+    fit.append(cb, 'preencher');
+    row.appendChild(fit);
+
+    const tsel = document.createElement('select');
+    tsel.className = 'insel'; tsel.style.maxWidth = '120px';
+    tsel.title = 'transição de entrada desta mídia';
+    for (const [val, lbl] of [['', '(padrão)'], ['none', 'corte seco'],
+                              ...lastTrans.map(f => [f, f.replace(/\.glsl$/, '')])]){
+      const o = document.createElement('option'); o.value = val; o.textContent = lbl;
+      if (val === (m.transition || '')) o.selected = true;
+      tsel.appendChild(o);
+    }
+    tsel.onchange = () => { m.transition = tsel.value; sendMedia(); };
+    row.appendChild(tsel);
+
+    const gear = document.createElement('button');
+    gear.className = 'ibtn sh-gear' + (mediaOpen === m.name ? ' open' : '');
+    gear.textContent = '⚙';
+    gear.title = 'renomear / tecla / excluir';
+    gear.onclick = () => { mediaOpen = mediaOpen === m.name ? '' : m.name; mediaSig = ''; renderMediaList(current); };
+    row.appendChild(gear);
+    box.appendChild(row);
+
+    if (mediaOpen === m.name) box.appendChild(mediaPanel(m));
+  }
+}
+function mediaPanel(m){
+  const p = document.createElement('div'); p.className = 'sh-panel';
+  const ren = document.createElement('input'); ren.className = 'insel'; ren.value = m.name;
+  const doRen = () => { const nn = ren.value.trim(); if (nn && nn !== m.name){ m.name = nn; mediaOpen = ''; sendMedia(); } };
+  ren.onkeydown = e => { if (e.key === 'Enter') doRen(); };
+  const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
+  p.append('nome ', ren, rb);
+
+  const ki = document.createElement('input'); ki.className = 'insel keyin'; ki.maxLength = 1; ki.placeholder = '—';
+  ki.value = (lastMediaKeys[m.name] || '').toUpperCase();
+  ki.onkeydown = e => {
+    if (e.key === 'Tab' || e.key === 'Escape') return;
+    e.preventDefault();
+    let k = '';
+    if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) k = e.key.toLowerCase();
+    else if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+    mediaTouched = performance.now();
+    fetch('/media-key', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: m.name, key: k }) })
+      .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+      .then(() => { mediaSig = ''; loadMedia(); }).catch(err => alert('tecla: ' + err));
+  };
+  p.append('tecla ', ki);
+
+  const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'excluir';
+  del.onclick = () => {
+    if (!del.classList.contains('arm')){ del.classList.add('arm'); del.textContent = 'confirmar?'; return; }
+    mediaTouched = performance.now();
+    fetch('/media-del', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: m.name, set: lastMediaSet }) })
+      .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
+      .then(() => { mediaOpen = ''; mediaSig = ''; loadMedia(); }).catch(e => alert('não excluiu: ' + e));
+  };
+  p.appendChild(del);
+  return p;
+}
+function sendMedia(){
+  mediaTouched = performance.now();
+  const msg = $('#media-msg'); msg.textContent = ''; msg.className = '';
+  // usa a RESPOSTA do POST (lista limpa do set) — nao um GET depois, que pega o tuning velho
+  // enquanto o mtime-reload nao rodou e faz o checkbox "voltar" ~600ms depois.
+  fetch('/media', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ media: lastMedia, set: lastMediaSet }) })
+    .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+    .then(list => { lastMedia = list; mediaSig = ''; renderMediaList(); })
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; loadMedia(); });
+}
+function mediaFile(){    // um botão só: o servidor decide imagem/vídeo pela extensão
+  const inp = $('#media-file');
+  inp.value = '';
+  inp.onchange = () => {
+    const f = inp.files[0]; if (!f) return;
+    const msg = $('#media-msg'); msg.textContent = 'enviando ' + f.name + '…'; msg.className = '';
+    mediaTouched = performance.now();
+    fetch('/media-add?name=' + encodeURIComponent(f.name),
+      { method: 'POST', headers: { 'Content-Type': f.type || 'application/octet-stream' }, body: f })
+      .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+      .then(() => { msg.textContent = ''; mediaSig = ''; loadMedia(); })
+      .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+  };
+  inp.click();
+}
+
+// ============ TRANSIÇÕES (galeria de .glsl; a atribuição vive nos <select> da lista de mídia) ============
+let lastTrans = [], lastTransDefault = 'none', transSig = '', transOpen = '';
+function loadTransitions(){
+  fetch('/transitions').then(r => r.json()).then(d => {
+    lastTrans = d.list || []; lastTransDefault = d.default || 'none';
+    transSig = ''; renderTransitions();
+    mediaSig = ''; renderMediaList();          // os <select> por mídia dependem da lista
+  }).catch(() => {});
+}
+function transPost(url, body){
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}) })
+    .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+    .then(d => {
+      lastTrans = d.list || []; lastTransDefault = d.default || 'none';
+      transSig = ''; renderTransitions();
+      mediaSig = ''; loadMedia();              // renomear/apagar pode ter mexido nos itens
+    });
+}
+function renderTransitions(){
+  const sig = JSON.stringify([lastTrans, lastTransDefault, transOpen]);
+  if (sig === transSig) return;
+  transSig = sig;
+  const opts = (extra) => [...extra, ...lastTrans.map(f => [f, f.replace(/\.glsl$/, '')])];
+  const dsel = $('#trans-default'); dsel.innerHTML = '';
+  for (const [val, lbl] of opts([['none', 'corte seco']])){
+    const o = document.createElement('option'); o.value = val; o.textContent = lbl;
+    if (val === lastTransDefault) o.selected = true;
+    dsel.appendChild(o);
+  }
+  dsel.onchange = () => transPost('/transition-default', { name: dsel.value }).catch(e => alert('padrão: ' + e));
+
+  const box = $('#trans-list'); box.innerHTML = '';
+  if (!lastTrans.length){ box.innerHTML = '<div class="txtrow">&mdash; nenhuma. Use "+ criar .glsl".</div>'; return; }
+  for (const f of lastTrans){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const nm = document.createElement('span'); nm.className = 'name';
+    nm.style.padding = '3px 8px'; nm.textContent = f.replace(/\.glsl$/, '');
+    if (f === lastTransDefault) nm.textContent += '  (padrão)';
+    row.appendChild(nm);
+    const gear = document.createElement('button');
+    gear.className = 'ibtn sh-gear' + (transOpen === f ? ' open' : '');
+    gear.textContent = '⚙'; gear.title = 'renomear / apagar';
+    gear.onclick = () => { transOpen = transOpen === f ? '' : f; transSig = ''; renderTransitions(); };
+    row.appendChild(gear);
+    box.appendChild(row);
+    if (transOpen !== f) continue;
+    const p = document.createElement('div'); p.className = 'sh-panel';
+    const ren = document.createElement('input'); ren.className = 'insel'; ren.value = f.replace(/\.glsl$/, '');
+    const doRen = () => transPost('/rename-transition', { name: f, newname: ren.value }).catch(e => alert('não renomeou: ' + e));
+    ren.onkeydown = e => { if (e.key === 'Enter') doRen(); };
+    const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
+    p.append('nome ', ren, rb);
+    const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
+    del.onclick = () => askConfirm(`Apagar a transição “${f}”? Mídias que a usam voltam pro padrão.`,
+      () => { transOpen = ''; transPost('/delete-transition', { name: f }).catch(e => alert('não apagou: ' + e)); });
+    p.appendChild(del);
+    box.appendChild(p);
+  }
+}
+function newTransition(){
+  const inp = $('#new-trans-name'), msg = $('#new-trans-msg');
+  const name = inp.value.trim();
+  if (!name) return inp.focus();
+  msg.textContent = ''; msg.className = '';
+  transPost('/new-transition', { name }).then(() => { inp.value = ''; })
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+}
+
+// atalho da aba Visuals em QUALQUER parte do dash: tecla de SHADER_KEYS (troca shader) ou de
+// MEDIA_KEYS (troca input de imagem) — mesmas teclas que valem na janela do native_synth.
+// Ignora se o foco esta num campo de texto / select / editavel, se ha modificador (nao
+// sequestra Ctrl+R etc.) ou se e' auto-repeat (segurar a tecla).
+function typingInField(el){
+  if (!el) return false;
+  const t = el.tagName;
+  return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
+}
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.key.length !== 1) return;
+  if (typingInField(e.target)) return;
+  const k = e.key.toLowerCase();
+  if (!/[a-z0-9]/.test(k)) return;
+  const sh = Object.keys(lastShaderKeys).find(s => lastShaderKeys[s] === k);
+  if (sh){ e.preventDefault(); shaderPost('/shader', { name: sh }); return; }
+  const md = Object.keys(lastMediaKeys).find(n => lastMediaKeys[n] === k);
+  if (md){ e.preventDefault(); selectMedia(md); }
+});
+
+let fxSig = '', fxEls = {}, fxActive = null, fxReleaseT = null, fxFlushT = null, fxSaved = {};
+const fxPending = {};
+function renderFx(fx){
+  if (!fx) return;
+  fxSaved = fx.saved || {};
+  const man = fx.manifest || [];
+  if (JSON.stringify(man) !== fxSig){            // manifest mudou (troca de shader / editou o "// fx:")
+    fxSig = JSON.stringify(man);
+    const box = $('#fx-list'); box.innerHTML = ''; fxEls = {};
+    if (!man.length) box.innerHTML = '<div class="txtrow">&mdash; o shader ativo não declara efeitos (sem linha <b>// fx:</b>)</div>';
+    for (const name of man){
+      const row = document.createElement('div'); row.className = 'knob';
+      row.innerHTML = `<label>${name}</label><input type="range" min="0" max="1" step="0.01"><span class="kv">&mdash;</span>`;
+      box.appendChild(row);
+      const inp = row.querySelector('input'), kv = row.querySelector('.kv');
+      fxEls[name] = { inp, kv };
+      inp.addEventListener('input', () => {
+        kv.textContent = fmt(inp.value);
+        fxPending[name] = inp.value; fxActive = name;
+        clearTimeout(fxReleaseT); fxReleaseT = setTimeout(() => fxActive = null, 600);
+        if (!fxFlushT) fxFlushT = setTimeout(fxFlush, 80);
+      });
+    }
+  }
+  const lv = fx.levels || {};
+  for (const [name, o] of Object.entries(fxEls)){
+    if (name === fxActive) continue;             // nao briga com o slider em arrasto
+    const v = name in lv ? lv[name] : (name in fxSaved ? fxSaved[name] : 1.0);
+    o.inp.value = v; o.kv.textContent = fmt(v);
+  }
+}
+function fxFlush(){
+  fxFlushT = null;
+  // manda o mapa INTEIRO (o servidor reescreve o bloco FX todo): grava o dos sliders atuais por
+  // cima do que ja estava salvo — preserva chaves de OUTROS presets que vivem no mesmo FX.
+  const fx = Object.assign({}, fxSaved);
+  for (const [name, o] of Object.entries(fxEls)) fx[name] = parseFloat(o.inp.value);
+  for (const [k, v] of Object.entries(fxPending)){ fx[k] = parseFloat(v); delete fxPending[k]; }
+  fetch('/fx', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fx }) });
+}
+
 function flush(){
   flushT = null;
   for (const [name, value] of Object.entries(pending)){
@@ -921,6 +1522,9 @@ for (const [id, kind] of [['#sel-audio', 'audio'], ['#sel-video', 'video']]){
   sel.addEventListener('change', e => { selTouched[kind] = performance.now(); setInput(kind, e.target.value); });
 }
 loadInputs();
+loadShaders();
+loadMedia();
+loadTransitions();
 
 // ============ STREAM ============
 let htmlMtime = null, msgTimes = [];
@@ -969,13 +1573,18 @@ function render(d){
   if (a.spectrum) renderSpectro(a.spectrum);
   renderRanges(d.bands_hz);
   renderChannels(d.channels);
+  renderShaderList(d.shader);
+  renderMediaList(d.media_active || '');   // só o highlight segue o stream; a lista vem de /media
+  renderFx(d.fx);
   renderOutput(d.output);
   renderImage(d.image);
   renderImage(d.out_image, 'out-');
   if (performance.now() - outimgTouched > TOUCH_MS) $('#outimg-cb').checked = !!d.out_analysis_enabled;
 
+  lastKnobs = d.knobs || lastKnobs;
+  if (d.band_tweaks) lastBandTweaks = d.band_tweaks;
   for (const [name, o] of Object.entries(knobEls)){
-    if (name === activeKnob) continue;
+    if (name === activeKnob || !o.inp.isConnected) continue;   // node de popup rebuild -> ignora o solto
     if (d.knobs && name in d.knobs){ o.inp.value = d.knobs[name]; o.kv.textContent = fmt(d.knobs[name]); }
   }
   if (d.inputs){
