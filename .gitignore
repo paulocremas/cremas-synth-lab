@@ -3,3 +3,5 @@ __pycache__/
 .claude/
 synth.log
 media/
+build/
+dist/
