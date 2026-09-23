@@ -134,9 +134,9 @@
 <thead><tr><th>comando</th><th>o que faz</th></tr></thead>
 <tbody>
 <tr><td colspan="2" class="grouprow"><b>rodar</b></td></tr>
-<tr><td><code>.venv/bin/python native_synth.py</code></td><td>modo padrão: webcam <code>/dev/video0</code> + áudio = <code>.monitor</code> da saída padrão, janela do tamanho do frame.</td></tr>
-<tr><td><code>./watch_synth.sh</code> <span class="ext">[flags]</span></td><td>mesma coisa, mas reinicia sozinho toda vez que <code>native_synth.py</code> é salvo (poll de mtime a cada 1&nbsp;s). Wrapper de dev.</td></tr>
-<tr><td><code>ESC</code> / fechar a janela</td><td>sai do programa (e o <code>watch_synth.sh</code> junto).</td></tr>
+<tr><td><code>.venv/bin/python src/native_synth.py</code></td><td>modo padrão: webcam <code>/dev/video0</code> + áudio = <code>.monitor</code> da saída padrão, janela do tamanho do frame. Abre a aba do dashboard no navegador (<code>http://127.0.0.1:8765</code>).</td></tr>
+<tr><td><code>./watch_synth.sh</code> <span class="ext">[flags]</span></td><td>mesma coisa, mas reinicia sozinho toda vez que <code>native_synth.py</code> é salvo (poll de mtime a cada 1&nbsp;s). Wrapper de dev. Os módulos <code>dash_*</code> não precisam — fazem hot-reload sozinhos.</td></tr>
+<tr><td><code>ESC</code> / fechar a janela / <code>Ctrl-C</code></td><td>sai do programa (e o <code>watch_synth.sh</code> junto); fecha o socket do dashboard, e as abas mostram "encerrado".</td></tr>
 <tr><td colspan="2" class="grouprow"><b>flags — entrada de imagem</b></td></tr>
 <tr><td><code>--screen</code></td><td>captura a tela em vez da webcam (o <code>ffmpeg</code> troca <code>v4l2</code> por <code>x11grab</code>).</td></tr>
 <tr><td><code>--source</code> <span class="ext">[NOME]</span></td><td>no modo <code>--screen</code>, captura só um monitor (ex. <code>eDP-1</code>) em vez da tela toda. Sem valor = auto-detecta o secundário.</td></tr>
@@ -145,12 +145,16 @@
 <tr><td><code>--device PATH</code></td><td>no modo webcam, qual device <code>v4l2</code> usar. Default <code>/dev/video0</code>. Aponte pra uma câmera virtual (v4l2loopback + OBS) pra puxar uma janela em fps cheio.</td></tr>
 <tr><td colspan="2" class="grouprow"><b>flags — entrada de áudio</b></td></tr>
 <tr><td><code>--audio SOURCE</code></td><td>fonte de áudio do PulseAudio/PipeWire (ver <code>pactl list short sources</code>). Default = <code>.monitor</code> da saída padrão (o som geral do sistema).</td></tr>
-<tr><td colspan="2" class="grouprow"><b>flags — janela de saída</b></td></tr>
+<tr><td colspan="2" class="grouprow"><b>flags — janela de saída (valores INICIAIS — a barra "saída" do dashboard troca ao vivo, sem reiniciar)</b></td></tr>
 <tr><td><code>--fullscreen</code></td><td>janela sem borda, do tamanho da tela.</td></tr>
 <tr><td><code>--monitor</code> <span class="ext">[NOME]</span></td><td>sem borda, fixa num monitor específico (ex. <code>HDMI-1</code> — projetor); implica <code>--fullscreen</code>. Sem valor = auto-detecta o secundário.</td></tr>
+<tr><td colspan="2" class="grouprow"><b>dashboard — no navegador, sem comando</b></td></tr>
+<tr><td>troca de fonte / knobs / ranges / canais / saída / efeitos</td><td>tudo pelo dashboard (tabs no header, ou <code>?panel=audio</code> / <code>?panel=image</code> em popup): trocar entrada de áudio/vídeo, monitor/dimensão/tela cheia da SAÍDA (lembra o tamanho de antes do fullscreen) — tudo ao vivo, sem reiniciar; sliders que gravam no <code>tuning.py</code>; barras de range das 8 faixas (clica pra arrastar dali, empurra a vizinha nos dois sentidos, liga/desliga sem apagar); canais por instrumento (adiciona/remove, cada um pode assumir uma variável existente — kick, faixas, amp/bass/mid/treble — quando tem source ligada); aba <b>Visuals</b> — sub-aba <b>Sets</b> (cenas: quais fontes/mídias entram na saída, a pilha de shaders de cada uma com opacidade/modo/forças, o que o set oferece, tecla e transição de entrada; auto-salva) e sub-aba <b>Biblioteca</b> (os arquivos: mídia, <code>.frag</code>, transições). Grava <code>SCENES</code>/<code>SCENE</code>/<code>OVERLAYS</code>/<code>BINDINGS</code>/<code>MEDIA</code>/<code>SOURCE_FIT</code>/<code>TRANSITION_DEFAULT</code> no <code>tuning.py</code>. Sincroniza entre as abas.</td></tr>
 <tr><td colspan="2" class="grouprow"><b>hot-reload — sem comando, é só salvar</b></td></tr>
-<tr><td><code>image.frag</code></td><td>salvar recompila o shader na hora (por mtime), sem reiniciar.</td></tr>
+<tr><td><code>shaders/image.frag</code> / <code>shaders/presets/default/*.frag</code> / <code>transitions/*.glsl</code></td><td>salvar um <code>.frag</code> recompila na hora (por mtime) e vale em toda fonte/set que usa aquele shader — o código é um só, a configuração (opacidade, modo, forças) é por fonte. As transições são re-checadas no início de cada troca de set.</td></tr>
 <tr><td><code>tuning.py</code></td><td>salvar recarrega as constantes de calibração na hora (por mtime), sem reiniciar.</td></tr>
+<tr><td><code>dash_server.py</code> · <code>dash_data.py</code></td><td>salvar troca o servidor / recarrega os módulos no processo (por mtime); o navegador reconecta sozinho.</td></tr>
+<tr><td><code>dash.html</code></td><td>salvar → a aba recarrega sozinha (mtime vai no stream SSE).</td></tr>
 </tbody>
 </table>
 </section>
@@ -179,9 +183,10 @@
     <text x="542" y="30" fill="#5cb8a6">imagem · input</text>
   </g>
 
-  <!-- Visualização (sub-caixa) — tom fraco da região processo -->
+  <!-- Dashboard (sub-caixa) — tom fraco da região processo. Antes era a "Visualização" em
+       terminal/só-leitura; agora é HTTP+SSE bidirecional (lê o state, grava no tuning.py). -->
   <rect x="270" y="322" width="220" height="118" rx="8" fill="#0d1117" stroke="#574f70" stroke-width="1.3"/>
-  <text x="280" y="340" font-size="14" font-weight="600" fill="#8b7fa8">Visualização</text>
+  <text x="280" y="340" font-size="14" font-weight="600" fill="#8b7fa8">Dashboard · HTTP</text>
 
   <!-- sub-caixa: thread de áudio + tuning.py (tuning.py pertence à thread, recarrega por mtime) -->
   <rect x="22" y="220" width="380" height="76" rx="10" fill="none" stroke="#574f70" stroke-width="1.4" stroke-dasharray="5 4"/>
@@ -203,7 +208,7 @@
     <text x="328" y="84">arquivo (hot-reload)</text>
     <text x="328" y="105">dado (state / uniform)</text>
     <text x="328" y="126">programa na GPU</text>
-    <text x="328" y="151">Visualização (só leitura)</text>
+    <text x="328" y="151">Dashboard (lê + regula)</text>
   </g>
 
   <!-- setas: fluxo / chamada GL -->
@@ -227,7 +232,7 @@
     <path d="M640,684 V785 H500"/>
     <path d="M400,812 V846"/>
   </g>
-  <!-- setas: leitura p/ Visualização — dois canais paralelos (x=532, x=524), ambos < x=540 pra não cruzar dominant_color_thread; pontas na linha "imagem" (y 348–388) -->
+  <!-- setas: stream p/ Dashboard (SSE) — dois canais paralelos (x=532, x=524), ambos < x=540 pra não cruzar dominant_color_thread; pontas na linha "imagem" (y 348–388) -->
   <g fill="none" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)">
     <path d="M205,296 V368 H270"/>
     <path d="M592,326 H532 V360 H490"/>
@@ -281,7 +286,7 @@
   </g>
   <!-- nó: hexágono (programa na GPU) -->
   <path d="M320,754 H480 L500,783 L480,812 H320 L300,783 Z" fill="#21262d" stroke="#d98aa8" stroke-width="1.5"/>
-  <!-- nós: Visualização (tracejado, esmaecido) -->
+  <!-- nós: Dashboard (tracejado, esmaecido) -->
   <g fill="#21262d" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.7">
     <rect x="282" y="348" width="196" height="40" rx="8"/>
     <rect x="282" y="394" width="196" height="40" rx="8"/>
@@ -301,9 +306,9 @@
       <text x="348" y="264" fill="#a394d6">tuning.py</text>
       <text x="400" y="660" fill="#5cb8a6">u_texture_0</text>
       <text x="640" y="660" fill="#5cb8a6">u_dominant</text>
-      <text x="400" y="780" fill="#d98aa8">image.frag na GPU</text>
-      <text x="378" y="374" fill="#8b7fa8">imagem · gnome-terminal</text>
-      <text x="378" y="420" fill="#8b7fa8">áudio · stdout</text>
+      <text x="400" y="780" fill="#d98aa8">.frag na GPU</text>
+      <text x="378" y="374" fill="#8b7fa8">dash.html · aba imagem</text>
+      <text x="378" y="420" fill="#8b7fa8">dash.html · aba áudio</text>
     </g>
     <g font-size="14">
       <text x="145" y="460" fill="#e3b341">13 floats de áudio</text>
@@ -311,7 +316,7 @@
       <text x="656" y="470" fill="#5cb8a6">state['dominant']</text>
       <text x="655" y="402" fill="#5cb8a6">dominant_color_thread (~10/s)</text>
       <text x="154" y="662" fill="#e3b341">13 uniforms de áudio</text>
-      <text x="400" y="501" fill="#a394d6">image.frag (arquivo)</text>
+      <text x="400" y="501" fill="#a394d6">.frag (arquivos)</text>
     </g>
     <g font-size="13" fill="#8b949e">
       <text x="145" y="76">(monitor do sistema)</text>
@@ -327,7 +332,7 @@
     <line x1="250" y1="909" x2="276" y2="909" stroke="#58a6ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arb)"/>
     <text x="282" y="913">hot-reload (mtime)</text>
     <line x1="405" y1="909" x2="431" y2="909" stroke="#6e7681" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arg)"/>
-    <text x="437" y="913">leitura p/ Visualização</text>
+    <text x="437" y="913">stream p/ Dashboard (SSE)</text>
   </g>
 
   <!-- áreas clicáveis — um nó, uma seção -->
@@ -354,7 +359,7 @@
     <a href="#uniforms"><rect x="54" y="630" width="200" height="52" rx="10"/></a>
     <a href="#u_texture_0"><rect x="320" y="630" width="160" height="52" rx="10"/></a>
     <a href="#u_dominant"><rect x="560" y="630" width="160" height="52" rx="10"/></a>
-    <!-- Visualização -->
+    <!-- Dashboard -->
     <a href="#vis-img"><rect x="282" y="348" width="196" height="40" rx="8"/></a>
     <a href="#vis-audio"><rect x="282" y="394" width="196" height="40" rx="8"/></a>
     <!-- fora do processo (baixo) -->
@@ -627,23 +632,35 @@ cópia) + um <code>/32768</code> vetorizado → janela de Hanning → <code>rfft
 (<code>bass_bins</code>…) são montados <b>1×</b> fora do loop — as máscaras só se refazem quando o
 <a href="#tuning"><code>tuning.py</code></a> recarrega. Resolução: 44100/1024 ≈ <b>43&nbsp;Hz/bin</b>
 — no grave as faixas log ficam mais estreitas que um bin, daí o fallback pro bin mais próximo.</p>
-<p>Grava as 13 chaves em <code>state</code>. No <b>10º</b> bloco (~230&nbsp;ms) roda, aqui dentro, os
-<a href="#vis-audio">painéis de áudio</a> <b>e</b> toda a <a href="#vis-img">análise da imagem</a> de
-entrada (HSV, FFT-2D, grid 3×3) — sobre um frame reduzido por stride (<code>frame_downsample</code>):
-em resolução cheia (~200&nbsp;ms) atrasaria a leitura do próximo bloco de áudio.</p>
+<p>Grava as 13 chaves em <code>state</code>. A cada <code>DASH_EVERY_N_CHUNKS</code> blocos (=&nbsp;3,
+~14&nbsp;Hz) monta, aqui dentro, os dicts que o <a href="#vis-audio">dashboard</a> lê:
+<code>audio_dash_data()</code> (kick / faixas BRUTO·FINAL·SMOOTH·Δ / espectrograma) e
+<code>image_dash_data()</code> — toda a <a href="#vis-img">análise da imagem</a> de entrada (HSV,
+FFT-2D de cor, grid 3×3, histogramas) sobre um frame reduzido por stride
+(<code>frame_downsample</code>): em resolução cheia (~200&nbsp;ms) atrasaria a leitura do próximo
+bloco de áudio. Também vigia aqui o <code>mtime</code> de <code>dash_server.py</code> /
+<code>dash_data.py</code> pro hot-reload deles.</p>
 
 <div class="sub">
 <section id="tuning" data-glossary>
 <h4>tuning.py · calibração</h4>
 <p>Arquivo <b>só de constantes</b>, lido e recarregado por <b>esta thread</b> (não pelo loop): cortes
-<code>BASS_MID_HZ</code> / <code>MID_TREBLE_HZ</code>; escalas <code>BASS_SCALE</code> / <code>MID_SCALE</code> /
+<code>BASS_MID_HZ</code> / <code>MID_TREBLE_HZ</code>; <code>FREQ_BAND_HZ</code> (o range
+<code>[lo, hi)</code> de cada uma das 8 faixas finas) + <code>HZ_OVERLAP</code> (0 = crossover, sem
+sobrepor mas com buraco permitido; 1 = livre); escalas <code>BASS_SCALE</code> / <code>MID_SCALE</code> /
 <code>TREBLE_SCALE</code>; suavização <code>SMOOTHING</code>, <code>SMOOTHING_MIN/MAX</code>,
 <code>ATTACK_RATIO</code>; auto-gain <code>PEAK_DECAY</code>; kick (<code>KICK_THRESHOLD</code>,
-<code>KICK_WARMUP_CHUNKS</code>, <code>KICK_DECAY*</code>).</p>
+<code>KICK_WARMUP_CHUNKS</code>, <code>KICK_DECAY*</code>). E o estado da
+<a href="#vis-effects">aba Visuals</a>: <code>SCENES</code> / <code>SCENE</code> (os sets e o ativo),
+<code>OVERLAYS</code> (fontes marcadas = a saída), <code>BINDINGS</code> (pilha de shaders + forças
+por fonte), <code>MEDIA</code> (biblioteca de mídia), <code>SOURCE_FIT</code> (câmera/tela em
+"encaixar"), <code>TRANSITION_DEFAULT</code>.</p>
 <p>Hot-reload: a thread compara o <code>mtime</code> a cada volta; mudou → <code>importlib.reload</code> +
-recomputa os bins de Hz e o release por banda. Vale no bloco seguinte, sem reiniciar nem cortar o
-áudio. As bordas de Hz das 8 faixas finas (<code>FREQ_BANDS</code>) <b>não</b> ficam aqui — são
-constantes no <code>native_synth.py</code>.</p>
+recomputa os bins de Hz, as 8 faixas (<code>freq_bands()</code>) e o release por banda. Vale no bloco
+seguinte, sem reiniciar nem cortar o áudio. O <a href="#vis-audio">dashboard</a> grava neste arquivo
+(sliders de knob → linha <code>NOME = valor</code>; barras de range → bloco <code>FREQ_BAND_HZ</code>;
+aba Visuals → blocos <code>SCENES</code> / <code>OVERLAYS</code> / <code>BINDINGS</code> / <code>MEDIA</code>…),
+com lock, e patcha o módulo <code>tuning</code> na hora (mesmo objeto que o native segura).</p>
 </section>
 </div>
 </section>
@@ -657,6 +674,17 @@ constantes no <code>native_synth.py</code>.</p>
 <code>treble_hi</code>, <code>brilho</code>, <code>air</code>).</p>
 <p>Cada uma vira o uniform de mesmo nome com prefixo <code>u_</code> — faixa de Hz, escala e suavização
 de cada uma na <a href="#uniforms">tabela de uniforms</a>.</p>
+<p>Fora essas 13 (escalares, um uniform cada), <code>chan</code> e <code>chan_hit</code> são mais duas
+chaves de áudio — só que cada uma é uma LISTA de 8 (uma por slot de <a href="#uniforms">canal</a>),
+viram <code>u_chan[8]</code> / <code>u_chan_hit[8]</code> (array, não escalar).</p>
+<p>Fora essas, o <code>state</code> também carrega o que o <a href="#vis-audio">dashboard</a> lê:
+<code>audio_dash</code> / <code>image</code> (os dicts de medidores), <code>output</code> (geometria da
+janela + fps), <code>dominant</code>, a fonte de áudio/vídeo atual (<code>audio_source</code>,
+<code>video</code>, <code>video_id</code> = a fonte <b>selecionada</b>, que é a capturada pela
+<a href="#video-thread">thread de vídeo</a>) e o vivo da <a href="#vis-effects">aba Visuals</a>:
+<code>overlays</code> (fontes marcadas), <code>bindings</code> (shaders + forças por fonte),
+<code>pool</code> (o que o set oferece), <code>selected</code> e <code>scene_pending</code> (troca de
+set pedida, aplicada pelo <a href="#loop">loop</a> no fim do frame).</p>
 </section>
 
 <section id="video-thread" data-glossary>
@@ -665,13 +693,25 @@ de cada uma na <a href="#uniforms">tabela de uniforms</a>.</p>
 (<code>WIDTH×HEIGHT×3</code> bytes). Guarda <b>só o último</b> em <code>state['frame']</code>. Sem fila: se
 o loop atrasa, os frames do meio são sobrescritos e perdidos. No modo <code>--window</code> roda
 <code>window_capture_thread</code> (ImageMagick <code>import</code>) no lugar, ~2–5&nbsp;fps.</p>
+<p>Captura a fonte <b>selecionada</b> na aba Visuals (a que a aba imagem analisa). As outras fontes
+<b>marcadas</b> (câmera/tela/mídia na saída) ganham cada uma um <code>ffmpeg</code> próprio
+(<code>_ovl</code>) ou saem do pool/cache abaixo; a selecionada, se também marcada, reaproveita
+<code>state['frame']</code> (v4l2 é exclusivo). O <code>-vf</code> de cada fonte vem de
+<code>_fit_vf</code>: <b>preencher</b> estica pra cobrir a saída, <b>encaixar</b> mantém o aspecto
+com margens pretas (ciente do aspecto da janela).</p>
+<p><b>Troca de fonte rápida</b>: imagem parada da biblioteca vem do
+<code>_still_cache</code> (1 decode, depois só troca o ponteiro — sem <code>ffmpeg</code> rodando à
+toa); vídeo, se <code>tuning.VIDEO_POOL</code>, fica num <code>ffmpeg -re</code> sempre vivo por
+thread (<code>_pool_reader</code>) → troca ~0&nbsp;ms. Fora disso, sobe o <code>ffmpeg</code> novo e
+só mata o antigo quando o novo entrega o 1º frame (<code>_await_first</code>) — sem piscar preto.</p>
 </section>
 
 <section id="state-frame" data-glossary>
 <h3><code>state['frame']</code></h3>
-<p>O último frame de vídeo cru, array de bytes RGB24. Escrito pela <a href="#video-thread">thread de
-vídeo</a>; lido pela <a href="#dominant-thread">cor dominante</a> (~10×/s), pelo <a href="#loop">loop</a>
-(todo frame, vira textura) e pelo <a href="#vis-img">painel de imagem</a>. Um buffer, sem histórico.</p>
+<p>O último frame cru da fonte <b>selecionada</b>, array de bytes RGB24. Escrito pela
+<a href="#video-thread">thread de vídeo</a>; lido pelo <a href="#loop">loop</a> quando essa fonte
+também está marcada (via <code>_source_frames()</code>) e pela análise do <a href="#vis-img">dashboard</a>
+(<code>image_dash_data</code>, no throttle da thread de áudio). Um buffer, sem histórico.</p>
 </section>
 
 <section id="dominant-thread" data-glossary>
@@ -689,24 +729,87 @@ média. Atualizada ~10×/s. Vira <a href="#u_dominant"><code>u_dominant</code></
 </section>
 
 <div class="sub">
-<p class="block-label">Visualização · painéis de texto — só leitura</p>
+<p class="block-label">Dashboard · HTTP + SSE — lê o <code>state</code>, regula ao vivo</p>
 
-<section id="vis-img" data-glossary>
-<h4>imagem · gnome-terminal</h4>
-<p>Uma janela <code>gnome-terminal</code> (<code>--full-screen</code>), aberta uma vez no start; a
-<a href="#audio-thread">thread de áudio</a> escreve nela por um FIFO a cada ~230&nbsp;ms. Mostra a
-análise da imagem de <b>entrada</b> (não da sintetizada): RESUMO (cor dominante, brilho, saturação,
-temp. de cor, contraste, nitidez, entropia, bordas, movimento…), o mesmo em grid 3×3, e 4 histogramas
-(matiz, brilho, FFT-2D de cor, orientação de borda). Sem <code>gnome-terminal</code> / <code>$DISPLAY</code>
-→ desligado, o resto segue.</p>
-</section>
+<p><code>dash_server.start()</code> (chamado no <code>main()</code>) sobe um servidor
+<code>http.server</code> stdlib num thread daemon e abre a aba no navegador. Módulos: <code>dash_server.py</code> (rotas),
+<code>dash_data.py</code> (funções puras que montam os números), <code>dash.html</code> (a página,
+JS puro). Os três fazem <a href="#tuning">hot-reload por mtime</a>. No start também roda as
+migrações one-shot (<code>_migrate_default_to_folder</code>, <code>_migrate_to_scenes</code>). Endpoints:
+<code>GET /events</code> (stream SSE do <code>state</code> ~20&nbsp;Hz),
+<code>/knobs</code> · <code>POST /knob</code> (grava linha do <code>tuning.py</code>),
+<code>/inputs</code> · <code>POST /input</code> (troca fonte áudio/vídeo), <code>POST /bands</code>
+(reescreve <code>HZ_OVERLAP</code>/<code>BANDS_ENABLED</code>/o bloco <code>FREQ_BAND_HZ</code>),
+<code>POST /tweaks</code> (dinâmica por faixa), <code>POST /channels</code> (bloco
+<code>CHANNELS</code>), aba Visuals · Sets: <code>GET /scenes</code> + <code>POST /scene</code>
+<code>/scene-new</code> <code>/scene-rename</code> <code>/scene-del</code> <code>/scene-key</code>
+<code>/scene-transition</code>, <code>POST /overlays</code> (fontes marcadas), <code>/bindings</code>
+(pilhas + forças), <code>/select</code> (fonte selecionada), <code>/pool</code> (o que o set
+oferece), <code>/source-fit</code> (câmera/tela: preencher/encaixar); Biblioteca: <code>GET
+/shaders</code> (lista + <code>// fx:</code> de cada um) + <code>POST /new-shader</code>
+<code>/rename-shader</code> <code>/delete-shader</code>, <code>GET /media</code> + <code>POST
+/media</code> <code>/media-add</code> <code>/media-del</code>, <code>GET /transitions</code> +
+<code>POST /transition-default</code> <code>/new-transition</code> <code>/rename-transition</code>
+<code>/delete-transition</code>,
+<code>POST /output</code> (pede troca de monitor/dimensão/tela cheia da janela — quem aplica é o
+<code>main()</code>, dono do contexto GL, no próximo frame), <code>POST /out-analysis</code>,
+<code>/favicon.png</code>.</p>
 
 <section id="vis-audio" data-glossary>
-<h4>áudio · stdout</h4>
-<p>O <code>stdout</code> do processo, reescrito no lugar (tela alternada) a cada ~230&nbsp;ms pela
-<a href="#audio-thread">thread de áudio</a>: <code>kick</code> (final + decay), as 8 faixas finas em
-BRUTO / FINAL / SMOOTHING / Δ, e o espectrograma (dB absoluto + % do pico). É o medidor pra calibrar o
-<a href="#tuning"><code>tuning.py</code></a> a olho.</p>
+<h4>dash.html · aba áudio (<code>?panel=audio</code>)</h4>
+<p>De <code>audio_dash_data()</code>: <code>kick</code> (final + decay), as 8 faixas finas em
+BRUTO / FINAL / SMOOTH / Δ, e o espectrograma (24 faixas log, agudo → grave, dB absoluto + % do
+pico). Mais os controles: sliders de knob que gravam no <a href="#tuning"><code>tuning.py</code></a>;
+as barras de range <code>[lo, hi)</code> das 8 faixas, também agudo → grave (toggle
+<code>HZ_OVERLAP</code>, checkbox <b>ativar</b> = <code>BANDS_ENABLED</code>, barra-resumo) — clica em
+qualquer ponto da barra pra arrastar dali, o Hz sob o cursor aparece no hover; arrastar um limite
+empurra a faixa vizinha nos dois sentidos (sobe ou desce); sair do overlap resolve sobreposição
+fazendo a faixa mais larga ceder, preservando as outras; e a seção <b>Canais</b> — lista de
+tamanho livre (até 8, botão "+ adicionar canal"), cada linha com nome, source de áudio (ou
+"ocioso") e "saída" (qual variável — <code>kick</code>/<code>amp</code>/<code>bass</code>/
+<code>mid</code>/<code>treble</code>/uma das 8 faixas — esse canal substitui enquanto tiver
+source ligada).</p>
+</section>
+
+<section id="vis-img" data-glossary>
+<h4>dash.html · aba imagem (<code>?panel=image</code>)</h4>
+<p>De <code>image_dash_data()</code> — análise da imagem de <b>entrada</b> (não da sintetizada):
+RESUMO (cor dominante/média, simetria, clipping, correlação RGB, centro, coloridez, paleta, tom
+quente), o mesmo em grid 3×3, e 4 histogramas (matiz, brilho, FFT-2D de cor, orientação de borda).
+Analisa a fonte <b>selecionada</b> na <a href="#vis-effects">aba Visuals</a>. Mais o painel <b>Saída</b> — resolução do render, tamanho/posição da
+janela, fps e os monitores disponíveis. O CONTROLE de saída (monitor / dimensão / tela cheia) fica
+na barra do topo (<code>#iobar</code>, visível em todas as abas, ao lado do seletor de áudio) —
+troca ao vivo via <code>POST /output</code>, sem reiniciar o processo; lembra o último tamanho de
+janela pra restaurar quando a tela cheia é desligada.</p>
+</section>
+
+<section id="vis-effects" data-glossary>
+<h4>dash.html · aba Visuals</h4>
+<p>Duas sub-abas: <b>Sets</b> (montar e tocar) e <b>Biblioteca</b> (os arquivos).</p>
+<p><b>Set</b> = uma cena (<code>SCENES</code>, ativo em <code>SCENE</code>). A lista no topo troca de
+set (clique ou tecla — na janela OpenGL ou em qualquer parte do dash), com a <b>transição de
+entrada</b> escolhida na linha (<code>(padrão)</code> = <code>TRANSITION_DEFAULT</code>). O set
+ativo <b>auto-salva</b>: toda edição abaixo grava nele. <code>+ set</code> copia o estado atual.</p>
+<p><b>A saída é só o que está marcado.</b> Seção <b>Imagem</b>, grupos <b>Fontes</b>
+(câmeras/telas) e <b>Mídias</b>: checkbox <b>camada</b> + opacidade = entra na saída
+(<code>OVERLAYS</code>, ordem de marcação, 1 = embaixo); <b>preencher</b> = estica pra cobrir,
+desmarcado = encaixa com margens (config da fonte, vale em todos os sets); <b>rebate</b> (vídeo) =
+vai-e-volta pré-renderizado. <b>Clique no nome</b> = só <b>seleciona</b> (a lista de efeitos passa a
+ser a dela e a <a href="#vis-img">aba imagem</a> analisa ela).</p>
+<p><b>Efeitos de X</b>: a pilha de shaders <b>dessa</b> fonte (<code>BINDINGS[fonte].shaders</code>),
+cada um com camada + opacidade + modo de mistura (normal / soma / tela / multiplicar / clarear).
+Cada fonte tem a sua, lembrada mesmo desmarcada; sem shader, entra crua. Clique no nome do shader =
+mostra a <b>força dos efeitos</b> dele: um slider por nome do cabeçalho <code>// fx:</code>
+(<code>dash_data.parse_fx_manifest</code>) → <a href="#u_fx"><code>u_fx_&lt;nome&gt;</code></a>,
+valor por par fonte/shader (<code>BINDINGS[fonte].fx[shader]</code>).</p>
+<p><b>Disponíveis por set</b> (<code>pool</code> do set): <code>×</code> tira uma fonte/mídia/shader
+do set (some do editor e da saída, mas marcação e pilha ficam lembradas); <code>+ adicionar ao
+set…</code> traz de volta. Arquivo novo da Biblioteca entra no set ativo.</p>
+<p><b>Biblioteca</b>: mídia (upload — kind pela extensão —, renomear, excluir), <code>.frag</code>
+(criar do template, renomear, apagar) e <b>transições</b> (<code>transitions/*.glsl</code>, estilo
+gl-transitions: <code>vec4 transition(vec2 uv)</code> com <code>getFromColor</code> /
+<code>getToColor</code> / <code>progress</code>, cabeçalho <code>// ms: N</code>; criar, renomear,
+apagar, padrão). Renomear/apagar atualiza todos os sets que usavam o arquivo.</p>
 </section>
 </div>
 
@@ -715,21 +818,34 @@ BRUTO / FINAL / SMOOTHING / Δ, e o espectrograma (dB absoluto + % do pico). É 
 <p>Main thread, <code>clock.tick(30)</code>. Por frame, em ordem:</p>
 <ol>
 <li>eventos do pygame (ESC / fechar → encerra);</li>
-<li><code>mtime</code> do <a href="#shader-file"><code>image.frag</code></a> → recompila se mudou;</li>
-<li><code>glTexImage2D</code>: <code>state['frame']</code> → <a href="#u_texture_0"><code>u_texture_0</code></a>;</li>
-<li><code>glUniform2f/1f/3f</code>: <code>u_resolution</code> e <code>u_time</code> (calculados aqui) + os 13
-floats de áudio (<code>glUniform1f</code> ×13) + <code>u_dominant</code>;</li>
-<li><code>glClear</code> + <code>glDrawArrays(GL_TRIANGLES, 0, 3)</code> → dispara a <a href="#shader-gpu">GPU</a>;</li>
-<li><code>pygame.display.flip()</code>.</li>
+<li><code>_source_frames()</code>: as fontes <b>marcadas</b> com frame pronto, de baixo pra cima
+(<code>_composite</code> também as mistura na CPU só pra fumaça / análise / cor dominante);</li>
+<li>pra cada fonte: <code>glTexImage2D</code> do frame → <a href="#u_texture_0"><code>u_texture_0</code></a>;
+cópia crua num FBO; cada shader marcado da pilha dela (<a href="#shader-file"><code>.frag</code></a>,
+recompila se o <code>mtime</code> mudou) desenha com os <a href="#uniforms">uniforms</a> — 13 floats de
+áudio, <code>u_dominant</code>, <code>u_resolution</code>, <code>u_time</code> e os
+<a href="#u_fx"><code>u_fx_*</code></a> daquele par fonte/shader — e mistura por cima (opacidade +
+modo, <code>LAYER_BLEND_SRC</code>); o resultado entra na saída com a opacidade da fonte (saída começa
+preta);</li>
+<li>saída → tela: cópia, ou, logo depois de uma troca de set, o passe de <b>transição</b> (o
+<code>.glsl</code> mistura a última imagem do set que saiu com a do novo);</li>
+<li>troca de set pedida (<code>state['scene_pending']</code>)? copia a tela (<code>glCopyTexSubImage2D</code>),
+aplica o set (<code>dash_server.apply_scene</code>) e liga a transição;</li>
+<li><code>pygame.display.flip()</code>; a cada ~15 frames grava o fps medido em <code>state['output']['fps']</code>.</li>
 </ol>
-<p>Não trava se uma thread parar: lê o último <code>state</code> e segue.</p>
+<p>Não trava se uma thread parar: lê o último <code>state</code> e segue. Erro de compilação num
+<a href="#shader-file"><code>.frag</code></a> → aquele shader é pulado e
+<code>state['output']['shader_status']</code> avisa. Na saída (ESC / <code>Ctrl-C</code>) chama
+<code>dash_server.stop()</code> — fecha o socket, e as abas do dashboard mostram "encerrado".</p>
 </section>
 
 <section id="shader-file" data-glossary>
-<h3><code>image.frag</code> · arquivo</h3>
-<p>O shader no disco. O <a href="#loop">loop</a> guarda o <code>mtime</code>; mudou → recompila e troca o
-programa GL vivo. Erro de compilação → mantém o programa anterior e imprime o log. Mesmo hot-reload do
-<a href="#tuning"><code>tuning.py</code></a>, só que no loop e pro lado da GPU.</p>
+<h3><code>.frag</code> · arquivos</h3>
+<p>Os shaders no disco (<code>shaders/image.frag</code> + <code>shaders/presets/default/*.frag</code>).
+Um arquivo por shader, usado por quantas fontes/sets quiser: o código é compartilhado, a
+configuração (opacidade, modo, forças) é por fonte. O <a href="#loop">loop</a> compila cada um
+1× e cacheia por <code>mtime</code>; mudou → recompila. Erro de compilação → pula e imprime o log.
+Mesmo hot-reload do <a href="#tuning"><code>tuning.py</code></a>, só que no loop e pro lado da GPU.</p>
 </section>
 
 <section id="uniforms" data-glossary>
@@ -744,7 +860,7 @@ número nasce na <a href="#audio-thread">thread de áudio</a>; constantes em
 <th>uniform</th><th>tipo</th><th>vem de</th><th>faixa</th><th>escala · auto-gain</th><th>suavização</th><th>o que é</th>
 </tr></thead>
 <tbody>
-<tr id="u_texture_0"><td><code>u_texture_0</code></td><td><code>sampler2D</code></td><td><code>state['frame']</code> (<a href="#state-frame">vídeo</a>)</td><td>—</td><td>—</td><td>—</td><td>frame de vídeo cru (RGB24), unidade de textura 0. No shader: <code>texture2D(u_texture_0, st)</code>.</td></tr>
+<tr id="u_texture_0"><td><code>u_texture_0</code></td><td><code>sampler2D</code></td><td>fonte marcada (<a href="#video-thread">vídeo</a>)</td><td>—</td><td>—</td><td>—</td><td>frame cru (RGB24) da fonte cuja pilha está sendo desenhada, unidade de textura 0 — cada shader só vê a sua fonte. No shader: <code>texture2D(u_texture_0, st)</code>, com <code>st.y = 1.0 - st.y</code> (a textura vem de cima pra baixo).</td></tr>
 <tr><td><code>u_resolution</code></td><td><code>vec2</code></td><td>loop (<code>WIN_W, WIN_H</code>)</td><td>—</td><td>—</td><td>—</td><td>tamanho da janela em px.</td></tr>
 <tr><td><code>u_time</code></td><td><code>float</code></td><td>loop (<code>perf_counter()−t0</code>)</td><td>—</td><td>—</td><td>—</td><td>segundos desde o start.</td></tr>
 <tr><td><code>u_amp</code></td><td><code>float</code> 0..1</td><td><code>state['amp']</code></td><td>espectro inteiro</td><td><code>min(1, RMS×4)</code></td><td>release <code>SMOOTHING</code> (0.9); attack ×<code>ATTACK_RATIO</code> (0.4)</td><td>volume geral do bloco.</td></tr>
@@ -752,15 +868,21 @@ número nasce na <a href="#audio-thread">thread de áudio</a>; constantes em
 <tr><td><code>u_mid</code></td><td><code>float</code> 0..1</td><td><code>state['mid']</code></td><td>150&nbsp;Hz – 4&nbsp;kHz</td><td>×<code>MID_SCALE</code> (6.0), teto 1.0</td><td>global</td><td>voz / melodia.</td></tr>
 <tr><td><code>u_treble</code></td><td><code>float</code> 0..1</td><td><code>state['treble']</code></td><td>&gt; <code>MID_TREBLE_HZ</code> (4&nbsp;kHz)</td><td>×<code>TREBLE_SCALE</code> (30.0), teto 1.0</td><td>global</td><td>agudo / hi-hat.</td></tr>
 <tr><td><code>u_kick</code></td><td><code>float</code> 0..1</td><td><code>state['kick']</code></td><td>grave cru (sem teto)</td><td>onset: pula pra 1.0 quando o grave &gt; baseline&nbsp;×&nbsp;<code>KICK_THRESHOLD</code> (1.5), depois de <code>KICK_WARMUP_CHUNKS</code> (20) blocos; decai por <code>kick_decay_dynamic</code>, adaptado ao ritmo entre <code>KICK_DECAY_MIN</code> (0.5) e <code>KICK_DECAY_MAX</code> (0.95)</td><td>nenhuma — ataque instantâneo</td><td><b>pulso de batida</b>, não nível.</td></tr>
-<tr><td colspan="7" class="grouprow"><b>8 faixas finas</b> — 0..1, cada uma <b>relativa ao próprio pico recente</b> (auto-gain por banda: sobe na hora, decai por <code>PEAK_DECAY</code> 0.999/bloco), então uma banda estruturalmente mais forte não fica grudada em 1.0. Release interpolado de <code>SMOOTHING_MIN</code> (0.7, no Sub-bass) a <code>SMOOTHING_MAX</code> (0.95, no Air); attack ×0.4. Bordas de Hz em <code>FREQ_BANDS</code>.</td></tr>
-<tr><td><code>u_subbass</code></td><td colspan="2"><code>state['subbass']</code> — Sub-bass</td><td colspan="4">0 – 250&nbsp;Hz</td></tr>
-<tr><td><code>u_lowmid</code></td><td colspan="2"><code>state['lowmid']</code> — Low-mid</td><td colspan="4">250 – 500&nbsp;Hz</td></tr>
-<tr><td><code>u_midrange</code></td><td colspan="2"><code>state['midrange']</code> — Midrange</td><td colspan="4">500&nbsp;Hz – 2&nbsp;kHz</td></tr>
-<tr><td><code>u_highmid</code></td><td colspan="2"><code>state['highmid']</code> — High-mid</td><td colspan="4">2 – 4&nbsp;kHz</td></tr>
-<tr><td><code>u_presence</code></td><td colspan="2"><code>state['presence']</code> — Presence</td><td colspan="4">4 – 6&nbsp;kHz</td></tr>
-<tr><td><code>u_treble_hi</code></td><td colspan="2"><code>state['treble_hi']</code> — Treble</td><td colspan="4">6 – 10&nbsp;kHz — sufixo <code>_hi</code> pra não colidir com <code>u_treble</code></td></tr>
-<tr><td><code>u_brilho</code></td><td colspan="2"><code>state['brilho']</code> — Brilliance</td><td colspan="4">10 – 16&nbsp;kHz</td></tr>
-<tr><td><code>u_air</code></td><td colspan="2"><code>state['air']</code> — Air</td><td colspan="4">&gt; 16&nbsp;kHz</td></tr>
+<tr><td colspan="7" class="grouprow"><b>8 faixas finas</b> — 0..1, cada uma <b>relativa ao próprio pico recente</b> (auto-gain por banda: sobe na hora, decai por <code>PEAK_DECAY</code> 0.999/bloco), então uma banda estruturalmente mais forte não fica grudada em 1.0. Release interpolado de <code>SMOOTHING_MIN</code> (Sub-bass) a <code>SMOOTHING_MAX</code> (Air); attack ×0.4. Range <code>[lo, hi)</code> de cada uma em <code>FREQ_BAND_HZ</code> (<code>tuning.py</code>), <b>editável por faixa</b> nas barras do dashboard (clica pra arrastar dali; empurra a vizinha nos dois sentidos) — os Hz abaixo são só o default. Com <code>HZ_OVERLAP=0</code> não se sobrepõem mas podem deixar buraco (cinza); com <code>=1</code>, livres. Checkbox "ativar" (<code>BANDS_ENABLED</code>) zera as 8 sem apagar as ranges.</td></tr>
+<tr><td><code>u_subbass</code></td><td colspan="2"><code>state['subbass']</code> — Sub-bass</td><td colspan="4">20 – 105&nbsp;Hz</td></tr>
+<tr><td><code>u_lowmid</code></td><td colspan="2"><code>state['lowmid']</code> — Low-mid</td><td colspan="4">105 – 393&nbsp;Hz</td></tr>
+<tr><td><code>u_midrange</code></td><td colspan="2"><code>state['midrange']</code> — Midrange</td><td colspan="4">393&nbsp;Hz – 1.47&nbsp;kHz</td></tr>
+<tr><td><code>u_highmid</code></td><td colspan="2"><code>state['highmid']</code> — High-mid</td><td colspan="4">1.47 – 3.17&nbsp;kHz</td></tr>
+<tr><td><code>u_presence</code></td><td colspan="2"><code>state['presence']</code> — Presence</td><td colspan="4">3.17 – 5.36&nbsp;kHz</td></tr>
+<tr><td><code>u_treble_hi</code></td><td colspan="2"><code>state['treble_hi']</code> — Treble</td><td colspan="4">5.36 – 6.61&nbsp;kHz — sufixo <code>_hi</code> pra não colidir com <code>u_treble</code></td></tr>
+<tr><td><code>u_brilho</code></td><td colspan="2"><code>state['brilho']</code> — Brilliance</td><td colspan="4">6.61 – 8.21&nbsp;kHz</td></tr>
+<tr><td><code>u_air</code></td><td colspan="2"><code>state['air']</code> — Air</td><td colspan="4">8.21 – 20&nbsp;kHz</td></tr>
+<tr><td colspan="7" class="grouprow"><b>canais por instrumento</b> — array fixo de 8 slots pra uma lista de TAMANHO LIVRE (<code>CHANNELS</code> em <code>tuning.py</code>; dashboard → aba áudio → "Canais", adiciona/remove até 8, não precisa pré-definir). Paralelo às faixas acima, não as substitui — só entra em cena quando o canal tem uma source do PulseAudio ligada (senão o slot fica 0 e a variável original segue intocada).</td></tr>
+<tr><td><code>u_chan[i]</code></td><td><code>float[8]</code> 0..1</td><td><code>state['chan'][i]</code></td><td>—</td><td>RMS suavizado (<code>SMOOTHING</code>) do canal <i>i</i>, se tiver source; senão 0</td><td>mesma do RMS acima</td><td>nível do canal <i>i</i> (instrumento isolado, ex. bumbo).</td></tr>
+<tr><td><code>u_chan_hit[i]</code></td><td><code>float[8]</code> 0..1</td><td><code>state['chan_hit'][i]</code></td><td>—</td><td>onset: mesmo detector do <code>u_kick</code>, agora sobre o RMS full-band do canal</td><td>nenhuma — ataque instantâneo</td><td><b>pulso de batida</b> do canal <i>i</i>, não nível.</td></tr>
+<tr><td colspan="7">Canal com <b>"saída"</b> escolhida (<code>kick</code>/<code>amp</code>/<code>bass</code>/<code>mid</code>/<code>treble</code>/uma das 8 faixas) <b>substitui</b> essa variável acima ENQUANTO tiver source bound — ex. um canal "bumbo" com saída <code>kick</code> troca o <code>u_kick</code> estimado por FFT pelo onset real do stem isolado.</td></tr>
+<tr id="u_fx"><td colspan="7" class="grouprow"><b>potenciômetros de efeito</b> — <code>u_fx_&lt;nome&gt;</code> <code>float</code> 0..1, <b>1.0 = cheio</b>. Um por nome no cabeçalho <code>// fx:</code> do shader (<code>dash_data.parse_fx_manifest</code>); o shader multiplica a intensidade do efeito correspondente por ele. Valor <b>por par fonte/shader</b> em <code>BINDINGS[fonte].fx[shader]</code> (<code>tuning.py</code>), editado na <a href="#vis-effects">aba Visuals</a> (ausente = 1.0). Nome sem <code>uniform</code> declarado no GLSL → loc <code>-1</code> → <code>glUniform1f</code> vira no-op (anotar efeito por efeito, sem quebrar). Não vem da thread de áudio — é knob puro (futuro: <a href="#midi-maybe">MIDI</a>). O <code>image.frag</code> hoje declara: <code>wave</code>, <code>flow</code>, <code>rgbsplit</code>, <code>channels</code>, <code>scanlines</code>, <code>grain</code>, <code>vignette</code>, <code>grayscale</code>, <code>layer</code>.</td></tr>
+<tr><td><code>u_fx_grain</code></td><td><code>float</code> 0..1</td><td><code>BINDINGS[fonte].fx[shader]['grain']</code></td><td>—</td><td>knob (dash), sem auto-gain</td><td>nenhuma</td><td>ex.: multiplica <code>grain_amt</code> do EFEITO 4. 0 corta o grão, 1 deixa como o arquivo define.</td></tr>
 <tr id="u_dominant"><td><code>u_dominant</code></td><td><code>vec3</code> 0..1</td><td><code>state['dominant']</code> (<a href="#dominant-thread">cor dominante</a>)</td><td>—</td><td>moda de cor, 5&nbsp;bits/canal, ~10×/s</td><td>—</td><td>cor mais frequente do frame.</td></tr>
 </tbody>
 </table>
@@ -783,9 +905,30 @@ número nasce na <a href="#audio-thread">thread de áudio</a>; constantes em
 
 <section id="saida">
 <h3>saída · janela / monitor</h3>
-<p><code>pygame.display.flip()</code> joga o frame renderizado na janela. Modos: janela normal,
-<code>--fullscreen</code>, ou <code>--monitor NOME</code> (sem borda, fixa num monitor — ex. projetor).
-Essa imagem é a única saída do programa.</p>
+<p><code>pygame.display.flip()</code> joga o frame renderizado na janela. Essa imagem é a única saída
+do programa. Modos — no start (flags) OU ao vivo (barra <b>saída</b> no topo do dashboard,
+<code>POST /output</code>, sem reiniciar o processo):</p>
+<ul>
+<li><b>janela</b> — dimensão livre (default = <code>WIDTH×HEIGHT</code> do render), sem monitor fixo;</li>
+<li><b>tela cheia</b> (<code>--fullscreen</code>) — sem borda, tamanho da tela toda inteira
+(<code>pygame.FULLSCREEN</code>);</li>
+<li><b>monitor</b> (<code>--monitor NOME</code>) — sem borda, fixa num monitor (ex. projetor); com
+tela cheia usa o tamanho dele, sem tela cheia aceita dimensão custom ancorada nele — os dois
+posicionados por <code>xrandr</code> (via <code>SDL_VIDEO_WINDOW_POS</code>).</li>
+</ul>
+<p>Troca ao vivo: <code>open_window()</code> reabre a janela (<code>pygame.display.quit()</code> +
+<code>init()</code> + <code>set_mode()</code> de novo — mesmo truque do <code>SDL_VIDEO_WINDOW_POS</code>
+do arranque) e regera <code>vbo</code>/<code>tex</code>/<code>program</code>: o contexto GL pode ou
+não sobreviver à troca, então regera sempre em vez de tentar adivinhar. Quem decide é o
+<a href="#loop">main thread</a> (dono do contexto), a cada frame, comparando
+<code>state['output_req']</code> (o que o dashboard pediu, via <code>set_output()</code>) com o
+que está aplicado agora. O dashboard lembra (no navegador) o último tamanho de janela pra
+restaurar quando a tela cheia é desligada.</p>
+<p>Em qualquer modo o shader escala o render pra <code>WIN_W×WIN_H</code> (uniform
+<code>u_resolution</code>). O <a href="#vis-img">dashboard</a> (aba imagem → <b>Saída</b>) mostra
+<code>state['output']</code>: resolução do render, tamanho/posição da janela, modo, fps medido,
+status do shader, e a lista de monitores (nome · <code>WxH</code> · <code>+x+y</code> · primário) —
+é o que usar pra decidir onde/como a imagem sai.</p>
 </section>
 </div>
 
@@ -797,6 +940,28 @@ Essa imagem é a única saída do programa.</p>
 <p><b>Imagem — só global</b> — cor média, simetria, clipping, correlação R/G/B, centro de massa do brilho, coloridez (Hasler–Süsstrunk), nº de cores únicas, mudança de cor, tons quentes/pele.</p>
 <p><b>Imagem — distribuições</b> — histograma de matiz (12), de brilho (16), FFT-2D por canal RGB (20 anéis), orientação de borda (9).</p>
 <p><b>Convenção GLSL</b> — <code>u_mouse</code>, <code>u_texture_1…</code>, buffer de feedback (pingpong da Fase 3), <code>u_tex0_resolution</code>.</p>
+</details>
+
+<details id="efeitos-maybe" class="maybe">
+<summary><span class="maybe-tag">possibilidade</span> galeria de presets · miniatura de prévia</summary>
+<p>Hoje a <a href="#vis-effects">aba Visuals</a> lista os <code>.frag</code> e as fontes por nome. Uma prévia
+renderizada por preset (thumbnail) daria pra <b>ver</b> a combinação antes de escolher — mas
+precisa de render fora de tela (framebuffer próprio) por arquivo, alimentado com um frame fixo,
+lido de volta com <code>glReadPixels</code>. Custo real (GPU + código); por isso ficou de fora da
+versão que existe. Lista de nomes primeiro; miniatura quando a lista não bastar.</p>
+</details>
+
+<details id="midi-maybe" class="maybe">
+<summary><span class="maybe-tag">possibilidade</span> controlador MIDI → potenciômetros de efeito</summary>
+<p>Um <code>midi_thread</code> (daemon, igual <code>channel_thread</code>) com
+<code>pygame.midi</code> — <b>sem dependência nova</b>, já importável. Loop <code>while running</code>,
+<code>Input.read(64)</code> a cada ~10&nbsp;ms; Control-Change (status <code>0xB0..0xBF</code>) →
+escreve a força do efeito em <code>state['bindings'][fonte]['fx'][shader][nome] = data2/127</code>
+pros pares com um CC bound. Único ponto de escrita: o mesmo <code>state['bindings']</code> que a
+<a href="#vis-effects">aba Visuals</a> já move — nada mais muda. Falta em <code>tuning.py</code>:
+<code>MIDI_DEVICE</code> + um mapa CC → (fonte, shader, efeito). "Learn" (girar o knob pra vincular):
+expor <code>state['midi_last']</code> no <a href="#vis-audio">stream</a> + um botão na aba. Não
+implementado — ainda não há hardware pra testar.</p>
 </details>
 
 <section id="refs">
@@ -894,7 +1059,7 @@ var GLOSS = {
   'rfft': { hit: ['rfft', 'rfftfreq'], d: 'FFT <b>real</b> (<code>np.fft.rfft</code>): quando a entrada é só número real (áudio), metade do espectro é espelho da outra — a <code>rfft</code> calcula só a metade útil, ~2× mais rápida que a <code>fft</code> completa. <code>rfftfreq</code> devolve a frequência em Hz de cada bin desse meio-espectro.' },
   'np-frombuffer': { hit: ['np.frombuffer'], d: 'Lê um bloco de bytes cru como array NumPy <b>sem copiar</b> — o array aponta pros mesmos bytes que vieram do pipe. Transformar os bytes do <code>parec</code>/<code>ffmpeg</code> em números é de graça; só um passo seguinte (dividir, reshape) é que gera dado novo.' },
   'rms': { hit: ['RMS'], d: 'Root Mean Square: raiz da média dos quadrados das amostras do bloco. É a medida de "volume" que segue a energia média do sinal, não o pico. Vira o <code>u_amp</code>.' },
-  'mtime': { hit: ['mtime'], d: '"Modification time": o timestamp de última alteração de um arquivo. O <a href="#loop">loop</a> (pro <code>image.frag</code>) e a <a href="#audio-thread">thread de áudio</a> (pro <code>tuning.py</code>) comparam o <code>mtime</code> a cada volta; mudou → releem e aplicam sem reiniciar (hot-reload).' },
+  'mtime': { hit: ['mtime'], d: '"Modification time": o timestamp de última alteração de um arquivo. O <a href="#loop">loop</a> (pros <code>.frag</code>) e a <a href="#audio-thread">thread de áudio</a> (pro <code>tuning.py</code>) comparam o <code>mtime</code> a cada volta; mudou → releem e aplicam sem reiniciar (hot-reload).' },
   'xrandr': { hit: ['xrandr'], d: 'Ferramenta do X11 que lista e configura as saídas de vídeo (monitores): resolução, posição, qual é o primário. O <code>native_synth.py</code> chama no arranque pra saber o tamanho da tela e onde fica cada monitor.' },
   'wmctrl': { hit: ['wmctrl'], d: 'Cliente de linha de comando do gerenciador de janelas do X11: lista as janelas abertas com título, posição e tamanho. Usado no modo <code>--window</code> pra achar a janela por um pedaço do título.' },
   'xwininfo': { hit: ['xwininfo'], d: 'Utilitário do X11 que mostra os dados de uma janela (id, posição, tamanho) — no modo interativo você clica na janela. O <code>native_synth.py</code> usa quando o <code>--window</code> vem sem título.' },
@@ -903,8 +1068,9 @@ var GLOSS = {
   'x11': { hit: ['X11', 'servidor X'], d: 'O <b>sistema de janelas</b> clássico do Linux ("X" ou "X.Org"): desenha as janelas e distribui teclado/mouse. <code>xrandr</code>, <code>wmctrl</code>, <code>xwininfo</code>, <code>x11grab</code> e o ImageMagick <code>import</code> todos falam com ele. O sucessor é o <i>Wayland</i>.' },
   'wayland': { hit: ['Wayland'], d: 'O <b>substituto moderno do X11</b>. Mais fechado por segurança (um app não lê a tela dos outros à toa) — por isso <code>x11grab</code> não funciona nele; pra capturar tela usa-se <code>kmsgrab</code> ou o <i>portal</i> do PipeWire. O <code>native_synth.py</code> hoje assume X11.' },
   'pygame': { hit: ['pygame'], d: 'Biblioteca Python que abre uma janela, cria o contexto <b>OpenGL</b> e entrega os eventos de teclado/mouse. Aqui é só a moldura: o <code>native_synth.py</code> usa pra ter uma janela GL onde o <code>image.frag</code> roda e pra saber quando você apertou ESC ou fechou.' },
-  'gnome-terminal': { hit: ['gnome-terminal'], d: 'O emulador de terminal padrão do GNOME. O <code>native_synth.py</code> abre uma janela dele só pra <b>exibir</b> a análise da imagem — escreve os medidores num FIFO, o terminal mostra. Sem ele (ou sem <code>$DISPLAY</code>), esse painel fica desligado e o resto segue.' },
-  'display-env': { hit: ['$DISPLAY'], d: 'Variável de ambiente que diz <b>qual tela X11</b> usar (normalmente <code>:0</code>). Sem ela (ex. via SSH sem X) não dá pra abrir janela — o <code>native_synth.py</code> detecta e pula o painel de imagem.' },
+  'sse': { hit: ['SSE', 'text/event-stream', 'EventSource'], d: '<i>Server-Sent Events</i>: um <code>GET</code> HTTP que o servidor <b>não fecha</b> — vai empurrando linhas <code>data: …</code> pelo mesmo cano. O <code>dash_server.py</code> streama o <code>state</code> em JSON ~20×/s por aí; o navegador (<code>EventSource</code>) recebe e reconecta sozinho se cair. Mais simples que WebSocket e só num sentido, que é o que o painel precisa (os controles voltam por <code>POST</code> separado).' },
+  'http-server': { hit: ['http.server', 'ThreadingHTTPServer', 'dash_server'], d: 'Módulo da <b>stdlib do Python</b> — servidor HTTP mínimo, sem dependência. O <code>dash_server.py</code> usa o <code>ThreadingHTTPServer</code> (um thread por conexão) num thread daemon dentro do próprio <code>native_synth.py</code>: serve o <code>dash.html</code>, o stream <a href="#vis-audio">SSE</a>, e recebe os <code>POST</code> que gravam no <code>tuning.py</code>.' },
+  'display-env': { hit: ['$DISPLAY'], d: 'Variável de ambiente que diz <b>qual tela X11</b> usar (normalmente <code>:0</code>). Sem ela (ex. via SSH sem X) não dá pra abrir janela — o <code>native_synth.py</code> detecta e degrada.' },
   'bin': { hit: ['bins', 'bin'], d: 'Cada "gaveta" de frequência que a <i>FFT</i> devolve. Bloco de 1024 amostras a 44,1&nbsp;kHz → ~512 bins de <b>~43&nbsp;Hz cada</b>. <code>bass</code>/<code>mid</code>/<code>treble</code> são médias de faixas de bins; no grave uma faixa estreita pode não conter bin nenhum, daí o "bin mais próximo".' },
   'uniform': { hit: ['uniforms', 'uniform'], d: 'Variável que a CPU <b>envia pra GPU</b> antes de desenhar o frame e que fica <b>igual pra todos os pixels</b> daquele frame (por isso "uniforme"). O <a href="#loop">loop</a> sobe <code>u_time</code>, <code>u_amp</code>, a textura de vídeo… e o <code>image.frag</code> lê. Muda de frame pra frame, não de pixel pra pixel — isso é o <code>gl_FragCoord</code>.' },
   'glsl': { hit: ['GLSL'], d: 'A linguagem dos shaders de GPU (OpenGL Shading Language) — parecida com C, com tipos de vetor (<code>vec2</code>, <code>vec3</code>) e funções de gráfica (<code>mix</code>, <code>fract</code>, <code>texture2D</code>). O <code>image.frag</code> é um <b>fragment shader</b>: uma função que roda 1× por pixel e devolve a cor dele.' },

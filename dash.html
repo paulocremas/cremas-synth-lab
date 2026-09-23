@@ -1,0 +1,1973 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PRISMA!</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<!--
+  Dashboard interativo do native_synth. Serve por dash_server.py (http://127.0.0.1:8765).
+  - EventSource('/events'): stream do state (~14 Hz, DASH_EVERY_N_CHUNKS no native_synth;
+    SSE re-poll a 20 Hz). d.audio = dash_data.audio_dash_data(); d.image = native_synth.image_dash_data().
+  - <input type=range>: potenciometro digital nativo; POST /knob reescreve tuning.py
+  - Uma aba so, com tabs Audio/Image no header (troca so o data-panel do body, ver CSS).
+    ?panel=audio | ?panel=image -> forca uma secao fixa, usado pelos popups (shift+click na tab).
+  - live-reload: editou este arquivo -> a aba recarrega sozinha (html_mtime no stream)
+  Sem framework, sem CDN — mesma pegada do webcam.html.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #111; color: #ddd;
+         font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 12px;
+           border-bottom: 1px solid #333; position: sticky; top: 0; background: #111; z-index: 1; }
+  header b { color: #fff; }
+  header button { background: #222; color: #bbb; border: 1px solid #444; border-radius: 4px;
+                  padding: 3px 8px; cursor: pointer; font: inherit; }
+  header button:hover { background: #2c2c2c; color: #fff; }
+  .tabs button.active { background: #2c2c2c; color: #fff; border-color: #4a8; }
+  body.popup .tabs { display: none; }
+  #rate { margin-left: auto; font-size: 11px; color: #888; }
+  #conn { font-size: 11px; color: #6a6; }
+  #conn.down { color: #c55; }
+  #iobar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+           padding: 8px 12px; border-bottom: 1px solid #2a2a2a; background: #161616;
+           position: sticky; top: 33px; z-index: 1; font-size: 11px; }
+  #iobar label { color: #888; display: flex; align-items: center; gap: 6px; }
+  main { padding: 14px; max-width: 1180px; }
+  section { margin-bottom: 26px; }
+  h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #888;
+       margin: 20px 0 8px; border-bottom: 1px solid #2a2a2a; padding-bottom: 4px; }
+  h2:first-child { margin-top: 0; }
+  h3 { font-size: 11px; color: #9a8; margin: 14px 0 6px; letter-spacing: .06em; }
+  h4 { font-size: 10px; color: #888; margin: 0 0 6px; letter-spacing: .08em; text-transform: uppercase; }
+
+  .track { display: block; background: #1c1c1c; border-radius: 3px; height: 11px; overflow: hidden; flex: 1; min-width: 0; }
+  .fill { display: block; height: 100%; width: 0; background: #4a8; transition: width .09s linear; }
+  .cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .cell .n { color: #888; font-size: 11px; white-space: nowrap; min-width: 40px; text-align: right; }
+
+  .meter { display: grid; grid-template-columns: 96px 1fr 60px; gap: 8px; align-items: center; margin: 3px 0; }
+  .meter .lbl { color: #999; text-align: right; }
+  .meter .val { color: #777; font-size: 11px; }
+
+  .chanrow { display: grid; grid-template-columns: 90px 1fr 1fr 1fr 40px 10px 20px; gap: 6px 8px;
+             align-items: center; margin: 3px 0; }
+  .chanrow input[type=text] { min-width: 0; }
+  .chanrow .val { color: #777; font-size: 11px; text-align: right; }
+  .chanrow .hit { width: 9px; height: 9px; border-radius: 50%; background: #333; }
+  .chanrow .hit.on { background: #e85; }
+  .chanrow .rm { padding: 1px 5px; }
+  #ranges-wrap.dim { opacity: .45; }
+
+  .faixas { display: grid; grid-template-columns: 92px repeat(4, minmax(108px, 1fr)) 26px; gap: 4px 12px; align-items: center; }
+  .faixas .head, .spectro .head { color: #888; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+                  border-bottom: 1px solid #2a2a2a; padding-bottom: 3px; }
+  .faixas .name { text-align: right; color: #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spectro { display: grid; grid-template-columns: 64px minmax(160px, 1fr) minmax(160px, 1fr); gap: 2px 12px; align-items: center; }
+  .spectro .hz { text-align: right; font-size: 11px; }
+
+  .ovl { display: block; color: #aaa; font-size: 12px; margin: 2px 0 8px; cursor: pointer; }
+  .ovl input { accent-color: #4a8; vertical-align: middle; }
+  .ranges { display: grid; grid-template-columns: 74px 1fr 58px 8px 58px;
+            gap: 22px 9px; align-items: center; margin-top: 6px; }
+  .ranges .rn { text-align: right; color: #bbb; font-size: 12px; }
+  .ranges .sep { text-align: center; color: #666; }
+  .ranges input { width: 100%; background: #1c1c1c; color: #ddd; border: 1px solid #444;
+                  border-radius: 4px; padding: 2px 3px; font: inherit; }
+  .ranges.rulerrow { gap: 0 9px; margin: 2px 0 0; }
+  .ranges.rulerrow i { font-style: normal; text-align: right; color: #666; font-size: 10px; }
+  #hzruler { position: relative; height: 13px; border-bottom: 1px solid #2a2a2a; }
+  #hzruler span { position: absolute; transform: translateX(-50%); bottom: 1px;
+                  font-size: 9px; color: #777; }
+  #bandmap { position: relative; height: 15px; margin: 3px 0 6px; background: #1c1c1c;
+             border-radius: 3px; overflow: hidden; }
+  /* cinza = buraco (nenhuma faixa). onde 2+ faixas se sobrepoem fica mais claro (screen). */
+  #bandmap .m { position: absolute; top: 0; height: 100%; opacity: .7; mix-blend-mode: screen; }
+  .bar { position: relative; height: 10px; background: #1c1c1c; border-radius: 5px;
+         cursor: pointer; touch-action: none; }
+  .bar .seg { position: absolute; top: 0; height: 100%; border-radius: 5px; opacity: .82; pointer-events: none; }
+  .bar .thumb { position: absolute; top: 50%; width: 13px; height: 13px; margin: -7px 0 0 -7px;
+                border-radius: 50%; background: #eee; border: 2px solid #1a1a1a; cursor: ew-resize;
+                touch-action: none; }
+  .bar .thumb:hover { background: #fff; }
+  .bar .thumb .tl { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+                    font-size: 9px; color: #bbb; white-space: nowrap; pointer-events: none; }
+  .bar .hzhint { position: absolute; bottom: 14px; transform: translateX(-50%); font-size: 9px;
+                 color: #7c7c7c; white-space: nowrap; pointer-events: none; }
+
+  .knob { display: grid; grid-template-columns: 1fr 60px; gap: 4px 10px; margin: 9px 0; }
+  .knob label { grid-column: 1 / -1; color: #aaa; }
+  .knob label small { color: #666; }
+  .knob input { width: 100%; accent-color: #4a8; }
+  .knob .kv { text-align: right; color: #cda; font-size: 12px; }
+
+  .swatch { display: inline-block; width: 46px; height: 20px; border-radius: 3px; border: 1px solid #333; vertical-align: middle; }
+  .io { color: #777; font-size: 11px; margin: 8px 0; }
+  .io span, .txtrow b { color: #cda; font-weight: normal; }
+  .insel { background: #1c1c1c; color: #ddd; border: 1px solid #444; border-radius: 4px;
+           padding: 2px 4px; font: inherit; max-width: 340px; }
+  .ibtn { background: #222; color: #bbb; border: 1px solid #444; border-radius: 4px;
+          padding: 1px 6px; cursor: pointer; font: inherit; }
+  .ibtn:hover { background: #2c2c2c; color: #fff; }
+  .txtrow { color: #888; font-size: 12px; margin: 3px 0; }
+  .txtrow .lbl { display: inline-block; width: 92px; text-align: right; color: #999; margin-right: 10px; }
+  .note { color: #666; margin-top: 10px; font-size: 11px; max-width: 46em; }
+
+  .grids { display: flex; flex-wrap: wrap; gap: 14px; }
+  .gbox { width: 108px; }
+  .gbox .gh { display: flex; justify-content: space-between; font-size: 10px; color: #aaa; margin-bottom: 3px; }
+  .gbox .gh .gtot { color: #cda; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+  .g3 div { height: 21px; border-radius: 2px; background: #222; }
+
+  .hists { display: flex; flex-wrap: wrap; gap: 28px; }
+  .hist { min-width: 210px; }
+  .hrow { display: grid; grid-template-columns: 46px 1fr; gap: 6px; align-items: center; margin: 2px 0; }
+  .hrow.rgb { grid-template-columns: 46px 1fr 1fr 1fr; }
+  .hrow .hl { text-align: right; font-size: 10px; color: #888; }
+
+  main > section { display: none; }
+  body[data-panel="audio"] #audio,
+  body[data-panel="image"] #image,
+  body[data-panel="effects"] #effects,
+  body[data-panel="output-image"] #output-image,
+  body[data-panel="output-lights"] #output-lights { display: block; }
+  .soon { color: #666; font-size: 12px; max-width: 46em; }
+  #shader-list, #media-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-width: 520px; }
+  .subtabs { display: flex; gap: 6px; margin: 4px 0 10px; }
+  .subtabs .ibtn.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
+  .vsub { display: none; }
+  body[data-vsub="sets"] #vis-sets, body[data-vsub="lib"] #vis-lib { display: block; }
+  .editing { color: #999; font-size: 12px; margin: 14px 0 0; padding: 6px 8px; border-left: 2px solid #4a8; }
+  .editing b { color: #fff; }
+  h3.subh { font-size: 11px; color: #888; font-weight: normal; letter-spacing: .08em; text-transform: uppercase;
+            margin: 10px 0 4px; }
+  .selname { color: #4a8; text-transform: none; letter-spacing: normal; }
+  .sh-row > .name.picked { border-color: #58c; color: #fff; }
+  .sh-row .ibtn.rm { color: #777; padding: 0 6px; }
+  .sh-row .ibtn.rm:hover { color: #c55; border-color: #533; }
+  .addrow { margin: 4px 0 2px 24px; }
+  .addrow select.insel { color: #8a8; }
+  .setbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; font-size: 11px; color: #999; }
+  .setbar select.insel { max-width: 160px; }
+  .setbar input.insel { width: 90px; }
+  .sh-row { display: flex; align-items: center; gap: 6px; }
+  .sh-row > .name { flex: 1; text-align: left; }
+  .sh-row .mtype { font-size: 13px; line-height: 1; width: 18px; text-align: center; filter: grayscale(.15); }
+  .sh-row .fit { font-size: 11px; color: #999; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+  .sh-row .ovl { font-size: 11px; color: #999; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+  .sh-row .ovl input[type=range] { width: 70px; }
+  .sh-row .ovl .pct { width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+  .sh-row .ovl .ord { min-width: 12px; color: #6a6; font-weight: bold; }
+  .sh-row .ovl select.blend { font-size: 11px; padding: 1px 2px; }
+  .sh-row > .name.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
+  .sh-row .keycap { min-width: 15px; text-align: center; color: #4a8; font-size: 11px; }
+  .sh-gear { min-width: 22px; }
+  .sh-gear.open { border-color: #4a8; color: #fff; }
+  .sh-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 4px 10px;
+              padding: 6px 8px; border-left: 2px solid #333; font-size: 11px; color: #999; }
+  .sh-panel input.insel { width: 130px; }
+  .sh-panel input.keyin { width: 34px; text-align: center; }
+  .sh-panel .del { color: #c55; border-color: #533; }
+  .sh-panel .del.arm { background: #c55; color: #111; }
+  h2.withbtn { display: flex; align-items: center; gap: 10px; }
+  h2.withbtn .ibtn { margin-left: auto; text-transform: none; letter-spacing: normal; }
+  #new-fx-msg, #media-msg, #new-trans-msg { font-size: 11px; }
+  #new-fx-msg.err, #media-msg.err, #new-trans-msg.err { color: #c55; }
+
+  /* engrenagem por faixa/amp/kick -> popup <dialog> com todos os knobs daquele alvo */
+  .fx-gear { justify-self: center; background: none; border: 1px solid #3a3a3a; color: #888;
+             border-radius: 4px; cursor: pointer; font: inherit; padding: 0 4px; line-height: 1.4; }
+  .fx-gear:hover { color: #fff; border-color: #4a8; }
+  h2 .fx-gear { margin-left: 8px; }
+  dialog.tweak { border: 1px solid #444; border-radius: 8px; padding: 0; background: #161616;
+                 color: #ddd; width: min(440px, calc(100vw - 32px)); font: inherit; }
+  dialog.tweak::backdrop { background: rgba(0, 0, 0, .6); }
+  dialog.tweak .th { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+                     border-bottom: 1px solid #2a2a2a; }
+  dialog.tweak .th b { color: #fff; }
+  dialog.tweak .th .ibtn { margin-left: auto; }
+  dialog.tweak .tbody { padding: 6px 14px 16px; }
+  dialog.tweak .tbody .knob { margin: 12px 0; }
+  dialog.tweak .tbody h4 { margin: 14px 0 2px; }
+  /* range Hz no popup: so as caixas lo/hi, centralizadas (a barra visual fica na secao "Ranges") */
+  dialog.tweak .poprange .pr-row { grid-column: 1 / -1; display: flex; align-items: center;
+                                   justify-content: center; gap: 8px; margin-top: 6px; }
+  dialog.tweak .poprange input { width: 78px; background: #1c1c1c; color: #ddd; border: 1px solid #444;
+                                 border-radius: 4px; padding: 3px 4px; font: inherit; text-align: center; }
+  dialog.tweak .poprange .sep { color: #666; }
+</style>
+
+<header>
+  <b>native_synth</b> dash
+  <span class="tabs" title="shift+click abre a aba num popup a parte">
+    <button class="tab" data-tab="audio" onclick="tabClick(event, 'audio')">Source Audio</button>
+    <button class="tab" data-tab="image" onclick="tabClick(event, 'image')">Source Image</button>
+    <button class="tab" data-tab="effects" onclick="tabClick(event, 'effects')">Visuals</button>
+    <button class="tab" data-tab="output-image" onclick="tabClick(event, 'output-image')">Output Image</button>
+    <button class="tab" data-tab="output-lights" onclick="tabClick(event, 'output-lights')">Output Lights</button>
+  </span>
+  <span id="rate">— Hz</span>
+  <span id="conn" class="down">offline</span>
+</header>
+
+<div id="iobar">
+  <label>áudio <select id="sel-audio" class="insel"></select></label>
+  <button class="ibtn" onclick="loadInputs()" title="recarregar lista">&#8635;</button>
+  <label>saída <select id="out-mon" class="insel"></select></label>
+  <label>dimensão <input type="number" id="out-w" class="insel" style="width:60px" min="160" step="10">
+    &times; <input type="number" id="out-h" class="insel" style="width:60px" min="120" step="10"></label>
+  <button class="ibtn" id="out-fitmedia" disabled title="sem mídia ativa">= mídia</button>
+  <label><input type="checkbox" id="out-full"> tela cheia</label>
+</div>
+
+<main>
+  <section id="audio">
+    <h2>KICK <button class="fx-gear" onclick="openTweak('kick')" title="ajustes do kick">⚙</button></h2>
+    <div id="kick"></div>
+
+    <h2>AMP &mdash; RMS do sinal inteiro (não é uma faixa)</h2>
+    <div class="faixas" id="amp">
+      <div class="head"></div><div class="head">bruto</div><div class="head">final</div>
+      <div class="head">smooth</div><div class="head">Δ bruto&rarr;final</div><div class="head"></div>
+    </div>
+
+    <h2>Faixas de mixagem</h2>
+    <div class="faixas" id="faixas">
+      <div class="head"></div><div class="head">bruto</div><div class="head">final</div>
+      <div class="head">smooth</div><div class="head">Δ bruto&rarr;final</div><div class="head"></div>
+    </div>
+
+    <h2>Espectrograma (24 faixas log, agudo &rarr; grave)</h2>
+    <div class="spectro" id="spectro">
+      <div class="head"></div><div class="head">absoluto (dB real)</div>
+      <div class="head">relativo (% do pico do frame)</div>
+    </div>
+
+    <h2>Ranges das faixas de mixagem (Hz)</h2>
+    <label class="ovl"><input type="checkbox" id="bands-cb" checked> ativar (desliga = u_subbass..u_air ficam 0 no shader,
+      sem apagar as ranges)</label>
+    <label class="ovl"><input type="checkbox" id="ovl-cb"> permitir sobreposição (overlap)</label>
+    <div id="ranges-wrap">
+      <div class="ranges rulerrow"><i></i><div id="hzruler"></div><i></i><i></i><i></i></div>
+      <div class="ranges rulerrow"><i>resumo</i><div id="bandmap"></div><i></i><i></i><i></i></div>
+      <div class="ranges" id="ranges"></div>
+    </div>
+    <p class="note" id="ovl-note"></p>
+
+    <h2>Canais (por instrumento)</h2>
+    <p class="note">Adiciona quantos quiser (até 8). Sem source: canal ocioso. "saída": qual
+      variável esse canal passa a SUBSTITUIR (kick, faixas, amp/bass/mid/treble) enquanto tiver
+      source ligada — sem source, a variável original continua normal. Não mexe nas faixas acima.</p>
+    <div id="channels"></div>
+    <button class="ibtn" onclick="addChannel()">+ adicionar canal</button>
+
+    <h2>Knobs &mdash; dinâmica (grava em tuning.py)</h2>
+    <div id="knoblist"></div>
+  </section>
+
+  <section id="image">
+    <h2>Saída (output) &mdash; onde/tamanho a imagem sintetizada aparece</h2>
+    <div id="output"></div>
+
+    <h2>Resumo</h2>
+    <div class="io">
+      dominante <span class="swatch" id="sw-dom"></span> <span id="dom-rgb">&mdash;</span>
+      &nbsp;&nbsp; média <span class="swatch" id="sw-mean"></span> <span id="mean-rgb">&mdash;</span>
+    </div>
+    <div id="img-meters"></div>
+    <div id="img-text"></div>
+
+    <h2>Onde na tela (grid 3&times;3 &mdash; mesmos medidores, por região)</h2>
+    <div class="grids" id="grids"></div>
+
+    <h2>Análise espacial</h2>
+    <div class="hists" id="hists"></div>
+  </section>
+
+  <section id="effects">
+    <!-- sub-abas: Sets (cenas; editar o set ativo) | Biblioteca (arquivos: adicionar/remover). Ver showSub(). -->
+    <div class="subtabs">
+      <button class="ibtn" data-vsub="sets" onclick="showSub('sets')">Sets</button>
+      <button class="ibtn" data-vsub="lib" onclick="showSub('lib')">Biblioteca</button>
+    </div>
+
+    <div id="vis-sets" class="vsub">
+      <h2 class="withbtn">Sets &mdash; cenas
+        <button class="ibtn" onclick="loadScenes()" title="recarregar">&#8635;</button></h2>
+      <p class="note">Um <b>set</b> guarda tudo desta aba: quais fontes/mídias estão marcadas (a
+        saída), os shaders de cada uma com opacidade e modo, e a força dos efeitos. <b>Clique</b> num
+        set pra entrar nele (com a <b>transição</b> escolhida na linha; <b>(padrão)</b> segue a da
+        Biblioteca). O set ativo <b>auto-salva</b>: tudo que você mexer abaixo grava nele. <b>+ set</b>
+        copia o estado atual num set novo. Engrenagem: renomear, tecla, apagar. Grava <b>SCENES</b> / <b>SCENE</b>.</p>
+      <div id="scene-list"></div>
+      <input type="text" id="new-scene-name" class="insel" placeholder="nome do novo set"
+        style="width:180px" onkeydown="if(event.key==='Enter')newScene()">
+      <button class="ibtn" onclick="newScene()" title="cria um set com o estado atual e entra nele">+ set</button>
+      <span id="new-scene-msg"></span>
+      <p class="editing">editando o set <b id="scene-cur">&mdash;</b> &mdash; tudo abaixo grava nele</p>
+
+      <h2 class="withbtn">Imagem &mdash; fontes e mídias
+        <button class="ibtn" onclick="loadInputs(); loadMedia()" title="recarregar listas">&#8635;</button></h2>
+      <p class="note"><b>×</b> tira a fonte/mídia/shader <b>deste set</b> (some daqui e da saída, mas o
+        que estava configurado fica lembrado); <b>+ adicionar ao set…</b> traz de volta. Arquivo novo da
+        Biblioteca entra no set ativo.</p>
+      <p class="note">A saída é <b>só o que está marcado</b> (<b>camada</b>): cada fonte/mídia marcada
+        entra por cima das anteriores, com a opacidade do slider (o número é a posição, 1 = mais
+        embaixo). <b>Clique no nome</b> = selecionar: a lista de efeitos abaixo passa a ser a
+        <i>dessa</i> fonte/mídia (não muda a saída), e a aba Source Image analisa ela.
+        <b>preencher</b> = estica a imagem pra cobrir a saída (desmarcado = encaixa inteira, com
+        margens); <b>rebate</b> (vídeo) = vai e volta em loop. Esses dois são da fonte/arquivo: valem
+        em todos os sets.</p>
+      <h3 class="subh">Fontes</h3>
+      <div id="video-list"></div>
+      <h3 class="subh">Mídias</h3>
+      <div id="media-pick"></div>
+
+      <h2>Efeitos de <span id="sel-name" class="selname">&mdash;</span></h2>
+      <p class="note">Os shaders <b>desta</b> fonte/mídia (cada uma tem os seus, lembrados mesmo
+        desmarcada). <b>camada</b> = aplica o shader sobre ela; slider = opacidade; menu = modo de
+        mistura (<b>normal</b> cobre, 100% esconde o de baixo; <b>tela</b>/<b>soma</b>/<b>clarear</b>
+        acendem por cima sem apagar; <b>multiplicar</b> escurece). Sem nenhum marcado, ela entra crua.
+        <b>Clique no nome</b> = mostra a força dos efeitos desse shader abaixo.</p>
+      <div id="shader-list"></div>
+
+      <h2>Força dos efeitos &mdash; <span id="fx-title" class="selname">&mdash;</span></h2>
+      <p class="note">Um slider por efeito do cabeçalho <b>// fx:</b> do shader (0 = desligado,
+        1 = cheio) &mdash; vira <b>u_fx_&lt;nome&gt;</b>. Vale para esse shader <b>nessa</b> fonte/mídia.</p>
+      <div id="fx-list"></div>
+    </div>
+
+    <div id="vis-lib" class="vsub">
+      <h2 class="withbtn">Mídia &mdash; imagens e vídeos
+        <button class="ibtn" onclick="loadMedia()" title="recarregar">&#8635;</button></h2>
+      <p class="note">Arquivos em <b>media/</b>. Engrenagem: renomear, excluir (sai também dos sets
+        que a usam). <b>preencher</b> e <b>rebate</b> ficam na lista de Mídias da sub-aba Sets.
+        Grava <b>MEDIA</b>.</p>
+      <div id="media-list"></div>
+      <input type="file" id="media-file" hidden
+        accept="image/*,video/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.mp4,.mov,.mkv,.webm,.avi,.m4v">
+      <button class="ibtn" onclick="mediaFile()">+ imagem ou vídeo</button>
+      <span id="media-msg"></span>
+
+      <h2 class="withbtn">Efeitos &mdash; arquivos .frag
+        <button class="ibtn" onclick="loadShaders()" title="recarregar lista de arquivos">&#8635;</button></h2>
+      <p class="note">Arquivos em <b>shaders/</b>: <b>image.frag</b> (base) + <b>presets/default/*.frag</b>.
+        Cabeçalho <b>// fx: a, b</b> = sliders de força. Editar o arquivo aplica ao vivo.
+        "+ criar .frag" gera um template e o põe como shader do set ativo.</p>
+      <div id="shader-admin"></div>
+      <input type="text" id="new-fx-name" class="insel" placeholder="nome do novo efeito"
+        style="width:180px" onkeydown="if(event.key==='Enter')newShader()">
+      <button class="ibtn" onclick="newShader()" title="cria shaders/presets/default/&lt;nome&gt;.frag (template minimo) e o deixa ativo">+ criar .frag</button>
+      <span id="new-fx-msg"></span>
+
+      <h2 class="withbtn">Transições &mdash; entre sets
+        <button class="ibtn" onclick="loadTransitions()" title="recarregar">&#8635;</button></h2>
+      <p class="note">Arquivos <b>.glsl</b> em <b>transitions/</b> (estilo gl-transitions: uma
+        <b>vec4 transition(vec2 uv)</b> com <b>getFromColor</b>/<b>getToColor</b>/<b>progress</b>;
+        cabeçalho <b>// ms: N</b> = duração). Na troca de set, mistura a imagem final do set que sai
+        com a do que entra. Cada set escolhe a sua (ou <b>(padrão)</b>, definido aqui). Grava
+        <b>TRANSITION_DEFAULT</b>.</p>
+      <div class="txtrow"><span class="lbl">padrão</span> <select id="trans-default" class="insel"></select></div>
+      <div id="trans-list"></div>
+      <input type="text" id="new-trans-name" class="insel" placeholder="nome da nova transição"
+        style="width:180px" onkeydown="if(event.key==='Enter')newTransition()">
+      <button class="ibtn" onclick="newTransition()" title="cria transitions/<nome>.glsl (template crossfade)">+ criar .glsl</button>
+      <span id="new-trans-msg"></span>
+    </div>
+  </section>
+
+  <section id="output-image">
+    <h2>Output Image &mdash; a imagem sintetizada (image.frag), como fonte</h2>
+    <label class="ovl"><input type="checkbox" id="outimg-cb"> calcular (~5x/s; lê a imagem já
+      sintetizada e roda os mesmos medidores do Source Image nela — desligado por padrão porque
+      custa GPU a mais, mesmo raro)</label>
+    <p class="note">Vai calibrar o output do mesmo jeito que Source Audio calibra o áudio hoje
+      (ranges, suavização, evitar estouro/sobreposição de cor) antes de virar controle de
+      <b>Output Lights</b>. Sem o checkbox acima ligado (e o app reiniciado desde que essa aba
+      apareceu), os números abaixo ficam zerados.</p>
+
+    <h2>Resumo</h2>
+    <div class="io">
+      dominante <span class="swatch" id="out-sw-dom"></span> <span id="out-dom-rgb">&mdash;</span>
+      &nbsp;&nbsp; média <span class="swatch" id="out-sw-mean"></span> <span id="out-mean-rgb">&mdash;</span>
+    </div>
+    <div id="out-img-meters"></div>
+    <div id="out-img-text"></div>
+
+    <h2>Onde na tela (grid 3&times;3 &mdash; mesmos medidores, por região)</h2>
+    <div class="grids" id="out-grids"></div>
+
+    <h2>Análise espacial</h2>
+    <div class="hists" id="out-hists"></div>
+  </section>
+
+  <section id="output-lights">
+    <h2>Output Lights &mdash; luzes de palco</h2>
+    <p class="soon">Ainda não implementado. Vai consumir o Output Image (e, futuramente, talvez
+      também o Source Audio direto p/ ritmo) e traduzir em DMX/luzes.</p>
+  </section>
+</main>
+
+<dialog id="tweakpop" class="tweak">
+  <div class="th"><b id="tweak-title">—</b>
+    <button class="ibtn" onclick="document.getElementById('tweakpop').close()">fechar ✕</button></div>
+  <div class="tbody" id="tweak-body"></div>
+</dialog>
+
+<dialog id="confirmpop" class="tweak">
+  <div class="th"><b>confirmar</b></div>
+  <div class="tbody">
+    <p id="confirm-msg" style="margin: 2px 0 18px; color: #ddd"></p>
+    <div style="display: flex; gap: 8px; justify-content: flex-end">
+      <button class="ibtn" onclick="document.getElementById('confirmpop').close()">cancelar</button>
+      <button class="ibtn" id="confirm-yes" style="background: #c55; color: #111; border-color: #c55">apagar</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+// guard compartilhado: ms desde o ultimo "mexi nisso local" antes de aceitar o eco do SSE de
+// volta (select-audio/video, canais, saida) — por TEMPO, nao por foco (ver comentario onde e usado)
+const TOUCH_MS = 600;
+const panel = new URLSearchParams(location.search).get('panel');
+if (panel) document.body.classList.add('popup');
+const TAB_TITLES = { audio: 'Source Audio', image: 'Source Image', effects: 'Visuals',
+                     'output-image': 'Output Image', 'output-lights': 'Output Lights' };
+document.title = TAB_TITLES[panel] || 'PRISMA!';
+function pop(p){ window.open('?panel=' + p, p, 'width=960,height=940'); }
+// shift+click numa tab: popup a parte (janela pequena, width/height fixo).
+// ctrl/cmd+click: aba nova do navegador (sem width/height -> o navegador ja abre como aba).
+// click normal: so troca a aba nesta janela.
+function tabClick(e, p){
+  if (e.shiftKey) return pop(p);
+  if (e.ctrlKey || e.metaKey) return window.open('?panel=' + p, '_blank');
+  showTab(p);
+}
+// aba unica: alterna a secao visivel (guarda a ultima escolha p/ recarregar no mesmo lugar);
+// nos popups (?panel=), o botao de tab some via CSS e o painel fica fixo no que veio da URL.
+function showTab(p){
+  document.body.dataset.panel = p;
+  localStorage.setItem('dashPanel', p);
+  document.querySelectorAll('.tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === p));
+}
+showTab(panel || localStorage.getItem('dashPanel') || 'audio');
+
+const fmt = v => String(parseFloat(Number(v).toFixed(4)));
+const rgbStr = a => a ? `rgb(${a[0]},${a[1]},${a[2]})` : '#888';
+const pct = v => Math.max(0, Math.min(100, v * 100)) + '%';
+
+function cell(){
+  const c = document.createElement('div');
+  c.className = 'cell';
+  c.innerHTML = '<span class="track"><span class="fill"></span></span><span class="n">0</span>';
+  return { el: c, fill: c.querySelector('.fill'), n: c.querySelector('.n') };
+}
+function setCell(o, level, text, color){
+  o.fill.style.width = pct(level);
+  if (color) o.fill.style.background = color;
+  o.n.textContent = text;
+}
+// cor de celula do grid — porta gray_bg / temp_bg do native_synth
+function cellBg(v, bipolar){
+  if (bipolar){
+    const t = Math.min(1, Math.abs(v) * 3);
+    const base = v > 0 ? [255,140,80] : [120,170,255];
+    const c = base.map(x => Math.round(128 + (x - 128) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+  const g = Math.round(Math.max(0, Math.min(1, v)) * 255);
+  return `rgb(${g},${g},${g})`;
+}
+function simpleMeter(parent, label){
+  const row = document.createElement('div');
+  row.className = 'meter';
+  row.innerHTML = `<span class="lbl">${label}</span><span class="track"><span class="fill"></span></span><span class="val">0.00</span>`;
+  parent.appendChild(row);
+  return { fill: row.querySelector('.fill'), val: row.querySelector('.val') };
+}
+
+// ============ ÁUDIO ============
+const kickEls = {};
+for (const [key, label, col] of [['final','final','#d84'], ['decay','decay','#888']]){
+  const row = document.createElement('div');
+  row.className = 'meter';
+  row.innerHTML = `<span class="lbl">${label}</span><span class="track"><span class="fill" style="background:${col}"></span></span><span class="val">0.00</span>`;
+  $('#kick').appendChild(row);
+  kickEls[key] = { fill: row.querySelector('.fill'), val: row.querySelector('.val') };
+}
+
+function faixaRow(parent, b, kind){
+  const name = document.createElement('div');
+  name.className = 'name'; name.textContent = b.name; name.style.color = rgbStr(b.rgb);
+  const bruto = cell(), final = cell(), smooth = cell(), delta = cell();
+  const gear = document.createElement('button');
+  gear.className = 'fx-gear'; gear.textContent = '⚙'; gear.title = 'ajustes de ' + b.name;
+  gear.onclick = () => openTweak(kind || b.name);
+  parent.append(name, bruto.el, final.el, smooth.el, delta.el, gear);
+  return { bruto, final, smooth, delta, color: rgbStr(b.rgb) };
+}
+function fillFaixa(r, b){
+  setCell(r.bruto,  b.raw_level, b.raw_mag.toFixed(3), r.color);
+  setCell(r.final,  b.final,     b.final.toFixed(2),   r.color);
+  setCell(r.smooth, b.smoothing, b.smoothing.toFixed(2), '#777');
+  setCell(r.delta,  b.delta,     b.delta.toFixed(2),   '#777');
+}
+let ampRow = null, faixasRows = null;
+function renderFaixas(bands){
+  const amp = bands.find(b => b.name === 'amp');
+  const rest = bands.filter(b => b.name !== 'amp');
+  if (amp){
+    if (!ampRow) ampRow = faixaRow($('#amp'), amp, 'amp');
+    fillFaixa(ampRow, amp);
+  }
+  if (!faixasRows) faixasRows = rest.map(b => faixaRow($('#faixas'), b));
+  rest.forEach((b, i) => fillFaixa(faixasRows[i], b));
+}
+
+let spectroRows = null;
+function buildSpectro(spec){
+  spectroRows = spec.map(s => {
+    const hz = document.createElement('div');
+    hz.className = 'hz'; hz.textContent = s.hz + ' Hz';
+    const abs = cell(), rel = cell();
+    $('#spectro').append(hz, abs.el, rel.el);
+    return { hz, abs, rel };
+  });
+}
+function renderSpectro(spec){
+  if (!spectroRows) buildSpectro(spec);
+  spec.forEach((s, i) => {
+    const r = spectroRows[i], c = rgbStr(s.rgb);  // cor vem do payload a cada frame — segue os ranges
+    r.hz.style.color = c;
+    setCell(r.abs, (s.db + 60) / 100, s.db.toFixed(1) + ' dB', c);
+    setCell(r.rel, s.rel, (s.rel * 100).toFixed(1) + '%', c);
+  });
+}
+
+// ============ SAÍDA (output) ============
+let _outStr = '';
+function renderOutput(o){
+  const sig = JSON.stringify(o || {});
+  if (sig === _outStr) return;          // só re-renderiza quando algo muda (fps ~2x/s)
+  _outStr = sig;
+  renderOutputBar(o);
+  if (!o || !o.window_w){ $('#output').innerHTML = '<div class="txtrow">— sem dados (app iniciando)</div>'; return; }
+  const shBad = o.shader_status && o.shader_status !== 'ok';
+  const mons = (o.monitors || []).map(m =>
+    `<div class="txtrow"><span class="lbl"></span>${m.name} &nbsp; ${m.w}×${m.h} &nbsp; +${m.x}+${m.y}`
+    + (m.primary ? ' <b>*</b>' : '') + '</div>').join('');
+  $('#output').innerHTML =
+    `<div class="txtrow"><span class="lbl">render</span><b>${o.content_w}×${o.content_h}</b> px (textura)</div>`
+    + `<div class="txtrow"><span class="lbl">janela</span><b>${o.window_w}×${o.window_h}</b> px &nbsp;·&nbsp; ${o.mode}`
+      + ` &nbsp;·&nbsp; pos ${o.pos ? o.pos.join(',') : '0,0'}</div>`
+    + `<div class="txtrow"><span class="lbl">fps</span><b>${(o.fps || 0).toFixed(1)}</b> / ${o.fps_target}</div>`
+    + `<div class="txtrow"><span class="lbl">shader</span>${o.shader} &nbsp;·&nbsp; `
+      + `<b style="color:${shBad ? '#c55' : '#6a6'}">${o.shader_status || 'ok'}</b></div>`
+    + `<div class="txtrow"><span class="lbl">monitores</span></div>` + mons
+    + `<p class="note">onde/tamanho: barra "saída" no topo (ao vivo, sem reiniciar). `
+      + `A resolução do render (textura) vem da fonte de vídeo; a janela escala pra caber.</p>`;
+}
+// controles de saída no #iobar (topo): monitor, dimensão, tela cheia — POST /output.
+// guard por TEMPO (TOUCH_MS, ver topo do script): mousedown/input ja conta como "mexendo".
+let outTouched = 0;
+function fillOutMon(monitors, current){
+  const items = [{ id: '', name: '— não fixa (janela normal)' },
+    ...monitors.map(m => ({ id: m.name, name: `${m.name} ${m.w}×${m.h}` + (m.primary ? ' *' : '') }))];
+  fillSel($('#out-mon'), items, current);
+}
+// lembra o ultimo tamanho de JANELA (nao-fullscreen) confirmado, pra restaurar ao sair do
+// fullscreen — localStorage porque e conveniencia de UI, nao config (sobrevive a um reload
+// da aba; nao precisa ir pro tuning.py).
+function saveOutSize(w, h){
+  try { localStorage.setItem('outSize', JSON.stringify({ w, h })); } catch {}
+}
+function loadOutSize(){
+  try { return JSON.parse(localStorage.getItem('outSize')); } catch { return null; }
+}
+let lastOutput = null;
+function renderOutputBar(o){
+  if (!o || !o.window_w) return;
+  lastOutput = o;
+  const md = o.media_dims, fb = $('#out-fitmedia');
+  fb.disabled = !md;
+  fb.title = md ? `janela do tamanho da mídia (${md[0]}×${md[1]}; reduz mantendo a proporção se não couber no monitor)`
+                : 'sem mídia ativa';
+  if (!o.fullscreen) saveOutSize(o.window_w, o.window_h);
+  if (performance.now() - outTouched < TOUCH_MS) return;
+  fillOutMon(o.monitors || [], o.monitor || '');
+  $('#out-full').checked = !!o.fullscreen;
+  $('#out-w').value = o.window_w;
+  $('#out-h').value = o.window_h;
+  $('#out-w').disabled = $('#out-h').disabled = !!o.fullscreen;
+}
+function sendOutput(){
+  outTouched = performance.now();
+  fetch('/output', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ monitor: $('#out-mon').value, fullscreen: $('#out-full').checked,
+                           w: +$('#out-w').value || 0, h: +$('#out-h').value || 0 }) });
+}
+$('#out-mon').addEventListener('mousedown', () => { outTouched = performance.now(); });
+$('#out-mon').addEventListener('change', sendOutput);
+$('#out-full').addEventListener('mousedown', () => { outTouched = performance.now(); });
+$('#out-full').addEventListener('change', () => {
+  const full = $('#out-full').checked;
+  if (!full){
+    const prev = loadOutSize();                    // volta pro tamanho de antes do fullscreen
+    if (prev && prev.w && prev.h){ $('#out-w').value = prev.w; $('#out-h').value = prev.h; }
+  }
+  $('#out-w').disabled = $('#out-h').disabled = full;
+  sendOutput();
+});
+// "= mídia": janela com as dims originais da midia ativa (o.media_dims, via ffprobe). Midia
+// maior que o monitor (ex. 4K num 1080p) reduz mantendo a proporcao; nunca amplia.
+$('#out-fitmedia').addEventListener('click', () => {
+  const o = lastOutput, md = o && o.media_dims;
+  if (!md) return;
+  const mons = o.monitors || [];
+  const mon = mons.find(m => m.name === $('#out-mon').value) || mons.find(m => m.primary) || mons[0];
+  const k = mon ? Math.min(1, mon.w / md[0], mon.h / md[1]) : 1;
+  $('#out-w').value = Math.round(md[0] * k);
+  $('#out-h').value = Math.round(md[1] * k);
+  $('#out-full').checked = false;
+  $('#out-w').disabled = $('#out-h').disabled = false;
+  sendOutput();
+});
+$('#out-w').addEventListener('input', () => { outTouched = performance.now(); });
+$('#out-w').addEventListener('change', sendOutput);
+$('#out-h').addEventListener('input', () => { outTouched = performance.now(); });
+$('#out-h').addEventListener('change', sendOutput);
+
+// ============ OUTPUT IMAGE (calculo pos-shader, ver tuning.OUT_ANALYSIS_ENABLED) ============
+let outimgTouched = 0;
+$('#outimg-cb').addEventListener('mousedown', () => { outimgTouched = performance.now(); });
+$('#outimg-cb').addEventListener('change', () => {
+  outimgTouched = performance.now();
+  fetch('/out-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: $('#outimg-cb').checked }) });
+});
+
+// ============ IMAGEM ============
+// parametrizado por prefixo de id (''  = Source Image; 'out-' = Output Image) pra nao duplicar
+// os ~120 linhas de montagem/render — imgScopes guarda os elementos ja criados de cada aba.
+const imgScopes = {};
+function buildImage(im, p){
+  const M = {};
+  M.symmetry     = simpleMeter($('#' + p + 'img-meters'), 'simetria');
+  M.colorfulness = simpleMeter($('#' + p + 'img-meters'), 'coloridez');
+  M.color_change = simpleMeter($('#' + p + 'img-meters'), 'mud. cor');
+  M.warm         = simpleMeter($('#' + p + 'img-meters'), 'tom quente');
+  M.palette_level= simpleMeter($('#' + p + 'img-meters'), 'paleta');
+
+  const T = {};
+  for (const key of ['clipping','corr','centro']){
+    const d = document.createElement('div'); d.className = 'txtrow';
+    $('#' + p + 'img-text').appendChild(d); T[key] = d;
+  }
+
+  // 8 grids 3x3
+  const G = im.grids.map(g => {
+    const box = document.createElement('div'); box.className = 'gbox';
+    box.innerHTML = `<div class="gh"><span>${g.name}</span><span class="gtot">0</span></div><div class="g3"></div>`;
+    $('#' + p + 'grids').appendChild(box);
+    const g3 = box.querySelector('.g3');
+    const cells = [];
+    for (let i = 0; i < 9; i++){ const c = document.createElement('div'); g3.appendChild(c); cells.push(c); }
+    return { tot: box.querySelector('.gtot'), cells, bipolar: g.bipolar };
+  });
+
+  // 4 histogramas
+  function histCol(title){
+    const col = document.createElement('div'); col.className = 'hist';
+    col.innerHTML = `<h4>${title}</h4>`;
+    $('#' + p + 'hists').appendChild(col); return col;
+  }
+  function histRows(col, items, rgbClass){
+    return items.map(it => {
+      const row = document.createElement('div');
+      row.className = 'hrow' + (rgbClass ? ' rgb' : '');
+      if (rgbClass){
+        row.innerHTML = '<span class="hl"></span>' +
+          '<span class="track"><span class="fill" style="background:#e44"></span></span>' +
+          '<span class="track"><span class="fill" style="background:#4c4"></span></span>' +
+          '<span class="track"><span class="fill" style="background:#69f"></span></span>';
+        return { hl: row.querySelector('.hl'),
+                 fills: [...row.querySelectorAll('.fill')], el: (col.appendChild(row), row) };
+      }
+      row.innerHTML = '<span class="hl"></span><span class="track"><span class="fill"></span></span>';
+      col.appendChild(row);
+      return { hl: row.querySelector('.hl'), fill: row.querySelector('.fill') };
+    });
+  }
+  const hueCol = histCol('matiz (hue)');
+  const hueRows = histRows(hueCol, im.hue_hist);
+  const brightCol = histCol('brilho (V) — claro em cima');
+  const brightRows = histRows(brightCol, im.bright_hist);
+  const specCol = histCol('cores (FFT 2D espacial) — R / G / B');
+  const specRows = histRows(specCol, im.color_spectrum, true);
+  const orientCol = histCol('orientação de borda');
+  const orientRows = histRows(orientCol, im.edge_orient);
+
+  imgScopes[p] = { M, T, G, hueRows, brightRows, specRows, orientRows };
+}
+function renderImage(im, p=''){
+  if (!im || !im.grids) return;
+  if (!imgScopes[p]) buildImage(im, p);
+  const els = imgScopes[p];
+  const s = im.summary;
+
+  $('#' + p + 'sw-dom').style.background = rgbStr(im.dominant);
+  $('#' + p + 'dom-rgb').textContent = `RGB(${im.dominant.join(',')})`;
+  $('#' + p + 'sw-mean').style.background = rgbStr(s.mean_rgb);
+  $('#' + p + 'mean-rgb').textContent = `RGB(${s.mean_rgb.join(',')})`;
+
+  const M = els.M;
+  const setM = (o, v) => { o.fill.style.width = pct(v); o.val.textContent = v.toFixed(2); };
+  setM(M.symmetry, s.symmetry); setM(M.colorfulness, s.colorfulness);
+  setM(M.color_change, s.color_change); setM(M.warm, s.warm); setM(M.palette_level, s.palette_level);
+  M.palette_level.val.textContent = (s.palette_level * 100).toFixed(1) + '%';
+
+  els.T.clipping.innerHTML = `<span class="lbl">clipping</span>estourado <b>${(s.overexposed*100).toFixed(1)}%</b> &nbsp; escuro <b>${(s.underexposed*100).toFixed(1)}%</b>`;
+  els.T.corr.innerHTML = `<span class="lbl">correlação</span>R↔G <b>${s.corr_rg.toFixed(2)}</b> &nbsp; R↔B <b>${s.corr_rb.toFixed(2)}</b> &nbsp; G↔B <b>${s.corr_gb.toFixed(2)}</b>`;
+  els.T.centro.innerHTML = `<span class="lbl">centro</span>x <b>${s.cx.toFixed(2)}</b> &nbsp; y <b>${s.cy.toFixed(2)}</b> &nbsp; (0,0 = sup-esq) &nbsp;·&nbsp; paleta <b>${s.palette_unique}</b>/${s.palette_total}px`;
+
+  im.grids.forEach((g, gi) => {
+    const G = els.G[gi];
+    G.tot.textContent = g.bipolar ? (g.total >= 0 ? '+' : '') + g.total.toFixed(2) : g.total.toFixed(2);
+    let k = 0;
+    for (const row of g.cells) for (const v of row){ G.cells[k++].style.background = cellBg(v, g.bipolar); }
+  });
+
+  im.hue_hist.forEach((h, i) => {
+    els.hueRows[i].hl.textContent = h.deg + '°';
+    els.hueRows[i].fill.style.width = pct(h.level);
+    els.hueRows[i].fill.style.background = rgbStr(h.rgb);
+  });
+  im.bright_hist.forEach((h, i) => {
+    els.brightRows[i].hl.textContent = h.gray;
+    els.brightRows[i].fill.style.width = pct(h.level);
+    els.brightRows[i].fill.style.background = `rgb(${h.gray},${h.gray},${h.gray})`;
+  });
+  im.color_spectrum.forEach((h, i) => {
+    els.specRows[i].hl.textContent = h.radius + 'px';
+    els.specRows[i].fills[0].style.width = pct(h.r);
+    els.specRows[i].fills[1].style.width = pct(h.g);
+    els.specRows[i].fills[2].style.width = pct(h.b);
+  });
+  im.edge_orient.forEach((h, i) => {
+    els.orientRows[i].hl.textContent = h.deg + '°';
+    els.orientRows[i].fill.style.width = pct(h.level);
+    els.orientRows[i].fill.style.background = rgbStr(h.rgb);
+  });
+}
+
+// ============ KNOBS ============
+let activeKnob = null, releaseT = null, flushT = null, lastKnobs = null;
+const pending = {}, knobEls = {};
+let KNOB_SPECS = [];
+// um <input range> -> POST /knob (reescreve tuning.py). Serve pra lista geral e pros popups.
+// `color` (opcional) pinta o trilho/bolinha do slider (cor do alvo — faixa, kick).
+function makeKnobRow(s, parent, color){
+  const row = document.createElement('div');
+  row.className = 'knob';
+  row.innerHTML =
+    `<label>${s.name} <small>&mdash; ${s.label}</small></label>` +
+    `<input type="range" min="${s.min}" max="${s.max}" step="${s.step}">` +
+    `<span class="kv">&mdash;</span>`;
+  parent.appendChild(row);
+  const inp = row.querySelector('input'), kv = row.querySelector('.kv');
+  if (color) inp.style.accentColor = color;
+  knobEls[s.name] = { inp, kv };
+  if (lastKnobs && s.name in lastKnobs){ inp.value = lastKnobs[s.name]; kv.textContent = fmt(lastKnobs[s.name]); }
+  inp.addEventListener('input', () => {
+    kv.textContent = fmt(inp.value);
+    pending[s.name] = inp.value;
+    activeKnob = s.name;
+    clearTimeout(releaseT); releaseT = setTimeout(() => activeKnob = null, 600);
+    if (!flushT) flushT = setTimeout(flush, 80);
+  });
+}
+fetch('/knobs').then(r => r.json()).then(specs => {
+  KNOB_SPECS = specs;
+  const groups = {};
+  for (const s of specs){ if (!s.popup) (groups[s.group] ||= []).push(s); }  // popup -> so no <dialog>
+  const GROUP_LABEL = { smooth:'SMOOTHING (global)', autogain:'AUTO-GAIN', scale:'ESCALAS / CORTES' };
+  for (const g of Object.keys(groups)){
+    const h = document.createElement('h3'); h.textContent = GROUP_LABEL[g] || g;
+    $('#knoblist').appendChild(h);
+    for (const s of groups[g]) makeKnobRow(s, $('#knoblist'));
+  }
+});
+
+// ============ POPUP "ENGRENAGEM" (kick / amp / cada faixa de mixagem) ============
+// <dialog> nativo — modal, Esc fecha, clique fora fecha, NAO e aba nova. kick/amp: os knobs
+// com s.popup daquele alvo (POST /knob). Faixa: as caixas lo/hi do range Hz (escrevem em
+// rangeRows[i] + commitRow -> mesmo POST /bands da secao "Ranges", que tem a barra visual) +
+// os 3 sliders de dinamica (POST /tweaks). Cor do alvo pinta os sliders / e o medidor de kick.
+let lastBandTweaks = {};
+const TWEAK_ROWS = [
+  ['smoothing', 'BAND_SMOOTHING', 'release (perto de 1 = mais suave/lento)', 0.5, 0.99, 0.01],
+  ['attack', 'BAND_ATTACK', 'attack ÷ release (1 = sem soco)', 0.05, 1.0, 0.05],
+  ['peak_decay', 'BAND_PEAK_DECAY', 'memória do teto do auto-gain', 0.9, 0.9999, 0.001],
+];
+const KICK_COLOR = '#d84';   // mesma cor do medidor de kick
+const tweakpop = $('#tweakpop');
+tweakpop.addEventListener('click', e => { if (e.target === tweakpop) tweakpop.close(); });  // clique no backdrop
+function openTweak(kind){
+  const body = $('#tweak-body'); body.innerHTML = '';
+  if (kind === 'kick' || kind === 'amp'){
+    $('#tweak-title').textContent = (kind === 'kick' ? 'KICK' : 'AMP') + ' — todos os ajustes';
+    const col = kind === 'kick' ? KICK_COLOR : '';
+    for (const s of KNOB_SPECS) if (s.popup === kind) makeKnobRow(s, body, col);
+  } else {
+    $('#tweak-title').textContent = kind + ' — ajustes da faixa';
+    buildBandTweak(kind, body);
+  }
+  tweakpop.showModal();
+}
+function buildBandTweak(name, body){
+  const i = (lastBandTweaks.names || []).indexOf(name);
+  if (i < 0) return;
+  const col = BAND_COLORS[name] || '#4a8';
+  // range Hz: so as caixas lo/hi, centralizadas. Escrevem em rangeRows[i] + commitRow -> mesmo
+  // POST /bands da secao "Ranges" (que tem a barra visual). So aparece se rangeRows ja montou.
+  if (rangeRows && rangeRows[i]){
+    const box = document.createElement('div'); box.className = 'knob poprange';
+    box.innerHTML = '<label>Hz <small>&mdash; range da faixa (a barra visual fica na seção “Ranges”)</small></label>';
+    const prow = document.createElement('div'); prow.className = 'pr-row';
+    const lo = document.createElement('input'), hi = document.createElement('input');
+    for (const el of [lo, hi]){ el.type = 'number'; el.min = HZ_LO; el.max = HZ_HI; el.step = 1; }
+    lo.value = rangeRows[i].lo.value; hi.value = rangeRows[i].hi.value;
+    const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '–';
+    prow.append(lo, sep, hi); box.appendChild(prow); body.appendChild(box);
+    lo.addEventListener('change', () => { rangeRows[i].lo.value = +lo.value || HZ_LO; commitRow(i); });
+    hi.addEventListener('change', () => { rangeRows[i].hi.value = +hi.value || HZ_LO; commitRow(i); });
+  }
+  for (const [key, LKEY, label, min, max, step] of TWEAK_ROWS){
+    const row = document.createElement('div'); row.className = 'knob';
+    row.innerHTML = `<label>${key} <small>&mdash; ${label}</small></label>` +
+      `<input type="range" min="${min}" max="${max}" step="${step}"><span class="kv">&mdash;</span>`;
+    body.appendChild(row);
+    const inp = row.querySelector('input'), kv = row.querySelector('.kv');
+    inp.style.accentColor = col;
+    const cur = (lastBandTweaks[key] || [])[i];
+    if (cur != null){ inp.value = cur; kv.textContent = fmt(cur); }
+    inp.addEventListener('input', () => {
+      kv.textContent = fmt(inp.value);
+      clearTimeout(inp._t);
+      inp._t = setTimeout(() => {
+        const arr = (lastBandTweaks[key] || []).slice();
+        if (arr.length !== 8) return;               // stream ainda nao trouxe as 8 -> nao manda incompleto
+        arr[i] = +inp.value;
+        fetch('/tweaks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [LKEY]: arr }) });
+      }, 90);
+    });
+  }
+}
+// ============ RANGES DAS FAIXAS ============
+// Barra log (20 Hz–20 kHz) por faixa com 2 bolinhas (lo/hi) + caixas numericas ao lado,
+// sincronizadas nos dois sentidos. POST /bands manda a config inteira; o servidor normaliza
+// (overlap=1 livre; overlap=0 = sem sobreposicao mas com buraco permitido) e devolve; o SSE
+// atualiza o que voce nao estiver mexendo. Cinza = Hz sem faixa nenhuma (so no modo crossover).
+const HZ_LO = 20, HZ_HI = 20000, _L = Math.log(HZ_LO), _R = Math.log(HZ_HI);
+const hzPct = hz => (Math.log(Math.max(HZ_LO, Math.min(HZ_HI, hz))) - _L) / (_R - _L) * 100;
+const pctHz = p => Math.round(Math.exp(_L + (_R - _L) * Math.max(0, Math.min(1, p / 100))));
+const kfmt = hz => hz >= 1000 ? (hz / 1000).toFixed(hz % 1000 ? 1 : 0) + 'k' : '' + hz;
+const OVL_NOTE = {
+  0: 'crossover: as faixas NÃO se sobrepõem. Cada limite é meio-aberto [lo, hi) — o Hz do limite pertence à faixa DE CIMA (ex.: 73 Hz entra na Low-mid, não na Sub-bass; por isso "73" aparece dos dois lados sem overlap). Arraste a bolinha hi para mover a costura (a vizinha acompanha); arraste a bolinha lo de uma faixa para cima para abrir um buraco (cinza — Hz sem faixa nenhuma).',
+  1: 'livre: cada faixa com seu lo/hi. Podem se sobrepor (Hz compartilhado soma energia nas duas) ou deixar buraco. Na barra-resumo a sobreposição aparece mais clara.',
+};
+let rangeRows = null, dragRow = -1, rangesTouched = 0;  // rangesTouched: ms do ultimo mexer local
+const BAND_COLORS = {  // espelha dash_data.FREQ_BAND_RGB
+  'Sub-bass':'rgb(30,140,255)', 'Low-mid':'rgb(0,200,255)', 'Midrange':'rgb(0,230,200)',
+  'High-mid':'rgb(140,140,255)', 'Presence':'rgb(190,100,255)', 'Treble':'rgb(225,80,255)',
+  'Brilliance':'rgb(255,70,210)', 'Air':'rgb(255,110,160)' };
+const isOv = () => $('#ovl-cb').checked;
+
+function buildRanges(bh){
+  const ruler = $('#hzruler'); ruler.innerHTML = '';
+  const bmap = $('#bandmap'); bmap.innerHTML = '';
+  for (const t of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]){
+    const s = document.createElement('span'); s.textContent = kfmt(t); s.style.left = hzPct(t) + '%';
+    ruler.appendChild(s);
+  }
+  rangeRows = bh.names.map((name, i) => {
+    const rn = document.createElement('div'); rn.className = 'rn'; rn.textContent = name;
+    const bar = document.createElement('div'); bar.className = 'bar';
+    bar.innerHTML = '<div class="seg"></div>' +
+      '<div class="thumb lo"><span class="tl"></span></div><div class="thumb hi"><span class="tl"></span></div>' +
+      '<span class="hzhint" hidden></span>';
+    const lo = document.createElement('input'); lo.type = 'number'; lo.min = HZ_LO; lo.max = HZ_HI; lo.step = 1;
+    const sep = document.createElement('div'); sep.className = 'sep'; sep.textContent = '–';
+    const hi = lo.cloneNode();
+    const m = document.createElement('div'); m.className = 'm'; m.style.background = BAND_COLORS[name] || '#4a8';
+    bmap.appendChild(m);
+    // prepend => lista de cima pra baixo agudo->grave, igual ao espectrograma (rangeRows[] segue grave->agudo)
+    $('#ranges').prepend(rn, bar, lo, sep, hi);
+    const r = { name, bar, seg: bar.querySelector('.seg'), m,
+                tLo: bar.querySelector('.thumb.lo'), tHi: bar.querySelector('.thumb.hi'),
+                lLo: bar.querySelector('.thumb.lo .tl'), lHi: bar.querySelector('.thumb.hi .tl'),
+                lo, hi };
+    r.seg.style.background = BAND_COLORS[name] || '#4a8';
+    lo.addEventListener('change', () => commitRow(i));
+    hi.addEventListener('change', () => commitRow(i));
+    startDrag(r.tLo, i, 'lo'); startDrag(r.tHi, i, 'hi');
+    // hover: mostra o Hz sob o cursor (some em cima das bolinhas, que ja tem label proprio)
+    const hint = bar.querySelector('.hzhint');
+    bar.addEventListener('pointermove', ev => {
+      if (ev.target.closest('.thumb')){ hint.hidden = true; return; }
+      const rect = bar.getBoundingClientRect();
+      const x = (ev.clientX - rect.left) / rect.width * 100;
+      hint.textContent = kfmt(pctHz(x)); hint.style.left = x + '%'; hint.hidden = false;
+    });
+    bar.addEventListener('pointerleave', () => { hint.hidden = true; });
+    // clique na barra (fora das bolinhas): pega a borda mais perto e ja arrasta a partir dali
+    bar.addEventListener('pointerdown', ev => {
+      if (ev.target.closest('.thumb')) return;
+      const rr = rangeRows[i], rect = bar.getBoundingClientRect();
+      const p = (ev.clientX - rect.left) / rect.width * 100;
+      const edge = Math.abs(p - hzPct(+rr.lo.value || HZ_LO)) <=
+                   Math.abs(p - hzPct(+rr.hi.value || HZ_HI)) ? 'lo' : 'hi';
+      beginDrag(edge === 'lo' ? rr.tLo : rr.tHi, i, edge, ev, true);
+    });
+    return r;
+  });
+  $('#ovl-cb').addEventListener('change', () => {
+    if (!isOv()) reflowFromOverlap();  // saindo do overlap: quem sobrepoe cede, as outras faixas ficam como estavam
+    cascade(); sendRanges();
+  });
+  $('#bands-cb').addEventListener('change', sendRanges);
+}
+// overlap -> crossover: resolve cada sobreposicao movendo a costura pra borda da faixa mais
+// ESTREITA (a mais larga recua). Assim uma faixa que cobria tudo vira so o pedaco que sobrou
+// e as faixas "normais" mantem lo/hi. Buracos existentes ficam.
+function reflowFromOverlap(){
+  if (!rangeRows) return;
+  const v = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_LO]);
+  const lw = ([lo, hi]) => Math.log(Math.max(HZ_LO, hi)) - Math.log(Math.max(HZ_LO, lo));
+  let prev = HZ_LO;
+  for (let i = 0; i < 8; i++){
+    let [lo, hi] = v[i];
+    lo = Math.max(lo, prev);
+    if (i < 7 && hi > v[i + 1][0] && lw(v[i]) >= lw(v[i + 1])) hi = v[i + 1][0];  // eu sou a larga: recuo
+    hi = Math.min(HZ_HI, Math.max(hi, lo + 1));
+    lo = Math.min(lo, hi - 1);
+    v[i] = [lo, hi];
+    prev = hi;
+  }
+  rangeRows.forEach((r, i) => { r.lo.value = v[i][0]; r.hi.value = v[i][1]; });
+}
+// espelha dash_server._clamp_ranges: overlap=1 solto; overlap=0 = ordenado, sem sobrepor,
+// buraco ok. Le as caixas, corrige, repinta tudo. Nao mexe na linha em arrasto/foco.
+function cascade(){
+  if (!rangeRows) return;
+  const v = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_LO]);
+  if (isOv()){
+    for (let i = 0; i < 8; i++){
+      let [lo, hi] = v[i];
+      lo = Math.max(HZ_LO, Math.min(HZ_HI, lo)); hi = Math.min(HZ_HI, Math.max(lo + 1, hi));
+      applyRow(i, lo, hi);
+    }
+  } else {
+    let prevHi = HZ_LO;
+    for (let i = 0; i < 8; i++){
+      let [lo, hi] = v[i];
+      lo = Math.max(Math.min(Math.max(HZ_LO, lo), HZ_HI), prevHi);
+      hi = Math.min(HZ_HI, Math.max(lo + 1, hi));
+      lo = Math.min(lo, hi - 1);
+      applyRow(i, lo, hi);
+      prevHi = hi;
+    }
+  }
+}
+function applyRow(i, lo, hi){  // pinta so se nao estiver sendo editada
+  const r = rangeRows[i];
+  if (dragRow === i || r.lo === document.activeElement || r.hi === document.activeElement){
+    // ainda atualiza o mapa e o segmento (feedback visual), mas nao a caixa focada
+    paintVisual(i, lo, hi);
+  } else {
+    r.lo.value = lo; r.hi.value = hi;
+    paintVisual(i, lo, hi);
+  }
+}
+function paintVisual(i, lo, hi){
+  const r = rangeRows[i];
+  const a = hzPct(lo), b = hzPct(hi);
+  r.tLo.style.left = a + '%'; r.tHi.style.left = b + '%';
+  r.seg.style.left = a + '%'; r.seg.style.width = (b - a) + '%';
+  r.lLo.textContent = kfmt(lo); r.lHi.textContent = kfmt(hi);
+  r.m.style.left = a + '%'; r.m.style.width = (b - a) + '%';
+}
+function commitRow(i){ cascade(); sendRanges(); }
+function startDrag(thumb, i, edge){
+  thumb.addEventListener('pointerdown', ev => { ev.stopPropagation(); beginDrag(thumb, i, edge, ev); });
+}
+function beginDrag(thumb, i, edge, ev, snap){
+    ev.preventDefault(); thumb.setPointerCapture(ev.pointerId); dragRow = i;
+    // esconde o hover-hint: o snap chama move() direto no pointerdown, sem passar pelo
+    // pointermove do bar (que e' quem normalmente esconde o hint) — sem isso ele fica
+    // "grudado" mostrando o valor antigo em cima do label do proprio thumb.
+    rangeRows[i].bar.querySelector('.hzhint').hidden = true;
+    const rect = rangeRows[i].bar.getBoundingClientRect();
+    // costura "grudada" com a vizinha de cima? entao arrastar o hi leva o lo dela junto
+    const linkedNext = !isOv() && edge === 'hi' && i < 7 &&
+      (+rangeRows[i + 1].lo.value === +rangeRows[i].hi.value);
+    const move = e => {
+      rangesTouched = performance.now();
+      let hz = Math.round(pctHz((e.clientX - rect.left) / rect.width * 100));
+      const r = rangeRows[i];
+      if (edge === 'lo'){
+        hz = Math.max(HZ_LO, Math.min(hz, (+r.hi.value || HZ_HI) - 1));
+        r.lo.value = hz;
+        // crossover: empurra as faixas graves pra baixo se o lo passou por cima delas (costura nos dois sentidos)
+        if (!isOv()) for (let k = i - 1, lim = hz; k >= 0; k--){
+          const p = rangeRows[k];
+          if ((+p.hi.value || HZ_LO) <= lim) break;
+          p.hi.value = lim;
+          if ((+p.lo.value || HZ_LO) < lim) break;
+          p.lo.value = (lim -= 1);
+        }
+      } else {
+        hz = Math.max(hz, (+r.lo.value || HZ_LO) + 1);
+        r.hi.value = Math.min(HZ_HI, hz);
+        if (linkedNext) rangeRows[i + 1].lo.value = r.hi.value;
+      }
+      cascade();
+      if (!thumb._t) thumb._t = setTimeout(() => { thumb._t = null; sendRanges(); }, 110);
+    };
+    const up = () => {
+      thumb.removeEventListener('pointermove', move);
+      thumb.removeEventListener('pointerup', up);
+      clearTimeout(thumb._t); thumb._t = null; dragRow = -1; sendRanges();
+    };
+    thumb.addEventListener('pointermove', move);
+    thumb.addEventListener('pointerup', up);
+    if (snap) move(ev);  // clique na barra: pula a borda pro ponto ja no pointerdown
+}
+const isBandsEnabled = () => $('#bands-cb').checked;
+function renderRanges(bh){
+  if (!bh || !bh.names) return;
+  if (!rangeRows) buildRanges(bh);
+  if (document.activeElement !== $('#ovl-cb')) $('#ovl-cb').checked = !!bh.overlap;
+  if (document.activeElement !== $('#bands-cb')) $('#bands-cb').checked = bh.enabled !== 0;
+  $('#ranges-wrap').classList.toggle('dim', bh.enabled === 0);
+  $('#ovl-note').textContent = OVL_NOTE[bh.overlap ? 1 : 0];
+  // acabou de arrastar/empurrar? ignora o eco velho do SSE ate o servidor devolver o novo
+  if (dragRow >= 0 || performance.now() - rangesTouched < 400) return;
+  bh.ranges.forEach(([lo, hi], i) => applyRow(i, lo, hi));
+}
+function sendRanges(){
+  if (!rangeRows) return;
+  rangesTouched = performance.now();
+  const ranges = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_LO]);
+  fetch('/bands', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ overlap: isOv() ? 1 : 0, ranges, enabled: isBandsEnabled() ? 1 : 0 }) });
+}
+
+// ============ CANAIS (por instrumento, lista de tamanho livre — add/remove aqui) ============
+// paralelo as ranges acima: mesmo esquema de POST-reescreve-bloco-inteiro, so que em
+// CHANNELS. Cada linha manda {name, src, output} inteiro no /channels a cada mudanca — o
+// servidor reescreve o bloco todo (sem slot fixo, sem padding).
+const MAX_CHANNELS = 8;
+const CHAN_OUTPUTS = [
+  ['', '— nenhuma (só no array u_chan[])'],
+  ['kick', 'kick (onset)'], ['amp', 'amp'], ['bass', 'bass'], ['mid', 'mid'], ['treble', 'treble'],
+  ['subbass', 'Sub-bass'], ['lowmid', 'Low-mid'], ['midrange', 'Midrange'], ['highmid', 'High-mid'],
+  ['presence', 'Presence'], ['treble_hi', 'Treble'], ['brilho', 'Brilliance'], ['air', 'Air'],
+];
+let chanRows = null, chanTouched = 0;   // 1:1 com o array vindo do servidor
+function makeChanRow(){
+  const row = document.createElement('div'); row.className = 'chanrow';
+  const name = document.createElement('input'); name.type = 'text'; name.className = 'insel'; name.placeholder = 'nome';
+  const srcSel = document.createElement('select'); srcSel.className = 'insel';
+  const outSel = document.createElement('select'); outSel.className = 'insel';
+  for (const [v, label] of CHAN_OUTPUTS){
+    const o = document.createElement('option'); o.value = v; o.textContent = label; outSel.appendChild(o);
+  }
+  const track = document.createElement('span'); track.className = 'track';
+  const fill = document.createElement('span'); fill.className = 'fill'; track.appendChild(fill);
+  const val = document.createElement('span'); val.className = 'val'; val.textContent = '0.00';
+  const hit = document.createElement('span'); hit.className = 'hit';
+  const rm = document.createElement('button'); rm.className = 'ibtn rm'; rm.textContent = '✕'; rm.title = 'remover canal';
+  row.append(name, srcSel, outSel, track, val, hit, rm);
+  $('#channels').appendChild(row);
+  const r = { name, srcSel, outSel, fill, val, hit };
+  name.addEventListener('input', () => { chanTouched = performance.now(); });
+  name.addEventListener('change', sendChannels);
+  for (const sel of [srcSel, outSel]){
+    sel.addEventListener('mousedown', () => { chanTouched = performance.now(); });
+    sel.addEventListener('change', sendChannels);
+  }
+  rm.addEventListener('click', () => {
+    const idx = chanRows.indexOf(r);   // busca a posicao NA HORA — indices deslizam apos remocao
+    if (idx < 0) return;
+    chanRows.splice(idx, 1);
+    row.remove();
+    sendChannels();
+  });
+  return r;
+}
+function addChannel(){
+  if (!chanRows) chanRows = [];
+  if (chanRows.length >= MAX_CHANNELS) return;
+  chanRows.push(makeChanRow());
+  fillAllChannelSelects();
+  sendChannels();
+}
+function fillAllChannelSelects(){
+  if (!chanRows) return;
+  const items = [{ id: '', name: '— (canal ocioso)' }, ...lastAudioSources];
+  for (const r of chanRows) fillSel(r.srcSel, items, r.srcSel.value);
+}
+function renderChannels(ch){
+  if (!ch || !ch.names) return;
+  // acabou de mexer local (add/remover/editar, ou so abriu um <select>)? ignora o eco velho do
+  // SSE por TOUCH_MS — guard por tempo, nao por foco (foco sozinho nao prova que ainda esta
+  // editando; um <select> pode ficar focado bem depois do dropdown fechar)
+  if (performance.now() - chanTouched < TOUCH_MS) return;
+  // so reconstroi quando a QUANTIDADE muda (add/remove — inclusive vindo de outra aba);
+  // edicao normal (nome/src/output) so atualiza valor, sem perder foco/selecao no meio do frame
+  if (!chanRows || chanRows.length !== ch.names.length){
+    $('#channels').innerHTML = '';
+    chanRows = ch.names.map(() => makeChanRow());
+    fillAllChannelSelects();
+  }
+  ch.names.forEach((name, i) => {
+    const r = chanRows[i];
+    r.name.value = name;
+    const src = ch.srcs[i] || '';
+    if ([...r.srcSel.options].some(o => o.value === src)) r.srcSel.value = src;
+    const out = ch.outputs[i] || '';
+    if ([...r.outSel.options].some(o => o.value === out)) r.outSel.value = out;
+    r.fill.style.width = pct(ch.levels[i] || 0);
+    r.val.textContent = (ch.levels[i] || 0).toFixed(2);
+    r.hit.classList.toggle('on', (ch.hits[i] || 0) > 0.5);
+  });
+}
+function sendChannels(){
+  if (!chanRows) return;
+  chanTouched = performance.now();
+  const channels = chanRows.map(r => ({ name: r.name.value, src: r.srcSel.value, output: r.outSel.value }));
+  fetch('/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channels }) });
+}
+
+// ============ SHADER (galeria de presets) + FX (potenciometros de efeito) ============
+// ---- confirmacao no proprio site (nao window.confirm): <dialog> modal, Esc/clique-fora cancela ----
+const confirmpop = $('#confirmpop');
+let _confirmYes = null;
+function askConfirm(msg, onYes){
+  $('#confirm-msg').textContent = msg;
+  _confirmYes = onYes;
+  confirmpop.showModal();
+}
+$('#confirm-yes').onclick = () => { const cb = _confirmYes; _confirmYes = null; confirmpop.close(); if (cb) cb(); };
+confirmpop.addEventListener('click', e => { if (e.target === confirmpop) confirmpop.close(); });
+
+// ============ VISUALS: sub-abas Sets | Biblioteca ============
+// Sets = cenas (tuning.SCENES): editar o set ATIVO (auto-salva no servidor a cada edicao).
+// Biblioteca = os arquivos (midia, .frag, .glsl): adicionar / renomear / remover.
+function showSub(sub){
+  if (sub !== 'lib') sub = 'sets';
+  document.body.dataset.vsub = sub;
+  document.querySelectorAll('.subtabs .ibtn').forEach(b => b.classList.toggle('active', b.dataset.vsub === sub));
+  try { localStorage.setItem('visSub', sub); } catch (e) {}
+}
+showSub(new URLSearchParams(location.search).get('sub')   // ?sub=lib|sets (popup/link) > lembrado
+        || (() => { try { return localStorage.getItem('visSub'); } catch (e) { return null; } })());
+
+// shaderPost: POST + recarrega shaders E midia (renomear/apagar mexe nas duas listas dos sets)
+function shaderPost(url, body, done){
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+    .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
+    .then(() => { shaderSig = shaderAdminSig = ''; loadShaders(); if (done) done(); });
+}
+
+// ============ SETS (cenas) ============
+let lastScenes = [], activeScene = '', sceneSig = '', sceneOpen = '';
+function loadScenes(){
+  fetch('/scenes').then(r => r.json()).then(gotScenes).catch(() => {});
+}
+function gotScenes(d){
+  lastScenes = d.list || []; activeScene = d.active || '';
+  sceneSig = ''; renderScenes();
+}
+function scenePost(url, body){
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+    .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+    .then(gotScenes);
+}
+function renderScenes(){
+  $('#scene-cur').textContent = activeScene || '—';
+  const sig = JSON.stringify([lastScenes, activeScene, sceneOpen, lastTrans, lastTransDefault]);
+  if (sig === sceneSig) return;
+  sceneSig = sig;
+  const box = $('#scene-list'); box.innerHTML = '';
+  if (!lastScenes.length) box.innerHTML = '<div class="txtrow">&mdash; nenhum set. Use "+ set".</div>';
+  const dname = lastTransDefault === 'none' ? 'corte seco' : lastTransDefault.replace(/\.glsl$/, '');
+  for (const sc of lastScenes){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (sc.name === activeScene ? ' active' : '');
+    b.textContent = sc.name;
+    b.onclick = () => scenePost('/scene', { name: sc.name }).catch(e => alert('set: ' + e));
+    row.appendChild(b);
+
+    const cap = document.createElement('span'); cap.className = 'keycap';
+    cap.textContent = (sc.key || '').toUpperCase();
+    row.appendChild(cap);
+
+    const tsel = document.createElement('select');
+    tsel.className = 'insel'; tsel.style.maxWidth = '150px';
+    tsel.title = 'transição de ENTRADA deste set';
+    for (const [val, lbl] of [['', `(padrão: ${dname})`], ['none', 'corte seco'],
+                              ...lastTrans.map(f => [f, f.replace(/\.glsl$/, '')])]){
+      const o = document.createElement('option'); o.value = val; o.textContent = lbl;
+      if (val === (sc.transition || '')) o.selected = true;
+      tsel.appendChild(o);
+    }
+    tsel.onchange = () => scenePost('/scene-transition', { name: sc.name, transition: tsel.value })
+      .catch(e => alert('transição: ' + e));
+    row.appendChild(tsel);
+
+    const gear = document.createElement('button');
+    gear.className = 'ibtn sh-gear' + (sceneOpen === sc.name ? ' open' : '');
+    gear.textContent = '⚙'; gear.title = 'renomear / tecla / apagar';
+    gear.onclick = () => { sceneOpen = sceneOpen === sc.name ? '' : sc.name; sceneSig = ''; renderScenes(); };
+    row.appendChild(gear);
+    box.appendChild(row);
+    if (sceneOpen === sc.name) box.appendChild(scenePanel(sc));
+  }
+}
+function scenePanel(sc){
+  const p = document.createElement('div'); p.className = 'sh-panel';
+  const ren = document.createElement('input'); ren.className = 'insel'; ren.value = sc.name;
+  const doRen = () => { const nn = ren.value.trim(); if (nn && nn !== sc.name)
+    scenePost('/scene-rename', { name: sc.name, newname: nn }).then(() => { sceneOpen = ''; })
+      .catch(e => alert('não renomeou: ' + e)); };
+  ren.onkeydown = e => { if (e.key === 'Enter') doRen(); };
+  const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
+  p.append('nome ', ren, rb);
+  // tecla: captura UMA tecla (a-z / 0-9) e vincula na hora; Backspace/Delete desvincula.
+  // limitado a alfanumérico pq é o que o pygame.key.name do native_synth também dá.
+  const ki = document.createElement('input'); ki.className = 'insel keyin'; ki.maxLength = 1; ki.placeholder = '—';
+  ki.value = (sc.key || '').toUpperCase();
+  ki.onkeydown = e => {
+    if (e.key === 'Tab' || e.key === 'Escape') return;
+    e.preventDefault();
+    let k = '';
+    if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) k = e.key.toLowerCase();
+    else if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+    scenePost('/scene-key', { name: sc.name, key: k }).catch(err => alert('tecla: ' + err));
+  };
+  p.append('tecla ', ki);
+  const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
+  del.onclick = () => askConfirm(`Apagar o set “${sc.name}”? (os arquivos da Biblioteca ficam)`,
+    () => { sceneOpen = ''; scenePost('/scene-del', { name: sc.name }).catch(e => alert('não apagou: ' + e)); });
+  p.appendChild(del);
+  return p;
+}
+function newScene(){
+  const inp = $('#new-scene-name'), msg = $('#new-scene-msg');
+  const name = inp.value.trim();
+  if (!name) return inp.focus();
+  msg.textContent = ''; msg.className = '';
+  scenePost('/scene-new', { name }).then(() => { inp.value = ''; })
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+}
+
+// ============ EFEITOS: shader principal + camadas (Sets) / arquivos .frag (Biblioteca) ============
+let lastShaderList = [], shaderSig = '', shaderAdminSig = '', shaderOpen = '';
+function loadShaders(){
+  fetch('/shaders').then(r => r.json()).then(d => {
+    lastShaderList = d.list || []; lastManifests = d.manifests || {};
+    shaderSig = ''; renderShaderList();
+    fxSig = ''; renderFx();
+    renderShaderAdmin();
+  });
+}
+function newShader(){
+  const inp = $('#new-fx-name'), msg = $('#new-fx-msg');
+  const name = inp.value.trim();
+  if (!name) return inp.focus();
+  msg.textContent = ''; msg.className = '';
+  shaderPost('/new-shader', { name }, () => { inp.value = ''; })   // criado + ja ativo
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+}
+// LIGAÇÕES fonte -> shaders (BINDINGS): {fonte: {shaders: [{file, opacity, blend}], fx: {shader: {nome: v}}}}.
+// A lista de efeitos mostra/edita a pilha da fonte SELECIONADA (lastSelected). Mesmo esquema das
+// camadas de midia: slider atualiza NO LUGAR (layerEls), grava ao soltar; o sig so muda quando a
+// pilha muda (nao a opacidade), pra nao matar um arrasto no meio.
+let lastBindings = {}, lastSelected = '', lastManifests = {}, fxShader = '';
+let layerEls = {}, layerDrag = '', bindT = null, bindTouched = 0;
+try { fxShader = localStorage.getItem('fxShader') || ''; } catch (e) {}
+function selBinding(create){
+  if (!lastSelected) return null;
+  if (!lastBindings[lastSelected] && create) lastBindings[lastSelected] = { shaders: [], fx: {} };
+  return lastBindings[lastSelected] || null;
+}
+function sendBindings(save){
+  bindTouched = performance.now();
+  clearTimeout(bindT); bindT = null;
+  fetch('/bindings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bindings: lastBindings, save }) });
+}
+function sendBindingsLive(){   // arrasto: no maximo ~25 POST/s, sem gravar no tuning.py
+  bindTouched = performance.now();
+  if (!bindT) bindT = setTimeout(() => { bindT = null; sendBindings(false); }, 40);
+}
+function syncLayerSliders(){
+  if (performance.now() - bindTouched < TOUCH_MS) return;
+  const stack = (selBinding(false) || {}).shaders || [];
+  for (const [file, el] of Object.entries(layerEls)){
+    if (file === layerDrag) continue;
+    const o = stack.find(x => x.file === file);
+    if (o){ el.inp.value = Math.round(o.opacity * 100); el.pct.textContent = el.inp.value + '%';
+            el.bsel.value = o.blend || 'normal'; }
+  }
+}
+const LAYER_BLENDS = [['normal', 'normal'], ['soma', 'soma'], ['tela', 'tela (screen)'],
+                      ['multiplicar', 'multiplicar'], ['clarear', 'clarear (max)']];
+function layerControl(file){
+  const stack = (selBinding(false) || {}).shaders || [];
+  const oi = stack.findIndex(o => o.file === file);
+  const ov = document.createElement('label'); ov.className = 'ovl';
+  const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
+  oc.disabled = !lastSelected;
+  oc.title = 'camada: aplica este shader na fonte/mídia selecionada, por cima dos já marcados';
+  const ord = document.createElement('span'); ord.className = 'ord';
+  ord.textContent = oi >= 0 ? String(oi + 1) : '';
+  ord.title = 'posição (1 = logo acima da imagem crua)';
+  const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
+  orng.value = oi >= 0 ? Math.round(stack[oi].opacity * 100) : 100;
+  orng.disabled = oi < 0; orng.title = 'opacidade';
+  const pct = document.createElement('span'); pct.className = 'pct';
+  pct.textContent = oi >= 0 ? orng.value + '%' : '';
+  // modo de mistura (ver LAYER_BLEND_SRC no native_synth): novo entra em 'normal' a 100% = o
+  // efeito puro; 'tela'/'soma' acendem por cima da imagem sem apagar
+  const bsel = document.createElement('select'); bsel.className = 'insel blend';
+  for (const [v, t] of LAYER_BLENDS){
+    const op = document.createElement('option'); op.value = v; op.textContent = t; bsel.appendChild(op);
+  }
+  bsel.value = oi >= 0 ? (stack[oi].blend || 'normal') : 'normal';
+  bsel.disabled = oi < 0; bsel.title = 'modo de mistura com o que está embaixo';
+  bsel.onchange = () => {
+    const o = ((selBinding(false) || {}).shaders || []).find(x => x.file === file); if (!o) return;
+    o.blend = bsel.value; sendBindings(true);
+  };
+  oc.onchange = () => {
+    const bnd = selBinding(true);
+    if (oc.checked) bnd.shaders.push({ file, opacity: +orng.value / 100, blend: bsel.value });
+    else bnd.shaders = bnd.shaders.filter(o => o.file !== file);
+    sendBindings(true); shaderSig = ''; renderShaderList();
+  };
+  orng.onpointerdown = () => { layerDrag = file; bindTouched = performance.now(); };
+  orng.oninput = () => {
+    const o = ((selBinding(false) || {}).shaders || []).find(x => x.file === file); if (!o) return;
+    o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
+    sendBindingsLive();
+  };
+  orng.onchange = () => { layerDrag = ''; sendBindings(true); };
+  ov.append(oc, ord, 'camada', orng, pct, bsel);
+  layerEls[file] = { inp: orng, pct, bsel };
+  return ov;
+}
+function pickShader(name){
+  fxShader = name;
+  try { localStorage.setItem('fxShader', name); } catch (e) {}
+  shaderSig = ''; renderShaderList(); fxSig = ''; renderFx();
+}
+function shortShader(name){ return name.startsWith('presets/') ? name.replace(/^presets\/[^/]+\//, '') : name; }
+function renderShaderList(){
+  if (performance.now() - bindTouched < TOUCH_MS && shaderSig) return;   // acabei de mexer
+  const stack = (selBinding(false) || {}).shaders || [];
+  const sig = JSON.stringify([lastShaderList, lastSelected, fxShader, stack.map(o => o.file), lastPool]);
+  if (sig === shaderSig) return;                 // nada mudou: nao repinta
+  shaderSig = sig;
+  $('#sel-name').textContent = sourceLabel(lastSelected) || '— (selecione uma fonte/mídia)';
+  const box = $('#shader-list'); box.innerHTML = ''; layerEls = {};
+  for (const name of lastShaderList.filter(x => inPool('shaders', x))){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (name === fxShader ? ' picked' : '');
+    b.textContent = shortShader(name);
+    b.title = name + ' — clique: mostra a força dos efeitos dele';
+    b.onclick = () => pickShader(name);
+    row.appendChild(b);
+    row.appendChild(layerControl(name));
+    row.appendChild(rmButton('shaders', name));
+    box.appendChild(row);
+  }
+  box.appendChild(addPicker('shaders', lastShaderList.filter(x => !inPool('shaders', x)).map(x => [x, shortShader(x)])));
+}
+function renderShaderAdmin(){
+  const sig = JSON.stringify([lastShaderList, shaderOpen]);
+  if (sig === shaderAdminSig) return;
+  shaderAdminSig = sig;
+  const box = $('#shader-admin'); box.innerHTML = '';
+  for (const name of lastShaderList){
+    const isPreset = name.startsWith('presets/');
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const nm = document.createElement('span'); nm.className = 'name'; nm.style.padding = '3px 8px';
+    nm.textContent = isPreset ? name.replace(/^presets\/[^/]+\//, '') : name + '  (base)';
+    nm.title = name;
+    row.appendChild(nm);
+    if (isPreset){
+      const gear = document.createElement('button');
+      gear.className = 'ibtn sh-gear' + (shaderOpen === name ? ' open' : '');
+      gear.textContent = '⚙'; gear.title = 'renomear / apagar';
+      gear.onclick = () => { shaderOpen = shaderOpen === name ? '' : name; shaderAdminSig = ''; renderShaderAdmin(); };
+      row.appendChild(gear);
+    }
+    box.appendChild(row);
+    if (shaderOpen === name) box.appendChild(shaderPanel(name));
+  }
+}
+function shaderPanel(name){
+  const p = document.createElement('div'); p.className = 'sh-panel';
+  const ren = document.createElement('input');
+  ren.className = 'insel'; ren.value = name.replace(/^presets\/[^/]+\//, '').replace(/\.frag$/, '');
+  const doRename = () => shaderPost('/rename-shader', { name, newname: ren.value }, () => { shaderOpen = ''; })
+    .catch(e => alert('não renomeou: ' + e));
+  ren.onkeydown = e => { if (e.key === 'Enter') doRename(); };
+  const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear';
+  rb.onclick = doRename;
+  p.append('nome ', ren, rb);
+  const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
+  del.onclick = () => askConfirm(`Apagar “${name}”? Sai também dos sets que o usam.`,
+    () => shaderPost('/delete-shader', { name }, () => { shaderOpen = ''; }).catch(e => alert('não apagou: ' + e)));
+  p.appendChild(del);
+  return p;
+}
+
+// ============ MÍDIA: principal + camadas (Sets) / arquivos (Biblioteca) ============
+let lastMedia = [], mediaSig = '', mediaAdminSig = '', mediaOpen = '', mediaTouched = 0;
+let lastBounceBusy = [];   // files (relativos a media/) com rebate sendo preparado agora — vem do stream
+function loadMedia(){
+  fetch('/media').then(r => r.json()).then(d => {
+    lastMedia = d.list || [];
+    if (d.overlays) lastOverlays = d.overlays;
+    mediaSig = ''; renderMediaList();
+    renderMediaAdmin();
+    shaderSig = ''; renderShaderList();          // o nome da fonte selecionada pode ser midia
+  });
+}
+// SELECIONAR uma fonte/midia (clique no nome): so' troca qual pilha de efeitos a lista mostra
+// (e o que a aba Source Image analisa). A saida e' so o que esta marcado.
+function selectSource(key){
+  lastSelected = key; selTouched.src = performance.now();
+  mediaSig = videoSig = shaderSig = fxSig = '';
+  renderMediaList(); renderVideoList(); renderShaderList(); renderFx();
+  fetch('/select', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ src: key }) });
+}
+function sourceLabel(key){
+  if (!key) return '';
+  const m = lastMedia.find(x => x.file === key);
+  if (m) return m.name;
+  const v = lastVideoInputs.find(x => x.id === key);
+  return v ? v.name : key;
+}
+// CAMADAS (overlay): [{file, opacity}] de baixo pra cima, na ordem em que foram marcadas. Vem de
+// /media e do stream; o slider se atualiza NO LUGAR (ovlEls) sem rebuild da lista — o sig so
+// muda quando a lista de camadas muda, nao a opacidade, pra nao matar um arrasto no meio.
+let lastOverlays = [], ovlEls = {}, ovlDrag = '', ovlT = null;
+function sendOverlays(save){
+  mediaTouched = performance.now();
+  clearTimeout(ovlT); ovlT = null;
+  fetch('/overlays', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ overlays: lastOverlays, save }) });
+}
+function sendOverlaysLive(){   // arrasto: no maximo ~25 POST/s, sem gravar no tuning.py
+  mediaTouched = performance.now();
+  if (!ovlT) ovlT = setTimeout(() => { ovlT = null; sendOverlays(false); }, 40);
+}
+// controle de camada (checkbox + ordem + slider) de UMA entrada de OVERLAYS: item de midia
+// (file) ou fonte viva ('webcam:..' | 'screen:..', lista "Fonte de imagem"). Marcar/desmarcar
+// repinta as duas listas (a ordem e' uma so pras duas).
+function ovlControl(file, title){
+  const oi = lastOverlays.findIndex(o => o.file === file);
+  const ov = document.createElement('label'); ov.className = 'ovl';
+  const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
+  oc.title = title;
+  const ord = document.createElement('span'); ord.className = 'ord';
+  ord.textContent = oi >= 0 ? String(oi + 1) : '';
+  ord.title = 'posição da camada (1 = mais embaixo)';
+  const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
+  orng.value = oi >= 0 ? Math.round(lastOverlays[oi].opacity * 100) : 50;
+  orng.disabled = oi < 0; orng.title = 'opacidade da camada';
+  const pct = document.createElement('span'); pct.className = 'pct';
+  pct.textContent = oi >= 0 ? orng.value + '%' : '';
+  oc.onchange = () => {
+    if (oc.checked) lastOverlays.push({ file, opacity: +orng.value / 100 });
+    else lastOverlays = lastOverlays.filter(o => o.file !== file);
+    sendOverlays(true); mediaSig = ''; videoSig = ''; renderMediaList(); renderVideoList();
+  };
+  orng.onpointerdown = () => { ovlDrag = file; mediaTouched = performance.now(); };
+  orng.oninput = () => {
+    const o = lastOverlays.find(x => x.file === file); if (!o) return;
+    o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
+    sendOverlaysLive();
+  };
+  orng.onchange = () => { ovlDrag = ''; sendOverlays(true); };
+  ov.append(oc, ord, 'camada', orng, pct);
+  ovlEls[file] = { inp: orng, pct };
+  return ov;
+}
+function syncOvlSliders(){
+  if (performance.now() - mediaTouched < TOUCH_MS) return;
+  for (const [file, el] of Object.entries(ovlEls)){
+    if (!el.inp.isConnected){ delete ovlEls[file]; continue; }
+    if (file === ovlDrag) continue;
+    const o = lastOverlays.find(x => x.file === file);
+    if (o){ el.inp.value = Math.round(o.opacity * 100); el.pct.textContent = el.inp.value + '%'; }
+  }
+}
+// DISPONÍVEIS no set ativo (pool): {sources?: [chaves], shaders?: [arquivos]}; lista ausente =
+// tudo. "×" tira do set (some daqui e da saida, mas marcacao/efeitos ficam lembrados); o
+// "+ adicionar ao set…" de cada grupo traz de volta. Sempre manda a lista explicita inteira.
+let lastPool = null, poolTouched = 0;
+function allOf(kind){
+  return kind === 'shaders' ? lastShaderList.slice()
+    : lastVideoInputs.filter(x => x.kind !== 'media').map(x => x.id).concat(lastMedia.map(m => m.file));
+}
+function inPool(kind, key){ const l = (lastPool || {})[kind]; return !l || l.includes(key); }
+function setPool(kind, list){
+  poolTouched = performance.now();
+  lastPool = Object.assign({}, lastPool || {}, { [kind]: list });
+  mediaSig = videoSig = shaderSig = ''; renderMediaList(); renderVideoList(); renderShaderList();
+  fetch('/pool', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pool: lastPool }) });
+}
+function rmButton(kind, key){
+  const b = document.createElement('button'); b.className = 'ibtn rm'; b.textContent = '×';
+  b.title = 'tirar deste set (some daqui e da saída; volta pelo "+ adicionar ao set")';
+  b.onclick = () => setPool(kind, ((lastPool || {})[kind] || allOf(kind)).filter(k => k !== key));
+  return b;
+}
+function addPicker(kind, items){   // items: [[chave, rotulo]] que NAO estao no set
+  const row = document.createElement('div'); row.className = 'addrow';
+  if (!items.length) return row;
+  const sel = document.createElement('select'); sel.className = 'insel';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '+ adicionar ao set…'; sel.appendChild(o0);
+  for (const [k, lbl] of items){ const o = document.createElement('option'); o.value = k; o.textContent = lbl; sel.appendChild(o); }
+  sel.onchange = () => { if (sel.value) setPool(kind, ((lastPool || {})[kind] || allOf(kind)).concat([sel.value])); };
+  row.appendChild(sel);
+  return row;
+}
+// preencher / rebate: configuracao da FONTE (midia: item de MEDIA; camera/tela: SOURCE_FIT), vale
+// em todos os sets — mas mora nas listas da aba Sets, junto do resto do que mexe na imagem.
+// preencher = estica pra cobrir a saida; desmarcado = encaixa inteira, com margens pretas.
+function fitControl(filled, onchange){
+  const fit = document.createElement('label'); fit.className = 'fit';
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = filled;
+  cb.title = 'preencher: estica a imagem pra cobrir a saída / desmarcado: encaixa inteira, com margens';
+  cb.onchange = () => onchange(cb.checked ? 'fill' : 'fit');
+  fit.append(cb, 'preencher');
+  return fit;
+}
+function rebateSlot(){       // vaga invisivel do tamanho do "rebate", pra coluna alinhar
+  const ph = document.createElement('label'); ph.className = 'fit'; ph.style.visibility = 'hidden';
+  const pc = document.createElement('input'); pc.type = 'checkbox';
+  ph.append(pc, 'rebate');
+  return ph;
+}
+function mediaOpts(m){
+  const box = document.createDocumentFragment();
+  box.appendChild(fitControl(m.fit !== 'fit', f => { m.fit = f; sendMedia(); }));
+  if (m.kind === 'video'){   // rebate: ida inteira + volta inteira em loop, desacelerando na virada
+    const bl = document.createElement('label'); bl.className = 'fit';
+    const bc = document.createElement('input'); bc.type = 'checkbox'; bc.checked = !!m.bounce;
+    bc.title = 'rebate: passa o vídeo pra frente e depois de trás pra frente, em loop, '
+             + 'desacelerando perto de cada virada. Na 1ª vez prepara uma versão (alguns segundos; '
+             + 'enquanto isso toca normal).';
+    bc.onchange = () => { m.bounce = bc.checked; sendMedia(); };
+    bl.append(bc, lastBounceBusy.includes(m.file) ? 'rebate (preparando…)' : 'rebate');
+    box.appendChild(bl);
+  } else {
+    box.appendChild(rebateSlot());
+  }
+  return box;
+}
+function renderMediaList(){
+  if (performance.now() - mediaTouched < TOUCH_MS && mediaSig) return;   // acabei de mexer
+  const sig = JSON.stringify([lastMedia, lastSelected, lastOverlays.map(o => o.file), lastBounceBusy, lastPool]);
+  if (sig === mediaSig) return;
+  mediaSig = sig;
+  const box = $('#media-pick'); box.innerHTML = '';
+  if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Adicione na sub-aba Biblioteca.</div>';
+  for (const m of lastMedia.filter(x => inPool('sources', x.file))){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const typ = document.createElement('span'); typ.className = 'mtype';
+    typ.textContent = m.kind === 'video' ? '🎬' : '🖼';
+    typ.title = m.kind === 'video' ? 'vídeo' : 'imagem';
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (m.file === lastSelected ? ' active' : '');
+    b.textContent = m.name;
+    b.title = 'selecionar (mostra os efeitos desta mídia)';
+    b.onclick = () => selectSource(m.file);
+    row.append(typ, b, ovlControl(m.file, 'camada: sobrepõe esta mídia à imagem, por cima das já marcadas (na ordem em que marcar)'),
+               mediaOpts(m), rmButton('sources', m.file));
+    box.appendChild(row);
+  }
+  box.appendChild(addPicker('sources', lastMedia.filter(x => !inPool('sources', x.file)).map(x => [x.file, x.name])));
+}
+function renderMediaAdmin(){
+  const sig = JSON.stringify([lastMedia, mediaOpen]);
+  if (sig === mediaAdminSig) return;
+  mediaAdminSig = sig;
+  const box = $('#media-list'); box.innerHTML = '';
+  if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Use "+ imagem ou vídeo".</div>';
+  for (const m of lastMedia){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const typ = document.createElement('span'); typ.className = 'mtype';
+    typ.textContent = m.kind === 'video' ? '🎬' : '🖼';
+    typ.title = m.kind === 'video' ? 'vídeo' : 'imagem';
+    const nm = document.createElement('span'); nm.className = 'name'; nm.style.padding = '3px 8px';
+    nm.textContent = m.name; nm.title = m.file;
+    row.append(typ, nm);
+
+    const gear = document.createElement('button');
+    gear.className = 'ibtn sh-gear' + (mediaOpen === m.name ? ' open' : '');
+    gear.textContent = '⚙'; gear.title = 'renomear / excluir';
+    gear.onclick = () => { mediaOpen = mediaOpen === m.name ? '' : m.name; mediaAdminSig = ''; renderMediaAdmin(); };
+    row.appendChild(gear);
+    box.appendChild(row);
+    if (mediaOpen === m.name) box.appendChild(mediaPanel(m));
+  }
+}
+function mediaPanel(m){
+  const p = document.createElement('div'); p.className = 'sh-panel';
+  const ren = document.createElement('input'); ren.className = 'insel'; ren.value = m.name;
+  const doRen = () => { const nn = ren.value.trim(); if (nn && nn !== m.name){ m.name = nn; mediaOpen = ''; sendMedia(); } };
+  ren.onkeydown = e => { if (e.key === 'Enter') doRen(); };
+  const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
+  p.append('nome ', ren, rb);
+  const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'excluir';
+  del.onclick = () => askConfirm(`Excluir “${m.name}”? Apaga o arquivo e tira dos sets que a usam.`, () => {
+    mediaTouched = performance.now();
+    fetch('/media-del', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: m.name }) })
+      .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
+      .then(() => { mediaOpen = ''; mediaSig = mediaAdminSig = ''; loadMedia(); }).catch(e => alert('não excluiu: ' + e));
+  });
+  p.appendChild(del);
+  return p;
+}
+function sendMedia(){
+  mediaTouched = performance.now();
+  const msg = $('#media-msg'); msg.textContent = ''; msg.className = '';
+  // usa a RESPOSTA do POST (lista limpa) — nao um GET depois, que pega o tuning velho
+  // enquanto o mtime-reload nao rodou e faz o checkbox "voltar" ~600ms depois.
+  fetch('/media', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ media: lastMedia }) })
+    .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+    .then(list => { lastMedia = list; mediaSig = mediaAdminSig = ''; renderMediaList(); renderMediaAdmin(); loadScenes(); })
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; loadMedia(); });
+}
+function mediaFile(){    // um botão só: o servidor decide imagem/vídeo pela extensão
+  const inp = $('#media-file');
+  inp.value = '';
+  inp.onchange = () => {
+    const f = inp.files[0]; if (!f) return;
+    const msg = $('#media-msg'); msg.textContent = 'enviando ' + f.name + '…'; msg.className = '';
+    mediaTouched = performance.now();
+    fetch('/media-add?name=' + encodeURIComponent(f.name),
+      { method: 'POST', headers: { 'Content-Type': f.type || 'application/octet-stream' }, body: f })
+      .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+      .then(() => { msg.textContent = ''; mediaSig = ''; loadMedia(); })
+      .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+  };
+  inp.click();
+}
+
+// ============ TRANSIÇÕES (galeria de .glsl; cada set escolhe a sua na lista de sets) ============
+let lastTrans = [], lastTransDefault = 'none', transSig = '', transOpen = '';
+function gotTransitions(d){
+  lastTrans = d.list || []; lastTransDefault = d.default || 'none';
+  transSig = ''; renderTransitions();
+  renderScenes();                              // os <select> por set dependem da lista
+}
+function loadTransitions(){
+  fetch('/transitions').then(r => r.json()).then(gotTransitions).catch(() => {});
+}
+function transPost(url, body){
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}) })
+    .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+    .then(d => { gotTransitions(d); loadScenes(); });   // renomear/apagar mexe nos sets
+}
+function renderTransitions(){
+  const sig = JSON.stringify([lastTrans, lastTransDefault, transOpen]);
+  if (sig === transSig) return;
+  transSig = sig;
+  const opts = (extra) => [...extra, ...lastTrans.map(f => [f, f.replace(/\.glsl$/, '')])];
+  const dsel = $('#trans-default'); dsel.innerHTML = '';
+  for (const [val, lbl] of opts([['none', 'corte seco']])){
+    const o = document.createElement('option'); o.value = val; o.textContent = lbl;
+    if (val === lastTransDefault) o.selected = true;
+    dsel.appendChild(o);
+  }
+  dsel.onchange = () => transPost('/transition-default', { name: dsel.value }).catch(e => alert('padrão: ' + e));
+
+  const box = $('#trans-list'); box.innerHTML = '';
+  if (!lastTrans.length){ box.innerHTML = '<div class="txtrow">&mdash; nenhuma. Use "+ criar .glsl".</div>'; return; }
+  for (const f of lastTrans){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const nm = document.createElement('span'); nm.className = 'name';
+    nm.style.padding = '3px 8px'; nm.textContent = f.replace(/\.glsl$/, '');
+    if (f === lastTransDefault) nm.textContent += '  (padrão)';
+    row.appendChild(nm);
+    const gear = document.createElement('button');
+    gear.className = 'ibtn sh-gear' + (transOpen === f ? ' open' : '');
+    gear.textContent = '⚙'; gear.title = 'renomear / apagar';
+    gear.onclick = () => { transOpen = transOpen === f ? '' : f; transSig = ''; renderTransitions(); };
+    row.appendChild(gear);
+    box.appendChild(row);
+    if (transOpen !== f) continue;
+    const p = document.createElement('div'); p.className = 'sh-panel';
+    const ren = document.createElement('input'); ren.className = 'insel'; ren.value = f.replace(/\.glsl$/, '');
+    const doRen = () => transPost('/rename-transition', { name: f, newname: ren.value }).catch(e => alert('não renomeou: ' + e));
+    ren.onkeydown = e => { if (e.key === 'Enter') doRen(); };
+    const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
+    p.append('nome ', ren, rb);
+    const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
+    del.onclick = () => askConfirm(`Apagar a transição “${f}”? Sets que a usam voltam pro padrão.`,
+      () => { transOpen = ''; transPost('/delete-transition', { name: f }).catch(e => alert('não apagou: ' + e)); });
+    p.appendChild(del);
+    box.appendChild(p);
+  }
+}
+function newTransition(){
+  const inp = $('#new-trans-name'), msg = $('#new-trans-msg');
+  const name = inp.value.trim();
+  if (!name) return inp.focus();
+  msg.textContent = ''; msg.className = '';
+  transPost('/new-transition', { name }).then(() => { inp.value = ''; })
+    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+}
+
+// atalho de SET em QUALQUER parte do dash (mesmas teclas que valem na janela do native_synth).
+// Ignora se o foco esta num campo de texto / select / editavel, se ha modificador (nao
+// sequestra Ctrl+R etc.) ou se e' auto-repeat (segurar a tecla).
+function typingInField(el){
+  if (!el) return false;
+  const t = el.tagName;
+  return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
+}
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.key.length !== 1) return;
+  if (typingInField(e.target)) return;
+  const k = e.key.toLowerCase();
+  if (!/[a-z0-9]/.test(k)) return;
+  const sc = lastScenes.find(x => x.key === k);
+  if (sc){ e.preventDefault(); scenePost('/scene', { name: sc.name }); }
+});
+
+// FORÇA DOS EFEITOS do par (fonte selecionada, shader clicado): BINDINGS[fonte].fx[shader][nome].
+// Nomes = cabecalho "// fx:" do shader (lastManifests, de /shaders). Ausente = 1.0 (cheio).
+let fxSig = '', fxEls = {}, fxActive = null, fxReleaseT = null;
+function renderFx(){
+  const man = lastManifests[fxShader] || [];
+  const sig = JSON.stringify([fxShader, lastSelected, man]);
+  if (sig !== fxSig){
+    fxSig = sig;
+    $('#fx-title').textContent = fxShader ? `${shortShader(fxShader)} em ${sourceLabel(lastSelected) || '—'}` : '—';
+    const box = $('#fx-list'); box.innerHTML = ''; fxEls = {};
+    if (!fxShader) box.innerHTML = '<div class="txtrow">&mdash; clique no nome de um shader acima</div>';
+    else if (!lastSelected) box.innerHTML = '<div class="txtrow">&mdash; selecione uma fonte/mídia</div>';
+    else if (!man.length) box.innerHTML = '<div class="txtrow">&mdash; esse shader não declara efeitos (sem linha <b>// fx:</b>)</div>';
+    else for (const name of man){
+      const row = document.createElement('div'); row.className = 'knob';
+      row.innerHTML = `<label>${name}</label><input type="range" min="0" max="1" step="0.01"><span class="kv">&mdash;</span>`;
+      box.appendChild(row);
+      const inp = row.querySelector('input'), kv = row.querySelector('.kv');
+      fxEls[name] = { inp, kv };
+      inp.addEventListener('input', () => {
+        kv.textContent = fmt(inp.value);
+        const bnd = selBinding(true);
+        bnd.fx = bnd.fx || {};
+        (bnd.fx[fxShader] = bnd.fx[fxShader] || {})[name] = parseFloat(inp.value);
+        fxActive = name;
+        clearTimeout(fxReleaseT); fxReleaseT = setTimeout(() => fxActive = null, 600);
+        sendBindingsLive();
+      });
+      inp.addEventListener('change', () => sendBindings(true));
+    }
+  }
+  const lv = (((selBinding(false) || {}).fx) || {})[fxShader] || {};
+  for (const [name, o] of Object.entries(fxEls)){
+    if (name === fxActive) continue;             // nao briga com o slider em arrasto
+    const v = name in lv ? lv[name] : 1.0;
+    o.inp.value = v; o.kv.textContent = fmt(v);
+  }
+}
+
+function flush(){
+  flushT = null;
+  for (const [name, value] of Object.entries(pending)){
+    fetch('/knob', { method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `name=${encodeURIComponent(name)}&value=${encodeURIComponent(value)}` });
+    delete pending[name];
+  }
+}
+
+// ============ ENTRADAS (audio / video) ============
+function fillSel(sel, items, current){
+  sel.innerHTML = '';
+  for (const it of items){
+    const o = document.createElement('option');
+    o.value = it.id; o.textContent = it.name;
+    if (it.id === current) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+let lastAudioSources = [];
+// FONTE DE IMAGEM: lista de linhas (mesmo visual da galeria de midia) em vez de <select>.
+// Lista vem de /inputs; o destaque (ativa) segue o stream (d.inputs.video).
+let lastVideoInputs = [], videoSig = '', lastSourceFit = {}, fitTouched = 0;
+function setSourceFit(id, fit){
+  fitTouched = performance.now();
+  if (fit === 'fit') lastSourceFit[id] = 'fit'; else delete lastSourceFit[id];
+  fetch('/source-fit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ src: id, fit }) });
+}
+const VIDEO_ICON = { webcam: '📷', screen: '🖥', media: '🎞' };
+const VIDEO_KIND = { webcam: 'câmera', screen: 'tela' };
+function renderVideoList(){
+  if (performance.now() - mediaTouched < TOUCH_MS && videoSig) return;   // acabei de mexer numa camada
+  const sig = JSON.stringify([lastVideoInputs, lastSelected, lastOverlays.map(o => o.file), lastSourceFit, lastPool]);
+  if (sig === videoSig) return;
+  videoSig = sig;
+  const box = $('#video-list'); box.innerHTML = '';
+  if (!lastVideoInputs.some(x => x.kind !== 'media')) box.innerHTML = '<div class="txtrow">&mdash; nenhuma fonte encontrada. Use ↻.</div>';
+  const live = lastVideoInputs.filter(x => x.kind !== 'media');   // mídias têm grupo próprio
+  for (const it of live.filter(x => inPool('sources', x.id))){
+    const row = document.createElement('div'); row.className = 'sh-row';
+    const typ = document.createElement('span'); typ.className = 'mtype';
+    typ.textContent = VIDEO_ICON[it.kind] || '•'; typ.title = VIDEO_KIND[it.kind] || it.kind;
+    const b = document.createElement('button');
+    b.className = 'ibtn name' + (it.id === lastSelected ? ' active' : '');
+    b.textContent = it.name; b.title = it.id + ' — selecionar (mostra os efeitos desta fonte)';
+    b.onclick = () => selectSource(it.id);
+    row.append(typ, b, ovlControl(it.id, 'camada: põe esta fonte na saída, por cima das já marcadas (na ordem em que marcar)'),
+               fitControl(lastSourceFit[it.id] !== 'fit', f => setSourceFit(it.id, f)), rebateSlot(),
+               rmButton('sources', it.id));
+    box.appendChild(row);
+  }
+  box.appendChild(addPicker('sources', live.filter(x => !inPool('sources', x.id)).map(x => [x.id, x.name])));
+}
+function loadInputs(){
+  fetch('/inputs').then(r => r.json()).then(d => {
+    if (!d.audio && !d.video) return;
+    lastAudioSources = d.audio || [];
+    fillSel($('#sel-audio'), d.audio || [], (d.current || {}).audio);
+    lastVideoInputs = d.video || [];
+    videoSig = ''; renderVideoList();
+    shaderSig = fxSig = ''; renderShaderList(); renderFx();   // o nome da fonte selecionada pode ser camera/tela
+    fillAllChannelSelects();
+  }).catch(() => {});
+}
+function setInput(kind, id){
+  fetch('/input', { method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}` });
+}
+// segue o estado ao vivo (troca feita em outra aba). Guard por TEMPO desde o ultimo mousedown/
+// change LOCAL (mesmo TOUCH_MS da barra de saida) — nao por foco: focado sozinho nao prova
+// que o usuario ainda esta escolhendo, e um <select> pode ficar com foco muito depois do
+// dropdown fechar (ex. Esc sem blur), travando a sincronizacao pra sempre ate clicar fora.
+const selTouched = { audio: 0, src: 0 };
+function syncSel(sel, kind, val){
+  if (!val || performance.now() - selTouched[kind] < TOUCH_MS || sel.value === val) return;
+  if ([...sel.options].some(o => o.value === val)) sel.value = val;
+}
+for (const [id, kind] of [['#sel-audio', 'audio']]){
+  const sel = $(id);
+  sel.addEventListener('mousedown', () => { selTouched[kind] = performance.now(); });
+  sel.addEventListener('change', e => { selTouched[kind] = performance.now(); setInput(kind, e.target.value); });
+}
+loadInputs();
+loadShaders();
+loadMedia();
+loadTransitions();
+loadScenes();
+
+// ============ STREAM ============
+let htmlMtime = null, msgTimes = [];
+function tickRate(){
+  const now = performance.now();
+  msgTimes.push(now);
+  msgTimes = msgTimes.filter(t => now - t < 2000);
+  if (msgTimes.length > 1){
+    const hz = (msgTimes.length - 1) / ((msgTimes[msgTimes.length - 1] - msgTimes[0]) / 1000);
+    $('#rate').textContent = hz.toFixed(1) + ' Hz';
+  }
+}
+let deadT = null;
+function connect(){
+  const es = new EventSource('/events');
+  const alive = () => {
+    $('#conn').textContent = 'ao vivo'; $('#conn').classList.remove('down');
+    clearTimeout(deadT); deadT = null;
+  };
+  es.onopen = alive;
+  es.onmessage = e => { alive(); render(JSON.parse(e.data)); };
+  es.onerror = () => {  // fora do ar >3.5s (sobrevive ao blip de hot-reload) = servidor encerrado
+    $('#conn').textContent = 'reconectando'; $('#conn').classList.add('down');
+    if (!deadT) deadT = setTimeout(serverGone, 3500);
+  };
+}
+function serverGone(){
+  try { window.close(); } catch (e) {}   // fecha se esta aba/janela foi aberta por script (popups ↗)
+  setTimeout(() => {                      // as abas abertas pelo SO o navegador nao deixa o JS fechar
+    document.title = '⏹ encerrado';
+    document.body.innerHTML = '<div style="padding:44px;color:#999;font:14px/1.6 system-ui,sans-serif">'
+      + '⏹ <b style="color:#ccc">native_synth</b> foi encerrado no terminal.<br>Pode fechar esta aba.</div>';
+  }, 350);
+}
+function render(d){
+  if (htmlMtime !== null && d.html_mtime !== htmlMtime) { location.reload(); return; }
+  htmlMtime = d.html_mtime;
+  tickRate();
+
+  const a = d.audio || {};
+  if (a.kick){
+    kickEls.final.fill.style.width = pct(a.kick.final); kickEls.final.val.textContent = a.kick.final.toFixed(2);
+    kickEls.decay.fill.style.width = pct(a.kick.decay); kickEls.decay.val.textContent = a.kick.decay.toFixed(2);
+  }
+  if (a.bands) renderFaixas(a.bands);
+  if (a.spectrum) renderSpectro(a.spectrum);
+  renderRanges(d.bands_hz);
+  renderChannels(d.channels);
+  if (d.bindings && performance.now() - bindTouched >= TOUCH_MS) lastBindings = d.bindings;
+  if (d.selected !== undefined && performance.now() - selTouched.src >= TOUCH_MS) lastSelected = d.selected;
+  if (d.source_fit && performance.now() - fitTouched >= TOUCH_MS) lastSourceFit = d.source_fit;
+  if (d.pool !== undefined && performance.now() - poolTouched >= TOUCH_MS) lastPool = d.pool;
+  renderShaderList();
+  syncLayerSliders();
+  lastBounceBusy = d.bounce_busy || [];
+  if (d.overlays && performance.now() - mediaTouched >= TOUCH_MS) lastOverlays = d.overlays;
+  renderMediaList();
+  renderVideoList();
+  if (d.scene !== undefined && d.scene !== activeScene) loadScenes();   // trocou de set (tecla / outra aba)
+  syncOvlSliders();   // só o highlight segue o stream; a lista vem de /media
+  renderFx();
+  renderOutput(d.output);
+  renderImage(d.image);
+  renderImage(d.out_image, 'out-');
+  if (performance.now() - outimgTouched > TOUCH_MS) $('#outimg-cb').checked = !!d.out_analysis_enabled;
+
+  lastKnobs = d.knobs || lastKnobs;
+  if (d.band_tweaks) lastBandTweaks = d.band_tweaks;
+  for (const [name, o] of Object.entries(knobEls)){
+    if (name === activeKnob || !o.inp.isConnected) continue;   // node de popup rebuild -> ignora o solto
+    if (d.knobs && name in d.knobs){ o.inp.value = d.knobs[name]; o.kv.textContent = fmt(d.knobs[name]); }
+  }
+  if (d.inputs){
+    syncSel($('#sel-audio'), 'audio', d.inputs.audio);
+  }
+}
+connect();
+</script>
