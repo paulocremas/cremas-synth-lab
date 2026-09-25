@@ -19,7 +19,7 @@ if False:
     import tempfile, threading, types, time, urllib.parse, webbrowser, http.server  # noqa
     import numpy, pygame, OpenGL.GL  # noqa
 
-CODE = ['src/native_synth.py', 'src/dash_server.py', 'src/dash_data.py', 'dash.html', 'favicon.png']
+CODE = ['src/native_synth.py', 'src/dash_server.py', 'src/dash_data.py', 'dash.html', 'dash2.html', 'favicon.png']
 DATA = ['src/tuning.py', 'shaders', 'transitions', 'media']
 
 

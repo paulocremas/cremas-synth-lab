@@ -24,6 +24,7 @@ BANDS_ENABLED = 1
 # "Output Image" no dash. Desliga por padrao: e' leitura de GPU (glReadPixels), custa
 # CPU/GPU a mais mesmo raro; liga so quando for de fato calibrar/usar essa aba.
 OUT_ANALYSIS_ENABLED = 1
+OUTPUT_FPS = 60            # fps da janela de saida (dash v2 > Saida: 24/30/50/60)
 FREQ_BAND_HZ = [
     [21, 88],  # Sub-bass
     [88, 342],  # Low-mid

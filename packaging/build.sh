@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 D=dist/prisma
 mkdir -p "$D/src"
 cp src/*.py "$D/src/"
-cp dash.html favicon.png "$D/"
+cp dash.html dash2.html favicon.png "$D/"
 cp -r shaders transitions "$D/"
 mkdir -p "$D/media"   # midia do usuario fica em ~/.local/share/prisma/media, nao aqui
 echo "ok: $D/prisma"

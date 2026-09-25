@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import threading
 import time
 import urllib.parse
@@ -26,6 +27,7 @@ import dash_data  # parse_fx_manifest (mesma pasta src/)
 _HERE = os.path.dirname(os.path.abspath(__file__))          # src/
 _ROOT = os.path.dirname(_HERE)                              # raiz do repo
 _HTML = os.path.join(_ROOT, 'dash.html')
+_HTML2 = os.path.join(_ROOT, 'dash2.html')                   # v2 (ao vivo), servido em /v2
 _FAVICON = os.path.join(_ROOT, 'favicon.png')  # copia do de paulocremas.github.io
 _SHADERS = os.path.join(_ROOT, 'shaders')                   # image.frag + presets/*.frag
 _MEDIA = os.path.join(_ROOT, 'media')                       # galeria da aba Visuais (imgs/videos)
@@ -71,6 +73,15 @@ _cfg = {'is_running': lambda: True, 'audio_source': '', 'video_mode': '', 'tunin
         'on_inputs': None, 'on_set_input': None, 'on_set_output': None}  # callbacks (native_synth)
 
 
+def _write_atomic(path, text):
+    """Grava o tuning.py de uma vez (temporario + os.replace): o native recarrega o arquivo pelo
+    mtime a qualquer momento, e com open('w') ele podia ler o arquivo truncado pela metade."""
+    tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
+    with open(tmp, 'w') as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
 def set_knob(name, value, tuning_path=None):
     """Reescreve `NAME = <numero>` em tuning.py preservando o comentario da linha. Devolve o
     valor efetivamente gravado (ja clampado ao [min,max] do spec). Levanta KeyError se o nome
@@ -86,7 +97,9 @@ def set_knob(name, value, tuning_path=None):
         new, n = re.subn(rf'(?m)^({re.escape(name)} = )[-\d.eE+]+', rf'\g<1>{literal}', src)
         if n != 1:
             raise KeyError(f'{name}: {n} ocorrencias em {path} (esperava 1)')
-        open(path, 'w').write(new)
+        _write_atomic(path, new)
+    if _tuning is not None:   # na hora: o reload do native pode demorar (loop de audio parado)
+        setattr(_tuning, name, int(round(value)) if spec.get('int') else round(value, 4))
     return value
 
 
@@ -129,7 +142,12 @@ def set_band_ranges(overlap, ranges, tuning_path=None, enabled=None):
             src, n3 = re.subn(r'(?m)^BANDS_ENABLED = [01]', f'BANDS_ENABLED = {enabled}', src)
             if n3 != 1:
                 raise KeyError(f'tuning.py: BANDS_ENABLED x{n3} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
+    if _tuning is not None:   # na hora (o stream le daqui; o reload do native pode atrasar)
+        _tuning.HZ_OVERLAP = overlap
+        _tuning.FREQ_BAND_HZ = [list(x) for x in ranges]
+        if enabled is not None:
+            _tuning.BANDS_ENABLED = enabled
     out = {'overlap': overlap, 'ranges': ranges}
     if enabled is not None:
         out['enabled'] = enabled
@@ -163,7 +181,10 @@ def set_band_tweaks(tweaks, tuning_path=None):
             if n != 1:
                 raise KeyError(f'tuning.py: {key} x{n} (esperava 1)')
             out[key] = vals
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
+    if _tuning is not None:
+        for key, vals in out.items():
+            setattr(_tuning, key, list(vals))
     return out
 
 
@@ -205,15 +226,17 @@ def _list_shaders(setname=None):
     return out
 
 
-def _shader_manifests(names):
-    """{caminho: [nomes do cabecalho // fx:]} — os sliders de forca de cada shader."""
+def _shader_manifests(names, defaults=False):
+    """{caminho: [nomes do cabecalho // fx:]} — os sliders de forca de cada shader.
+    defaults=True -> {caminho: {nome: padrao}} (o "nome=0.5" do cabecalho)."""
     out = {}
     for rel in names:
         try:
             with open(os.path.join(_SHADERS, rel)) as f:
-                out[rel] = dash_data.parse_fx_manifest(f.read(4000))
+                d = dash_data.parse_fx_defaults(f.read(4000))
         except OSError:
-            out[rel] = []
+            d = {}
+        out[rel] = d if defaults else list(d)
     return out
 
 
@@ -236,7 +259,7 @@ def set_shader(name, tuning_path=None):
         new, n = re.subn(r'(?m)^(SHADER = )"[^"]*"', rf'\g<1>"{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: SHADER x{n} (esperava 1)')
-        open(path, 'w').write(new)
+        _write_atomic(path, new)
     if _tuning is not None:
         _tuning.SHADER = name
     return name
@@ -252,7 +275,7 @@ def set_active_shader_set(name, tuning_path=None):
         src, n = re.subn(r'(?m)^SHADER_SET = "[^"]*"', f'SHADER_SET = "{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: SHADER_SET x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     if _tuning is not None:
         _tuning.SHADER_SET = name
     return name
@@ -390,7 +413,7 @@ def _write_keys(block, nested, tuning_path=None):
         src, n = re.subn(rf'(?ms)^{block} = \{{.*?^\}}', text, src)
         if n != 1:
             raise KeyError(f'tuning.py: {block} x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     if _tuning is not None:
         setattr(_tuning, block, {s: dict(mp) for s, mp in clean.items()})
     return clean
@@ -437,7 +460,8 @@ def bind_shader_key(name, key, tuning_path=None):
 # espelhado no accept= do <input id="media-file"> do dash.html — manter os dois iguais
 _MEDIA_EXT = {'image': {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'},
               'video': {'.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v'}}
-_MEDIA_MAX = 400 * 1024 * 1024  # teto do upload (bytes) — leitura do body inteira na memoria
+_MEDIA_CHUNK = 1024 * 1024       # upload vai do socket pro disco em blocos (memoria constante)
+_MEDIA_FREE_MIN = 256 * 1024 * 1024  # folga que sobra no disco depois do upload
 
 
 def _media_dir(override=None):
@@ -525,7 +549,7 @@ def _write_media(allm, tuning_path=None):
         src, n = re.subn(r'(?ms)^MEDIA = \[.*?^\]', block, src)
         if n != 1:
             raise KeyError(f'tuning.py: MEDIA x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     if _tuning is not None:   # patch na hora (mesmo objeto do native_synth) — evita GET velho
         _tuning.MEDIA = [dict(m) for m in clean]
     return clean
@@ -568,9 +592,25 @@ def set_media(items, setname=None, tuning_path=None, media_dir=None):
     return [dict(m, set=setname) for m in clean]
 
 
-def add_media(orig_name, kind=None, data=b'', setname=None, tuning_path=None, media_dir=None):
-    """Grava `data` em media/<set>/<slug><ext> e adiciona a MEDIA no set `setname` (ativo se
-    None). `kind` opcional — sai da extensao."""
+class _Body:
+    """Body do POST lido aos poucos, contando o que falta (pra `drain` se o upload for recusado)."""
+    def __init__(self, rfile, length):
+        self.rfile, self.left = rfile, length
+
+    def read(self, n):
+        buf = self.rfile.read(min(n, self.left)) if self.left > 0 else b''
+        self.left -= len(buf)
+        return buf
+
+    def drain(self):
+        while self.left > 0 and self.read(_MEDIA_CHUNK):
+            pass
+
+
+def add_media(orig_name, kind=None, data=b'', setname=None, tuning_path=None, media_dir=None,
+              stream=None, length=0):
+    """Grava `data` (ou `length` bytes lidos de `stream`, em blocos) em media/<set>/<slug><ext> e
+    adiciona a MEDIA no set `setname` (ativo se None). `kind` opcional — sai da extensao."""
     if setname is None:
         setname = _active_media_set()
     ext = os.path.splitext(str(orig_name))[1].lower()
@@ -588,9 +628,27 @@ def add_media(orig_name, kind=None, data=b'', setname=None, tuning_path=None, me
         raise ValueError(f'ja existe: media/{_media_rel(setname, fname)}')
     if any(m['name'] == slug for m in _read_media(setname, media_dir)):
         raise ValueError(f'ja existe midia {slug!r} no set {setname!r}')
+    if stream is not None and shutil.disk_usage(sd).free < length + _MEDIA_FREE_MIN:
+        raise ValueError(f'sem espaco em disco pra {length // (1024 * 1024)} MB')
     entry = {'name': slug, 'file': _media_rel(setname, fname), 'kind': kind, 'fit': 'fill', 'transition': ''}
-    with open(fpath, 'wb') as f:
-        f.write(data)
+    part = fpath + '.part'   # so vira o arquivo de verdade se chegou inteiro
+    try:
+        with open(part, 'wb') as f:
+            if stream is None:
+                f.write(data)
+            else:
+                left = length
+                while left > 0:
+                    buf = stream.read(min(_MEDIA_CHUNK, left))
+                    if not buf:
+                        raise ValueError(f'upload interrompido ({length - left} de {length} bytes)')
+                    f.write(buf)
+                    left -= len(buf)
+        os.replace(part, fpath)
+    except BaseException:
+        if os.path.exists(part):
+            os.remove(part)
+        raise
     _write_media(_read_media(None, media_dir) + [entry], tuning_path)
     return dict(entry, set=setname)
 
@@ -619,6 +677,50 @@ def delete_media(name, setname=None, tuning_path=None, media_dir=None):
     return name
 
 
+# ---------------- miniatura dos canais da mesa (GET /thumb?src=) ----------------
+_thumb_cache = {}   # caminho da midia -> (mtime, jpeg)
+
+
+def _jpeg(args, data=None, vf='scale=240:-2'):
+    try:
+        r = subprocess.run(['ffmpeg', '-loglevel', 'error', *args, '-frames:v', '1', '-vf', vf,
+                            '-q:v', '6', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-'],
+                           input=data, capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout or None
+
+
+def thumb(src):
+    """JPEG pequeno pro card do canal: midia = 1 frame do arquivo (cache por mtime); camera/tela =
+    o frame que o native esta capturando agora (on_thumb). None = sem imagem (fonte parada)."""
+    src = _base_key(src)
+    if src.startswith(('webcam:', 'screen:')):
+        fn = _cfg.get('on_thumb')
+        got = fn(src) if fn else None
+        if not got:
+            return None
+        data, w, h = got
+        return _jpeg(['-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{w}x{h}', '-i', '-'], data)
+    if not src or '..' in src:
+        return None
+    path = os.path.join(_media_dir(), src)
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return None
+    hit = _thumb_cache.get(path)
+    if hit and hit[0] == mt:
+        return hit[1]
+    jpg = None
+    if os.path.splitext(path)[1].lower() in _MEDIA_EXT['video']:
+        jpg = _jpeg(['-ss', '1', '-i', path])       # 1s adentro: evita o 1o frame preto
+    jpg = jpg or _jpeg(['-i', path], vf='format=rgba,premultiply=inplace=1,scale=240:-2')  # transparente -> preto
+    if jpg:
+        _thumb_cache[path] = (mt, jpg)
+    return jpg
+
+
 # ---------------- camadas (overlay) de midia: OVERLAYS = [{file, opacity}] ----------------
 # Ordem = de baixo pra cima, na ordem em que foram marcadas (a ultima marcada fica por cima).
 # Vivo em _state['overlays'] (o native_synth compoe por frame em cima da fonte atual); gravado
@@ -628,16 +730,53 @@ def delete_media(name, setname=None, tuning_path=None, media_dir=None):
 LAYER_BLENDS = ['normal', 'soma', 'tela', 'multiplicar', 'clarear']
 
 
-def _norm_overlays(items):
-    out, seen = [], set()
+def _chkey(o):
+    """chave do CANAL da mesa: a mesma fonte pode estar 2x+ (item com 'dup': N >= 2) -> 'file#N'.
+    BINDINGS e a selecao usam essa chave; o frame vem da fonte (_base_key)."""
+    d = o.get('dup')
+    return f"{o.get('file', '')}#{d}" if d else o.get('file', '')
+
+
+def _base_key(key):
+    """'file#N' -> 'file' (a fonte de verdade de um canal repetido)."""
+    b, sep, n = str(key or '').rpartition('#')
+    return b if sep and n.isdigit() else str(key or '')
+
+
+def _remap_key(key, files):
+    """renomear/apagar na Biblioteca numa chave de canal ('file' ou 'file#N'). None = apagada."""
+    b = _base_key(key)
+    if b not in files:
+        return key
+    return files[b] + key[len(b):] if files[b] else None
+
+
+def _norm_fx(lv):
+    return {str(n): round(max(0.0, min(1.0, float(x))), 4) for n, x in dict(lv or {}).items()}
+
+
+def _norm_overlays(items, dedupe=True):
+    """dedupe=False na pilha de shaders: o mesmo .frag pode entrar 2x na mesma fonte (cada entrada
+    com as suas forcas em 'fx')."""
+    out, seen, aud = [], set(), False
     for it in items or []:
         f = str((it or {}).get('file', '')).replace('\\', '/').lstrip('/')
-        if not f or '..' in f or f in seen:
+        dup = int(it.get('dup') or 0) if str(it.get('dup') or '').isdigit() else 0
+        ck = f'{f}#{dup}' if dup >= 2 else f
+        if not f or '..' in f or (dedupe and ck in seen):
             continue
-        seen.add(f)
+        seen.add(ck)
         o = {'file': f, 'opacity': round(max(0.0, min(1.0, float(it.get('opacity', 1.0)))), 3)}
+        if dup >= 2:        # 2a+ vez da mesma fonte na mesa (canal proprio: pilha/modo/opacidade)
+            o['dup'] = dup
         if it.get('blend') in LAYER_BLENDS[1:]:   # 'normal' (padrao) nao vai pro tuning.py
             o['blend'] = it['blend']
+        if it.get('off'):   # desligada: fica na lista (posicao/opacidade lembradas), fora da saida
+            o['off'] = 1
+        if it.get('audio') and not aud:   # 🔊 video = fonte de audio no lugar do PulseAudio (so' 1)
+            o['audio'], aud = 1, True
+        if isinstance(it.get('fx'), dict):   # forcas desta entrada da pilha (ausente = fx[shader] da fonte)
+            o['fx'] = _norm_fx(it['fx'])
         out.append(o)
     return out
 
@@ -657,7 +796,7 @@ def _set_layers(key, var, items, save, tuning_path, comment):
             src, n = re.subn(rf'(?ms)^{var} = \[.*?^\]', block, src)
             if n == 0:
                 src = src.rstrip('\n') + f'\n\n# {comment}\n' + block + '\n'
-            open(path, 'w').write(src)
+            _write_atomic(path, src)
         if _tuning is not None:
             setattr(_tuning, var, [dict(o) for o in clean])
     return clean
@@ -724,8 +863,8 @@ def _norm_bindings(b):
         for sh, lv in dict(v.get('fx') or {}).items():
             if '..' in str(sh) or not isinstance(lv, dict):
                 continue
-            fx[str(sh)] = {str(n): round(max(0.0, min(1.0, float(x))), 4) for n, x in lv.items()}
-        out[key] = {'shaders': _norm_overlays(v.get('shaders')), 'fx': fx}
+            fx[str(sh)] = _norm_fx(lv)
+        out[key] = {'shaders': _norm_overlays(v.get('shaders'), dedupe=False), 'fx': fx}
     return out
 
 
@@ -745,7 +884,7 @@ def set_bindings(b, save=False, tuning_path=None):
             if n == 0:
                 src = src.rstrip('\n') + ('\n\n# fonte/midia -> shaders dela (+ forca dos efeitos), dash aba'
                                           ' Visuals > Sets\n') + block + '\n'
-            open(path, 'w').write(src)
+            _write_atomic(path, src)
         if _tuning is not None:
             _tuning.BINDINGS = json.loads(json.dumps(clean))
     return clean
@@ -761,7 +900,7 @@ def _remap_bindings(bindings, files=None, shaders=None):
     files, shaders = files or {}, shaders or {}
     out = {}
     for key, v in bindings.items():
-        nk = files.get(key, key)
+        nk = _remap_key(key, files)
         if not nk:
             continue
         out[nk] = {'shaders': [dict(o, file=shaders[o['file']]) if o['file'] in shaders else o
@@ -831,7 +970,7 @@ def set_source_fit(key, fit, tuning_path=None):
         if n == 0:
             src = src.rstrip('\n') + ('\n\n# camera/tela: "fit" = encaixa com margens (ausente = estica pra'
                                       ' preencher), dash aba Visuals > Sets\n') + block + '\n'
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     if _tuning is not None:
         _tuning.SOURCE_FIT = cur
     fn = _cfg.get('on_set_input')     # a capturada (selecionada) respawna com o -vf novo
@@ -844,7 +983,7 @@ def select_source(key):
     """Seleciona a fonte (clique no nome): a lista de efeitos passa a ser a dela, e a captura/
     analise (aba Source Image) segue ela. NAO muda a saida — so o que esta marcado conta."""
     key = str(key or '')
-    ident = _input_of_source_key(key)
+    ident = _input_of_source_key(_base_key(key))   # canal repetido ('file#2') captura a fonte dele
     if not ident:
         raise ValueError(f'fonte desconhecida: {key!r}')
     if _state is not None:
@@ -963,7 +1102,7 @@ def _write_scenes(scenes, active=None, tuning_path=None):
             src, n = re.subn(r'(?m)^SCENE = .*$', lambda _: line, src)
             if n == 0:
                 src = src.rstrip('\n') + '\n' + line + '\n'
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     if _tuning is not None:
         _tuning.SCENES = [dict(sc) for sc in scenes]
         if active is not None:
@@ -1001,7 +1140,7 @@ def save_active_scene(tuning_path=None):
 def _find_scene(name, scenes=None):
     sc = next((x for x in (scenes if scenes is not None else _read_scenes()) if x.get('name') == name), None)
     if sc is None:
-        raise ValueError(f'set desconhecido: {name!r}')
+        raise ValueError(f'scene desconhecida: {name!r}')
     return sc
 
 
@@ -1045,7 +1184,7 @@ def create_scene(name, tuning_path=None):
         raise ValueError('nome vazio')
     scenes = _read_scenes()
     if any(sc.get('name') == name for sc in scenes):
-        raise ValueError(f'set ja existe: {name}')
+        raise ValueError(f'scene ja existe: {name}')
     scenes.append(_scene_with({'name': name, 'key': '', 'transition': ''}, scene_capture()))
     _write_scenes(scenes, active=name, tuning_path=tuning_path)
     return name
@@ -1058,7 +1197,7 @@ def rename_scene(name, newname, tuning_path=None):
     if not newname:
         raise ValueError('nome vazio')
     if newname != name and any(x.get('name') == newname for x in scenes):
-        raise ValueError(f'set ja existe: {newname}')
+        raise ValueError(f'scene ja existe: {newname}')
     sc['name'] = newname
     active = newname if _active_scene_name() == name else None
     _write_scenes(scenes, active=active, tuning_path=tuning_path)
@@ -1070,7 +1209,7 @@ def delete_scene(name, tuning_path=None):
     scenes = _read_scenes()
     _find_scene(name, scenes)
     if len(scenes) <= 1:
-        raise ValueError('precisa sobrar pelo menos um set')
+        raise ValueError('precisa sobrar pelo menos uma scene')
     scenes = [x for x in scenes if x.get('name') != name]
     was_active = _active_scene_name() == name
     _write_scenes(scenes, tuning_path=tuning_path)
@@ -1132,8 +1271,8 @@ def _remap_scenes(files=None, shaders=None, names=None, trans=None, tuning_path=
         sc['bindings'] = _remap_bindings(sc.get('bindings') or {}, files, shaders)
         if sc.get('pool'):
             sc['pool'] = _remap_pool(sc['pool'], files, shaders)
-        if sc.get('selected') in files:
-            sc['selected'] = files[sc['selected']] or ''
+        if sc.get('selected') and _base_key(sc['selected']) in files:
+            sc['selected'] = _remap_key(sc['selected'], files) or ''
         if sc.get('transition') in trans:
             sc['transition'] = trans[sc['transition']]
         changed |= json.dumps(sc, sort_keys=True) != before
@@ -1156,7 +1295,7 @@ def set_active_media_set(name, tuning_path=None, media_dir=None):
         src, n = re.subn(r'(?m)^MEDIA_SET = "[^"]*"', f'MEDIA_SET = "{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: MEDIA_SET x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     if _tuning is not None:
         _tuning.MEDIA_SET = name
     return name
@@ -1251,7 +1390,7 @@ def set_transition_default(name, tuning_path=None, trans_dir=None):
         src, n = re.subn(r'(?m)^TRANSITION_DEFAULT = "[^"]*"', f'TRANSITION_DEFAULT = "{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: TRANSITION_DEFAULT x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     if _tuning is not None:
         _tuning.TRANSITION_DEFAULT = name
     return name
@@ -1356,8 +1495,31 @@ def set_fx(fx, tuning_path=None):
         src, n = re.subn(r'(?ms)^FX = \{.*?^\}', block, src)
         if n != 1:
             raise KeyError(f'tuning.py: FX x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
     return clean
+
+
+OUTPUT_FPS_CHOICES = (24, 30, 50, 60)
+
+
+def set_output_fps(fps, tuning_path=None):
+    """fps da janela de saida (dash v2, aba Saida): patcha tuning.OUTPUT_FPS na hora (o loop GL
+    le a cada frame) e grava `OUTPUT_FPS = N` no tuning.py (acrescenta a linha se nao houver)."""
+    fps = int(fps)
+    if fps not in OUTPUT_FPS_CHOICES:
+        raise ValueError(f'fps {fps} fora de {OUTPUT_FPS_CHOICES}')
+    if _tuning is not None:
+        _tuning.OUTPUT_FPS = fps
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(r'(?m)^OUTPUT_FPS = \d+', f'OUTPUT_FPS = {fps}', src)
+        if n == 0:
+            src = src.rstrip('\n') + ('\n\n# fps da janela de saida (dash v2 > Saida). A 60 o movimento dos shaders'
+                                      ' fica liso; camera/video continuam no fps deles\n'
+                                      f'OUTPUT_FPS = {fps}\n')
+        _write_atomic(path, src)
+    return fps
 
 
 def set_out_analysis(enabled, tuning_path=None):
@@ -1370,8 +1532,66 @@ def set_out_analysis(enabled, tuning_path=None):
         src, n = re.subn(r'(?m)^OUT_ANALYSIS_ENABLED = [01]', f'OUT_ANALYSIS_ENABLED = {enabled}', src)
         if n != 1:
             raise KeyError(f'tuning.py: OUT_ANALYSIS_ENABLED x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
+    if _tuning is not None:
+        _tuning.OUT_ANALYSIS_ENABLED = enabled
     return enabled
+
+
+GRADE_FRAG = 'calibrar.frag'   # shaders/calibrar.frag — calibracao da SAIDA (ultimo passe do loop GL)
+
+
+def output_grade_defaults():
+    """{knob: padrao} do cabecalho // fx: do calibrar.frag (o dash monta os knobs disso)."""
+    try:
+        with open(os.path.join(_SHADERS, GRADE_FRAG)) as f:
+            return dash_data.parse_fx_defaults(f.read(4000))
+    except OSError:
+        return {}
+
+
+def _current_output_grade():
+    g = getattr(_tuning, 'OUTPUT_GRADE', None) or {}
+    out = {'on': int(bool(g.get('on', 1))), 'test': int(bool(g.get('test', 0))),
+           'fx': dict(g.get('fx') or {})}
+    if 'master' in g:
+        out['master'] = g['master']
+    return out
+
+
+def set_output_grade(grade, save=True, tuning_path=None):
+    """Calibracao da saida (aba Output Image): {'on': 0|1, 'test': 0|1 (padrao de teste no
+    lugar da imagem), 'fx': {knob: 0..1}} -> tuning.OUTPUT_GRADE (patch na hora; o native le
+    a cada frame). save=False = arrasto de knob (so' o modulo, sem gravar o tuning.py). So'
+    guarda knob fora do padrao do calibrar.frag; ints, nao bools (o bloco sai via json.dumps)."""
+    dflt = output_grade_defaults()
+    fx = {}
+    for n, v in dict((grade or {}).get('fx') or {}).items():
+        n = str(n)
+        if not re.fullmatch(r'[A-Za-z0-9_]+', n):
+            raise ValueError(f'knob invalido: {n!r}')
+        v = round(min(1.0, max(0.0, float(v))), 3)
+        if n in dflt and v == dflt[n]:
+            continue
+        fx[n] = v
+    out = {'on': int(bool(grade.get('on', 1))), 'test': int(bool(grade.get('test', 0))), 'fx': fx}
+    # master (dash v2: fader + blackout): 0..1, vale mesmo com a calibracao desligada; 1 = omitido
+    master = round(min(1.0, max(0.0, float(grade.get('master', 1.0)))), 3)
+    if master < 1.0:
+        out['master'] = master
+    if _tuning is not None:
+        _tuning.OUTPUT_GRADE = out
+    if save:
+        block = 'OUTPUT_GRADE = ' + json.dumps(out, indent=4, sort_keys=True)
+        path = tuning_path or _cfg['tuning_path']
+        with _knob_lock:
+            src = open(path).read()
+            src, n = re.subn(r'(?ms)^OUTPUT_GRADE = \{.*?^\}', lambda _: block, src)
+            if n == 0:
+                src = src.rstrip('\n') + ('\n\n# calibracao da saida (telao): shaders/calibrar.frag, knobs na'
+                                          ' aba Output Image. fx ausente = padrao do .frag\n') + block + '\n'
+            _write_atomic(path, src)
+    return out
 
 
 def set_channels(channels, tuning_path=None):
@@ -1391,7 +1611,9 @@ def set_channels(channels, tuning_path=None):
         src, n = re.subn(r'(?ms)^CHANNELS = \[.*?^\]', block, src)
         if n != 1:
             raise KeyError(f'tuning.py: CHANNELS x{n} (esperava 1)')
-        open(path, 'w').write(src)
+        _write_atomic(path, src)
+    if _tuning is not None:
+        _tuning.CHANNELS = [dict(c) for c in ch]
     return ch
 
 
@@ -1405,13 +1627,17 @@ def _payload():
         'image': _state.get('image', {}),
         'out_image': _state.get('out_image', {}),
         'out_analysis_enabled': int(getattr(_tuning, 'OUT_ANALYSIS_ENABLED', 0)),
+        'output_grade': _current_output_grade(),   # calibracao da saida (knobs em /output-grade)
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
+        'audio_media': os.path.relpath(_state['audio_media'], _media_dir()).replace(os.sep, '/')
+                       if _state.get('audio_media') else '',   # video 🔊 da mesa no lugar do PulseAudio
         'video_mode': _state.get('video_label') or _cfg['video_mode'],
         # ids no formato das opcoes dos <select> — pro dash sincronizar os dropdowns entre abas
         'inputs': {'audio': _state.get('audio_source', ''), 'video': _state.get('video_id', '')},
         'output': _state.get('output', {}),   # geometria/fps da janela de saida (imagem sintetizada)
+        'output_fps': int(getattr(_tuning, 'OUTPUT_FPS', 60) or 60),   # escolhido no dash v2 (Saida)
         'bands_hz': {'overlap': int(getattr(_tuning, 'HZ_OVERLAP', 0)),
                      'enabled': int(getattr(_tuning, 'BANDS_ENABLED', 1)),
                      'ranges': [list(x) for x in getattr(_tuning, 'FREQ_BAND_HZ', [])],
@@ -1445,6 +1671,7 @@ def _payload():
         'bounce_busy': [os.path.relpath(p, _media_dir()).replace(os.sep, '/')
                         for p in _state.get('bounce_busy', [])],
         'html_mtime': os.path.getmtime(_HTML),   # cliente recarrega a aba quando muda
+        'html2_mtime': os.path.getmtime(_HTML2) if os.path.exists(_HTML2) else 0,   # idem, v2
     }
 
 
@@ -1470,6 +1697,8 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split('?')[0]
         if path in ('/', '/dash.html'):
             self._send(200, 'text/html; charset=utf-8', open(_HTML, 'rb').read())
+        elif path in ('/v2', '/dash2.html'):
+            self._send(200, 'text/html; charset=utf-8', open(_HTML2, 'rb').read())
         elif path in ('/favicon.png', '/favicon.ico'):  # navegador tambem sonda /favicon.ico
             try:
                 self._send(200, 'image/png', open(_FAVICON, 'rb').read())
@@ -1477,13 +1706,40 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(404, 'text/plain', b'nope')
         elif path == '/knobs':
             self._send(200, 'application/json', json.dumps(KNOBS).encode())
+        elif path == '/thumb':
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            jpg = thumb((q.get('src') or [''])[0])
+            if jpg:
+                self._send(200, 'image/jpeg', jpg)
+            else:
+                self._send(404, 'text/plain', b'sem imagem')
+        elif path == '/frame':   # dash v2: pixels crus reduzidos (rgb24) pra canvas, ~15 fps — ver native _preview_frame
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            fn = _cfg.get('on_frame')
+            got = fn((q.get('which') or ['src'])[0], (q.get('src') or [''])[0]) if fn else None
+            if not got:
+                self._send(204, 'text/plain', b'')
+            else:
+                data, w, h = got
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/octet-stream')
+                self.send_header('Content-Length', str(len(data)))
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-W', str(w))
+                self.send_header('X-H', str(h))
+                self.end_headers()
+                self.wfile.write(data)
         elif path == '/inputs':
             fn = _cfg.get('on_inputs')
             self._send(200, 'application/json', json.dumps(fn() if fn else {}).encode())
+        elif path == '/output-grade':
+            self._send(200, 'application/json', json.dumps(
+                {'grade': _current_output_grade(), 'defaults': output_grade_defaults()}).encode())
         elif path == '/shaders':  # glob aqui, nao no _payload de 20 Hz (igual /inputs)
             s = _active_shader_set()
             self._send(200, 'application/json', json.dumps(
                 {'list': _list_shaders(s), 'manifests': _shader_manifests(_list_shaders(s)),
+                 'fxDefaults': _shader_manifests(_list_shaders(s), defaults=True),
                  'keys': _read_keys_for('SHADER_KEYS', s),
                  'set': s, 'sets': _list_shader_sets()}).encode())
         elif path == '/media':
@@ -1512,15 +1768,23 @@ class _Handler(BaseHTTPRequestHandler):
             while _cfg['is_running']() and self.server is _cfg.get('srv'):
                 self.wfile.write(b'data: ' + json.dumps(_payload()).encode() + b'\n\n')
                 self.wfile.flush()
-                time.sleep(0.05)  # 20 Hz — o dado novo vem a ~14 Hz (DASH_EVERY_N_CHUNKS)
+                time.sleep(1 / 30)  # 30 Hz — audio novo a ~43 Hz; o dash v2 interpola a 60 fps
         except (BrokenPipeError, ConnectionResetError):
             pass  # aba fechou
 
     def do_POST(self):
         path = self.path.split('?')[0]
         length = int(self.headers.get('Content-Length', 0))
-        if path == '/media-add' and length > _MEDIA_MAX:
-            self._send(413, 'text/plain', f'arquivo grande demais (> {_MEDIA_MAX // (1024 * 1024)} MB)'.encode())
+        if path == '/media-add':  # body = bytes do arquivo; ?name=<orig> — vai direto pro disco
+            body = _Body(self.rfile, length)
+            try:
+                q = urllib.parse.parse_qs(self.path.partition('?')[2])
+                entry = add_media(q.get('name', [''])[0], stream=body, length=length)
+                _pool_add('sources', entry['file'])
+                self._send(200, 'application/json', json.dumps(entry).encode())
+            except (KeyError, ValueError, TypeError, OSError) as e:
+                body.drain()   # recusou antes de ler tudo: esvazia o socket pro navegador ver o erro
+                self._send(400, 'text/plain', str(e).encode())
             return
         raw = self.rfile.read(length)
         if path == '/bands':
@@ -1624,15 +1888,6 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
-        if path == '/media-add':  # body = bytes do arquivo; ?name=<orig> (kind sai da extensao)
-            try:
-                q = urllib.parse.parse_qs(self.path.partition('?')[2])
-                entry = add_media(q.get('name', [''])[0], data=raw)
-                _pool_add('sources', entry['file'])
-                self._send(200, 'application/json', json.dumps(entry).encode())
-            except (KeyError, ValueError, TypeError) as e:
-                self._send(400, 'text/plain', str(e).encode())
-            return
         if path == '/media-del':
             try:
                 b = json.loads(raw.decode())
@@ -1708,6 +1963,21 @@ class _Handler(BaseHTTPRequestHandler):
                 out = select_source(json.loads(raw.decode())['src'])
                 save_active_scene()
                 self._send(200, 'application/json', json.dumps({'selected': out}).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/output-grade':  # {grade: {on, test, fx: {knob: 0..1}}, save}
+            try:
+                b = json.loads(raw.decode())
+                out = set_output_grade(b['grade'], save=bool(b.get('save', True)))
+                self._send(200, 'application/json', json.dumps({'grade': out}).encode())
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/output-fps':  # {fps: 24|30|50|60}
+            try:
+                out = set_output_fps(json.loads(raw.decode())['fps'])
+                self._send(200, 'application/json', json.dumps({'fps': out}).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
@@ -1888,16 +2158,18 @@ def _migrate_to_scenes(tuning_path=None, media_dir=None, shaders_dir=None):
 
 
 def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mode='',
-          port=8765, open_browser=True, on_inputs=None, on_set_input=None, on_set_output=None):
+          port=8765, open_browser=True, on_inputs=None, on_set_input=None, on_set_output=None,
+          on_thumb=None, on_frame=None):
     """Sobe o servidor num thread daemon. Degrada sem travar o synth se a porta estiver ocupada.
     open_browser=False num hot-reload pra nao reabrir as abas. on_inputs/on_set_input = callbacks
     do native_synth pra listar/trocar entrada de audio e video. on_set_output = pedido de troca
-    da janela de SAIDA (monitor/tela cheia/dimensao — barra "saida" no topo do dash)."""
+    da janela de SAIDA (monitor/tela cheia/dimensao — barra "saida" no topo do dash). on_thumb(chave)
+    = frame atual de uma fonte viva (bytes rgb24, w, h) | None, pra miniatura da mesa."""
     global _state, _tuning
     _state, _tuning = state, tuning_mod
     _cfg.update(is_running=is_running, audio_source=audio_source, video_mode=video_mode,
                 tuning_path=tuning_path, on_inputs=on_inputs, on_set_input=on_set_input,
-                on_set_output=on_set_output)
+                on_set_output=on_set_output, on_thumb=on_thumb, on_frame=on_frame)
     try:
         _migrate_default_to_folder()
     except (OSError, KeyError, ValueError) as e:
@@ -1930,6 +2202,17 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     open(p, 'w').write('KICK_THRESHOLD = 1.5      # grave cru passa X vezes a media\n'
                        'MID_TREBLE_HZ = 4000\n')
     assert set_knob('KICK_THRESHOLD', 2.0, p) == 2.0
+    assert _norm_overlays([{'file': 'a.png'}, {'file': 'a.png', 'dup': 2}, {'file': 'a.png'}]) == \
+        [{'file': 'a.png', 'opacity': 1.0}, {'file': 'a.png', 'opacity': 1.0, 'dup': 2}], 'mesma fonte 2x (dup)'
+    assert _base_key('d/a.mp4#2') == 'd/a.mp4' and _base_key('screen:HDMI#x') == 'screen:HDMI#x'
+    assert _remap_bindings({'d/a.png#2': {'shaders': []}}, files={'d/a.png': 'd/b.png'}) == \
+        {'d/b.png#2': {'shaders': [], 'fx': {}}}
+    two = _norm_bindings({'cam': {'shaders': [{'file': 'x.frag', 'fx': {'a': 0.2}}, {'file': 'x.frag'}]}})
+    assert [o.get('fx') for o in two['cam']['shaders']] == [{'a': 0.2}, None], 'mesmo shader 2x na pilha'
+    assert _norm_overlays([{'file': 'a.png', 'opacity': 1, 'off': True}, {'file': 'b.png', 'off': 0}]) == \
+        [{'file': 'a.png', 'opacity': 1.0, 'off': 1}, {'file': 'b.png', 'opacity': 1.0}], 'off (desligada) se perdeu'
+    assert [o.get('audio') for o in _norm_overlays([{'file': 'a.mp4', 'audio': 1}, {'file': 'b.mp4', 'audio': True},
+                                                   {'file': 'c.mp4'}])] == [1, None, None], '🔊 e so 1 por mesa'
     txt = open(p).read()
     assert 'KICK_THRESHOLD = 2.0 ' in txt, txt
     assert '# grave cru passa X vezes a media' in txt, 'comentario perdido'
@@ -2123,6 +2406,17 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
                   'transition': '', 'set': 'default'}, e1
     assert os.path.isfile(os.path.join(md, 'default', 'MinhaFoto.png'))   # default agora e' pasta
     add_media('clip.mp4', data=b'y', tuning_path=p, media_dir=md); _sync()
+    import io   # upload em stream: blocos, sem sobrar .part; stream curto = erro e nada gravado
+    big = os.urandom(_MEDIA_CHUNK * 2 + 7)
+    add_media('big.webm', stream=_Body(io.BytesIO(big), len(big)), length=len(big), tuning_path=p, media_dir=md); _sync()
+    assert open(os.path.join(md, 'default', 'big.webm'), 'rb').read() == big
+    try:
+        add_media('cut.webm', stream=_Body(io.BytesIO(b'abc'), 10), length=10, tuning_path=p, media_dir=md)
+        assert False, 'stream curto'
+    except ValueError:
+        pass
+    assert not [f for f in os.listdir(os.path.join(md, 'default')) if f.startswith('cut')]
+    delete_media('big', tuning_path=p, media_dir=md); _sync()
     assert len(_read_media('default', md)) == 2 and _read_media('Show1', md) == []
     try:
         add_media('x.txt', data=b'', tuning_path=p, media_dir=md); assert False, 'extensao ruim'
@@ -2287,6 +2581,27 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert _find_scene('prn')['bindings']['default/w.png']['fx']['presets/default/b.frag'] == {'tint': 0.9}
     assert 'webcam:/dev/video0' in _find_scene('prn')['bindings'], 'relacao de fonte desmarcada devia ser lembrada'
     assert _find_scene('default')['bindings']['default/w.png']['fx']['presets/default/b.frag'] == {'tint': 0.5}
+    # calibracao da saida: so' knob fora do padrao vai pro bloco; save=False nao grava
+    open(os.path.join(_SHADERS, GRADE_FRAG), 'w').write('// fx: gama=0.5, vermelho=0.5, x\n')
+    assert output_grade_defaults() == {'gama': 0.5, 'vermelho': 0.5, 'x': 1.0}
+    g = set_output_grade({'on': 1, 'test': 1, 'fx': {'gama': 0.7, 'vermelho': 0.5}}, tuning_path=p2)
+    assert g == {'on': 1, 'test': 1, 'fx': {'gama': 0.7}}, g
+    ns = {}; exec(open(p2).read(), ns); assert ns['OUTPUT_GRADE'] == g, ns['OUTPUT_GRADE']
+    set_output_grade({'on': 0, 'fx': {'gama': 0.2}}, save=False, tuning_path=p2)
+    assert _tuning.OUTPUT_GRADE['fx'] == {'gama': 0.2}
+    ns = {}; exec(open(p2).read(), ns); assert ns['OUTPUT_GRADE'] == g
+    set_output_grade({'on': 1, 'fx': {}}, tuning_path=p2)
+    ns = {}; exec(open(p2).read(), ns); assert ns['OUTPUT_GRADE'] == {'on': 1, 'test': 0, 'fx': {}}
+    assert set_output_fps(60, tuning_path=p2) == 60 and _tuning.OUTPUT_FPS == 60   # fps da saida (v2)
+    set_output_fps(30, tuning_path=p2); assert open(p2).read().count('OUTPUT_FPS = 30') == 1
+    try:
+        set_output_fps(33, tuning_path=p2); raise AssertionError('33 fps devia falhar')
+    except ValueError:
+        pass
+    g = set_output_grade({'on': 0, 'master': 0.25, 'fx': {}}, tuning_path=p2)   # master (v2)
+    assert g == {'on': 0, 'test': 0, 'fx': {}, 'master': 0.25} and _current_output_grade() == g, g
+    assert set_output_grade({'on': 1, 'master': 1, 'fx': {}}, tuning_path=p2) == {'on': 1, 'test': 0, 'fx': {}}
+    assert open(p2).read().count('OUTPUT_GRADE =') == 1
     # preencher/encaixar de camera/tela: bloco SOURCE_FIT so com os 'fit'; a capturada respawna
     st['video_id'] = 'webcam:/dev/video0'
     assert set_source_fit('webcam:/dev/video0', 'fit', p2) == 'fit' and calls[-1] == 'webcam:/dev/video0'
