@@ -58,7 +58,7 @@ void main() {
     vec2 st0 = st; // UV congelada ANTES de qualquer efeito — a imagem "seca" pro EFEITO 8
 
     // ===== EFEITO 1: ONDA — distorce a coordenada de leitura (imagem "derrete"/ondula) =====
-    float wave_amount = 0.03 * u_subbass * u_kick * u_fx_wave; // <- edita aqui. 0 = desligado. testa 0.01 a 0.05
+    float wave_amount = 0.01 * u_subbass * u_kick * u_fx_wave; // <- edita aqui. 0 = desligado. testa 0.01 a 0.05
     st.x += sin(st.y * 0.05 + u_time * 0.1) * wave_amount * 0.5;
     // st.y += sin(st.x * 0.10 + u_time * 2.5) * wave_amount * 0.5;
 
@@ -74,7 +74,7 @@ void main() {
 
     // ===== EFEITO 2: RGB SPLIT — lê cada canal com um deslocamento diferente (fantasmas coloridos) =====
     // 'split' = distância entre os fantasmas; abre no kick
-    float split = 0.02 * u_subbass * u_kick * u_fx_rgbsplit;  // <- edita aqui. 0 = desligado. testa 0.002 a 0.03
+    float split = 0.01 * u_subbass * u_kick * u_fx_rgbsplit;  // <- edita aqui. 0 = desligado. testa 0.002 a 0.03
     float r = texture2D(u_texture_0, st + vec2(split, 0.0)).r;
     float g = texture2D(u_texture_0, st).g;
     float b = texture2D(u_texture_0, st - vec2(split, 0.0)).b;

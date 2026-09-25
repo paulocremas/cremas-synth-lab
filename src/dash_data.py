@@ -12,9 +12,26 @@ import numpy as np
 def parse_fx_manifest(src):
     """Nomes dos potenciometros de efeito que um shader expoe, do comentario-cabecalho
     "// fx: nome1, nome2, ..." (aba Efeitos do dash). Sem essa linha -> []. Cada nome vira
-    o uniform u_fx_<nome> no GLSL (0..1, 1.0 = cheio) e um slider no dash."""
+    o uniform u_fx_<nome> no GLSL (0..1, 1.0 = cheio) e um slider no dash. "nome=0.5" da' o
+    valor padrao do knob (ver parse_fx_defaults)."""
+    return list(parse_fx_defaults(src))
+
+
+def parse_fx_defaults(src):
+    """{nome: padrao} do cabecalho "// fx: nome, nome=0.5, ..." — padrao = valor do knob
+    enquanto a entrada da pilha nao tem forca gravada (e o do duplo-clique). Sem "=x" -> 1.0."""
     m = re.search(r'(?m)^//\s*fx:\s*(.+)$', src or '')
-    return [s.strip() for s in m.group(1).split(',') if s.strip()] if m else []
+    out = {}
+    for s in (m.group(1).split(',') if m else []):
+        n, _, d = s.partition('=')
+        if not n.strip():
+            continue
+        try:
+            v = min(1.0, max(0.0, float(d))) if d.strip() else 1.0
+        except ValueError:
+            v = 1.0
+        out[n.strip()] = v
+    return out
 
 # espelha FREQ_BANDS (native_synth.py) pro lado web/JSON — nome, [lo, hi] default, cor.
 _FREQ_BANDS = [
@@ -90,6 +107,8 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert parse_fx_manifest('// fx: wave, grain ,vignette\nfoo bar') == ['wave', 'grain', 'vignette']
     assert parse_fx_manifest('//fx:wave') == ['wave']
     assert parse_fx_manifest('nada aqui') == [] and parse_fx_manifest('') == []
+    assert parse_fx_manifest('// fx: a=0.5, b') == ['a', 'b']
+    assert parse_fx_defaults('// fx: a=0.5, b, c=2, d=x') == {'a': 0.5, 'b': 1.0, 'c': 1.0, 'd': 1.0}
 
     freqs = np.fft.rfftfreq(1024, d=1 / 44100)
     spec = np.full(len(freqs), 0.01)
