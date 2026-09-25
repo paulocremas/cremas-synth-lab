@@ -301,7 +301,7 @@
       <text x="655" y="66" fill="#5cb8a6">entrada de imagem (OBS)</text>
       <text x="655" y="131" fill="#5cb8a6">captura (FFMPEG)</text>
       <text x="655" y="259" fill="#5cb8a6">thread de vídeo</text>
-      <text x="400" y="577" fill="#a394d6">loop principal · 30 fps</text>
+      <text x="400" y="577" fill="#a394d6">loop principal · 60 fps</text>
       <text x="400" y="875" fill="#d98aa8">pygame → janela / monitor</text>
       <text x="348" y="264" fill="#a394d6">tuning.py</text>
       <text x="400" y="660" fill="#5cb8a6">u_texture_0</text>
@@ -632,9 +632,8 @@ cópia) + um <code>/32768</code> vetorizado → janela de Hanning → <code>rfft
 (<code>bass_bins</code>…) são montados <b>1×</b> fora do loop — as máscaras só se refazem quando o
 <a href="#tuning"><code>tuning.py</code></a> recarrega. Resolução: 44100/1024 ≈ <b>43&nbsp;Hz/bin</b>
 — no grave as faixas log ficam mais estreitas que um bin, daí o fallback pro bin mais próximo.</p>
-<p>Grava as 13 chaves em <code>state</code>. A cada <code>DASH_EVERY_N_CHUNKS</code> blocos (=&nbsp;3,
-~14&nbsp;Hz) monta, aqui dentro, os dicts que o <a href="#vis-audio">dashboard</a> lê:
-<code>audio_dash_data()</code> (kick / faixas BRUTO·FINAL·SMOOTH·Δ / espectrograma) e
+<p>Grava as 13 chaves em <code>state</code>. A cada bloco (~43&nbsp;Hz) monta, aqui dentro, o dict que o <a href="#vis-audio">dashboard</a> lê,
+<code>audio_dash_data()</code> (kick / faixas BRUTO·FINAL·SMOOTH·Δ / espectrograma), e a cada <code>DASH_EVERY_N_CHUNKS</code> blocos (=&nbsp;2, ~21&nbsp;Hz)
 <code>image_dash_data()</code> — toda a <a href="#vis-img">análise da imagem</a> de entrada (HSV,
 FFT-2D de cor, grid 3×3, histogramas) sobre um frame reduzido por stride
 (<code>frame_downsample</code>): em resolução cheia (~200&nbsp;ms) atrasaria a leitura do próximo
@@ -814,8 +813,8 @@ apagar, padrão). Renomear/apagar atualiza todos os sets que usavam o arquivo.</
 </div>
 
 <section id="loop" data-glossary>
-<h3>loop principal · 30 fps</h3>
-<p>Main thread, <code>clock.tick(30)</code>. Por frame, em ordem:</p>
+<h3>loop principal · 60 fps</h3>
+<p>Main thread, <code>clock.tick(OUTPUT_FPS)</code> (<code>tuning.OUTPUT_FPS</code>, 24/30/50/60, troca ao vivo). Fonte que não trouxe frame novo não é re-subida nem re-misturada (<code>src_tex</code>, <code>comp_last</code>). Por frame, em ordem:</p>
 <ol>
 <li>eventos do pygame (ESC / fechar → encerra);</li>
 <li><code>_source_frames()</code>: as fontes <b>marcadas</b> com frame pronto, de baixo pra cima
