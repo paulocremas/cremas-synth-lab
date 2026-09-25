@@ -109,7 +109,6 @@
   .ibtn:hover { background: #2c2c2c; color: #fff; }
   .txtrow { color: #888; font-size: 12px; margin: 3px 0; }
   .txtrow .lbl { display: inline-block; width: 92px; text-align: right; color: #999; margin-right: 10px; }
-  .note { color: #666; margin-top: 10px; font-size: 11px; max-width: 46em; }
 
   .grids { display: flex; flex-wrap: wrap; gap: 14px; }
   .gbox { width: 108px; }
@@ -131,7 +130,7 @@
   body[data-panel="output-image"] #output-image,
   body[data-panel="output-lights"] #output-lights { display: block; }
   .soon { color: #666; font-size: 12px; max-width: 46em; }
-  #shader-list, #media-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-width: 520px; }
+  #media-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-width: 520px; }
   .subtabs { display: flex; gap: 6px; margin: 4px 0 10px; }
   .subtabs .ibtn.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
   .vsub { display: none; }
@@ -160,6 +159,114 @@
   .sh-row .ovl select.blend { font-size: 11px; padding: 1px 2px; }
   .sh-row > .name.active { border-color: #4a8; color: #fff; background: #2c2c2c; }
   .sh-row .keycap { min-width: 15px; text-align: center; color: #4a8; font-size: 11px; }
+  /* MESA (Visuals > Sets): canais lado a lado + painel de knobs do efeito escolhido */
+  h2.mixhead #keys-btn { margin-left: 0; }
+  /* barra de SETS (cenas): botao por set com a tecla em destaque; a transicao de entrada do ativo */
+  .scenebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0 12px;
+              border-bottom: 1px solid #262626; }
+  .scenebar .sb-label { font-size: 11px; letter-spacing: .12em; color: #888; margin-right: 6px; }
+  .scn { display: flex; align-items: stretch; border: 1px solid #2e2e2e; border-radius: 6px; background: #1a1a1a; }
+  .scn.active { border-color: #4a8; background: #1c2a23; }
+  .scn-go { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px 0 6px; background: none;
+            border: none; color: #bbb; font: inherit; cursor: pointer; }
+  .scn.active .scn-go { color: #fff; }
+  .scn .skc { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+              font-weight: bold; background: #262626; color: #999; }
+  .scn .skc.empty { color: #555; }
+  .scn.active .skc { background: #4a8; color: #111; }
+  .scn-gear { background: none; border: none; border-left: 1px solid #2e2e2e; color: #666; cursor: pointer; padding: 0 8px; font: inherit; }
+  .scn-gear:hover, .scn-gear.open { color: #ddd; }
+  .scn-add { height: 40px; padding: 0 14px; border: 1px dashed #3a3a3a; border-radius: 6px; background: transparent;
+             color: #888; font: inherit; cursor: pointer; }
+  .scenebar input.insel { height: 40px; box-sizing: border-box; width: 170px; }
+  .scenebar .sb-trans { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; }
+  #scene-edit .sh-panel { margin: 8px 0 0; }
+  .mixhud { font-size: 11px; padding: 2px 8px; border: 1px solid #333; border-radius: 4px; color: #888;
+            text-transform: none; letter-spacing: normal; }
+  .mixhud.src { border-color: #4a8; color: #cfe9dc; }
+  .mixhud.fx { border-color: #e8854f; color: #f3c3a6; }
+  #keys-btn.open { border-color: #e8854f; color: #f3c3a6; }
+  .keyspop { border: 1px solid #3a3a3a; background: #1a1a1a; border-radius: 8px; padding: 12px; max-width: 520px;
+             margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; }
+  .keyspop[hidden] { display: none; }
+  .keyspop .krow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .keyspop .klabel { font-size: 11px; color: #bbb; min-width: 170px; }
+  .keyspop .chip { flex: none; padding: 3px 9px; }
+  .keyspop .kval { min-width: 90px; text-align: center; border: 1px solid #333; border-radius: 4px; padding: 2px 8px;
+                   font-weight: bold; background: #111; }
+  .keyspop .kval.cap { border-color: #e8854f; color: #e8854f; }
+  .keyspop .kwarn { font-size: 11px; color: #d9a55a; }
+  .mixorder { display: flex; justify-content: space-between; color: #777; font-size: 10px; letter-spacing: .08em;
+              margin: 10px 0 6px; max-width: 100%; }
+  .mixer { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; align-items: flex-start; }
+  .strip { width: 196px; flex: none; box-sizing: border-box; background: #171717; border: 2px solid #2b2b2b;
+           border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 7px; }
+  .strip.sel { border-color: #e8854f; }
+  .strip.off { opacity: .55; }
+  .mixer.fxmode .strip:not(.sel) { opacity: .4; }
+  .strip.over { border-style: dashed; border-color: #e8854f; }
+  .strip.dragging { opacity: .3; }
+  .strip .thumb { position: relative; overflow: hidden; height: 108px; display: flex; justify-content: space-between;
+                  align-items: flex-start; background: #232323; border: 1px solid #2e2e2e; border-radius: 4px; padding: 5px;
+                  cursor: grab; color: #aaa; font: inherit; font-size: 10px; text-align: left; }
+  .strip .thumb .tn { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .strip .thumb .kc, .strip .thumb .kind { position: relative; }
+  .strip .thumb .kind { align-self: flex-end; background: rgba(0,0,0,.6); padding: 1px 5px; border-radius: 3px; }
+  .srow select.sblend { flex: 1; min-width: 0; font-size: 10px; padding: 1px 2px; }
+  .mixer .kc { min-width: 24px; height: 24px; padding: 0 4px; box-sizing: border-box; border-radius: 4px; display: inline-flex;
+               align-items: center; justify-content: center; font-weight: bold; font-size: 13px; background: #333; color: #ddd; flex: none; }
+  .strip.sel .thumb .kc { background: #e8854f; color: #111; }
+  .srow { display: flex; align-items: center; gap: 6px; }
+  .srow .sname { flex: 1; min-width: 0; font-weight: bold; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srow input[type=range] { flex: 1; min-width: 0; accent-color: #4a8; }
+  .srow .pct { width: 34px; text-align: right; font-size: 11px; color: #bbb; font-variant-numeric: tabular-nums; }
+  .onbtn { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 1px solid #444; background: #1b1b1b;
+           cursor: pointer; padding: 0; }
+  .onbtn.on { background: #4a8; border-color: #4a8; }
+  .chip { flex: 1; font: inherit; font-size: 10px; padding: 3px 0; border-radius: 4px; border: 1px solid #333;
+          background: #1b1b1b; color: #888; cursor: pointer; }
+  .chip.on { background: #243029; color: #cfe9dc; border-color: #3a5a4a; }
+  .mixer .rm { background: none; border: none; color: #666; cursor: pointer; font: inherit; padding: 0 3px; }
+  .mixer .rm:hover { color: #c55; }
+  .fxbox { display: flex; flex-direction: column; gap: 4px; padding: 5px; margin: 0 -5px; border: 1px dashed transparent;
+           border-radius: 6px; }
+  .fxbox.active { border-color: #e8854f; }
+  .fxlabel { font-size: 10px; letter-spacing: .1em; color: #888; }
+  .fxbox.active .fxlabel { color: #e8854f; }
+  .fxbox select.insel, .addcol select.insel { width: 100%; font-size: 11px; color: #8a8; }
+  .ins { display: flex; align-items: center; gap: 5px; height: 30px; padding: 0 3px; border: 1px solid #2a2a2a;
+         border-radius: 4px; background: #1d1d1d; font-size: 11px; cursor: grab; }
+  .ins.picked { border-color: #e8854f; background: #2a1f18; }
+  .ins.off { color: #777; }
+  .ins.over { border-style: dashed; border-color: #e8854f; }
+  .ins.dragging { opacity: .3; }
+  .ins .kc { min-width: 18px; height: 18px; font-size: 10px; background: #2a2a2a; color: #aaa; }
+  .fxbox.active .ins .kc { background: #e8854f; color: #111; }
+  .ins .led { width: 9px; height: 9px; flex: none; border-radius: 50%; border: none; padding: 0; background: #3a3a3a; cursor: pointer; }
+  .ins .led.on { background: #4a8; }
+  .ins .iname { flex: 1; min-width: 0; background: none; border: none; color: inherit; font: inherit; text-align: left;
+                cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; }
+  .ins .bl { font-size: 10px; color: #888; }
+  .addcol { width: 150px; flex: none; }
+  .kt { fill: none; stroke: #2e2e2e; stroke-width: 3.5; stroke-linecap: round; }
+  .ka { fill: none; stroke: #4a8; stroke-width: 3.5; stroke-linecap: round; }
+  .kp { stroke: #ddd; stroke-width: 2; stroke-linecap: round; }
+  .ins.off .ka { stroke: #555; }
+  .bigknob.fx .ka { stroke: #e8854f; }
+  .device { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; border-top: 1px solid #262626;
+            margin-top: 10px; padding: 14px 0; }
+  .dev-info { width: 230px; display: flex; flex-direction: column; gap: 6px; }
+  .dev-cap { font-size: 10px; letter-spacing: .1em; color: #888; }
+  .dev-title { font-size: 16px; font-weight: bold; color: #eee; }
+  .dev-title small { color: #888; font-weight: normal; font-size: 12px; }
+  .blends { display: flex; flex-wrap: wrap; gap: 3px; }
+  .blends .chip { flex: none; padding: 2px 7px; }
+  .knobs { display: flex; gap: 22px; flex-wrap: wrap; }
+  .bigknob { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #ccc;
+             cursor: ns-resize; user-select: none; touch-action: none; }
+  .bigknob .kvv { font-size: 10px; color: #888; }
+  .keyhelp { font-size: 11px; color: #888; line-height: 1.7; border: 1px dashed #333; border-radius: 6px; padding: 8px 12px; }
+  .keyhelp b { color: #ccc; }
   .sh-gear { min-width: 22px; }
   .sh-gear.open { border-color: #4a8; color: #fff; }
   .sh-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 4px 10px;
@@ -205,12 +312,14 @@
     <button class="tab" data-tab="output-image" onclick="tabClick(event, 'output-image')">Output Image</button>
     <button class="tab" data-tab="output-lights" onclick="tabClick(event, 'output-lights')">Output Lights</button>
   </span>
+  <a class="tab" href="/v2" style="color:#4a8;text-decoration:none;font-size:11px" title="dash novo, pra usar ao vivo">v2 ↗</a>
   <span id="rate">— Hz</span>
   <span id="conn" class="down">offline</span>
 </header>
 
 <div id="iobar">
   <label>áudio <select id="sel-audio" class="insel"></select></label>
+  <span id="audio-media" style="display:none;color:#4a8" title="um vídeo marcado 🔊 na mesa está no lugar desta fonte"></span>
   <button class="ibtn" onclick="loadInputs()" title="recarregar lista">&#8635;</button>
   <label>saída <select id="out-mon" class="insel"></select></label>
   <label>dimensão <input type="number" id="out-w" class="insel" style="width:60px" min="160" step="10">
@@ -243,20 +352,15 @@
     </div>
 
     <h2>Ranges das faixas de mixagem (Hz)</h2>
-    <label class="ovl"><input type="checkbox" id="bands-cb" checked> ativar (desliga = u_subbass..u_air ficam 0 no shader,
-      sem apagar as ranges)</label>
+    <label class="ovl"><input type="checkbox" id="bands-cb" checked> ativar</label>
     <label class="ovl"><input type="checkbox" id="ovl-cb"> permitir sobreposição (overlap)</label>
     <div id="ranges-wrap">
       <div class="ranges rulerrow"><i></i><div id="hzruler"></div><i></i><i></i><i></i></div>
       <div class="ranges rulerrow"><i>resumo</i><div id="bandmap"></div><i></i><i></i><i></i></div>
       <div class="ranges" id="ranges"></div>
     </div>
-    <p class="note" id="ovl-note"></p>
 
     <h2>Canais (por instrumento)</h2>
-    <p class="note">Adiciona quantos quiser (até 8). Sem source: canal ocioso. "saída": qual
-      variável esse canal passa a SUBSTITUIR (kick, faixas, amp/bass/mid/treble) enquanto tiver
-      source ligada — sem source, a variável original continua normal. Não mexe nas faixas acima.</p>
     <div id="channels"></div>
     <button class="ibtn" onclick="addChannel()">+ adicionar canal</button>
 
@@ -286,62 +390,27 @@
   <section id="effects">
     <!-- sub-abas: Sets (cenas; editar o set ativo) | Biblioteca (arquivos: adicionar/remover). Ver showSub(). -->
     <div class="subtabs">
-      <button class="ibtn" data-vsub="sets" onclick="showSub('sets')">Sets</button>
+      <button class="ibtn" data-vsub="sets" onclick="showSub('sets')">Scenes</button>
       <button class="ibtn" data-vsub="lib" onclick="showSub('lib')">Biblioteca</button>
     </div>
 
     <div id="vis-sets" class="vsub">
-      <h2 class="withbtn">Sets &mdash; cenas
-        <button class="ibtn" onclick="loadScenes()" title="recarregar">&#8635;</button></h2>
-      <p class="note">Um <b>set</b> guarda tudo desta aba: quais fontes/mídias estão marcadas (a
-        saída), os shaders de cada uma com opacidade e modo, e a força dos efeitos. <b>Clique</b> num
-        set pra entrar nele (com a <b>transição</b> escolhida na linha; <b>(padrão)</b> segue a da
-        Biblioteca). O set ativo <b>auto-salva</b>: tudo que você mexer abaixo grava nele. <b>+ set</b>
-        copia o estado atual num set novo. Engrenagem: renomear, tecla, apagar. Grava <b>SCENES</b> / <b>SCENE</b>.</p>
-      <div id="scene-list"></div>
-      <input type="text" id="new-scene-name" class="insel" placeholder="nome do novo set"
-        style="width:180px" onkeydown="if(event.key==='Enter')newScene()">
-      <button class="ibtn" onclick="newScene()" title="cria um set com o estado atual e entra nele">+ set</button>
-      <span id="new-scene-msg"></span>
-      <p class="editing">editando o set <b id="scene-cur">&mdash;</b> &mdash; tudo abaixo grava nele</p>
+      <div id="scene-bar" class="scenebar"></div>
+      <div id="scene-edit"></div>
 
-      <h2 class="withbtn">Imagem &mdash; fontes e mídias
-        <button class="ibtn" onclick="loadInputs(); loadMedia()" title="recarregar listas">&#8635;</button></h2>
-      <p class="note"><b>×</b> tira a fonte/mídia/shader <b>deste set</b> (some daqui e da saída, mas o
-        que estava configurado fica lembrado); <b>+ adicionar ao set…</b> traz de volta. Arquivo novo da
-        Biblioteca entra no set ativo.</p>
-      <p class="note">A saída é <b>só o que está marcado</b> (<b>camada</b>): cada fonte/mídia marcada
-        entra por cima das anteriores, com a opacidade do slider (o número é a posição, 1 = mais
-        embaixo). <b>Clique no nome</b> = selecionar: a lista de efeitos abaixo passa a ser a
-        <i>dessa</i> fonte/mídia (não muda a saída), e a aba Source Image analisa ela.
-        <b>preencher</b> = estica a imagem pra cobrir a saída (desmarcado = encaixa inteira, com
-        margens); <b>rebate</b> (vídeo) = vai e volta em loop. Esses dois são da fonte/arquivo: valem
-        em todos os sets.</p>
-      <h3 class="subh">Fontes</h3>
-      <div id="video-list"></div>
-      <h3 class="subh">Mídias</h3>
-      <div id="media-pick"></div>
-
-      <h2>Efeitos de <span id="sel-name" class="selname">&mdash;</span></h2>
-      <p class="note">Os shaders <b>desta</b> fonte/mídia (cada uma tem os seus, lembrados mesmo
-        desmarcada). <b>camada</b> = aplica o shader sobre ela; slider = opacidade; menu = modo de
-        mistura (<b>normal</b> cobre, 100% esconde o de baixo; <b>tela</b>/<b>soma</b>/<b>clarear</b>
-        acendem por cima sem apagar; <b>multiplicar</b> escurece). Sem nenhum marcado, ela entra crua.
-        <b>Clique no nome</b> = mostra a força dos efeitos desse shader abaixo.</p>
-      <div id="shader-list"></div>
-
-      <h2>Força dos efeitos &mdash; <span id="fx-title" class="selname">&mdash;</span></h2>
-      <p class="note">Um slider por efeito do cabeçalho <b>// fx:</b> do shader (0 = desligado,
-        1 = cheio) &mdash; vira <b>u_fx_&lt;nome&gt;</b>. Vale para esse shader <b>nessa</b> fonte/mídia.</p>
-      <div id="fx-list"></div>
+      <h2 class="withbtn mixhead">Mesa
+        <span id="mix-hud" class="mixhud"></span>
+        <button class="ibtn" id="keys-btn" onclick="toggleKeysPop()">&#9000; atalhos</button>
+        <button class="ibtn" onclick="loadInputs(); loadMedia(); loadShaders()" title="recarregar listas">&#8635;</button></h2>
+      <div id="keys-pop" class="keyspop" hidden></div>
+      <div class="mixorder"><span>&larr; 1 = embaixo &middot; arraste o card pra reordenar</span><span>em cima &rarr;</span></div>
+      <div id="mixer" class="mixer"></div>
+      <div id="device" class="device"></div>
     </div>
 
     <div id="vis-lib" class="vsub">
       <h2 class="withbtn">Mídia &mdash; imagens e vídeos
         <button class="ibtn" onclick="loadMedia()" title="recarregar">&#8635;</button></h2>
-      <p class="note">Arquivos em <b>media/</b>. Engrenagem: renomear, excluir (sai também dos sets
-        que a usam). <b>preencher</b> e <b>rebate</b> ficam na lista de Mídias da sub-aba Sets.
-        Grava <b>MEDIA</b>.</p>
       <div id="media-list"></div>
       <input type="file" id="media-file" hidden
         accept="image/*,video/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.mp4,.mov,.mkv,.webm,.avi,.m4v">
@@ -350,22 +419,14 @@
 
       <h2 class="withbtn">Efeitos &mdash; arquivos .frag
         <button class="ibtn" onclick="loadShaders()" title="recarregar lista de arquivos">&#8635;</button></h2>
-      <p class="note">Arquivos em <b>shaders/</b>: <b>image.frag</b> (base) + <b>presets/default/*.frag</b>.
-        Cabeçalho <b>// fx: a, b</b> = sliders de força. Editar o arquivo aplica ao vivo.
-        "+ criar .frag" gera um template e o põe como shader do set ativo.</p>
       <div id="shader-admin"></div>
       <input type="text" id="new-fx-name" class="insel" placeholder="nome do novo efeito"
         style="width:180px" onkeydown="if(event.key==='Enter')newShader()">
       <button class="ibtn" onclick="newShader()" title="cria shaders/presets/default/&lt;nome&gt;.frag (template minimo) e o deixa ativo">+ criar .frag</button>
       <span id="new-fx-msg"></span>
 
-      <h2 class="withbtn">Transições &mdash; entre sets
+      <h2 class="withbtn">Transições &mdash; entre scenes
         <button class="ibtn" onclick="loadTransitions()" title="recarregar">&#8635;</button></h2>
-      <p class="note">Arquivos <b>.glsl</b> em <b>transitions/</b> (estilo gl-transitions: uma
-        <b>vec4 transition(vec2 uv)</b> com <b>getFromColor</b>/<b>getToColor</b>/<b>progress</b>;
-        cabeçalho <b>// ms: N</b> = duração). Na troca de set, mistura a imagem final do set que sai
-        com a do que entra. Cada set escolhe a sua (ou <b>(padrão)</b>, definido aqui). Grava
-        <b>TRANSITION_DEFAULT</b>.</p>
       <div class="txtrow"><span class="lbl">padrão</span> <select id="trans-default" class="insel"></select></div>
       <div id="trans-list"></div>
       <input type="text" id="new-trans-name" class="insel" placeholder="nome da nova transição"
@@ -377,13 +438,16 @@
 
   <section id="output-image">
     <h2>Output Image &mdash; a imagem sintetizada (image.frag), como fonte</h2>
-    <label class="ovl"><input type="checkbox" id="outimg-cb"> calcular (~5x/s; lê a imagem já
-      sintetizada e roda os mesmos medidores do Source Image nela — desligado por padrão porque
-      custa GPU a mais, mesmo raro)</label>
-    <p class="note">Vai calibrar o output do mesmo jeito que Source Audio calibra o áudio hoje
-      (ranges, suavização, evitar estouro/sobreposição de cor) antes de virar controle de
-      <b>Output Lights</b>. Sem o checkbox acima ligado (e o app reiniciado desde que essa aba
-      apareceu), os números abaixo ficam zerados.</p>
+    <label class="ovl"><input type="checkbox" id="outimg-cb"> calcular (~5x/s)</label>
+
+    <h2>Calibração do telão &mdash; última etapa, na saída inteira (shaders/calibrar.frag)</h2>
+    <div class="io">
+      <label><input type="checkbox" id="grade-on"> ligada</label>
+      &nbsp;&nbsp; <label><input type="checkbox" id="grade-test"> padrão de teste</label>
+      &nbsp;&nbsp; <button class="ibtn" id="grade-reset" title="todos os knobs de volta ao neutro">zerar</button>
+      &nbsp;&nbsp; <span style="color:#888;font-size:11px">0.5 = neutro · duplo-clique zera o knob · shift = fino</span>
+    </div>
+    <div class="knobs" id="grade-knobs" style="margin:10px 0 4px"></div>
 
     <h2>Resumo</h2>
     <div class="io">
@@ -563,9 +627,7 @@ function renderOutput(o){
     + `<div class="txtrow"><span class="lbl">fps</span><b>${(o.fps || 0).toFixed(1)}</b> / ${o.fps_target}</div>`
     + `<div class="txtrow"><span class="lbl">shader</span>${o.shader} &nbsp;·&nbsp; `
       + `<b style="color:${shBad ? '#c55' : '#6a6'}">${o.shader_status || 'ok'}</b></div>`
-    + `<div class="txtrow"><span class="lbl">monitores</span></div>` + mons
-    + `<p class="note">onde/tamanho: barra "saída" no topo (ao vivo, sem reiniciar). `
-      + `A resolução do render (textura) vem da fonte de vídeo; a janela escala pra caber.</p>`;
+    + `<div class="txtrow"><span class="lbl">monitores</span></div>` + mons;
 }
 // controles de saída no #iobar (topo): monitor, dimensão, tela cheia — POST /output.
 // guard por TEMPO (TOUCH_MS, ver topo do script): mousedown/input ja conta como "mexendo".
@@ -636,6 +698,43 @@ $('#out-w').addEventListener('input', () => { outTouched = performance.now(); })
 $('#out-w').addEventListener('change', sendOutput);
 $('#out-h').addEventListener('input', () => { outTouched = performance.now(); });
 $('#out-h').addEventListener('change', sendOutput);
+
+// ============ CALIBRACAO DA SAIDA (tuning.OUTPUT_GRADE -> shaders/calibrar.frag) ============
+// knobs = cabecalho // fx: do calibrar.frag (GET /output-grade); arrasto = POST sem gravar,
+// soltar = grava. Mesmo guard por TEMPO (gradeTouched) contra o stream sobrescrever.
+let lastGrade = { on: 1, test: 0, fx: {} }, gradeDefaults = {}, gradeTouched = 0, gradeT = null, gradeEls = {};
+function sendGrade(save){
+  gradeTouched = performance.now();
+  clearTimeout(gradeT); gradeT = null;
+  fetch('/output-grade', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grade: lastGrade, save }) });
+}
+const KNOB_GRADE = { touch(){ gradeTouched = performance.now(); },
+  live(){ gradeTouched = performance.now(); if (!gradeT) gradeT = setTimeout(() => { gradeT = null; sendGrade(false); }, 40); },
+  commit: () => sendGrade(true) };
+function gradeVal(n){ return n in lastGrade.fx ? lastGrade.fx[n] : (gradeDefaults[n] ?? 1); }
+function renderGrade(){
+  const box = $('#grade-knobs'); box.innerHTML = ''; gradeEls = {};
+  for (const n of Object.keys(gradeDefaults)){
+    const k = bigKnob('grade:' + n, n, () => gradeVal(n),
+      v => { lastGrade.fx[n] = Math.round(v * 1000) / 1000; }, 'fx', gradeDefaults[n], KNOB_GRADE);
+    gradeEls[n] = k; box.appendChild(k);
+  }
+  syncGrade();
+}
+function syncGrade(){
+  $('#grade-on').checked = !!lastGrade.on; $('#grade-test').checked = !!lastGrade.test;
+  for (const [n, k] of Object.entries(gradeEls)) if (knobDrag !== 'grade:' + n) k._show(gradeVal(n));
+}
+function loadGrade(){
+  fetch('/output-grade').then(r => r.json()).then(d => {
+    gradeDefaults = d.defaults || {}; lastGrade = d.grade || lastGrade; renderGrade();
+  });
+}
+$('#grade-on').addEventListener('change', () => { lastGrade.on = $('#grade-on').checked ? 1 : 0; sendGrade(true); });
+$('#grade-test').addEventListener('change', () => { lastGrade.test = $('#grade-test').checked ? 1 : 0; sendGrade(true); });
+$('#grade-reset').addEventListener('click', () => { lastGrade.fx = {}; syncGrade(); sendGrade(true); });
+loadGrade();
 
 // ============ OUTPUT IMAGE (calculo pos-shader, ver tuning.OUT_ANALYSIS_ENABLED) ============
 let outimgTouched = 0;
@@ -873,10 +972,6 @@ const HZ_LO = 20, HZ_HI = 20000, _L = Math.log(HZ_LO), _R = Math.log(HZ_HI);
 const hzPct = hz => (Math.log(Math.max(HZ_LO, Math.min(HZ_HI, hz))) - _L) / (_R - _L) * 100;
 const pctHz = p => Math.round(Math.exp(_L + (_R - _L) * Math.max(0, Math.min(1, p / 100))));
 const kfmt = hz => hz >= 1000 ? (hz / 1000).toFixed(hz % 1000 ? 1 : 0) + 'k' : '' + hz;
-const OVL_NOTE = {
-  0: 'crossover: as faixas NÃO se sobrepõem. Cada limite é meio-aberto [lo, hi) — o Hz do limite pertence à faixa DE CIMA (ex.: 73 Hz entra na Low-mid, não na Sub-bass; por isso "73" aparece dos dois lados sem overlap). Arraste a bolinha hi para mover a costura (a vizinha acompanha); arraste a bolinha lo de uma faixa para cima para abrir um buraco (cinza — Hz sem faixa nenhuma).',
-  1: 'livre: cada faixa com seu lo/hi. Podem se sobrepor (Hz compartilhado soma energia nas duas) ou deixar buraco. Na barra-resumo a sobreposição aparece mais clara.',
-};
 let rangeRows = null, dragRow = -1, rangesTouched = 0;  // rangesTouched: ms do ultimo mexer local
 const BAND_COLORS = {  // espelha dash_data.FREQ_BAND_RGB
   'Sub-bass':'rgb(30,140,255)', 'Low-mid':'rgb(0,200,255)', 'Midrange':'rgb(0,230,200)',
@@ -1051,7 +1146,6 @@ function renderRanges(bh){
   if (document.activeElement !== $('#ovl-cb')) $('#ovl-cb').checked = !!bh.overlap;
   if (document.activeElement !== $('#bands-cb')) $('#bands-cb').checked = bh.enabled !== 0;
   $('#ranges-wrap').classList.toggle('dim', bh.enabled === 0);
-  $('#ovl-note').textContent = OVL_NOTE[bh.overlap ? 1 : 0];
   // acabou de arrastar/empurrar? ignora o eco velho do SSE ate o servidor devolver o novo
   if (dragRow >= 0 || performance.now() - rangesTouched < 400) return;
   bh.ranges.forEach(([lo, hi], i) => applyRow(i, lo, hi));
@@ -1180,11 +1274,11 @@ showSub(new URLSearchParams(location.search).get('sub')   // ?sub=lib|sets (popu
 function shaderPost(url, body, done){
   return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
     .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
-    .then(() => { shaderSig = shaderAdminSig = ''; loadShaders(); if (done) done(); });
+    .then(() => { shaderAdminSig = ''; loadShaders(); if (done) done(); });
 }
 
 // ============ SETS (cenas) ============
-let lastScenes = [], activeScene = '', sceneSig = '', sceneOpen = '';
+let lastScenes = [], activeScene = '', sceneSig = '', sceneOpen = '', sceneAdding = false;
 function loadScenes(){
   fetch('/scenes').then(r => r.json()).then(gotScenes).catch(() => {});
 }
@@ -1198,46 +1292,67 @@ function scenePost(url, body){
     .then(gotScenes);
 }
 function renderScenes(){
-  $('#scene-cur').textContent = activeScene || '—';
-  const sig = JSON.stringify([lastScenes, activeScene, sceneOpen, lastTrans, lastTransDefault]);
+  const sig = JSON.stringify([lastScenes, activeScene, sceneOpen, lastTrans, lastTransDefault, sceneAdding]);
   if (sig === sceneSig) return;
   sceneSig = sig;
-  const box = $('#scene-list'); box.innerHTML = '';
-  if (!lastScenes.length) box.innerHTML = '<div class="txtrow">&mdash; nenhum set. Use "+ set".</div>';
-  const dname = lastTransDefault === 'none' ? 'corte seco' : lastTransDefault.replace(/\.glsl$/, '');
+  const bar = $('#scene-bar'); bar.innerHTML = '';
+  const lab = document.createElement('span'); lab.className = 'sb-label'; lab.textContent = 'SCENES';
+  bar.appendChild(lab);
   for (const sc of lastScenes){
-    const row = document.createElement('div'); row.className = 'sh-row';
-    const b = document.createElement('button');
-    b.className = 'ibtn name' + (sc.name === activeScene ? ' active' : '');
-    b.textContent = sc.name;
-    b.onclick = () => scenePost('/scene', { name: sc.name }).catch(e => alert('set: ' + e));
-    row.appendChild(b);
-
-    const cap = document.createElement('span'); cap.className = 'keycap';
-    cap.textContent = (sc.key || '').toUpperCase();
-    row.appendChild(cap);
-
-    const tsel = document.createElement('select');
-    tsel.className = 'insel'; tsel.style.maxWidth = '150px';
-    tsel.title = 'transição de ENTRADA deste set';
+    const pill = document.createElement('div'); pill.className = 'scn' + (sc.name === activeScene ? ' active' : '');
+    const go = document.createElement('button'); go.className = 'scn-go';
+    go.title = 'entrar nesta scene' + (sc.key ? ` (tecla ${sc.key.toUpperCase()})` : '');
+    const kc = document.createElement('span'); kc.className = 'skc' + (sc.key ? '' : ' empty');
+    kc.textContent = sc.key ? sc.key.toUpperCase() : '·';
+    go.append(kc, sc.name);
+    go.onclick = () => scenePost('/scene', { name: sc.name }).catch(e => alert('scene: ' + e));
+    const gear = document.createElement('button');
+    gear.className = 'scn-gear' + (sceneOpen === sc.name ? ' open' : '');
+    gear.textContent = '⚙'; gear.title = 'renomear / tecla / apagar';
+    gear.onclick = () => { sceneOpen = sceneOpen === sc.name ? '' : sc.name; sceneSig = ''; renderScenes(); };
+    pill.append(go, gear);
+    bar.appendChild(pill);
+  }
+  // + set: vira um campo de nome (Enter cria com o estado atual e entra; Esc cancela)
+  if (sceneAdding){
+    const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'insel';
+    inp.placeholder = 'nome da nova scene';
+    inp.onkeydown = e => {
+      if (e.key === 'Enter') newScene(inp.value);
+      else if (e.key === 'Escape'){ sceneAdding = false; sceneSig = ''; renderScenes(); }
+    };
+    bar.appendChild(inp);
+    setTimeout(() => inp.focus(), 0);
+  } else {
+    const add = document.createElement('button'); add.className = 'scn-add'; add.textContent = '+ scene';
+    add.title = 'cria uma scene com o estado atual e entra nela';
+    add.onclick = () => { sceneAdding = true; sceneSig = ''; renderScenes(); };
+    bar.appendChild(add);
+  }
+  // transicao de ENTRADA do set ativo ((padrao) = a da Biblioteca)
+  const cur = lastScenes.find(x => x.name === activeScene);
+  const tr = document.createElement('label'); tr.className = 'sb-trans';
+  if (cur){
+    const dname = lastTransDefault === 'none' ? 'corte seco' : lastTransDefault.replace(/\.glsl$/, '');
+    const tsel = document.createElement('select'); tsel.className = 'insel'; tsel.style.maxWidth = '170px';
+    tsel.title = 'transição de ENTRADA desta scene';
     for (const [val, lbl] of [['', `(padrão: ${dname})`], ['none', 'corte seco'],
                               ...lastTrans.map(f => [f, f.replace(/\.glsl$/, '')])]){
       const o = document.createElement('option'); o.value = val; o.textContent = lbl;
-      if (val === (sc.transition || '')) o.selected = true;
+      if (val === (cur.transition || '')) o.selected = true;
       tsel.appendChild(o);
     }
-    tsel.onchange = () => scenePost('/scene-transition', { name: sc.name, transition: tsel.value })
+    tsel.onchange = () => scenePost('/scene-transition', { name: cur.name, transition: tsel.value })
       .catch(e => alert('transição: ' + e));
-    row.appendChild(tsel);
-
-    const gear = document.createElement('button');
-    gear.className = 'ibtn sh-gear' + (sceneOpen === sc.name ? ' open' : '');
-    gear.textContent = '⚙'; gear.title = 'renomear / tecla / apagar';
-    gear.onclick = () => { sceneOpen = sceneOpen === sc.name ? '' : sc.name; sceneSig = ''; renderScenes(); };
-    row.appendChild(gear);
-    box.appendChild(row);
-    if (sceneOpen === sc.name) box.appendChild(scenePanel(sc));
+    tr.append('entrada', tsel);
   }
+  const rl = document.createElement('button'); rl.className = 'ibtn'; rl.innerHTML = '&#8635;'; rl.title = 'recarregar';
+  rl.onclick = loadScenes;
+  tr.appendChild(rl);
+  bar.appendChild(tr);
+  const ed = $('#scene-edit'); ed.innerHTML = '';
+  const open = lastScenes.find(x => x.name === sceneOpen);
+  if (open) ed.appendChild(scenePanel(open));
 }
 function scenePanel(sc){
   const p = document.createElement('div'); p.className = 'sh-panel';
@@ -1258,31 +1373,30 @@ function scenePanel(sc){
     let k = '';
     if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) k = e.key.toLowerCase();
     else if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+    if (mixKeys.family === 'digits' && /^[1-9]$/.test(k))
+      return alert(`${k} seleciona a fonte ${k} da mesa. Use uma letra (ou mude a mesa pra F1–F9 em "⌨ atalhos").`);
     scenePost('/scene-key', { name: sc.name, key: k }).catch(err => alert('tecla: ' + err));
   };
   p.append('tecla ', ki);
   const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
-  del.onclick = () => askConfirm(`Apagar o set “${sc.name}”? (os arquivos da Biblioteca ficam)`,
+  del.onclick = () => askConfirm(`Apagar a scene “${sc.name}”? (os arquivos da Biblioteca ficam)`,
     () => { sceneOpen = ''; scenePost('/scene-del', { name: sc.name }).catch(e => alert('não apagou: ' + e)); });
   p.appendChild(del);
   return p;
 }
-function newScene(){
-  const inp = $('#new-scene-name'), msg = $('#new-scene-msg');
-  const name = inp.value.trim();
-  if (!name) return inp.focus();
-  msg.textContent = ''; msg.className = '';
-  scenePost('/scene-new', { name }).then(() => { inp.value = ''; })
-    .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
+function newScene(name){
+  name = (name || '').trim();
+  if (!name) return;
+  scenePost('/scene-new', { name }).then(() => { sceneAdding = false; sceneSig = ''; renderScenes(); })
+    .catch(e => alert('scene: ' + e));
 }
 
 // ============ EFEITOS: shader principal + camadas (Sets) / arquivos .frag (Biblioteca) ============
-let lastShaderList = [], shaderSig = '', shaderAdminSig = '', shaderOpen = '';
+let lastShaderList = [], shaderAdminSig = '', shaderOpen = '';
 function loadShaders(){
   fetch('/shaders').then(r => r.json()).then(d => {
-    lastShaderList = d.list || []; lastManifests = d.manifests || {};
-    shaderSig = ''; renderShaderList();
-    fxSig = ''; renderFx();
+    lastShaderList = d.list || []; lastManifests = d.manifests || {}; lastFxDefaults = d.fxDefaults || {};
+    remix();
     renderShaderAdmin();
   });
 }
@@ -1294,18 +1408,10 @@ function newShader(){
   shaderPost('/new-shader', { name }, () => { inp.value = ''; })   // criado + ja ativo
     .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
 }
-// LIGAÇÕES fonte -> shaders (BINDINGS): {fonte: {shaders: [{file, opacity, blend}], fx: {shader: {nome: v}}}}.
-// A lista de efeitos mostra/edita a pilha da fonte SELECIONADA (lastSelected). Mesmo esquema das
-// camadas de midia: slider atualiza NO LUGAR (layerEls), grava ao soltar; o sig so muda quando a
-// pilha muda (nao a opacidade), pra nao matar um arrasto no meio.
-let lastBindings = {}, lastSelected = '', lastManifests = {}, fxShader = '';
-let layerEls = {}, layerDrag = '', bindT = null, bindTouched = 0;
-try { fxShader = localStorage.getItem('fxShader') || ''; } catch (e) {}
-function selBinding(create){
-  if (!lastSelected) return null;
-  if (!lastBindings[lastSelected] && create) lastBindings[lastSelected] = { shaders: [], fx: {} };
-  return lastBindings[lastSelected] || null;
-}
+// LIGAÇÕES fonte -> shaders (BINDINGS): {fonte: {shaders: [{file, opacity, blend?, off?}], fx: {shader: {nome: v}}}}.
+// Editadas na MESA (canal de cada fonte + painel de knobs). Arrasto = POST ao vivo, soltar grava.
+let lastBindings = {}, lastSelected = '', lastManifests = {}, lastFxDefaults = {};
+let bindT = null, bindTouched = 0;
 function sendBindings(save){
   bindTouched = performance.now();
   clearTimeout(bindT); bindT = null;
@@ -1316,90 +1422,9 @@ function sendBindingsLive(){   // arrasto: no maximo ~25 POST/s, sem gravar no t
   bindTouched = performance.now();
   if (!bindT) bindT = setTimeout(() => { bindT = null; sendBindings(false); }, 40);
 }
-function syncLayerSliders(){
-  if (performance.now() - bindTouched < TOUCH_MS) return;
-  const stack = (selBinding(false) || {}).shaders || [];
-  for (const [file, el] of Object.entries(layerEls)){
-    if (file === layerDrag) continue;
-    const o = stack.find(x => x.file === file);
-    if (o){ el.inp.value = Math.round(o.opacity * 100); el.pct.textContent = el.inp.value + '%';
-            el.bsel.value = o.blend || 'normal'; }
-  }
-}
 const LAYER_BLENDS = [['normal', 'normal'], ['soma', 'soma'], ['tela', 'tela (screen)'],
                       ['multiplicar', 'multiplicar'], ['clarear', 'clarear (max)']];
-function layerControl(file){
-  const stack = (selBinding(false) || {}).shaders || [];
-  const oi = stack.findIndex(o => o.file === file);
-  const ov = document.createElement('label'); ov.className = 'ovl';
-  const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
-  oc.disabled = !lastSelected;
-  oc.title = 'camada: aplica este shader na fonte/mídia selecionada, por cima dos já marcados';
-  const ord = document.createElement('span'); ord.className = 'ord';
-  ord.textContent = oi >= 0 ? String(oi + 1) : '';
-  ord.title = 'posição (1 = logo acima da imagem crua)';
-  const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
-  orng.value = oi >= 0 ? Math.round(stack[oi].opacity * 100) : 100;
-  orng.disabled = oi < 0; orng.title = 'opacidade';
-  const pct = document.createElement('span'); pct.className = 'pct';
-  pct.textContent = oi >= 0 ? orng.value + '%' : '';
-  // modo de mistura (ver LAYER_BLEND_SRC no native_synth): novo entra em 'normal' a 100% = o
-  // efeito puro; 'tela'/'soma' acendem por cima da imagem sem apagar
-  const bsel = document.createElement('select'); bsel.className = 'insel blend';
-  for (const [v, t] of LAYER_BLENDS){
-    const op = document.createElement('option'); op.value = v; op.textContent = t; bsel.appendChild(op);
-  }
-  bsel.value = oi >= 0 ? (stack[oi].blend || 'normal') : 'normal';
-  bsel.disabled = oi < 0; bsel.title = 'modo de mistura com o que está embaixo';
-  bsel.onchange = () => {
-    const o = ((selBinding(false) || {}).shaders || []).find(x => x.file === file); if (!o) return;
-    o.blend = bsel.value; sendBindings(true);
-  };
-  oc.onchange = () => {
-    const bnd = selBinding(true);
-    if (oc.checked) bnd.shaders.push({ file, opacity: +orng.value / 100, blend: bsel.value });
-    else bnd.shaders = bnd.shaders.filter(o => o.file !== file);
-    sendBindings(true); shaderSig = ''; renderShaderList();
-  };
-  orng.onpointerdown = () => { layerDrag = file; bindTouched = performance.now(); };
-  orng.oninput = () => {
-    const o = ((selBinding(false) || {}).shaders || []).find(x => x.file === file); if (!o) return;
-    o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
-    sendBindingsLive();
-  };
-  orng.onchange = () => { layerDrag = ''; sendBindings(true); };
-  ov.append(oc, ord, 'camada', orng, pct, bsel);
-  layerEls[file] = { inp: orng, pct, bsel };
-  return ov;
-}
-function pickShader(name){
-  fxShader = name;
-  try { localStorage.setItem('fxShader', name); } catch (e) {}
-  shaderSig = ''; renderShaderList(); fxSig = ''; renderFx();
-}
 function shortShader(name){ return name.startsWith('presets/') ? name.replace(/^presets\/[^/]+\//, '') : name; }
-function renderShaderList(){
-  if (performance.now() - bindTouched < TOUCH_MS && shaderSig) return;   // acabei de mexer
-  const stack = (selBinding(false) || {}).shaders || [];
-  const sig = JSON.stringify([lastShaderList, lastSelected, fxShader, stack.map(o => o.file), lastPool]);
-  if (sig === shaderSig) return;                 // nada mudou: nao repinta
-  shaderSig = sig;
-  $('#sel-name').textContent = sourceLabel(lastSelected) || '— (selecione uma fonte/mídia)';
-  const box = $('#shader-list'); box.innerHTML = ''; layerEls = {};
-  for (const name of lastShaderList.filter(x => inPool('shaders', x))){
-    const row = document.createElement('div'); row.className = 'sh-row';
-    const b = document.createElement('button');
-    b.className = 'ibtn name' + (name === fxShader ? ' picked' : '');
-    b.textContent = shortShader(name);
-    b.title = name + ' — clique: mostra a força dos efeitos dele';
-    b.onclick = () => pickShader(name);
-    row.appendChild(b);
-    row.appendChild(layerControl(name));
-    row.appendChild(rmButton('shaders', name));
-    box.appendChild(row);
-  }
-  box.appendChild(addPicker('shaders', lastShaderList.filter(x => !inPool('shaders', x)).map(x => [x, shortShader(x)])));
-}
 function renderShaderAdmin(){
   const sig = JSON.stringify([lastShaderList, shaderOpen]);
   if (sig === shaderAdminSig) return;
@@ -1434,44 +1459,35 @@ function shaderPanel(name){
   rb.onclick = doRename;
   p.append('nome ', ren, rb);
   const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
-  del.onclick = () => askConfirm(`Apagar “${name}”? Sai também dos sets que o usam.`,
+  del.onclick = () => askConfirm(`Apagar “${name}”? Sai também das scenes que o usam.`,
     () => shaderPost('/delete-shader', { name }, () => { shaderOpen = ''; }).catch(e => alert('não apagou: ' + e)));
   p.appendChild(del);
   return p;
 }
 
 // ============ MÍDIA: principal + camadas (Sets) / arquivos (Biblioteca) ============
-let lastMedia = [], mediaSig = '', mediaAdminSig = '', mediaOpen = '', mediaTouched = 0;
+let lastMedia = [], mediaAdminSig = '', mediaOpen = '', mediaTouched = 0;
+let lastAudioMedia = '';   // video 🔊 da mesa que esta no lugar do PulseAudio agora ('' = nenhum) — vem do stream
 let lastBounceBusy = [];   // files (relativos a media/) com rebate sendo preparado agora — vem do stream
 function loadMedia(){
   fetch('/media').then(r => r.json()).then(d => {
     lastMedia = d.list || [];
     if (d.overlays) lastOverlays = d.overlays;
-    mediaSig = ''; renderMediaList();
     renderMediaAdmin();
-    shaderSig = ''; renderShaderList();          // o nome da fonte selecionada pode ser midia
+    remix();
   });
 }
-// SELECIONAR uma fonte/midia (clique no nome): so' troca qual pilha de efeitos a lista mostra
-// (e o que a aba Source Image analisa). A saida e' so o que esta marcado.
+// SELECIONAR uma fonte (card / tecla de posicao): o painel de knobs passa a ser dela e a aba
+// Source Image analisa ela. Nao muda a saida.
 function selectSource(key){
   lastSelected = key; selTouched.src = performance.now();
-  mediaSig = videoSig = shaderSig = fxSig = '';
-  renderMediaList(); renderVideoList(); renderShaderList(); renderFx();
+  remix();
   fetch('/select', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ src: key }) });
 }
-function sourceLabel(key){
-  if (!key) return '';
-  const m = lastMedia.find(x => x.file === key);
-  if (m) return m.name;
-  const v = lastVideoInputs.find(x => x.id === key);
-  return v ? v.name : key;
-}
-// CAMADAS (overlay): [{file, opacity}] de baixo pra cima, na ordem em que foram marcadas. Vem de
-// /media e do stream; o slider se atualiza NO LUGAR (ovlEls) sem rebuild da lista — o sig so
-// muda quando a lista de camadas muda, nao a opacidade, pra nao matar um arrasto no meio.
-let lastOverlays = [], ovlEls = {}, ovlDrag = '', ovlT = null;
+// CAMADAS (overlay) = os canais da MESA: [{file, opacity, blend?, off?, dup?}] de baixo pra cima. Vem de /media
+// e do stream; a opacidade se atualiza NO LUGAR (syncMixer), sem rebuild.
+let lastOverlays = [], ovlDrag = '', ovlT = null;
 function sendOverlays(save){
   mediaTouched = performance.now();
   clearTimeout(ovlT); ovlT = null;
@@ -1485,133 +1501,21 @@ function sendOverlaysLive(){   // arrasto: no maximo ~25 POST/s, sem gravar no t
 // controle de camada (checkbox + ordem + slider) de UMA entrada de OVERLAYS: item de midia
 // (file) ou fonte viva ('webcam:..' | 'screen:..', lista "Fonte de imagem"). Marcar/desmarcar
 // repinta as duas listas (a ordem e' uma so pras duas).
-function ovlControl(file, title){
-  const oi = lastOverlays.findIndex(o => o.file === file);
-  const ov = document.createElement('label'); ov.className = 'ovl';
-  const oc = document.createElement('input'); oc.type = 'checkbox'; oc.checked = oi >= 0;
-  oc.title = title;
-  const ord = document.createElement('span'); ord.className = 'ord';
-  ord.textContent = oi >= 0 ? String(oi + 1) : '';
-  ord.title = 'posição da camada (1 = mais embaixo)';
-  const orng = document.createElement('input'); orng.type = 'range'; orng.min = 0; orng.max = 100;
-  orng.value = oi >= 0 ? Math.round(lastOverlays[oi].opacity * 100) : 50;
-  orng.disabled = oi < 0; orng.title = 'opacidade da camada';
-  const pct = document.createElement('span'); pct.className = 'pct';
-  pct.textContent = oi >= 0 ? orng.value + '%' : '';
-  oc.onchange = () => {
-    if (oc.checked) lastOverlays.push({ file, opacity: +orng.value / 100 });
-    else lastOverlays = lastOverlays.filter(o => o.file !== file);
-    sendOverlays(true); mediaSig = ''; videoSig = ''; renderMediaList(); renderVideoList();
-  };
-  orng.onpointerdown = () => { ovlDrag = file; mediaTouched = performance.now(); };
-  orng.oninput = () => {
-    const o = lastOverlays.find(x => x.file === file); if (!o) return;
-    o.opacity = +orng.value / 100; pct.textContent = orng.value + '%';
-    sendOverlaysLive();
-  };
-  orng.onchange = () => { ovlDrag = ''; sendOverlays(true); };
-  ov.append(oc, ord, 'camada', orng, pct);
-  ovlEls[file] = { inp: orng, pct };
-  return ov;
-}
-function syncOvlSliders(){
-  if (performance.now() - mediaTouched < TOUCH_MS) return;
-  for (const [file, el] of Object.entries(ovlEls)){
-    if (!el.inp.isConnected){ delete ovlEls[file]; continue; }
-    if (file === ovlDrag) continue;
-    const o = lastOverlays.find(x => x.file === file);
-    if (o){ el.inp.value = Math.round(o.opacity * 100); el.pct.textContent = el.inp.value + '%'; }
-  }
-}
 // DISPONÍVEIS no set ativo (pool): {sources?: [chaves], shaders?: [arquivos]}; lista ausente =
 // tudo. "×" tira do set (some daqui e da saida, mas marcacao/efeitos ficam lembrados); o
 // "+ adicionar ao set…" de cada grupo traz de volta. Sempre manda a lista explicita inteira.
 let lastPool = null, poolTouched = 0;
-function allOf(kind){
-  return kind === 'shaders' ? lastShaderList.slice()
-    : lastVideoInputs.filter(x => x.kind !== 'media').map(x => x.id).concat(lastMedia.map(m => m.file));
-}
 function inPool(kind, key){ const l = (lastPool || {})[kind]; return !l || l.includes(key); }
 function setPool(kind, list){
   poolTouched = performance.now();
   lastPool = Object.assign({}, lastPool || {}, { [kind]: list });
-  mediaSig = videoSig = shaderSig = ''; renderMediaList(); renderVideoList(); renderShaderList();
+  remix();
   fetch('/pool', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pool: lastPool }) });
-}
-function rmButton(kind, key){
-  const b = document.createElement('button'); b.className = 'ibtn rm'; b.textContent = '×';
-  b.title = 'tirar deste set (some daqui e da saída; volta pelo "+ adicionar ao set")';
-  b.onclick = () => setPool(kind, ((lastPool || {})[kind] || allOf(kind)).filter(k => k !== key));
-  return b;
-}
-function addPicker(kind, items){   // items: [[chave, rotulo]] que NAO estao no set
-  const row = document.createElement('div'); row.className = 'addrow';
-  if (!items.length) return row;
-  const sel = document.createElement('select'); sel.className = 'insel';
-  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '+ adicionar ao set…'; sel.appendChild(o0);
-  for (const [k, lbl] of items){ const o = document.createElement('option'); o.value = k; o.textContent = lbl; sel.appendChild(o); }
-  sel.onchange = () => { if (sel.value) setPool(kind, ((lastPool || {})[kind] || allOf(kind)).concat([sel.value])); };
-  row.appendChild(sel);
-  return row;
 }
 // preencher / rebate: configuracao da FONTE (midia: item de MEDIA; camera/tela: SOURCE_FIT), vale
 // em todos os sets — mas mora nas listas da aba Sets, junto do resto do que mexe na imagem.
 // preencher = estica pra cobrir a saida; desmarcado = encaixa inteira, com margens pretas.
-function fitControl(filled, onchange){
-  const fit = document.createElement('label'); fit.className = 'fit';
-  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = filled;
-  cb.title = 'preencher: estica a imagem pra cobrir a saída / desmarcado: encaixa inteira, com margens';
-  cb.onchange = () => onchange(cb.checked ? 'fill' : 'fit');
-  fit.append(cb, 'preencher');
-  return fit;
-}
-function rebateSlot(){       // vaga invisivel do tamanho do "rebate", pra coluna alinhar
-  const ph = document.createElement('label'); ph.className = 'fit'; ph.style.visibility = 'hidden';
-  const pc = document.createElement('input'); pc.type = 'checkbox';
-  ph.append(pc, 'rebate');
-  return ph;
-}
-function mediaOpts(m){
-  const box = document.createDocumentFragment();
-  box.appendChild(fitControl(m.fit !== 'fit', f => { m.fit = f; sendMedia(); }));
-  if (m.kind === 'video'){   // rebate: ida inteira + volta inteira em loop, desacelerando na virada
-    const bl = document.createElement('label'); bl.className = 'fit';
-    const bc = document.createElement('input'); bc.type = 'checkbox'; bc.checked = !!m.bounce;
-    bc.title = 'rebate: passa o vídeo pra frente e depois de trás pra frente, em loop, '
-             + 'desacelerando perto de cada virada. Na 1ª vez prepara uma versão (alguns segundos; '
-             + 'enquanto isso toca normal).';
-    bc.onchange = () => { m.bounce = bc.checked; sendMedia(); };
-    bl.append(bc, lastBounceBusy.includes(m.file) ? 'rebate (preparando…)' : 'rebate');
-    box.appendChild(bl);
-  } else {
-    box.appendChild(rebateSlot());
-  }
-  return box;
-}
-function renderMediaList(){
-  if (performance.now() - mediaTouched < TOUCH_MS && mediaSig) return;   // acabei de mexer
-  const sig = JSON.stringify([lastMedia, lastSelected, lastOverlays.map(o => o.file), lastBounceBusy, lastPool]);
-  if (sig === mediaSig) return;
-  mediaSig = sig;
-  const box = $('#media-pick'); box.innerHTML = '';
-  if (!lastMedia.length) box.innerHTML = '<div class="txtrow">&mdash; nenhuma mídia. Adicione na sub-aba Biblioteca.</div>';
-  for (const m of lastMedia.filter(x => inPool('sources', x.file))){
-    const row = document.createElement('div'); row.className = 'sh-row';
-    const typ = document.createElement('span'); typ.className = 'mtype';
-    typ.textContent = m.kind === 'video' ? '🎬' : '🖼';
-    typ.title = m.kind === 'video' ? 'vídeo' : 'imagem';
-    const b = document.createElement('button');
-    b.className = 'ibtn name' + (m.file === lastSelected ? ' active' : '');
-    b.textContent = m.name;
-    b.title = 'selecionar (mostra os efeitos desta mídia)';
-    b.onclick = () => selectSource(m.file);
-    row.append(typ, b, ovlControl(m.file, 'camada: sobrepõe esta mídia à imagem, por cima das já marcadas (na ordem em que marcar)'),
-               mediaOpts(m), rmButton('sources', m.file));
-    box.appendChild(row);
-  }
-  box.appendChild(addPicker('sources', lastMedia.filter(x => !inPool('sources', x.file)).map(x => [x.file, x.name])));
-}
 function renderMediaAdmin(){
   const sig = JSON.stringify([lastMedia, mediaOpen]);
   if (sig === mediaAdminSig) return;
@@ -1644,12 +1548,12 @@ function mediaPanel(m){
   const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
   p.append('nome ', ren, rb);
   const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'excluir';
-  del.onclick = () => askConfirm(`Excluir “${m.name}”? Apaga o arquivo e tira dos sets que a usam.`, () => {
+  del.onclick = () => askConfirm(`Excluir “${m.name}”? Apaga o arquivo e tira das scenes que a usam.`, () => {
     mediaTouched = performance.now();
     fetch('/media-del', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: m.name }) })
       .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)))
-      .then(() => { mediaOpen = ''; mediaSig = mediaAdminSig = ''; loadMedia(); }).catch(e => alert('não excluiu: ' + e));
+      .then(() => { mediaOpen = ''; mediaAdminSig = ''; loadMedia(); }).catch(e => alert('não excluiu: ' + e));
   });
   p.appendChild(del);
   return p;
@@ -1662,7 +1566,7 @@ function sendMedia(){
   fetch('/media', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ media: lastMedia }) })
     .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-    .then(list => { lastMedia = list; mediaSig = mediaAdminSig = ''; renderMediaList(); renderMediaAdmin(); loadScenes(); })
+    .then(list => { lastMedia = list; mediaAdminSig = ''; renderMediaAdmin(); remix(); loadScenes(); })
     .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; loadMedia(); });
 }
 function mediaFile(){    // um botão só: o servidor decide imagem/vídeo pela extensão
@@ -1675,10 +1579,585 @@ function mediaFile(){    // um botão só: o servidor decide imagem/vídeo pela 
     fetch('/media-add?name=' + encodeURIComponent(f.name),
       { method: 'POST', headers: { 'Content-Type': f.type || 'application/octet-stream' }, body: f })
       .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-      .then(() => { msg.textContent = ''; mediaSig = ''; loadMedia(); })
+      .then(() => { msg.textContent = ''; loadMedia(); })
       .catch(e => { msg.textContent = '✗ ' + e; msg.className = 'err'; });
   };
   inp.click();
+}
+
+// ============ MESA (Visuals > Sets): um canal por fonte do set ============
+// Canal = entrada de OVERLAYS (lastOverlays), na ordem da saida: 1 = embaixo = mais a esquerda.
+// {off: 1} = fora da saida mas continua na mesa (posicao/opacidade lembradas). Cada canal mostra
+// a pilha de shaders da fonte (BINDINGS[fonte].shaders, 1 = o de cima da lista; {off: 1} =
+// desligado; o mesmo .frag pode entrar 2x, cada entrada com as suas forcas em 'fx' — por isso
+// tudo aqui e' pela POSICAO na pilha). O painel de baixo (#device) mostra o efeito escolhido
+// (fxPick[fonte] = indice) da fonte
+// selecionada. Teclado: posicao (1..9 | F1..F9 | numpad) seleciona a fonte; a mesma 2x (ou a
+// tecla configurada) entra nos efeitos dela; ali a posicao escolhe o efeito; Backspace (ou Esc) volta.
+// Config das teclas + efeito escolhido por fonte = localStorage (conveniencia do dash).
+const MIX_FAMILIES = { digits: '1–9', fkeys: 'F1–F9', numpad: 'Num 1–9' };
+const MIX_KEYS_DEFAULT = { family: 'digits', enter: 'double', back: 'Backspace' };
+let mixKeys = Object.assign({}, MIX_KEYS_DEFAULT), mixMode = 'src', fxPick = {}, keysCapture = '';
+try { Object.assign(mixKeys, JSON.parse(localStorage.getItem('mixKeys') || '{}')); } catch (e) {}
+if (mixKeys.back === 'Escape') mixKeys.back = 'Backspace';   // padrao antigo (Esc continua valendo)
+try { fxPick = JSON.parse(localStorage.getItem('fxPick') || '{}') || {}; } catch (e) {}
+let mixSig = '', mixEls = {}, devEls = {}, mixDrag = null, knobDrag = '', lastTap = null;
+
+const keyName = k => k === 'Escape' ? 'Esc' : k === 'Backspace' ? '⌫ Backspace' : k === ' ' ? 'Espaço' : k === 'double' ? '2× o número'
+  : k.length === 1 ? k.toUpperCase() : k;
+function posLabel(n){
+  return mixKeys.family === 'fkeys' ? 'F' + n : mixKeys.family === 'numpad' ? 'N' + n : String(n);
+}
+function posFromKey(e){
+  const m = mixKeys.family === 'fkeys' ? /^F([1-9])$/.exec(e.key)
+    : mixKeys.family === 'numpad' ? /^Numpad([1-9])$/.exec(e.code || '') : /^([1-9])$/.exec(e.key);
+  return m ? +m[1] : 0;
+}
+function binding(src, create){
+  if (!src) return null;
+  if (!lastBindings[src] && create) lastBindings[src] = { shaders: [], fx: {} };
+  return lastBindings[src] || null;
+}
+const stackOf = src => (binding(src) || {}).shaders || [];
+// canal = chave de OVERLAYS/BINDINGS: 'file', ou 'file#N' quando a mesma fonte entra de novo
+// (item com dup: N) — cada canal tem pilha/opacidade/modo proprios; o frame e' o da fonte.
+const chKey = o => o.dup ? `${o.file}#${o.dup}` : o.file;
+const baseKey = k => { const m = /^(.*)#(\d+)$/.exec(k || ''); return m ? m[1] : (k || ''); };
+const mixStrips = () => lastOverlays.filter(o => inPool('sources', o.file));
+function srcInfo(key){
+  const base = baseKey(key), dup = key !== base ? ' ·' + key.slice(base.length + 1) : '';
+  const m = lastMedia.find(x => x.file === base);
+  if (m) return { name: m.name + dup, file: base, media: true, video: m.kind === 'video', kind: m.kind === 'video' ? '🎬 vídeo' : '🖼 imagem' };
+  const v = lastVideoInputs.find(x => x.id === base);
+  const k = v ? v.kind : String(base).split(':')[0];
+  return { name: (v ? v.name : base) + dup, file: base, kind: (VIDEO_ICON[k] || '•') + ' ' + (VIDEO_KIND[k] || k) };
+}
+function pickedFx(src){          // indice do efeito escolhido na pilha da fonte (-1 = nenhum)
+  const st = stackOf(src), p = fxPick[src];
+  if (typeof p === 'number' && p >= 0 && p < st.length) return p;
+  if (typeof p === 'string'){ const i = st.findIndex(o => o.file === p); if (i >= 0) return i; }  // formato antigo
+  return st.length ? 0 : -1;
+}
+// forcas de UMA entrada da pilha: e.fx (dela) ou, sem, o fx[shader] antigo da fonte
+// (ausente = padrao do cabecalho "// fx: nome=0.5", senao 1.0)
+function fxDefault(file, n){ const d = (lastFxDefaults[file] || {})[n]; return typeof d === 'number' ? d : 1.0; }
+function fxVal(src, e, n){
+  const lv = e.fx || (((binding(src) || {}).fx || {})[e.file]) || {};
+  return n in lv ? lv[n] : fxDefault(e.file, n);
+}
+function setFxVal(src, e, n, v){
+  if (!e.fx) e.fx = Object.assign({}, (((binding(src) || {}).fx || {})[e.file]) || {});
+  e.fx[n] = Math.round(v * 1000) / 1000;
+}
+function ensurePool(kind, key){
+  const l = (lastPool || {})[kind];
+  if (l && !l.includes(key)) setPool(kind, l.concat([key]));
+}
+function remix(){ mixSig = ''; renderMixer(); }
+function setMixMode(m){ mixMode = m; remix(); }
+function pickFx(src, idx){
+  fxPick[src] = idx;
+  try { localStorage.setItem('fxPick', JSON.stringify(fxPick)); } catch (e) {}
+  mixMode = 'fx';
+  if (src !== lastSelected) selectSource(src); else remix();
+}
+// clique no card / tecla de posicao: seleciona; a mesma 2x rapido entra nos efeitos
+function tapSource(key, mouse){
+  const now = performance.now();
+  const again = lastTap && lastTap.key === key && now - lastTap.t < 450;
+  lastTap = again ? null : { key, t: now };
+  if (again && (mouse || mixKeys.enter === 'double')){ setMixMode('fx'); return; }
+  mixMode = 'src';
+  if (key !== lastSelected) selectSource(key); else remix();
+}
+// Alt+←/→ = move a fonte selecionada de posicao; Alt+↑/↓ = move o efeito escolhido na pilha
+// (so' dentro dos efeitos, depois do 2x). Segurar repete.
+function mixMoveKey(e){
+  if (!e.altKey || e.ctrlKey || e.metaKey || !lastSelected) return false;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
+    const vis = mixStrips().map(chKey), i = vis.indexOf(lastSelected);
+    const j = i + (e.key === 'ArrowLeft' ? -1 : 1);
+    if (i >= 0 && j >= 0 && j < vis.length) moveSource(lastSelected, vis[j]);
+    return true;
+  }
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mixMode === 'fx'){
+    const i = pickedFx(lastSelected), j = i + (e.key === 'ArrowUp' ? -1 : 1);
+    if (i >= 0 && stackOf(lastSelected)[j]) moveFx(lastSelected, i, j);
+    return true;
+  }
+  return false;
+}
+// setas sem modificador: ←/→ = fonte vizinha; ↑/↓ = efeito anterior/proximo da fonte selecionada
+// (ja entra nos efeitos, sem precisar do 2x). Segurar repete.
+function mixNavKey(e){
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+  const vis = mixStrips().map(chKey);
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
+    if (!vis.length) return false;
+    const i = vis.indexOf(lastSelected);
+    const j = i < 0 ? 0 : Math.max(0, Math.min(vis.length - 1, i + (e.key === 'ArrowLeft' ? -1 : 1)));
+    mixMode = 'src';
+    if (vis[j] !== lastSelected) selectSource(vis[j]); else remix();
+    return true;
+  }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown'){
+    const st = stackOf(lastSelected);
+    if (!lastSelected || !st.length) return false;
+    const i = pickedFx(lastSelected);
+    const j = mixMode !== 'fx' ? Math.max(0, i) : Math.max(0, Math.min(st.length - 1, i + (e.key === 'ArrowUp' ? -1 : 1)));
+    pickFx(lastSelected, j);
+    return true;
+  }
+  return false;
+}
+// liga/desliga: canal (na saida / fora) e efeito da pilha (LED). Segurar o numero ou Espaco.
+function toggleSource(key){
+  const x = lastOverlays.find(o => chKey(o) === key); if (!x) return;
+  if (x.off) delete x.off; else x.off = 1;
+  sendOverlays(true); remix();
+}
+function toggleFx(src, idx){
+  const x = stackOf(src)[idx]; if (!x) return;
+  if (!inPool('shaders', x.file)){ ensurePool('shaders', x.file); delete x.off; }
+  else if (x.off) delete x.off; else x.off = 1;
+  sendBindings(true); remix();
+}
+// SEGURAR o numero (HOLD_MS) = liga/desliga o que ele aponta; soltar antes = so' o toque normal
+const HOLD_MS = 450;
+let holdT = null, holdKey = '';
+function armHold(e, fn){
+  clearTimeout(holdT);
+  holdKey = e.code || e.key;
+  holdT = setTimeout(() => { holdT = null; holdKey = ''; fn(); }, HOLD_MS);
+}
+document.addEventListener('keyup', e => {
+  if ((e.code || e.key) === holdKey){ clearTimeout(holdT); holdT = null; holdKey = ''; }
+  if (e.key === ' ' && !typingInField(e.target)) e.preventDefault();   // botao focado nao "clica" no espaco
+});
+window.addEventListener('blur', () => { clearTimeout(holdT); holdT = null; holdKey = ''; });
+function mixKey(e){
+  if ((e.key === mixKeys.back || e.key === 'Escape') && mixMode === 'fx'){ setMixMode('src'); return true; }
+  if (mixKeys.enter !== 'double' && e.key === mixKeys.enter && lastSelected){ setMixMode('fx'); return true; }
+  if (e.key === ' '){                 // Espaco: liga/desliga o selecionado (efeito, dentro dos efeitos)
+    if (mixMode === 'fx'){ const i = pickedFx(lastSelected); if (i >= 0) toggleFx(lastSelected, i); }
+    else if (lastSelected) toggleSource(lastSelected);
+    return true;
+  }
+  const n = posFromKey(e);
+  if (!n) return false;
+  if (mixMode === 'fx'){
+    const src = lastSelected;
+    if (stackOf(src)[n - 1]){ pickFx(src, n - 1); armHold(e, () => toggleFx(src, n - 1)); }
+    return true;
+  }
+  const o = mixStrips()[n - 1];
+  if (!o) return false;
+  const k = chKey(o);
+  tapSource(k, false);
+  if (mixMode === 'src') armHold(e, () => toggleSource(k));   // o 2o toque do 2x (entrou) nao arma
+  return true;
+}
+
+function knobSvg(size){
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', size); svg.setAttribute('height', size); svg.setAttribute('viewBox', '0 0 36 36');
+  const mk = (tag, cls) => { const p = document.createElementNS(NS, tag); p.setAttribute('class', cls); svg.appendChild(p); return p; };
+  const tr = mk('path', 'kt'), ar = mk('path', 'ka'), ln = mk('line', 'kp');
+  const P = (a, r) => { const t = a * Math.PI / 180; return [(18 + r * Math.sin(t)).toFixed(2), (18 - r * Math.cos(t)).toFixed(2)]; };
+  const s0 = P(-135, 14), f = P(135, 14);
+  tr.setAttribute('d', `M${s0[0]} ${s0[1]} A14 14 0 1 1 ${f[0]} ${f[1]}`);
+  ln.setAttribute('x1', 18); ln.setAttribute('y1', 18);
+  return { svg, set(v){
+    v = Math.max(0, Math.min(1, +v || 0));
+    const a = -135 + 270 * v, e = P(a, 14), q = P(a, 8);
+    ar.setAttribute('d', v > 0.005 ? `M${s0[0]} ${s0[1]} A14 14 0 ${270 * v > 180 ? 1 : 0} 1 ${e[0]} ${e[1]}` : '');
+    ln.setAttribute('x2', q[0]); ln.setAttribute('y2', q[1]);
+  } };
+}
+// knob grande do painel: arrasta pra cima/baixo (shift = fino), roda do mouse, duplo clique = 100%
+// io = pra onde o knob manda: {touch, live (arrasto), commit (soltar = grava)}. Padrao = BINDINGS
+// da mesa (e registra em devEls, que o stream resincroniza). Outro io (calibracao) cuida do seu.
+const KNOB_BIND = { touch(){ bindTouched = performance.now(); }, live: () => sendBindingsLive(),
+                    commit: () => sendBindings(true) };
+function bigKnob(id, label, get, set, cls, dflt = 1, io = KNOB_BIND){
+  const w = document.createElement('div'); w.className = 'bigknob ' + (cls || '');
+  const k = knobSvg(64);
+  const lb = document.createElement('span'); lb.textContent = label;
+  const val = document.createElement('span'); val.className = 'kvv';
+  w.append(k.svg, lb, val);
+  const show = v => { k.set(v); val.textContent = Math.round(v * 100) + '%'; };
+  const put = v => { v = Math.max(0, Math.min(1, v)); set(v); show(v); };
+  let y0 = 0, v0 = 0;
+  w.onpointerdown = e => { w.setPointerCapture(e.pointerId); y0 = e.clientY; v0 = get(); knobDrag = id; io.touch(); };
+  w.onpointermove = e => {
+    if (knobDrag !== id || !w.hasPointerCapture(e.pointerId)) return;
+    put(v0 + (y0 - e.clientY) / (e.shiftKey ? 600 : 150)); io.live();
+  };
+  w.onpointerup = () => { if (knobDrag === id){ knobDrag = ''; io.commit(); } };
+  w.onwheel = e => {
+    e.preventDefault(); put(get() + (e.deltaY < 0 ? 0.02 : -0.02)); io.live();
+    clearTimeout(w._t); w._t = setTimeout(() => io.commit(), 400);
+  };
+  w.ondblclick = () => { put(dflt); io.commit(); };  // duplo-clique = volta ao padrao
+  w._show = show;
+  if (io === KNOB_BIND) devEls[id] = { show, get };
+  show(get());
+  return w;
+}
+function chip(text, on, title, onclick){
+  const b = document.createElement('button');
+  b.className = 'chip' + (on ? ' on' : ''); b.textContent = text; b.title = title; b.onclick = onclick;
+  return b;
+}
+function clearDragMarks(){
+  document.querySelectorAll('#mixer .over, #mixer .dragging').forEach(x => x.classList.remove('over', 'dragging'));
+}
+function moveSource(from, to){
+  const vis = mixStrips().map(chKey);
+  const a = vis.indexOf(from), b = vis.indexOf(to);
+  if (a < 0 || b < 0 || a === b) return;
+  vis.splice(b, 0, vis.splice(a, 1)[0]);
+  const by = Object.fromEntries(lastOverlays.map(o => [chKey(o), o]));
+  lastOverlays = vis.map(k => by[k]).concat(lastOverlays.filter(o => !vis.includes(chKey(o))));
+  sendOverlays(true); remix();
+}
+function moveFx(src, a, b){
+  const st = stackOf(src);
+  if (a === b || !st[a] || !st[b]) return;
+  const picked = st[pickedFx(src)];
+  st.splice(b, 0, st.splice(a, 1)[0]);
+  if (picked) fxPick[src] = st.indexOf(picked);   // o escolhido segue a entrada, nao a posicao
+  sendBindings(true); remix();
+}
+
+function renderMixer(){
+  if (performance.now() - Math.max(mediaTouched, bindTouched) < TOUCH_MS && mixSig) return;   // acabei de mexer
+  const strips = mixStrips();
+  const sig = JSON.stringify([strips.map(o => [chKey(o), o.off || 0, o.blend || '', o.audio || 0]), lastAudioMedia,
+    strips.map(o => stackOf(chKey(o)).map(s => [s.file, s.off || 0, s.blend || ''])),
+    lastSelected, mixMode, fxPick, lastMedia, lastVideoInputs, lastSourceFit, lastBounceBusy,
+    lastShaderList, lastManifests, mixKeys, lastPool]);
+  if (sig === mixSig) return;
+  mixSig = sig;
+  const box = $('#mixer'); box.innerHTML = ''; mixEls = {};
+  box.classList.toggle('fxmode', mixMode === 'fx');
+  strips.forEach((o, i) => box.appendChild(stripEl(o, i)));
+  box.appendChild(addSourceEl(strips));
+  renderDevice();
+  renderHud();
+  renderKeysPop();
+}
+function stripEl(o, i){
+  const key = chKey(o), info = srcInfo(key), sel = key === lastSelected, fxOn = sel && mixMode === 'fx';
+  const cur = () => lastOverlays.find(x => chKey(x) === key);
+  const el = document.createElement('div');
+  el.className = 'strip' + (sel ? ' sel' : '') + (o.off ? ' off' : '');
+
+  // card: clique = selecionar, 2x = efeitos; e' a alca do arrasto (o canal so' fica draggable
+  // enquanto o card esta apertado, pra nao roubar o arrasto do slider de opacidade)
+  const thumb = document.createElement('button'); thumb.className = 'thumb';
+  thumb.title = 'clique: selecionar · 2 cliques: efeitos · arraste: reordenar';
+  const kc = document.createElement('span'); kc.className = 'kc'; kc.textContent = posLabel(i + 1);
+  const kd = document.createElement('span'); kd.className = 'kind'; kd.textContent = info.kind;
+  const tn = document.createElement('img'); tn.className = 'tn'; tn.alt = ''; tn.draggable = false;
+  tn.onerror = () => tn.remove();       // sem imagem (fonte parada): fica so' o tipo
+  tn.src = '/thumb?src=' + encodeURIComponent(o.file) + (info.media ? '' : '&t=' + Date.now());
+  if (!info.media) tn.dataset.live = o.file;   // camera/tela: refresca a cada 2 s
+  thumb.append(tn, kc, kd);
+  thumb.onpointerdown = () => { el.draggable = true; };
+  thumb.onpointerup = () => { el.draggable = false; };
+  thumb.onclick = () => tapSource(key, true);
+  el.ondragstart = e => {
+    if (mixDrag) return;
+    mixDrag = { kind: 'src', file: key };
+    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', key);
+    el.classList.add('dragging');
+  };
+  el.ondragover = e => {
+    if (!mixDrag || mixDrag.kind !== 'src' || mixDrag.file === key) return;
+    e.preventDefault(); el.classList.add('over');
+  };
+  el.ondragleave = e => { if (!el.contains(e.relatedTarget)) el.classList.remove('over'); };
+  el.ondrop = e => {
+    if (!mixDrag || mixDrag.kind !== 'src') return;
+    e.preventDefault(); const from = mixDrag.file; mixDrag = null; moveSource(from, key);
+  };
+  el.ondragend = () => { el.draggable = false; mixDrag = null; clearDragMarks(); };
+
+  const r1 = document.createElement('div'); r1.className = 'srow';
+  const nm = document.createElement('span'); nm.className = 'sname'; nm.textContent = info.name; nm.title = key;
+  const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '×';
+  rm.title = 'tirar da scene (os efeitos dela ficam lembrados)';
+  rm.onclick = () => { lastOverlays = lastOverlays.filter(x => chKey(x) !== key); sendOverlays(true); remix(); };
+  r1.append(nm, rm);
+
+  const r2 = document.createElement('div'); r2.className = 'srow';
+  const on = document.createElement('button'); on.className = 'onbtn' + (o.off ? '' : ' on');
+  on.title = o.off ? 'fora da saída (clique pra pôr)' : 'na saída (clique pra tirar)';
+  on.onclick = () => toggleSource(key);
+  const rng = document.createElement('input'); rng.type = 'range'; rng.min = 0; rng.max = 100;
+  rng.value = Math.round(o.opacity * 100); rng.title = 'opacidade na saída';
+  const pct = document.createElement('span'); pct.className = 'pct'; pct.textContent = rng.value + '%';
+  rng.onpointerdown = () => { ovlDrag = key; mediaTouched = performance.now(); };
+  rng.oninput = () => { const x = cur(); if (!x) return; x.opacity = +rng.value / 100; pct.textContent = rng.value + '%'; sendOverlaysLive(); };
+  rng.onchange = () => { ovlDrag = ''; sendOverlays(true); };
+  r2.append(on, rng, pct);
+
+  // preencher / rebate: da FONTE (MEDIA / SOURCE_FIT), valem em todos os sets
+  const r3 = document.createElement('div'); r3.className = 'srow';
+  const med = () => lastMedia.find(x => x.file === o.file);   // preencher/rebate sao da FONTE
+  const filled = info.media ? (med() || {}).fit !== 'fit' : lastSourceFit[o.file] !== 'fit';
+  r3.appendChild(chip('preencher', filled, 'estica pra cobrir a saída (desligado: encaixa inteira, com margens)', () => {
+    if (info.media){ const m = med(); if (m){ m.fit = filled ? 'fit' : 'fill'; sendMedia(); } }
+    else setSourceFit(o.file, filled ? 'fit' : 'fill');
+    remix();
+  }));
+  const bsel = document.createElement('select'); bsel.className = 'insel sblend';
+  bsel.title = 'como esta fonte mistura com as de baixo (normal a 100% cobre; tela/soma/clarear acendem por cima)';
+  for (const [v, t] of LAYER_BLENDS){ const op = document.createElement('option'); op.value = v; op.textContent = v; op.title = t; bsel.appendChild(op); }
+  bsel.value = o.blend || 'normal';
+  bsel.onchange = () => { const x = cur(); if (!x) return; if (bsel.value === 'normal') delete x.blend; else x.blend = bsel.value; sendOverlays(true); };
+  if (info.video){
+    const m = med() || {};
+    r3.appendChild(chip(lastBounceBusy.includes(o.file) ? 'rebate…' : 'rebate', !!m.bounce,
+      'vai e volta em loop, desacelerando nas viradas (na 1ª vez prepara uma versão)', () => {
+        const x = med(); if (x){ x.bounce = !x.bounce; sendMedia(); remix(); }
+      }));
+    // 🔊 (teste): o som deste video vira a fonte de audio no lugar do PulseAudio — 1 por mesa
+    const live = o.audio && lastAudioMedia === o.file;
+    r3.appendChild(chip(o.audio && !live ? '🔊 ?' : '🔊', !!o.audio,
+      o.audio && !live ? 'marcado, mas sem efeito (canal desligado, rebate ligado ou vídeo sem som)'
+        : 'o som deste vídeo alimenta os efeitos no lugar da fonte de áudio (e toca)', () => {
+        const on = !o.audio;
+        lastOverlays.forEach(x => delete x.audio);
+        const x = cur(); if (x && on) x.audio = 1;
+        sendOverlays(true); remix();
+      }));
+  }
+
+  r3.appendChild(bsel);
+
+  const fb = document.createElement('div'); fb.className = 'fxbox' + (fxOn ? ' active' : '');
+  const st = stackOf(key), picked = pickedFx(key);
+  const lab = document.createElement('div'); lab.className = 'fxlabel';
+  lab.textContent = fxOn && st.length ? `EFEITOS · ${posLabel(1)}–${posLabel(st.length)}` : 'EFEITOS';
+  fb.appendChild(lab);
+  mixEls[key] = { rng, pct, minis: {} };
+  st.forEach((s, j) => fb.appendChild(insertEl(key, s, j, sel && j === picked)));
+  const add = document.createElement('select'); add.className = 'insel';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '+ efeito…'; add.appendChild(o0);
+  for (const f of lastShaderList){         // o mesmo pode entrar de novo (outra entrada, forcas proprias)
+    const op = document.createElement('option'); op.value = f; op.textContent = shortShader(f); add.appendChild(op);
+  }
+  add.onchange = () => {
+    if (!add.value) return;
+    const b = binding(key, true);
+    b.shaders.push({ file: add.value, opacity: 1, fx: {} });
+    ensurePool('shaders', add.value);
+    sendBindings(true); pickFx(key, b.shaders.length - 1);
+  };
+  fb.appendChild(add);
+
+  el.append(thumb, r1, r2, r3, fb);
+  return el;
+}
+function insertEl(key, s, j, picked){
+  const live = !s.off && inPool('shaders', s.file);
+  const row = document.createElement('div');
+  row.className = 'ins' + (picked ? ' picked' : '') + (live ? '' : ' off');
+  row.draggable = true;
+  const kc = document.createElement('span'); kc.className = 'kc'; kc.textContent = posLabel(j + 1);
+  const led = document.createElement('button'); led.className = 'led' + (live ? ' on' : '');
+  led.title = live ? 'ligado (clique pra desligar)' : 'desligado (clique pra ligar)';
+  led.onclick = () => toggleFx(key, j);
+  const nb = document.createElement('button'); nb.className = 'iname';
+  nb.textContent = shortShader(s.file); nb.title = s.file + ' — clique: knobs dele no painel';
+  nb.onclick = () => pickFx(key, j);
+  const bl = document.createElement('span'); bl.className = 'bl'; bl.textContent = s.blend || 'normal';
+  const mini = knobSvg(22); mini.set(s.opacity);
+  const x = document.createElement('button'); x.className = 'rm'; x.textContent = '×'; x.title = 'tirar este efeito da fonte';
+  x.onclick = () => {
+    const st = stackOf(key); if (!st[j]) return;
+    const p = pickedFx(key);
+    st.splice(j, 1);
+    if (p > j) fxPick[key] = p - 1;
+    sendBindings(true); remix();
+  };
+  row.append(kc, led, nb, bl, mini.svg, x);
+  row.ondragstart = e => {
+    e.stopPropagation();
+    mixDrag = { kind: 'fx', src: key, idx: j };
+    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.file);
+    row.classList.add('dragging');
+  };
+  row.ondragover = e => {
+    if (!mixDrag || mixDrag.kind !== 'fx' || mixDrag.src !== key || mixDrag.idx === j) return;
+    e.preventDefault(); e.stopPropagation(); row.classList.add('over');
+  };
+  row.ondragleave = () => row.classList.remove('over');
+  row.ondrop = e => {
+    if (!mixDrag || mixDrag.kind !== 'fx' || mixDrag.src !== key) return;
+    e.preventDefault(); e.stopPropagation();
+    const from = mixDrag.idx; mixDrag = null; moveFx(key, from, j);
+  };
+  row.ondragend = e => { e.stopPropagation(); mixDrag = null; clearDragMarks(); };
+  mixEls[key].minis[j] = mini;
+  return row;
+}
+function addSourceEl(strips){
+  const col = document.createElement('div'); col.className = 'addcol';
+  const have = new Set(strips.map(o => o.file));
+  const items = lastVideoInputs.filter(x => x.kind !== 'media').map(x => [x.id, (VIDEO_ICON[x.kind] || '•') + ' ' + x.name])
+    .concat(lastMedia.map(m => [m.file, (m.kind === 'video' ? '🎬 ' : '🖼 ') + m.name]))
+    .map(([k, lbl]) => [k, have.has(k) ? lbl + '  (de novo)' : lbl]);
+  const sel = document.createElement('select'); sel.className = 'insel';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '+ fonte…'; sel.appendChild(o0);
+  for (const [k, lbl] of items){ const o = document.createElement('option'); o.value = k; o.textContent = lbl; sel.appendChild(o); }
+  sel.onchange = () => {
+    const k = sel.value; if (!k) return;
+    const same = lastOverlays.filter(o => o.file === k);
+    let ent;
+    if (!same.length) lastOverlays.push(ent = { file: k, opacity: 1 });
+    else if (!have.has(k)) ent = same[0];              // estava so' fora do pool: volta
+    else {                                             // ja esta na mesa: canal novo da mesma fonte
+      const n = Math.max(...same.map(o => o.dup || 1)) + 1;
+      lastOverlays.push(ent = { file: k, opacity: 1, dup: n });
+    }
+    ensurePool('sources', k);
+    sendOverlays(true); selectSource(chKey(ent));
+  };
+  col.appendChild(sel);
+  return col;
+}
+function renderDevice(){
+  const box = $('#device'); box.innerHTML = ''; devEls = {};
+  const src = lastSelected, info = src ? srcInfo(src) : null;
+  const st = stackOf(src), idx = pickedFx(src);
+  const s = st[idx], file = s ? s.file : '';
+  const left = document.createElement('div'); left.className = 'dev-info';
+  box.appendChild(left);
+  if (!src || !s){
+    left.innerHTML = '<div class="dev-cap"></div>';
+    left.firstChild.textContent = !src ? 'nenhuma fonte selecionada' : `${info.name}: sem efeitos (“+ efeito” no canal)`;
+  } else {
+    const cur = () => { const x = stackOf(src)[idx]; return x && x.file === file ? x : null; };
+    const pos = mixStrips().findIndex(o => chKey(o) === src);
+    const cap = document.createElement('div'); cap.className = 'dev-cap';
+    cap.textContent = `EFEITO ${posLabel(idx + 1)} · FONTE ${pos >= 0 ? posLabel(pos + 1) : '—'}`;
+    const tt = document.createElement('div'); tt.className = 'dev-title'; tt.textContent = shortShader(file) + ' ';
+    const sm = document.createElement('small'); sm.textContent = 'em ' + info.name; tt.appendChild(sm);
+    const bl = document.createElement('div'); bl.className = 'blends';
+    for (const [v, t] of LAYER_BLENDS){
+      bl.appendChild(chip(v, (s.blend || 'normal') === v, t, () => {
+        const x = cur(); if (!x) return;
+        if (v === 'normal') delete x.blend; else x.blend = v;
+        sendBindings(true); remix();
+      }));
+    }
+    left.append(cap, tt, bl);
+    const kn = document.createElement('div'); kn.className = 'knobs';
+    kn.appendChild(bigKnob('op', 'opacidade', () => (cur() || {}).opacity ?? 1, v => {
+      const x = cur(); if (x) x.opacity = v;
+      const m = (mixEls[src] || { minis: {} }).minis[idx]; if (m) m.set(v);
+    }));
+    for (const n of lastManifests[file] || []){
+      kn.appendChild(bigKnob('fx:' + n, n, () => { const x = cur(); return x ? fxVal(src, x, n) : fxDefault(file, n); },
+        v => { const x = cur(); if (x) setFxVal(src, x, n, v); }, 'fx', fxDefault(file, n)));
+    }
+    box.appendChild(kn);
+  }
+  const sp = document.createElement('div'); sp.style.flex = '1'; box.appendChild(sp);
+  const help = document.createElement('div'); help.className = 'keyhelp';
+  const fam = MIX_FAMILIES[mixKeys.family];
+  help.innerHTML = `<div><b></b> seleciona a fonte</div><div><b></b> entra nos efeitos dela</div>`
+    + `<div><b></b> ali dentro = efeito</div><div><b></b> volta pras fontes</div>`
+    + `<div><b>segurar o número</b> ou <b>Espaço</b> liga/desliga</div><div><b>← → ↑ ↓</b> navega fontes / efeitos</div><div><b>Alt ←/→</b> muda a fonte de lugar</div><div><b>Alt ↑/↓</b> muda o efeito de lugar (dentro dos efeitos)</div>`;
+  const bs = help.querySelectorAll('b');
+  bs[0].textContent = fam; bs[1].textContent = keyName(mixKeys.enter); bs[2].textContent = fam; bs[3].textContent = keyName(mixKeys.back);
+  box.appendChild(help);
+}
+function renderHud(){
+  const h = $('#mix-hud');
+  const name = lastSelected ? srcInfo(lastSelected).name : '—';
+  if (mixMode === 'fx'){
+    const st = stackOf(lastSelected), i = pickedFx(lastSelected);
+    h.className = 'mixhud fx';
+    h.textContent = `EFEITOS · ${name}` + (i >= 0 ? ` › ${posLabel(i + 1)} ${shortShader(st[i].file)}` : '');
+  } else {
+    const pos = mixStrips().findIndex(o => chKey(o) === lastSelected);
+    h.className = 'mixhud src';
+    h.textContent = `FONTES · ${pos >= 0 ? posLabel(pos + 1) + ' ' : ''}${name}`;
+  }
+}
+// opacidades mudam sem rebuild (arrasto em outra aba, set novo com a mesma estrutura)
+function syncMixer(){
+  if (performance.now() - mediaTouched >= TOUCH_MS){
+    for (const o of lastOverlays){
+      const k = chKey(o), el = mixEls[k]; if (!el || k === ovlDrag) continue;
+      el.rng.value = Math.round(o.opacity * 100); el.pct.textContent = el.rng.value + '%';
+    }
+  }
+  if (performance.now() - bindTouched >= TOUCH_MS){
+    for (const [src, el] of Object.entries(mixEls))
+      stackOf(src).forEach((s, j) => { const m = el.minis[j]; if (m) m.set(s.opacity); });
+    for (const [id, d] of Object.entries(devEls)) if (id !== knobDrag) d.show(d.get());
+  }
+}
+
+setInterval(() => {
+  if (document.hidden || document.body.dataset.panel !== 'effects') return;
+  for (const img of document.querySelectorAll('#mixer img.tn[data-live]')){
+    if (!img.complete) continue;
+    img.src = '/thumb?src=' + encodeURIComponent(img.dataset.live) + '&t=' + Date.now();
+  }
+}, 2000);
+
+// ---- atalhos: familia da posicao + tecla de entrar/voltar (captura a proxima tecla) ----
+function toggleKeysPop(){ const p = $('#keys-pop'); p.hidden = !p.hidden; keysCapture = ''; renderKeysPop(); }
+function saveMixKeys(){
+  try { localStorage.setItem('mixKeys', JSON.stringify(mixKeys)); } catch (e) {}
+  remix();
+}
+function renderKeysPop(){
+  const p = $('#keys-pop');
+  $('#keys-btn').classList.toggle('open', !p.hidden);
+  if (p.hidden) return;
+  p.innerHTML = '';
+  const r0 = document.createElement('div'); r0.className = 'krow';
+  const l0 = document.createElement('span'); l0.className = 'klabel'; l0.textContent = 'fonte / efeito pela posição';
+  r0.appendChild(l0);
+  for (const [f, lbl] of Object.entries(MIX_FAMILIES))
+    r0.appendChild(chip(lbl, mixKeys.family === f, '', () => { mixKeys.family = f; saveMixKeys(); }));
+  p.appendChild(r0);
+  for (const [k, lbl] of [['enter', 'entrar nos efeitos'], ['back', 'voltar pras fontes']]){
+    const r = document.createElement('div'); r.className = 'krow';
+    const l = document.createElement('span'); l.className = 'klabel'; l.textContent = lbl;
+    const v = document.createElement('span'); v.className = 'kval' + (keysCapture === k ? ' cap' : '');
+    v.textContent = keysCapture === k ? 'aperte uma tecla…' : keyName(mixKeys[k]);
+    const b = document.createElement('button'); b.className = 'ibtn'; b.textContent = 'redefinir';
+    b.onclick = () => { keysCapture = k; renderKeysPop(); };
+    r.append(l, v, b);
+    if (k === 'enter' && mixKeys.enter !== 'double'){
+      const d = document.createElement('button'); d.className = 'ibtn'; d.textContent = '2×';
+      d.title = 'volta pra "apertar o número 2 vezes"';
+      d.onclick = () => { mixKeys.enter = 'double'; saveMixKeys(); };
+      r.appendChild(d);
+    }
+    p.appendChild(r);
+  }
+  const r9 = document.createElement('div'); r9.className = 'krow';
+  const dflt = document.createElement('button'); dflt.className = 'ibtn'; dflt.textContent = 'padrão';
+  dflt.onclick = () => { mixKeys = Object.assign({}, MIX_KEYS_DEFAULT); keysCapture = ''; saveMixKeys(); };
+  r9.appendChild(dflt);
+  const clash = mixKeys.family === 'digits' ? lastScenes.filter(s => /^[1-9]$/.test(s.key || '')) : [];
+  if (clash.length){
+    const w = document.createElement('span'); w.className = 'kwarn';
+    w.textContent = '⚠ scenes com tecla numérica (' + clash.map(s => s.name + ' = ' + s.key).join(', ')
+      + '): a mesa tem prioridade';
+    r9.appendChild(w);
+  }
+  p.appendChild(r9);
 }
 
 // ============ TRANSIÇÕES (galeria de .glsl; cada set escolhe a sua na lista de sets) ============
@@ -1732,7 +2211,7 @@ function renderTransitions(){
     const rb = document.createElement('button'); rb.className = 'ibtn'; rb.textContent = 'renomear'; rb.onclick = doRen;
     p.append('nome ', ren, rb);
     const del = document.createElement('button'); del.className = 'ibtn del'; del.textContent = 'apagar';
-    del.onclick = () => askConfirm(`Apagar a transição “${f}”? Sets que a usam voltam pro padrão.`,
+    del.onclick = () => askConfirm(`Apagar a transição “${f}”? Scenes que a usam voltam pro padrão.`,
       () => { transOpen = ''; transPost('/delete-transition', { name: f }).catch(e => alert('não apagou: ' + e)); });
     p.appendChild(del);
     box.appendChild(p);
@@ -1748,60 +2227,30 @@ function newTransition(){
 }
 
 // atalho de SET em QUALQUER parte do dash (mesmas teclas que valem na janela do native_synth).
-// Ignora se o foco esta num campo de texto / select / editavel, se ha modificador (nao
-// sequestra Ctrl+R etc.) ou se e' auto-repeat (segurar a tecla).
+// Ignora se o foco esta num campo de TEXTO / editavel (slider, checkbox e select focados depois
+// de um clique nao contam), se ha modificador (nao sequestra Ctrl+R etc.) ou se e' auto-repeat.
 function typingInField(el){
   if (!el) return false;
-  const t = el.tagName;
-  return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
+  if (el.tagName === 'TEXTAREA' || el.isContentEditable) return true;
+  return el.tagName === 'INPUT' && /^(text|search|email|password|url|tel|number)$/.test(el.type);
 }
 document.addEventListener('keydown', e => {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.key.length !== 1) return;
+  if (keysCapture){                     // "redefinir" nos atalhos da mesa: a proxima tecla vale
+    e.preventDefault();
+    mixKeys[keysCapture] = e.key; keysCapture = ''; saveMixKeys();
+    return;
+  }
   if (typingInField(e.target)) return;
+  if (mixMoveKey(e) || mixNavKey(e)){ e.preventDefault(); return; }   // antes do filtro (Alt / repetir)
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (mixKey(e)){ e.preventDefault(); return; }   // mesa (posicao de fonte/efeito) tem prioridade
+  if (e.key.length !== 1) return;
   const k = e.key.toLowerCase();
   if (!/[a-z0-9]/.test(k)) return;
   const sc = lastScenes.find(x => x.key === k);
   if (sc){ e.preventDefault(); scenePost('/scene', { name: sc.name }); }
 });
 
-// FORÇA DOS EFEITOS do par (fonte selecionada, shader clicado): BINDINGS[fonte].fx[shader][nome].
-// Nomes = cabecalho "// fx:" do shader (lastManifests, de /shaders). Ausente = 1.0 (cheio).
-let fxSig = '', fxEls = {}, fxActive = null, fxReleaseT = null;
-function renderFx(){
-  const man = lastManifests[fxShader] || [];
-  const sig = JSON.stringify([fxShader, lastSelected, man]);
-  if (sig !== fxSig){
-    fxSig = sig;
-    $('#fx-title').textContent = fxShader ? `${shortShader(fxShader)} em ${sourceLabel(lastSelected) || '—'}` : '—';
-    const box = $('#fx-list'); box.innerHTML = ''; fxEls = {};
-    if (!fxShader) box.innerHTML = '<div class="txtrow">&mdash; clique no nome de um shader acima</div>';
-    else if (!lastSelected) box.innerHTML = '<div class="txtrow">&mdash; selecione uma fonte/mídia</div>';
-    else if (!man.length) box.innerHTML = '<div class="txtrow">&mdash; esse shader não declara efeitos (sem linha <b>// fx:</b>)</div>';
-    else for (const name of man){
-      const row = document.createElement('div'); row.className = 'knob';
-      row.innerHTML = `<label>${name}</label><input type="range" min="0" max="1" step="0.01"><span class="kv">&mdash;</span>`;
-      box.appendChild(row);
-      const inp = row.querySelector('input'), kv = row.querySelector('.kv');
-      fxEls[name] = { inp, kv };
-      inp.addEventListener('input', () => {
-        kv.textContent = fmt(inp.value);
-        const bnd = selBinding(true);
-        bnd.fx = bnd.fx || {};
-        (bnd.fx[fxShader] = bnd.fx[fxShader] || {})[name] = parseFloat(inp.value);
-        fxActive = name;
-        clearTimeout(fxReleaseT); fxReleaseT = setTimeout(() => fxActive = null, 600);
-        sendBindingsLive();
-      });
-      inp.addEventListener('change', () => sendBindings(true));
-    }
-  }
-  const lv = (((selBinding(false) || {}).fx) || {})[fxShader] || {};
-  for (const [name, o] of Object.entries(fxEls)){
-    if (name === fxActive) continue;             // nao briga com o slider em arrasto
-    const v = name in lv ? lv[name] : 1.0;
-    o.inp.value = v; o.kv.textContent = fmt(v);
-  }
-}
 
 function flush(){
   flushT = null;
@@ -1826,7 +2275,7 @@ function fillSel(sel, items, current){
 let lastAudioSources = [];
 // FONTE DE IMAGEM: lista de linhas (mesmo visual da galeria de midia) em vez de <select>.
 // Lista vem de /inputs; o destaque (ativa) segue o stream (d.inputs.video).
-let lastVideoInputs = [], videoSig = '', lastSourceFit = {}, fitTouched = 0;
+let lastVideoInputs = [], lastSourceFit = {}, fitTouched = 0;
 function setSourceFit(id, fit){
   fitTouched = performance.now();
   if (fit === 'fit') lastSourceFit[id] = 'fit'; else delete lastSourceFit[id];
@@ -1835,37 +2284,13 @@ function setSourceFit(id, fit){
 }
 const VIDEO_ICON = { webcam: '📷', screen: '🖥', media: '🎞' };
 const VIDEO_KIND = { webcam: 'câmera', screen: 'tela' };
-function renderVideoList(){
-  if (performance.now() - mediaTouched < TOUCH_MS && videoSig) return;   // acabei de mexer numa camada
-  const sig = JSON.stringify([lastVideoInputs, lastSelected, lastOverlays.map(o => o.file), lastSourceFit, lastPool]);
-  if (sig === videoSig) return;
-  videoSig = sig;
-  const box = $('#video-list'); box.innerHTML = '';
-  if (!lastVideoInputs.some(x => x.kind !== 'media')) box.innerHTML = '<div class="txtrow">&mdash; nenhuma fonte encontrada. Use ↻.</div>';
-  const live = lastVideoInputs.filter(x => x.kind !== 'media');   // mídias têm grupo próprio
-  for (const it of live.filter(x => inPool('sources', x.id))){
-    const row = document.createElement('div'); row.className = 'sh-row';
-    const typ = document.createElement('span'); typ.className = 'mtype';
-    typ.textContent = VIDEO_ICON[it.kind] || '•'; typ.title = VIDEO_KIND[it.kind] || it.kind;
-    const b = document.createElement('button');
-    b.className = 'ibtn name' + (it.id === lastSelected ? ' active' : '');
-    b.textContent = it.name; b.title = it.id + ' — selecionar (mostra os efeitos desta fonte)';
-    b.onclick = () => selectSource(it.id);
-    row.append(typ, b, ovlControl(it.id, 'camada: põe esta fonte na saída, por cima das já marcadas (na ordem em que marcar)'),
-               fitControl(lastSourceFit[it.id] !== 'fit', f => setSourceFit(it.id, f)), rebateSlot(),
-               rmButton('sources', it.id));
-    box.appendChild(row);
-  }
-  box.appendChild(addPicker('sources', live.filter(x => !inPool('sources', x.id)).map(x => [x.id, x.name])));
-}
 function loadInputs(){
   fetch('/inputs').then(r => r.json()).then(d => {
     if (!d.audio && !d.video) return;
     lastAudioSources = d.audio || [];
     fillSel($('#sel-audio'), d.audio || [], (d.current || {}).audio);
     lastVideoInputs = d.video || [];
-    videoSig = ''; renderVideoList();
-    shaderSig = fxSig = ''; renderShaderList(); renderFx();   // o nome da fonte selecionada pode ser camera/tela
+    remix();
     fillAllChannelSelects();
   }).catch(() => {});
 }
@@ -1945,19 +2370,22 @@ function render(d){
   if (d.selected !== undefined && performance.now() - selTouched.src >= TOUCH_MS) lastSelected = d.selected;
   if (d.source_fit && performance.now() - fitTouched >= TOUCH_MS) lastSourceFit = d.source_fit;
   if (d.pool !== undefined && performance.now() - poolTouched >= TOUCH_MS) lastPool = d.pool;
-  renderShaderList();
-  syncLayerSliders();
   lastBounceBusy = d.bounce_busy || [];
+  lastAudioMedia = d.audio_media || '';
+  const am = $('#audio-media'); am.style.display = lastAudioMedia ? '' : 'none';
+  am.textContent = lastAudioMedia ? '→ 🔊 ' + srcInfo(lastAudioMedia).name : '';
+  $('#sel-audio').style.opacity = lastAudioMedia ? .45 : '';
   if (d.overlays && performance.now() - mediaTouched >= TOUCH_MS) lastOverlays = d.overlays;
-  renderMediaList();
-  renderVideoList();
+  renderMixer();
+  syncMixer();
   if (d.scene !== undefined && d.scene !== activeScene) loadScenes();   // trocou de set (tecla / outra aba)
-  syncOvlSliders();   // só o highlight segue o stream; a lista vem de /media
-  renderFx();
   renderOutput(d.output);
   renderImage(d.image);
   renderImage(d.out_image, 'out-');
   if (performance.now() - outimgTouched > TOUCH_MS) $('#outimg-cb').checked = !!d.out_analysis_enabled;
+  if (d.output_grade && performance.now() - gradeTouched > TOUCH_MS && !knobDrag.startsWith('grade:')){
+    lastGrade = d.output_grade; syncGrade();
+  }
 
   lastKnobs = d.knobs || lastKnobs;
   if (d.band_tweaks) lastBandTweaks = d.band_tweaks;
