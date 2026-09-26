@@ -14,15 +14,12 @@ primeiro, depois comparar, só então compor.
   `dash_server.py` (HTTP+SSE stdlib) + `dash_data.py` (funções puras) + `dash.html` (v1, `/`) e
   `dash2.html` (v2 ao vivo, `/v2`). Arquivos e fluxos: [README.md](README.md).
 - **App empacotado (`prisma`)**: `dist/prisma/prisma` roda uma **cópia** em `~/.local/share/prisma/`
-  (dados reais do usuário: `tuning.py`, shaders, transições, mídia). Mudou código → copiar
-  `src/native_synth.py`, `dash_server.py`, `dash_data.py`, `dash.html`, `dash2.html` (e shader
-  interno tipo `calibrar.frag`) pra `dist/prisma/` **e** `~/.local/share/prisma/` (o launcher
-  recopia de `dist/` a cada abertura; `dash2.html` só entra sozinho após rebuild). Config ao vivo =
-  `~/.local/share/prisma/src/tuning.py`.
-- **Janelas**: dash = Brave próprio (`_open_dash_window`: `--app --kiosk`, perfil
-  `~/.config/prisma/dash-browser`, morre no `atexit`; `PRISMA_NO_BROWSER=1` pra testes). Dash e
-  saída com WM_CLASS `prisma` (+ `StartupWMClass`) = uma pilha na barra. Esc na saída só sai da
-  tela cheia.
+  (dados reais: `src/tuning.py` ao vivo, shaders, transições, mídia). Mudou código → copiar os `src/*.py`,
+  `dash*.html` (e shader interno tipo `calibrar.frag`) pra `dist/prisma/` **e** `~/.local/share/prisma/`
+  (o launcher recopia de `dist/` a cada abertura).
+- **Janelas**: dash = Brave `--app --kiosk` próprio (`_open_dash_window`, morre no `atexit`;
+  `PRISMA_NO_BROWSER=1` pra testes), WM_CLASS `prisma` igual à saída. Esc na saída sai da tela
+  cheia; 3× Esc (saída ou dash → `POST /quit` = SIGTERM no próprio processo) fecha tudo.
 - **Hot-reload por mtime**: `.frag`, `transitions/*.glsl`, `tuning.py`, `dash_server.py`,
   `dash_data.py`, `dash*.html` (`html_mtime`/`html2_mtime`). **`native_synth.py` só reabrindo.**
 
@@ -46,14 +43,20 @@ primeiro, depois comparar, só então compor.
   (`from` guardado antes da calibração) → calibração (`OUTPUT_GRADE`, `master` → `u_dim`, vale
   desligada). As duas usam `calibrar.frag`.
 - Prévias v2: `GET /frame?which=out|sel|comp|src` (`_preview_frame`; saída por blit só enquanto
-  pedida, `out_want`). Áudio: vigia `PAREC_STALL_S`.
-- Dash v2: decisões no comentário do topo do `dash2.html` (modo Palco `.ed`, `knob()`/`fader()`,
-  MIDI `CTRL[id]`, costura das faixas `seamOf`/`moveSeam`, `METERS` a 60 fps). localStorage
-  `mixKeys`/`fxPick` é compartilhado com a v1. Faixas sem sobreposição seguem a ordem do ESPECTRO
-  (`specOrder` / `_clamp_ranges`), não o índice — dá pra trocar faixas; a v1 ainda ordena por índice.
+  pedida, `out_want`).
+- Dash v2: decisões no comentário do topo do `dash2.html` (modo Palco, knob/fader, MIDI, faixas,
+  saúde). localStorage `mixKeys`/`fxPick` compartilhado com a v1. Faixas seguem a ordem do ESPECTRO
+  (`specOrder`/`_clamp_ranges`); a v1 ainda ordena por índice.
+- Saúde v2 (`healthChecks`/`healthDetail`, moldura `#hframe`): o native manda `state['health']`
+  (`audio_age`, `_stale_sources`) e `output.shader_error`. Elemento que é recriado a cada SSE perde
+  clique — atualizar no lugar.
+- Classe no `body` não pode colidir com classe de componente (`body.blk` pegava `.blk` e encolhia a
+  página; blackout = `body.blackout`).
 
 ## Testes
 `.venv/bin/python src/dash_server.py` e `.venv/bin/python src/native_synth.py --selfcheck` (venv).
+Rodar o `native_synth.py` do repo migra/auto-salva o `src/tuning.py` do repo (backup antes) e a
+porta 8765 pode estar com o prisma aberto.
 
 ## Docs
 - Fluxo técnico navegável: <https://paulocremas.github.io/cremas-synth-lab/> (`docs/index.html`).

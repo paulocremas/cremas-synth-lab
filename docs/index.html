@@ -136,7 +136,7 @@
 <tr><td colspan="2" class="grouprow"><b>rodar</b></td></tr>
 <tr><td><code>.venv/bin/python src/native_synth.py</code></td><td>modo padrão: webcam <code>/dev/video0</code> + áudio = <code>.monitor</code> da saída padrão, janela do tamanho do frame. Abre a aba do dashboard no navegador (<code>http://127.0.0.1:8765</code>).</td></tr>
 <tr><td><code>./watch_synth.sh</code> <span class="ext">[flags]</span></td><td>mesma coisa, mas reinicia sozinho toda vez que <code>native_synth.py</code> é salvo (poll de mtime a cada 1&nbsp;s). Wrapper de dev. Os módulos <code>dash_*</code> não precisam — fazem hot-reload sozinhos.</td></tr>
-<tr><td><code>ESC</code> / fechar a janela / <code>Ctrl-C</code></td><td>sai do programa (e o <code>watch_synth.sh</code> junto); fecha o socket do dashboard, e as abas mostram "encerrado".</td></tr>
+<tr><td><code>ESC</code> 3× (saída ou dash) / fechar a janela / <code>Ctrl-C</code></td><td>sai do programa (1 <code>ESC</code> na saída só sai da tela cheia) (e o <code>watch_synth.sh</code> junto); fecha o socket do dashboard, e as abas mostram "encerrado".</td></tr>
 <tr><td colspan="2" class="grouprow"><b>flags — entrada de imagem</b></td></tr>
 <tr><td><code>--screen</code></td><td>captura a tela em vez da webcam (o <code>ffmpeg</code> troca <code>v4l2</code> por <code>x11grab</code>).</td></tr>
 <tr><td><code>--source</code> <span class="ext">[NOME]</span></td><td>no modo <code>--screen</code>, captura só um monitor (ex. <code>eDP-1</code>) em vez da tela toda. Sem valor = auto-detecta o secundário.</td></tr>
@@ -816,7 +816,7 @@ apagar, padrão). Renomear/apagar atualiza todos os sets que usavam o arquivo.</
 <h3>loop principal · 60 fps</h3>
 <p>Main thread, <code>clock.tick(OUTPUT_FPS)</code> (<code>tuning.OUTPUT_FPS</code>, 24/30/50/60, troca ao vivo). Fonte que não trouxe frame novo não é re-subida nem re-misturada (<code>src_tex</code>, <code>comp_last</code>). Por frame, em ordem:</p>
 <ol>
-<li>eventos do pygame (ESC / fechar → encerra);</li>
+<li>eventos do pygame (3× ESC / fechar → encerra; 1 ESC sai da tela cheia);</li>
 <li><code>_source_frames()</code>: as fontes <b>marcadas</b> com frame pronto, de baixo pra cima
 (<code>_composite</code> também as mistura na CPU só pra fumaça / análise / cor dominante);</li>
 <li>pra cada fonte: <code>glTexImage2D</code> do frame → <a href="#u_texture_0"><code>u_texture_0</code></a>;
@@ -834,7 +834,7 @@ aplica o set (<code>dash_server.apply_scene</code>) e liga a transição;</li>
 </ol>
 <p>Não trava se uma thread parar: lê o último <code>state</code> e segue. Erro de compilação num
 <a href="#shader-file"><code>.frag</code></a> → aquele shader é pulado e
-<code>state['output']['shader_status']</code> avisa. Na saída (ESC / <code>Ctrl-C</code>) chama
+<code>state['output']['shader_status']</code> avisa (texto do erro em <code>shader_error</code>, e <code>state['health']</code> diz áudio/fontes paradas — tudo vai pra saúde do dash v2). Na saída (3× ESC / <code>Ctrl-C</code>) chama
 <code>dash_server.stop()</code> — fecha o socket, e as abas do dashboard mostram "encerrado".</p>
 </section>
 
