@@ -19,6 +19,10 @@ primeiro, depois comparar, só então compor.
   interno tipo `calibrar.frag`) pra `dist/prisma/` **e** `~/.local/share/prisma/` (o launcher
   recopia de `dist/` a cada abertura; `dash2.html` só entra sozinho após rebuild). Config ao vivo =
   `~/.local/share/prisma/src/tuning.py`.
+- **Janelas**: dash = Brave próprio (`_open_dash_window`: `--app --kiosk`, perfil
+  `~/.config/prisma/dash-browser`, morre no `atexit`; `PRISMA_NO_BROWSER=1` pra testes). Dash e
+  saída com WM_CLASS `prisma` (+ `StartupWMClass`) = uma pilha na barra. Esc na saída só sai da
+  tela cheia.
 - **Hot-reload por mtime**: `.frag`, `transitions/*.glsl`, `tuning.py`, `dash_server.py`,
   `dash_data.py`, `dash*.html` (`html_mtime`/`html2_mtime`). **`native_synth.py` só reabrindo.**
 
@@ -38,13 +42,15 @@ primeiro, depois comparar, só então compor.
   pela POSIÇÃO. Fora do `pool` some da mesa/saída mas fica lembrado.
 - 60 fps (`tuning.OUTPUT_FPS`): textura por fonte (`src_tex`) e mistura CPU (`comp_last`) só refazem
   quando o frame é OUTRO objeto — comparar por `is`, guardando o próprio frame.
-- Calibração (`calibrar.frag`, `OUTPUT_GRADE`) é o último passe; `master` → `u_dim` (0 = neutro,
-  vale com a calibração desligada). O `from` da transição é guardado antes dela.
-- Prévias do dash v2: `GET /frame?which=out|sel|comp|src` (rgb24 cru, `_preview_frame`); saída lida
-  pequena por blit (`out_pv`, só enquanto pedida — `out_want`). Áudio: vigia `PAREC_STALL_S`.
+- Ordem dos passes: mistura → imagem da cena (`SCENE_GRADE` = campo `grade` do set) → transição
+  (`from` guardado antes da calibração) → calibração (`OUTPUT_GRADE`, `master` → `u_dim`, vale
+  desligada). As duas usam `calibrar.frag`.
+- Prévias v2: `GET /frame?which=out|sel|comp|src` (`_preview_frame`; saída por blit só enquanto
+  pedida, `out_want`). Áudio: vigia `PAREC_STALL_S`.
 - Dash v2: decisões no comentário do topo do `dash2.html` (modo Palco `.ed`, `knob()`/`fader()`,
   MIDI `CTRL[id]`, costura das faixas `seamOf`/`moveSeam`, `METERS` a 60 fps). localStorage
-  `mixKeys`/`fxPick` é compartilhado com a v1.
+  `mixKeys`/`fxPick` é compartilhado com a v1. Faixas sem sobreposição seguem a ordem do ESPECTRO
+  (`specOrder` / `_clamp_ranges`), não o índice — dá pra trocar faixas; a v1 ainda ordena por índice.
 
 ## Testes
 `.venv/bin/python src/dash_server.py` e `.venv/bin/python src/native_synth.py --selfcheck` (venv).
@@ -54,6 +60,7 @@ primeiro, depois comparar, só então compor.
   Respeitar os sistemas do arquivo: glossário `GLOSS` + `linkify`, cores por região + linhagem,
   possibilidades em `<details>` retraído, status `.maybe` separado da cor.
 - [MAPA.md](MAPA.md) = índice comentado dos currículos (material de estudo).
+- [BACKLOG.md](BACKLOG.md) = ideias combinadas e ainda não feitas (ex.: canvas estilo OBS na Saída/Palco).
 
 ## Vocabulário compartilhado (onda / sinal)
 

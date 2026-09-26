@@ -16,6 +16,7 @@ Exec=$DIST/prisma
 Path=$DIST
 Icon=$DIST/favicon.png
 Terminal=false
+StartupWMClass=prisma
 Categories=AudioVideo;Graphics;
 DESKTOP
 update-desktop-database ~/.local/share/applications 2>/dev/null || true

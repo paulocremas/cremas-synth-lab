@@ -22,6 +22,7 @@ Comment=Sintese de imagem reagindo ao audio
 Exec=prisma
 Icon=prisma
 Terminal=false
+StartupWMClass=prisma
 Categories=AudioVideo;Graphics;
 DESKTOP
 cat > "$PKG/DEBIAN/control" <<CONTROL

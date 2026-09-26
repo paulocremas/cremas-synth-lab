@@ -18,10 +18,13 @@ import select
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
 import numpy as np
+# WM_CLASS da janela de saida = a do dash (--class no dash_server) -> uma pilha so' na barra
+os.environ.setdefault('SDL_VIDEO_X11_WMCLASS', 'prisma')
 import pygame
 from OpenGL.GL import *
 
@@ -439,6 +442,21 @@ def resolve_output(cfg):
     return win_w, win_h, pos, flags, label
 
 
+def _wm_fullscreen():
+    """Pede tela cheia ao gerenciador de janelas (_NET_WM_STATE_FULLSCREEN): so' NOFRAME no
+    tamanho do monitor fica ATRAS da barra de tarefas do Cinnamon; com o estado fullscreen a
+    saida cobre a barra, igual ao dash (--kiosk). Sem wmctrl: fica como antes."""
+    wid = pygame.display.get_wm_info().get('window')
+    if not wid:
+        return
+    pygame.event.pump()   # janela mapeada antes do pedido
+    try:
+        subprocess.run(['wmctrl', '-i', '-r', hex(wid), '-b', 'add,fullscreen'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def open_window(cfg):
     """Abre (ou REABRE) a janela de saida a partir de resolve_output(cfg). pygame.display.quit()
     + init() de novo e o mesmo truque que o --monitor original usava no arranque (SDL so le
@@ -455,8 +473,14 @@ def open_window(cfg):
     if pygame.display.get_init():
         pygame.display.quit()
     pygame.display.init()
+    try:  # icone do PRISMA na barra (antes do set_mode; sem ele fica a cobra do pygame)
+        pygame.display.set_icon(pygame.image.load(os.path.join(_ROOT, 'favicon.png')))
+    except (pygame.error, FileNotFoundError):
+        pass
     pygame.display.set_mode((win_w, win_h), flags)
-    pygame.display.set_caption('native_synth — ESC ou fechar a janela pra sair')
+    pygame.display.set_caption('PRISMA! · saída')
+    if cfg.get('fullscreen'):
+        _wm_fullscreen()
     glViewport(0, 0, win_w, win_h)
 
     vbo = glGenBuffers(1)
@@ -2607,8 +2631,14 @@ def main():
                'prev_val': [None], 'prev_mean': [None]}
     while running:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+            if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_F11):
+                # Esc SAI da tela cheia (nao fecha mais o app: era o gesto natural e derrubava o
+                # show); F11 alterna. Fechar = fechar a janela. Mesmo caminho do dash (output_req)
+                if event.key == pygame.K_F11 or out_cfg.get('fullscreen'):
+                    fs = not out_cfg.get('fullscreen')
+                    set_output({**out_cfg, 'fullscreen': fs, **({} if fs else {'w': 0, 'h': 0})})   # janela = tamanho padrao
             elif event.type == pygame.KEYDOWN:
                 # atalho de SET (campo 'key' de tuning.SCENES): pede a troca; ela e' aplicada
                 # no fim deste frame (bloco "scene_pending" antes do flip), com transicao
@@ -2879,6 +2909,24 @@ def main():
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, al)
             blend_into(lt['out'][1 - oi], lt['out'][oi], lt['src'][si], min(1.0, src_a), sm,
                        mask=int(al is not None))
+            oi = 1 - oi
+        # IMAGEM DA CENA (tuning.SCENE_GRADE = campo 'grade' do set ativo; knobs no Palco do v2):
+        # o mesmo calibrar.frag, mas na MISTURA da cena -> vem antes da transicao (o `from` ja
+        # sai ajustado, cada cena cruza com o seu) e da calibracao do telao. Neutro = sem passe.
+        sg = getattr(tuning, 'SCENE_GRADE', None) or {}
+        sfx = (sg.get('fx') or {}) if sg.get('on', 1) else {}
+        sgh = layer_program(dash_server.GRADE_FRAG) if sfx else None
+        if sgh and any(abs(float(sfx.get(n, d)) - d) > 1e-4 for n, d in sgh[3].items()):
+            glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['out'][1 - oi], 0)
+            use_program(sgh[1], sgh[3])
+            set_uniforms(sfx)
+            glUniform1i(glGetUniformLocation(sgh[1], 'u_test'), 0)
+            glUniform1f(glGetUniformLocation(sgh[1], 'u_dim'), 0.0)
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+            glClear(GL_COLOR_BUFFER_BIT)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
             oi = 1 - oi
         # CALIBRACAO DA SAIDA (tuning.OUTPUT_GRADE, shaders/calibrar.frag): ligada e fora do
         # neutro (ou no padrao de teste) -> a imagem final (copia ou transicao) vai pra textura

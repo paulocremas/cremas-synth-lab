@@ -10,11 +10,13 @@ O write-back e literalmente "editar tuning.py como o Paulo edita, so que por sli
 isso a posicao do knob persiste entre execucoes de graca. MIDI/potenciometro fisico depois
 e so mais um chamador de set_knob().
 """
+import atexit
 import glob
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -105,19 +107,21 @@ def set_knob(name, value, tuning_path=None):
 
 def _clamp_ranges(overlap, ranges):
     """8 pares [lo, hi] -> versao consistente. Sempre: int, dentro de [20, 20000], lo < hi.
-    overlap=1: cada faixa independente (podem se sobrepor). overlap=0 (crossover): faixas
-    ordenadas e SEM sobreposicao (band[k].lo >= band[k-1].hi), mas BURACOS sao permitidos
-    (band[k].lo pode ser > band[k-1].hi -> essas frequencias nao entram em nenhuma faixa)."""
+    overlap=1: cada faixa independente (podem se sobrepor). overlap=0 (crossover): SEM
+    sobreposicao, na ordem do ESPECTRO (por lo) e nao do indice — o dash troca faixas de lugar
+    (Treble no grave, Sub-bass no agudo). BURACOS sao permitidos (lo de uma > hi da anterior
+    -> essas frequencias nao entram em nenhuma faixa)."""
     r = [[int(round(float(lo))), int(round(float(hi)))] for lo, hi in ranges[:8]]
     r = [[max(_HZ_MIN, min(_HZ_MAX, lo)), max(_HZ_MIN, min(_HZ_MAX, hi))] for lo, hi in r]
     if overlap:
         return [[lo, max(lo + 1, min(_HZ_MAX, hi))] for lo, hi in r]
-    out, prev_hi = [], _HZ_MIN
-    for lo, hi in r:
-        lo = max(lo, prev_hi)               # nao invade a faixa anterior (buraco ok)
+    out, prev_hi = [None] * len(r), _HZ_MIN
+    for k in sorted(range(len(r)), key=lambda k: (r[k][0], k)):   # grave -> agudo, empate = indice
+        lo, hi = r[k]
+        lo = max(lo, prev_hi)               # nao invade a faixa anterior no espectro (buraco ok)
         hi = min(max(hi, lo + 1), _HZ_MAX)  # lo < hi, dentro do teto
         lo = min(lo, hi - 1)
-        out.append([lo, hi])
+        out[k] = [lo, hi]
         prev_hi = hi
     return out
 
@@ -1112,8 +1116,9 @@ def _write_scenes(scenes, active=None, tuning_path=None):
 
 def scene_capture():
     """O estado ao vivo, nos campos de um set ('pool' None = tudo disponivel -> campo some)."""
+    g = _current_scene_grade()
     return {'selected': _current_selected(), 'sources': _current_overlays(), 'bindings': _current_bindings(),
-            'pool': _current_pool()}
+            'pool': _current_pool(), 'grade': g if (g['fx'] or not g['on']) else None}
 
 
 def _scene_with(sc, cap):
@@ -1132,6 +1137,7 @@ def save_active_scene(tuning_path=None):
         if sc.get('name') == name:
             new = _scene_with(sc, scene_capture())
             if new != sc:
+                sc.clear()          # substitui (update manteria campo que voltou a None: pool, grade)
                 sc.update(new)
                 _write_scenes(scenes, tuning_path=tuning_path)
             return
@@ -1156,6 +1162,7 @@ def apply_scene(name, tuning_path=None):
             _state['pool'] = _norm_pool(sc.get('pool'))
         set_overlays(sc.get('sources') or [], save=True, tuning_path=path)
         set_bindings(sc.get('bindings') or {}, save=True, tuning_path=path)
+        set_scene_grade(sc.get('grade') or {}, save=True, tuning_path=path)   # sem campo = neutra
         if sc.get('selected'):
             try:
                 select_source(sc['selected'])
@@ -1559,11 +1566,8 @@ def _current_output_grade():
     return out
 
 
-def set_output_grade(grade, save=True, tuning_path=None):
-    """Calibracao da saida (aba Output Image): {'on': 0|1, 'test': 0|1 (padrao de teste no
-    lugar da imagem), 'fx': {knob: 0..1}} -> tuning.OUTPUT_GRADE (patch na hora; o native le
-    a cada frame). save=False = arrasto de knob (so' o modulo, sem gravar o tuning.py). So'
-    guarda knob fora do padrao do calibrar.frag; ints, nao bools (o bloco sai via json.dumps)."""
+def _grade_fx(grade):
+    """{knob: 0..1} valido, so' o que foge do padrao do calibrar.frag (padrao = omitido)."""
     dflt = output_grade_defaults()
     fx = {}
     for n, v in dict((grade or {}).get('fx') or {}).items():
@@ -1574,7 +1578,42 @@ def set_output_grade(grade, save=True, tuning_path=None):
         if n in dflt and v == dflt[n]:
             continue
         fx[n] = v
-    out = {'on': int(bool(grade.get('on', 1))), 'test': int(bool(grade.get('test', 0))), 'fx': fx}
+    return fx
+
+
+def _current_scene_grade():
+    g = getattr(_tuning, 'SCENE_GRADE', None) or {}
+    return {'on': int(bool(g.get('on', 1))), 'fx': dict(g.get('fx') or {})}
+
+
+def set_scene_grade(grade, save=True, tuning_path=None):
+    """IMAGEM DA CENA (dash v2, Palco): mesmos knobs do calibrar.frag, aplicados na mistura da
+    cena ANTES da transicao e da calibracao do telao. {'on': 0|1, 'fx': {knob: 0..1}} ->
+    tuning.SCENE_GRADE (ao vivo) e, com save, no set ativo (campo 'grade'; neutro = sem campo).
+    save=False = arrasto de knob (so' o modulo)."""
+    out = {'on': int(bool((grade or {}).get('on', 1))), 'fx': _grade_fx(grade)}
+    if _tuning is not None:
+        _tuning.SCENE_GRADE = out
+    if save:
+        block = 'SCENE_GRADE = ' + json.dumps(out, indent=4, sort_keys=True)
+        path = tuning_path or _cfg['tuning_path']
+        with _knob_lock:
+            src = open(path).read()
+            src, n = re.subn(r'(?ms)^SCENE_GRADE = \{.*?^\}', lambda _: block, src)
+            if n == 0:
+                src = src.rstrip('\n') + ('\n\n# imagem da CENA ativa (calibrar.frag na mistura, antes da transicao);'
+                                          ' copia do campo "grade" do set ativo\n') + block + '\n'
+            _write_atomic(path, src)
+        save_active_scene(tuning_path)
+    return out
+
+
+def set_output_grade(grade, save=True, tuning_path=None):
+    """Calibracao da saida (aba Output Image): {'on': 0|1, 'test': 0|1 (padrao de teste no
+    lugar da imagem), 'fx': {knob: 0..1}} -> tuning.OUTPUT_GRADE (patch na hora; o native le
+    a cada frame). save=False = arrasto de knob (so' o modulo, sem gravar o tuning.py). So'
+    guarda knob fora do padrao do calibrar.frag; ints, nao bools (o bloco sai via json.dumps)."""
+    out = {'on': int(bool(grade.get('on', 1))), 'test': int(bool(grade.get('test', 0))), 'fx': _grade_fx(grade)}
     # master (dash v2: fader + blackout): 0..1, vale mesmo com a calibracao desligada; 1 = omitido
     master = round(min(1.0, max(0.0, float(grade.get('master', 1.0)))), 3)
     if master < 1.0:
@@ -1628,6 +1667,7 @@ def _payload():
         'out_image': _state.get('out_image', {}),
         'out_analysis_enabled': int(getattr(_tuning, 'OUT_ANALYSIS_ENABLED', 0)),
         'output_grade': _current_output_grade(),   # calibracao da saida (knobs em /output-grade)
+        'scene_grade': _current_scene_grade(),     # imagem da cena ativa (knobs no Palco, /scene-grade)
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
@@ -1966,6 +2006,14 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
+        if path == '/scene-grade':  # {grade: {on, fx: {knob: 0..1}}, save}
+            try:
+                b = json.loads(raw.decode())
+                out = set_scene_grade(b['grade'], save=bool(b.get('save', True)))
+                self._send(200, 'application/json', json.dumps({'grade': out}).encode())
+            except (KeyError, ValueError, TypeError, AttributeError, OSError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
         if path == '/output-grade':  # {grade: {on, test, fx: {knob: 0..1}}, save}
             try:
                 b = json.loads(raw.decode())
@@ -2190,10 +2238,89 @@ def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mod
     url = f'http://127.0.0.1:{port}'
     print(f'dash: {url}  (tabs Audio/Image no header, ou ?panel=audio | ?panel=image p/ popup)')
     if open_browser:
-        try:  # uma aba so; audio/image trocam por tab no header (botoes de popup continuam disponiveis)
-            webbrowser.open(url, new=2)
-        except webbrowser.Error:
+        _open_dash_window(url + '/v2')   # v2 (palco) e' o dash principal; v1 segue em /
+
+
+# navegadores com --app/--user-data-dir (familia Chromium), na ordem de preferencia
+_APP_BROWSERS = ('brave-browser', 'google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge')
+
+
+def _no_translate(prof):
+    """Desliga a oferta de traducao no perfil do dash (o Brave ignora --disable-features=Translate
+    e o lang/notranslate da pagina). Grava no Preferences ANTES de abrir: com o navegador aberto
+    ele sobrescreve o arquivo."""
+    path = os.path.join(prof, 'Default', 'Preferences')
+    try:
+        with open(path) as f:
+            prefs = json.load(f)
+    except (OSError, ValueError):
+        prefs = {}
+    if prefs.get('translate', {}).get('enabled') is False:
+        return
+    prefs.setdefault('translate', {})['enabled'] = False
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump(prefs, f)
+    except OSError:
+        pass
+
+
+def _raise_output_over_dash():
+    """O Brave aparece ~1-2 s DEPOIS da saida e rouba o foco. Espera a janela do dash surgir e
+    traz a saida (WM_CLASS prisma.prisma; o dash e' 127.0.0.1__v2.prisma) pra frente: dash fica
+    de fundo, no monitor onde ja' abriu. Saida em tela cheia + com foco = barra escondida."""
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < 15:
+        try:
+            out = subprocess.run(['wmctrl', '-lx'], capture_output=True, text=True, timeout=2).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return
+        if any('.prisma ' in l and not l.split()[2].startswith('prisma.') for l in out.splitlines()):
+            time.sleep(0.6)   # deixa o Brave terminar de entrar em tela cheia
+            subprocess.run(['wmctrl', '-x', '-a', 'prisma.prisma'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+            return
+        time.sleep(0.25)
+
+
+def _open_dash_window(url):
+    """Abre o dash numa janela PROPRIA (--app, perfil separado = processo separado) e a fecha ao
+    sair do programa: aba aberta pelo SO o navegador nao deixa o window.close() do JS fechar.
+    O perfil fica em ~/.config/prisma/dash-browser (localStorage/permissao de MIDI persistem la).
+    atexit (e nao _cfg) porque o hot-reload troca este modulo. Sem Chromium -> aba comum.
+    PRISMA_NO_BROWSER=1 = nao abre nada (testes do app inteiro)."""
+    if os.environ.get('PRISMA_NO_BROWSER'):
+        return
+    exe = next((shutil.which(b) for b in _APP_BROWSERS if shutil.which(b)), None)
+    if exe:
+        prof = os.path.join(os.path.expanduser('~'), '.config', 'prisma', 'dash-browser')
+        try:
+            os.makedirs(prof, exist_ok=True)
+            _no_translate(prof)
+            # --kiosk = tela cheia SEM o balao "aperte Esc pra sair" (o --start-fullscreen mostra);
+            # sai com Alt+F4 (ou fechando o prisma). --class=prisma = mesmo WM_CLASS da janela de
+            # saida (SDL_VIDEO_X11_WMCLASS no native) -> as duas empilham como UM app na barra
+            p = subprocess.Popen([exe, '--app=' + url, '--user-data-dir=' + prof, '--kiosk', '--class=prisma',
+                                  '--disable-features=Translate', '--no-first-run',
+                                  '--no-default-browser-check'],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)   # grupo proprio: mata o wrapper e os filhos
+        except OSError:
             pass
+        else:
+            def _close():
+                try:
+                    os.killpg(p.pid, signal.SIGTERM)
+                except OSError:
+                    pass
+            atexit.register(_close)
+            threading.Thread(target=_raise_output_over_dash, daemon=True).start()
+            return
+    try:  # uma aba so; audio/image trocam por tab no header (botoes de popup continuam disponiveis)
+        webbrowser.open(url, new=2)
+    except webbrowser.Error:
+        pass
 
 
 if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_server.py)
@@ -2237,6 +2364,9 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert all(fixed[i][0] < fixed[i][1] for i in range(8)), fixed       # lo<hi
     gap = _clamp_ranges(0, [[20, 100], [300, 500]] + default[2:])
     assert gap[0] == [20, 100] and gap[1] == [300, 500], gap             # BURACO 100..300 preservado
+    # faixas trocadas de lugar (Air no grave, Sub-bass no agudo): aceitas como vieram
+    sw = [[20, 250] if i == 7 else [16000, 20000] if i == 0 else x for i, x in enumerate(default)]
+    assert _clamp_ranges(0, sw) == sw, _clamp_ranges(0, sw)
     # overlap: mantem sobreposicao
     ov = _clamp_ranges(1, [[39, 469], [200, 500]] + default[2:])
     assert ov[0] == [39, 469] and ov[1] == [200, 500], ov
@@ -2602,6 +2732,18 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert g == {'on': 0, 'test': 0, 'fx': {}, 'master': 0.25} and _current_output_grade() == g, g
     assert set_output_grade({'on': 1, 'master': 1, 'fx': {}}, tuning_path=p2) == {'on': 1, 'test': 0, 'fx': {}}
     assert open(p2).read().count('OUTPUT_GRADE =') == 1
+    # imagem da CENA: vai pro set ativo (campo grade), volta ao trocar de set, neutra = sem campo
+    act = _active_scene_name()
+    other = next(sc['name'] for sc in _read_scenes() if sc['name'] != act)
+    g = set_scene_grade({'on': 1, 'fx': {'gama': 0.8, 'vermelho': 0.5}}, tuning_path=p2)
+    assert g == {'on': 1, 'fx': {'gama': 0.8}} and _find_scene(act)['grade'] == g, _find_scene(act)
+    ns = {}; exec(open(p2).read(), ns); assert ns['SCENE_GRADE'] == g
+    apply_scene(other, tuning_path=p2)
+    assert _current_scene_grade() == {'on': 1, 'fx': {}} and 'grade' not in _find_scene(other)
+    apply_scene(act, tuning_path=p2)
+    assert _current_scene_grade() == g, _current_scene_grade()
+    set_scene_grade({'on': 1, 'fx': {}}, tuning_path=p2)
+    assert 'grade' not in _find_scene(act) and open(p2).read().count('SCENE_GRADE =') == 1
     # preencher/encaixar de camera/tela: bloco SOURCE_FIT so com os 'fit'; a capturada respawna
     st['video_id'] = 'webcam:/dev/video0'
     assert set_source_fit('webcam:/dev/video0', 'fit', p2) == 'fit' and calls[-1] == 'webcam:/dev/video0'

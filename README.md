@@ -65,7 +65,8 @@ ou `.venv/bin/python src/native_synth.py`). O app empacotado (`prisma`) roda uma
 
 Binários externos (não versionados): `ffmpeg` (webcam/tela), `import`/ImageMagick (uma janela),
 `parec`/`pactl` (áudio PulseAudio), `xrandr`/`wmctrl`/`xwininfo`/`v4l2-ctl` (geometria e fontes).
-O dashboard abre no navegador padrão via `webbrowser` (stdlib) — sem `gnome-terminal`.
+O dashboard abre em janela própria (Brave/Chrome `--app --kiosk`, perfil separado) que fecha junto
+com o app; sem navegador Chromium, cai no navegador padrão via `webbrowser` (aí a aba fica aberta).
 
 ---
 

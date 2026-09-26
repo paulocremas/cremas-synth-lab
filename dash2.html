@@ -1,5 +1,7 @@
 <!doctype html>
+<html lang="pt-BR" translate="no">
 <meta charset="utf-8">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PRISMA! · palco</title>
 <link rel="icon" type="image/png" href="/favicon.png">
@@ -11,6 +13,9 @@
   - AGRUPAR O QUE SE USA JUNTO: Palco = mesa + inspetor fixo (fonte selecionada + knobs do efeito
     dela, sem rolar); Audio = espectro com as 8 faixas por cima (arrasta a borda no proprio
     espectro) + uma coluna por faixa (medidor, Hz, knobs). Topo = medidores + status + master.
+  - FAIXAS: meio = move a faixa inteira; solta na raia de outra = TROCA (sem sobreposicao). Sem
+    sobreposicao a ordem e' a do ESPECTRO, nao o indice (specOrder; servidor: _clamp_ranges); com
+    sobreposicao nada gruda (seamOf vazio). A v1 ainda ordena por indice — nao misturar as duas.
   - KNOB = "slider invisivel" VERTICAL (convencao de plugin de audio): so o eixo Y, arrasto
     RELATIVO (clicar nao pula o valor), Shift = fino (sem salto), roda/trackpad, duplo-clique ou
     Ctrl+clique = padrao, marca do padrao no arco; arco sai do neutro quando o padrao e' 0.5.
@@ -260,6 +265,7 @@
   .lane .thumb:hover::before { opacity: 1; }
   .lane .thumb.glued::before { opacity: .95; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
   .lane .thumb.free::before { background: none; border: 1px dashed #eef0f2; width: 2px; }
+  .lane.swap { background: rgba(255,255,255,.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); border-radius: 4px; }
   .lane .hzhint { position: absolute; top: 50%; transform: translate(-50%, -50%); font: 10px var(--mono); color: var(--tx); background: rgba(0,0,0,.7); padding: 1px 4px; border-radius: 3px; pointer-events: none; white-space: nowrap; }
   #hzruler { position: absolute; left: 0; right: 0; bottom: 0; height: 16px; border-top: 1px solid var(--line); pointer-events: none; }
   #hzruler span { position: absolute; transform: translateX(-50%); bottom: 2px; font: 9px var(--mono); color: var(--tx3); }
@@ -317,6 +323,9 @@
   .outbar input[type=number] { width: 74px; }
   .fpsbig { font: 700 28px var(--mono); }
   .fpsbig small { font-size: 13px; color: var(--tx3); font-weight: 500; }
+  .fpsgraph { margin-top: 10px; background: var(--s2); border-radius: var(--r2); padding: 6px 8px 4px; }
+  .fpsgraph canvas { display: block; width: 100%; height: 90px; }
+  .fpsgraph .hint { display: block; text-align: right; margin-top: 2px; }
 
   /* ---------- BIBLIOTECA ---------- */
   .libcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--gap); align-items: start; }
@@ -403,6 +412,8 @@
   @media (max-width: 1000px) { #knobgroups { grid-template-columns: 1fr 1fr !important; } }
   .audio-bottom { grid-template-columns: 1fr; }
   .gradegrid { display: grid; grid-template-columns: 2fr 6fr 4fr 4fr; gap: 8px; }
+  #sgrade-box { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  #sgrade-btn.on { background: var(--sel-d); border-color: var(--sel); color: var(--tx); }
   .gradegrid .knobs { grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); justify-items: center; }
   @media (max-width: 1100px) { .gradegrid { grid-template-columns: 1fr 1fr; } }
   .outgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: stretch; }
@@ -415,7 +426,7 @@
   .ipv .ov { pointer-events: none; }
   .ipv .mon-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tx3); font-size: 12px; }
   .ipv canvas.ok ~ .mon-wait { display: none; }
-  .maps { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; margin: 8px 0 10px; }
+  .maps { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, 1fr); gap: 4px; margin: 8px 0 10px; overflow-x: auto; padding-bottom: 2px; }
   .mapc .mn { flex-direction: column; align-items: flex-start; line-height: 1.25; }
   .mapc .mn .num { font-weight: 500; color: var(--tx3); }
   .mapc { background: var(--s2); border: 1px solid transparent; border-radius: 6px; padding: 4px; cursor: pointer; min-width: 0; color: var(--tx2); }
@@ -473,8 +484,15 @@
     <div class="palco-grid">
       <div class="panel scenes-p">
         <div class="ph"><b>Scenes</b><span class="grow"></span><span class="hint" id="scene-trans"></span>
+          <button class="btn sm" id="sgrade-btn" title="imagem da scene inteira (temperatura, luz, cor) — guardada em cada scene">◐ imagem</button>
           <button class="btn sm" id="reload-lists" title="recarregar listas (fontes, mídia, efeitos, scenes)">↻</button></div>
         <div class="scenes" id="scenes"></div>
+        <div id="sgrade-box" hidden>
+          <div class="ph"><b>Imagem da scene</b><span class="hint" id="sgrade-name"></span><span class="hint">na mistura inteira, antes da transição e da calibração · centro = neutro · duplo-clique zera</span><span class="grow"></span>
+            <label class="chk"><input type="checkbox" id="sgrade-on"> ligada</label>
+            <button class="btn sm" id="sgrade-reset">zerar</button></div>
+          <div class="gradegrid" id="sgrade-knobs"></div>
+        </div>
         <div id="scene-edit"></div>
       </div>
       <div class="panel mesa-p">
@@ -506,7 +524,7 @@
         <span class="grow"></span>
         <label class="chk"><input type="checkbox" id="bands-cb" checked> faixas ativas</label>
         <label class="chk"><input type="checkbox" id="ovl-cb"> sobreposição</label>
-        <span class="hint">arraste as bordas no espectro · bordas que se tocam andam juntas · duplo-clique na borda descola</span>
+        <span class="hint">arraste as bordas · o meio move a faixa (solte na raia de outra = troca) · bordas que se tocam andam juntas · duplo-clique na borda descola</span>
       </div>
       <div class="spec-wrap"><canvas id="spec"></canvas><div id="lanes"></div><div id="hzruler"></div></div>
       <div class="cols" id="cols"></div>
@@ -540,6 +558,7 @@
         </div>
         <div class="ph" style="margin-top:16px"><b>Quadros por segundo</b></div>
         <div class="outbar"><span class="fpsbig" id="fps-big">—</span><span class="seg" id="fps-seg"></span></div>
+        <div class="fpsgraph"><canvas id="fps-graph"></canvas><span class="hint num" id="fps-stats"></span></div>
         <p class="hint">60 deixa o movimento dos efeitos e transições liso; câmera e vídeo seguem no fps deles (frame repetido não é reenviado pra GPU). Se o número real ficar abaixo do alvo, volte pra 30.</p>
         <div id="outinfo"></div>
         <p class="hint" style="margin-top:12px">Luzes de palco (DMX): ainda não implementado.</p>
@@ -610,6 +629,16 @@ function h(tag, attrs, ...kids){
   }
   for (const c of kids.flat()) if (c != null && c !== false) e.append(c);
   return e;
+}
+// roda do mouse rola na HORIZONTAL (mesa, mapas): so' quando ha o que rolar pro lado e nada pra
+// rolar na vertical; knob/fader por baixo ja' consumiu a roda (defaultPrevented) -> deixa quieto
+function wheelX(el){
+  el.addEventListener('wheel', e => {
+    if (e.defaultPrevented || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    if (el.scrollWidth <= el.clientWidth || el.scrollHeight > el.clientHeight + 1) return;
+    e.preventDefault();
+    el.scrollLeft += e.deltaY * (e.deltaMode ? 33 : 1);
+  }, { passive: false });
 }
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body || {}) }).then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t)));
@@ -973,10 +1002,45 @@ function syncGrade(){
   for (const [n, k] of Object.entries(gradeEls)) if (activeDrag !== 'grade:' + n) k._show(gradeVal(n));
   syncMaster();
 }
-fetch('/output-grade').then(r => r.json()).then(d => { gradeDefaults = d.defaults || {}; lastGrade = d.grade || lastGrade; renderGrade(); }).catch(() => {});
+fetch('/output-grade').then(r => r.json()).then(d => { gradeDefaults = d.defaults || {}; lastGrade = d.grade || lastGrade; renderGrade(); renderSGrade(); }).catch(() => {});
 $('#grade-on').onchange = () => { lastGrade.on = $('#grade-on').checked ? 1 : 0; sendGrade(true); };
 $('#grade-test').onchange = () => { lastGrade.test = $('#grade-test').checked ? 1 : 0; sendGrade(true); };
 $('#grade-reset').onclick = () => { lastGrade.fx = {}; syncGrade(); sendGrade(true); };
+// ---- IMAGEM DA SCENE (tuning.SCENE_GRADE = campo 'grade' do set ativo): mesmos knobs do
+// calibrar.frag, na mistura da scene (antes da transicao e da calibracao do telao) ----
+let lastSGrade = { on: 1, fx: {} }, sgTouched = 0, sgT = null, sgEls = {};
+function sendSGrade(save){ sgTouched = now(); clearTimeout(sgT); sgT = null; post('/scene-grade', { grade: lastSGrade, save }).catch(() => {}); }
+const IO_SGRADE = { touch(){ sgTouched = now(); },
+  live(){ sgTouched = now(); if (!sgT) sgT = setTimeout(() => { sgT = null; sendSGrade(false); }, 40); },
+  commit: () => sendSGrade(true) };
+const SG_GROUPS = GRADE_GROUPS.map(([t, ns]) => [t === 'Aparelho (telão)' ? 'Canais' : t, ns]);
+const sgVal = n => n in lastSGrade.fx ? lastSGrade.fx[n] : (gradeDefaults[n] ?? 1);
+function renderSGrade(){
+  const box = $('#sgrade-knobs'); box.innerHTML = ''; sgEls = {};
+  for (const [t, ns0] of SG_GROUPS){
+    const ns = ns0.filter(n => n in gradeDefaults); if (!ns.length) continue;
+    const kn = h('div', { class: 'knobs' });
+    for (const n of ns){
+      const k = knob({ id: 'sgrade:' + n, label: GRADE_LABEL[n] || n, mlabel: 'imagem da scene · ' + n, dflt: gradeDefaults[n], io: IO_SGRADE,
+        get: () => sgVal(n), set: v => { lastSGrade.fx[n] = Math.round(v * 1000) / 1000; } });
+      sgEls[n] = k; kn.append(k);
+    }
+    box.append(h('div', { class: 'kgroup' }, h('span', { class: 'gt', text: t }), kn));
+  }
+  syncSGrade();
+}
+function syncSGrade(){
+  $('#sgrade-on').checked = !!lastSGrade.on;
+  for (const [n, k] of Object.entries(sgEls)) if (activeDrag !== 'sgrade:' + n) k._show(sgVal(n));
+  const dirty = lastSGrade.on && Object.keys(lastSGrade.fx).length > 0;   // botao aceso = scene com ajuste
+  $('#sgrade-btn').classList.toggle('on', !$('#sgrade-box').hidden || dirty);
+  $('#sgrade-btn').textContent = dirty ? '◐ imagem •' : '◐ imagem';
+  $('#sgrade-name').textContent = activeScene ? '· ' + activeScene : '';
+}
+$('#sgrade-btn').onclick = () => { const b = $('#sgrade-box'); b.hidden = !b.hidden; LS.set('v2sgrade', b.hidden ? 0 : 1); syncSGrade(); };
+$('#sgrade-box').hidden = !LS.get('v2sgrade', 0);
+$('#sgrade-on').onchange = () => { lastSGrade.on = $('#sgrade-on').checked ? 1 : 0; syncSGrade(); sendSGrade(true); };
+$('#sgrade-reset').onclick = () => { lastSGrade.fx = {}; syncSGrade(); sendSGrade(true); };
 // ---- fps da saida (tuning.OUTPUT_FPS, ao vivo) ----
 const FPS_CHOICES = [24, 30, 50, 60];
 let outFps = 60, fpsTouched = 0;
@@ -1061,8 +1125,31 @@ function animTop(){
   const q = Math.round(TM.kick.cur * 50) / 50;
   if (q !== kickShown){ kickShown = q; $('#tm-kick').style.opacity = 0.12 + 0.88 * q; }
 }
+// ---- historico do fps da saida (aba Saida): ~4 amostras/s, ultimos 2 min, alvo tracejado ----
+const FPS_HIST = [], FPS_SPAN = 120000;
+function pushFps(o){
+  const t = now(), last = FPS_HIST[FPS_HIST.length - 1];
+  if (last && t - last.t < 250) return;
+  FPS_HIST.push({ t, v: +o.fps || 0, tgt: +o.fps_target || 60 });
+  while (FPS_HIST.length && t - FPS_HIST[0].t > FPS_SPAN) FPS_HIST.shift();
+}
+function drawFps(){
+  const c = $('#fps-graph'), r = c && fitCanvas(c); if (!r || FPS_HIST.length < 2) return;   // c some com o "encerrado"
+  const [g, w, hh] = r, t1 = now(), tgt = FPS_HIST[FPS_HIST.length - 1].tgt;
+  const top = Math.max(tgt * 1.15, ...FPS_HIST.map(p => p.v)), y = v => hh - 2 - (v / top) * (hh - 4), x = t => w - (t1 - t) / FPS_SPAN * w;
+  g.strokeStyle = 'rgba(255,255,255,.25)'; g.setLineDash([4, 4]); g.lineWidth = 1;   // alvo
+  g.beginPath(); g.moveTo(0, y(tgt)); g.lineTo(w, y(tgt)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = 'rgba(255,255,255,.35)'; g.font = '10px ui-monospace, monospace'; g.fillText(tgt + ' alvo', 4, y(tgt) - 3);
+  g.beginPath(); FPS_HIST.forEach((p, k) => k ? g.lineTo(x(p.t), y(p.v)) : g.moveTo(x(p.t), y(p.v)));
+  g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--live') || '#3fd08f'; g.lineWidth = 1.5; g.stroke();
+  const lowC = getComputedStyle(document.documentElement).getPropertyValue('--warn') || '#e8c14a';   // quedas abaixo de 85% do alvo
+  g.fillStyle = lowC; for (const p of FPS_HIST) if (p.v < p.tgt * 0.85) g.fillRect(x(p.t) - 1, y(p.v) - 1, 3, 3);
+  const vs = FPS_HIST.map(p => p.v), avg = vs.reduce((a, b) => a + b, 0) / vs.length;
+  $('#fps-stats').textContent = `últimos ${Math.round((t1 - FPS_HIST[0].t) / 1000)} s · mín ${Math.min(...vs).toFixed(0)} · média ${avg.toFixed(1)} · máx ${Math.max(...vs).toFixed(0)}`;
+}
 function renderTop(d){
   const o = d.output || {}, f = $('#fps');
+  if (o.fps_target) pushFps(o);
   if (o.fps_target) $('#mon-fps').textContent = `${o.window_w || ''}×${o.window_h || ''} · ${(o.fps || 0).toFixed(0)}/${o.fps_target} fps`;
   if (o.fps_target){ f.textContent = `${(o.fps || 0).toFixed(0)}/${o.fps_target} fps`; f.classList.toggle('low', (o.fps || 0) < o.fps_target * 0.85); }
   const bad = o.shader_status && o.shader_status !== 'ok';
@@ -1082,7 +1169,7 @@ function renderTop(d){
 let lastScenes = [], activeScene = '', sceneSig = '', sceneOpen = '', sceneAdding = false;
 let lastTrans = [], lastTransDefault = 'none', transSig = '';
 function loadScenes(){ fetch('/scenes').then(r => r.json()).then(gotScenes).catch(() => {}); }
-function gotScenes(d){ lastScenes = d.list || []; activeScene = d.active || ''; sceneSig = ''; renderScenes(); }
+function gotScenes(d){ lastScenes = d.list || []; activeScene = d.active || ''; sceneSig = ''; renderScenes(); if (Object.keys(sgEls).length) syncSGrade(); }
 const scenePost = (url, body) => post(url, body).then(gotScenes);
 function goScene(name){ scenePost('/scene', { name }).catch(e => toast('scene: ' + e, 'err')); }
 function renderScenes(){
@@ -1595,11 +1682,14 @@ function renderLevels(a){
   }
 }
 // ---- espectro (canvas, 60 fps: interpola ate o alvo + pico que cai devagar) ----
-let specT = null, specC = null, specPk = null, specHz = null, specCol = null;
+const BAND_RGB = Object.fromEntries(BAND_NAMES.map(n => [n, BAND_COLORS[n].match(/\d+/g).map(Number)]));
+const BLEND_PX = 3;
+const fadeGrad = (g, y0, y1) => { const m = g.createLinearGradient(0, y0, 0, y1); m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(1, 'rgba(0,0,0,1)'); return m; };   // meia-largura da mistura de cor onde uma borda de faixa corta uma barra do espectro
+let specT = null, specC = null, specPk = null, specHz = null;
 function setSpec(spec){
   const s = spec.slice().reverse();          // payload vem agudo -> grave
   if (!specT || specT.length !== s.length){ specC = s.map(() => 0); specPk = s.map(() => 0); }
-  specT = s.map(b => clamp01((b.db + 60) / 100)); specHz = s.map(b => b.hz); specCol = s.map(b => rgbStr(b.rgb));
+  specT = s.map(b => clamp01((b.db + 60) / 100)); specHz = s.map(b => b.hz);
 }
 function drawSpec(dt){
   const cv = $('#spec'); if (!specT) return;
@@ -1608,16 +1698,43 @@ function drawSpec(dt){
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round((H + 16) * dpr)){ cv.width = Math.round(W * dpr); cv.height = Math.round((H + 16) * dpr); }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H + 16);
   const n = specT.length, k = 1 - Math.exp(-dt * 30), fall = dt * 0.35;
+  const E = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_HI]);   // faixas AO VIVO (inclusive no arrasto)
+  const colAt = hz => {   // cor da(s) faixa(s) nesse Hz: SOBREPOSTAS = media das cores; nenhuma = cinza (buraco)
+    const hit = E.map((ab, j) => hz >= ab[0] && hz < ab[1] ? BAND_RGB[rangeRows[j].name] : null).filter(Boolean);
+    if (!hit.length) return 'rgb(95,95,95)';
+    return 'rgb(' + [0, 1, 2].map(c => Math.round(hit.reduce((t, x) => t + x[c], 0) / hit.length)).join(',') + ')';
+  };
   // faixa de Hz de cada barra = meio caminho (log) ate as vizinhas
   for (let i = 0; i < n; i++){
     specC[i] += (specT[i] - specC[i]) * k;
     specPk[i] = Math.max(specC[i], specPk[i] - fall);
     const lo = i ? Math.sqrt(specHz[i - 1] * specHz[i]) : HZ_LO, hi = i < n - 1 ? Math.sqrt(specHz[i] * specHz[i + 1]) : HZ_HI;
-    const x0 = hzPct(lo) / 100 * W, x1 = hzPct(hi) / 100 * W, bh = specC[i] * H;
-    const grd = g.createLinearGradient(0, H - bh, 0, H);
-    grd.addColorStop(0, specCol[i]); grd.addColorStop(1, 'rgba(0,0,0,0)');
-    g.globalAlpha = 0.9; g.fillStyle = grd; g.fillRect(x0 + 1, H - bh, Math.max(1, x1 - x0 - 2), bh);
-    g.globalAlpha = 1; g.fillStyle = specCol[i]; g.fillRect(x0 + 1, H - specPk[i] * H - 1, Math.max(1, x1 - x0 - 2), 2);
+    const x0 = hzPct(lo) / 100 * W, x1 = hzPct(hi) / 100 * W, bh = specC[i] * H, bw = Math.max(1, x1 - x0 - 2);
+    // barra DIVIDIDA (uma borda de faixa passa por dentro dela): cada pedaco na cor da faixa
+    // dele, com uma mistura CURTA (±BLEND_PX) em volta do ponto da borda — nao a barra toda
+    const cuts = [...new Set(E.flat())].filter(c => c > lo && c < hi).sort((a, b) => a - b);
+    let fill = colAt(Math.sqrt(lo * hi));   // calculada aqui (nao a do servidor): segue o arrasto ao vivo e mistura sobreposicao
+    const xa = x0 + 1;
+    if (cuts.length){
+      const pts = [lo, ...cuts, hi], d = Math.min(0.5, BLEND_PX / bw);
+      const cols = pts.slice(1).map((p, s) => colAt(Math.sqrt(pts[s] * p)));
+      fill = g.createLinearGradient(xa, 0, xa + bw, 0);
+      fill.addColorStop(0, cols[0]);
+      cuts.forEach((c, s) => {
+        const f = Math.max(0, Math.min(1, (hzPct(c) / 100 * W - xa) / bw));
+        fill.addColorStop(Math.max(0, f - d), cols[s]); fill.addColorStop(Math.min(1, f + d), cols[s + 1]);
+      });
+      fill.addColorStop(1, cols[cols.length - 1]);
+    }
+    // TODA barra pelo mesmo caminho (dividida ou nao — senao umas ficam mais escuras que as outras):
+    // cor a 90%, escurece pra baixo (source-atop preto) e some pra baixo (destination-out) = o
+    // fade de sempre (cor -> preto transparente). So' dentro do retangulo desta barra.
+    g.globalAlpha = 0.9; g.fillStyle = fill; g.fillRect(xa, H - bh, bw, bh);
+    g.globalAlpha = 1; g.fillStyle = fadeGrad(g, H - bh, H);
+    g.globalCompositeOperation = 'source-atop'; g.fillRect(xa, H - bh, bw, bh);
+    g.globalCompositeOperation = 'destination-out'; g.fillRect(xa, H - bh, bw, bh);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1; g.fillStyle = fill; g.fillRect(x0 + 1, H - specPk[i] * H - 1, bw, 2);
   }
 }
 // ---- faixas (Hz) por cima do espectro: uma raia por faixa, grave embaixo. Mesma logica da v1 ----
@@ -1647,33 +1764,40 @@ const rangeRows = BAND_NAMES.map((name, i) => {
   tLo.addEventListener('dblclick', ev => { ev.stopPropagation(); toggleSeam(i, 'lo'); });
   tHi.addEventListener('dblclick', ev => { ev.stopPropagation(); toggleSeam(i, 'hi'); });
   tHi.addEventListener('pointerdown', ev => { ev.stopPropagation(); beginDrag(tHi, i, 'hi', ev); });
+  const inBody = p => p > hzPct(+lo.value || HZ_LO) && p < hzPct(+hi.value || HZ_HI);
   bar.addEventListener('pointermove', ev => {
     if (ev.target.closest('.thumb') || dragRow >= 0){ if (dragRow < 0) hint.hidden = true; return; }
     const rect = bar.getBoundingClientRect(), x = (ev.clientX - rect.left) / rect.width * 100;
+    bar.style.cursor = inBody(x) ? 'grab' : '';
     hint.textContent = kfmt(pctHz(x)) + ' Hz'; hint.style.left = x + '%'; hint.hidden = false;
   });
   bar.addEventListener('pointerleave', () => { if (dragRow !== i) hint.hidden = true; });
-  bar.addEventListener('pointerdown', ev => {    // clique na raia: pega a borda mais perto e ja arrasta
+  bar.addEventListener('pointerdown', ev => {    // meio da faixa: move ela inteira; fora: pega a borda mais perto
     if (ev.target.closest('.thumb')) return;
     const rect = bar.getBoundingClientRect(), p = (ev.clientX - rect.left) / rect.width * 100;
+    if (inBody(p)) return beginBodyDrag(i, ev);
     const edge = Math.abs(p - hzPct(+lo.value || HZ_LO)) <= Math.abs(p - hzPct(+hi.value || HZ_HI)) ? 'lo' : 'hi';
     beginDrag(edge === 'lo' ? tLo : tHi, i, edge, ev, true);
   });
   return r;
 });
-$('#ovl-cb').addEventListener('change', () => { if (!isOv()) reflowFromOverlap(); cascade(); sendRanges(); });
+$('#ovl-cb').addEventListener('change', () => { if (!isOv()) reflowFromOverlap(); cascade(); paintSeams(); sendRanges(); });
 $('#bands-cb').addEventListener('change', sendRanges);
+// ordem NO ESPECTRO (grave -> agudo, empate = indice) — nao o indice: faixas podem trocar de
+// lugar (arrastar o meio de uma pra raia de outra). O servidor normaliza igual (_clamp_ranges)
+const specOrder = v => v.map((_, i) => i).sort((a, b) => v[a][0] - v[b][0] || a - b);
 function reflowFromOverlap(){
   const v = rangeRows.map(r => [+r.lo.value || HZ_LO, +r.hi.value || HZ_LO]);
   const lw = ([lo, hi]) => Math.log(Math.max(HZ_LO, hi)) - Math.log(Math.max(HZ_LO, lo));
+  const ord = specOrder(v);
   let prev = HZ_LO;
-  for (let i = 0; i < 8; i++){
-    let [lo, hi] = v[i];
+  ord.forEach((i, k) => {
+    let [lo, hi] = v[i]; const nx = ord[k + 1];
     lo = Math.max(lo, prev);
-    if (i < 7 && hi > v[i + 1][0] && lw(v[i]) >= lw(v[i + 1])) hi = v[i + 1][0];
+    if (nx !== undefined && hi > v[nx][0] && lw(v[i]) >= lw(v[nx])) hi = v[nx][0];
     hi = Math.min(HZ_HI, Math.max(hi, lo + 1)); lo = Math.min(lo, hi - 1);
     v[i] = [lo, hi]; prev = hi;
-  }
+  });
   rangeRows.forEach((r, i) => { r.lo.value = v[i][0]; r.hi.value = v[i][1]; });
 }
 function cascade(){
@@ -1682,7 +1806,7 @@ function cascade(){
     for (let i = 0; i < 8; i++){ let [lo, hi] = v[i]; lo = Math.max(HZ_LO, Math.min(HZ_HI, lo)); hi = Math.min(HZ_HI, Math.max(lo + 1, hi)); applyRow(i, lo, hi); }
   } else {
     let prevHi = HZ_LO;
-    for (let i = 0; i < 8; i++){
+    for (const i of specOrder(v)){
       let [lo, hi] = v[i];
       lo = Math.max(Math.min(Math.max(HZ_LO, lo), HZ_HI), prevHi); hi = Math.min(HZ_HI, Math.max(lo + 1, hi)); lo = Math.min(lo, hi - 1);
       applyRow(i, lo, hi); prevHi = hi;
@@ -1696,7 +1820,8 @@ function applyRow(i, lo, hi){
   r.tLo.style.left = a + '%'; r.tHi.style.left = b + '%'; r.seg.style.left = a + '%'; r.seg.style.width = (b - a) + '%'; r.nm.style.left = a + '%';
   r.nm.style.display = (b - a) > 6 ? '' : 'none';
 }
-// COSTURA: borda que encosta na borda OPOSTA de outra faixa (hi de uma = lo de outra) fica grudada
+// COSTURA (so' SEM sobreposicao — com ela cada borda anda sozinha): borda que encosta na borda
+// OPOSTA de outra faixa (hi de uma = lo de outra) fica grudada
 // — mexer uma leva a outra junto, nos dois sentidos. Vale pras que ja se tocam quando o arrasto
 // comeca E pras que passam a se tocar no meio dele (encostou = grudou). Soltar mantem a costura:
 // no proximo arrasto elas ja comecam grudadas. O limite: nenhuma faixa grudada fica com lo >= hi.
@@ -1715,6 +1840,7 @@ function touching(i, edge){   // faixas cuja borda oposta esta na borda `edge` d
 }
 function seamOf(i, edge, v){   // faixas GRUDADAS na borda de i que esta em v
   const out = [];
+  if (isOv()) return out;      // sobreposicao: cada faixa anda sozinha, nada gruda
   for (let j = 0; j < rangeRows.length; j++) if (j !== i && edgeVal(j, opp(edge)) === v && !isFree(i, edge, j)) out.push(j);
   return out;
 }
@@ -1725,6 +1851,7 @@ function pruneSeams(){   // par descolado que nao se toca mais volta a ser "norm
   if (ch) saveSeamFree();
 }
 function toggleSeam(i, edge){
+  if (isOv()) return toast('com sobreposição as faixas não grudam');
   const js = touching(i, edge); if (!js.length) return;
   const anyGlued = js.some(j => !isFree(i, edge, j));
   for (const j of js){ const k = pairKey(i, edge, j); if (anyGlued) seamFree.add(k); else seamFree.delete(k); }
@@ -1733,7 +1860,7 @@ function toggleSeam(i, edge){
 }
 function paintSeams(){   // alca grudada = cheia; descolada = vazada (so' contorno)
   rangeRows.forEach((r, i) => { for (const e of ['lo', 'hi']){
-    const js = touching(i, e), th = e === 'lo' ? r.tLo : r.tHi;
+    const js = isOv() ? [] : touching(i, e), th = e === 'lo' ? r.tLo : r.tHi;
     th.classList.toggle('glued', js.some(j => !isFree(i, e, j))); th.classList.toggle('free', js.length > 0 && js.every(j => isFree(i, e, j)));
   } });
 }
@@ -1759,19 +1886,18 @@ function beginDrag(thumb, i, edge, ev, snap){
   dragRow = i;
   const rr = rangeRows[i], rect = rr.bar.getBoundingClientRect();
   const linked = new Set(seamOf(i, edge, edgeVal(i, edge)));
+  const rk = []; specOrder(rangeRows.map((_, j) => [edgeVal(j, 'lo')])).forEach((j, k) => { rk[j] = k; });   // posicao no espectro
   const move = e => {
     rangesTouched = now(); moved = true;
     const prev = edgeVal(i, edge);
     let hz = Math.round(pctHz((e.clientX - rect.left) / rect.width * 100));
     // encostou (ou passou por cima) na borda oposta de outra faixa no caminho -> gruda nela
     if (e.altKey) linked.clear();                // Alt = descola: so' esta borda anda
-    else for (let j = 0; j < rangeRows.length; j++){
+    else if (!isOv()) for (let j = 0; j < rangeRows.length; j++){   // sobreposicao: nada gruda
       if (j === i || linked.has(j) || isFree(i, edge, j)) continue;
       const v = edgeVal(j, opp(edge));
-      if ((v - prev) * (v - hz) <= 0 && v !== prev || v === hz){
-        if (isOv()){ linked.add(j); }                      // sobreposicao: so' gruda se encostar
-        else if ((edge === 'hi' && j > i) || (edge === 'lo' && j < i)) linked.add(j);   // crossover: vizinhas na ordem
-      }
+      if (((v - prev) * (v - hz) <= 0 && v !== prev || v === hz) &&
+          ((edge === 'hi' && rk[j] > rk[i]) || (edge === 'lo' && rk[j] < rk[i]))) linked.add(j);   // crossover: vizinhas no espectro
     }
     hz = moveSeam(i, edge, hz, [...linked]);
     rr.hint.textContent = kfmt(hz) + ' Hz' + (linked.size ? ' · grudada' : ''); rr.hint.style.left = hzPct(hz) + '%'; rr.hint.hidden = false;
@@ -1783,6 +1909,54 @@ function beginDrag(thumb, i, edge, ev, snap){
                      dragRow = -1; rr.hint.hidden = true; pruneSeams(); paintSeams(); if (moved || snap) sendRanges(); };
   thumb.addEventListener('pointermove', move); thumb.addEventListener('pointerup', up);
   if (snap) move(ev);
+}
+// ARRASTAR A FAIXA INTEIRA (pelo meio): as duas bordas andam juntas (largura em oitavas mantida).
+// Sem sobreposicao, vizinhas GRUDADAS acompanham (encolhem/esticam) e as soltas viram parede.
+// Soltar na RAIA de outra faixa (so' sem sobreposicao) = TROCA as duas de lugar (ex. Treble <-> Sub-bass).
+function beginBodyDrag(i, ev){
+  ev.preventDefault();
+  const rr = rangeRows[i], bar = rr.bar; try { bar.setPointerCapture(ev.pointerId); } catch {}
+  dragRow = i; bar.style.cursor = 'grabbing';
+  const rect = bar.getBoundingClientRect(), ov = isOv(), x0 = ev.clientX;
+  const snap = rangeRows.map(r => [r.lo.value, r.hi.value]);
+  const lo0 = edgeVal(i, 'lo'), hi0 = edgeVal(i, 'hi'), pLo = hzPct(lo0), pHi = hzPct(hi0);
+  const L = seamOf(i, 'lo', lo0), R = seamOf(i, 'hi', hi0);   // [] com sobreposicao
+  let dMin = hzPct(HZ_LO) - pLo, dMax = hzPct(HZ_HI) - pHi;
+  if (!ov) for (let j = 0; j < rangeRows.length; j++){
+    if (j === i) continue;
+    if (L.includes(j)) dMin = Math.max(dMin, hzPct(edgeVal(j, 'lo') + 1) - pLo);        // grudada nao some
+    else if (R.includes(j)) dMax = Math.min(dMax, hzPct(edgeVal(j, 'hi') - 1) - pHi);
+    else if (edgeVal(j, 'hi') <= lo0) dMin = Math.max(dMin, hzPct(edgeVal(j, 'hi')) - pLo);   // solta = parede
+    else if (edgeVal(j, 'lo') >= hi0) dMax = Math.min(dMax, hzPct(edgeVal(j, 'lo')) - pHi);
+  }
+  let target = -1, moved = false;
+  const laneAt = y => rangeRows.findIndex(r => { const b = r.bar.getBoundingClientRect(); return y >= b.top && y < b.bottom; });
+  const mark = t => { if (t === target) return; if (target >= 0) rangeRows[target].bar.classList.remove('swap'); target = t; if (t >= 0) rangeRows[t].bar.classList.add('swap'); };
+  const move = e => {
+    rangesTouched = now(); moved = true;
+    const d = Math.max(dMin, Math.min(dMax, (e.clientX - x0) / rect.width * 100));
+    const lo = Math.round(pctHz(pLo + d)), hi = Math.round(pctHz(pHi + d));
+    rr.lo.value = lo; rr.hi.value = hi;
+    for (const j of L) rangeRows[j].hi.value = lo;
+    for (const j of R) rangeRows[j].lo.value = hi;
+    const t = ov ? -1 : laneAt(e.clientY); mark(t === i ? -1 : t);
+    rr.hint.textContent = target >= 0 ? '⇅ trocar com ' + rangeRows[target].name : kfmt(lo) + '–' + kfmt(hi) + ' Hz';
+    rr.hint.style.left = ((hzPct(lo) + hzPct(hi)) / 2) + '%'; rr.hint.hidden = false;
+    cascade();
+    if (!bar._t) bar._t = setTimeout(() => { bar._t = null; sendRanges(); }, 110);
+  };
+  const up = () => {
+    bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up);
+    clearTimeout(bar._t); bar._t = null; dragRow = -1; rr.hint.hidden = true; bar.style.cursor = '';
+    if (target >= 0){   // troca: volta tudo pro inicio do arrasto e so' permuta as duas
+      const j = target; mark(-1);
+      snap.forEach(([a, b], k) => { rangeRows[k].lo.value = a; rangeRows[k].hi.value = b; });
+      [snap[i], snap[j]].forEach(([a, b], k) => { const r = rangeRows[k ? i : j]; r.lo.value = a; r.hi.value = b; });
+      cascade(); toast(rr.name + ' ⇄ ' + rangeRows[j].name); moved = true;
+    }
+    pruneSeams(); paintSeams(); if (moved) sendRanges();
+  };
+  bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
 }
 function renderRanges(bh){
   if (!bh || !bh.names) return;
@@ -1945,7 +2119,7 @@ function imgCol(root, which){
   S.ov = ov; S.cv = cv;
   root.append(h('div', { class: 'ipv' }, cv, ov, h('span', { class: 'mon-wait', text: 'aguardando imagem…' })));
   addPreview(cv, '/frame?which=' + which, 15, 'imagem', () => { const r = cv.width / cv.height; cv.parentElement.style.aspectRatio = r ? r.toFixed(4) : ''; drawOverlay(S); });
-  S.maps = h('div', { class: 'maps' }); root.append(S.maps);
+  S.maps = h('div', { class: 'maps' }); root.append(S.maps); wheelX(S.maps);
   const blocks = h('div', { class: 'blocks' }); root.append(blocks);
   const mm = (box, label) => { const f = h('i'), v = h('span', { class: 'v', text: '—' }); box.append(h('div', { class: 'mm' }, h('span', { class: 'l', text: label }), h('span', { class: 'track' }, f), v)); return { f, v }; };
   const kv = (box, label) => { const b = h('b', { text: '—' }); box.append(h('div', { class: 'kv' }, h('span', { text: label }), b)); return b; };
@@ -2186,6 +2360,7 @@ function process(stateOnly){
   if (d.overlays && now() - mediaTouched >= TOUCH_MS) lastOverlays = d.overlays;
   if (d.scene !== undefined && d.scene !== activeScene){ activeScene = d.scene; loadScenes(); }
   if (d.output_grade && now() - gradeTouched > TOUCH_MS && !activeDrag.startsWith('grade:') && activeDrag !== 'master'){ lastGrade = d.output_grade; syncGrade(); }
+  if (d.scene_grade && now() - sgTouched > TOUCH_MS && !activeDrag.startsWith('sgrade:') && JSON.stringify(d.scene_grade) !== JSON.stringify(lastSGrade)){ lastSGrade = d.scene_grade; syncSGrade(); }
   if (d.output_fps && now() - fpsTouched > TOUCH_MS && d.output_fps !== outFps){ outFps = d.output_fps; renderFpsSeg(); }
   syncKnobs(d.knobs); syncDyn(d.band_tweaks);
   if (d.inputs && d.inputs.audio && now() - selTouched.audio >= TOUCH_MS){ const s = $('#sel-audio'); if (s.value !== d.inputs.audio && [...s.options].some(o => o.value === d.inputs.audio)) s.value = d.inputs.audio; }
@@ -2214,12 +2389,14 @@ function loop(t){
   process(false);
   animMeters(dt); animTop(); pumpPreviews();
   if (curTab === 'audio') drawSpec(dt);
+  else if (curTab === 'saida' && t - (loop.fpsT || 0) > 200){ loop.fpsT = t; drawFps(); }
   requestAnimationFrame(loop);
 }
 
 // ---- boot ----
 { const top = $('#top'); const fix = () => document.documentElement.style.setProperty('--toph', top.offsetHeight + 'px'); new ResizeObserver(fix).observe(top); fix(); }
 document.body.classList.toggle('perform', perform);
+wheelX($('#mixer'));
 $('#mode-btn').classList.toggle('edit', !perform); $('#mode-btn').textContent = perform ? '✎ editar' : '✓ modo palco';
 showTab(panelParam || LS.get('v2tab', 'palco'));
 loadInputs(); loadShaders(); loadMedia(); loadTransitions(); loadScenes();
