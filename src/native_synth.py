@@ -902,6 +902,7 @@ def _pool_reader(e):
         f = read_exact(p.stdout, FRAME_SIZE)
         if f is not None:
             e['frame'] = np.frombuffer(f, dtype=np.uint8)
+            e['t'] = time.monotonic()   # saude (_stale_sources): fonte parada = frame velho
             p.nframes = getattr(p, 'nframes', 0) + 1   # relogio do video (-r 30) pro audio_thread alinhar
         elif e['run'] and running:
             time.sleep(0.3)
@@ -939,7 +940,7 @@ def _sync_pool():
             _pool.pop(path, None)
     for path, v in want:
         if path not in _pool:
-            e = {'v': v, 'proc': _spawn_ffmpeg(v), 'frame': None, 'win': win, 'run': True}
+            e = {'v': v, 'proc': _spawn_ffmpeg(v), 'frame': None, 'win': win, 'run': True, 't': time.monotonic()}
             e['thr'] = threading.Thread(target=_pool_reader, args=(e,), daemon=True)
             e['thr'].start()
             _pool[path] = e
@@ -1015,12 +1016,30 @@ def _sync_overlays():
             _ovl.pop(path, None)
     for path, v in want.items():
         if path not in _ovl:
-            e = {'v': v, 'proc': _spawn_ffmpeg(v), 'frame': None, 'win': win, 'run': True}
+            e = {'v': v, 'proc': _spawn_ffmpeg(v), 'frame': None, 'win': win, 'run': True, 't': time.monotonic()}
             e['thr'] = threading.Thread(target=_pool_reader, args=(e,), daemon=True)
             e['thr'].start()
             _ovl[path] = e
             print('camada +', _video_label(v))
     state['audio_media'] = apath if apath in _ovl else None   # audio_thread troca de fonte ao ver isso
+
+
+SRC_STALE_S = 2.0   # fonte da mistura sem frame novo por isso = parada (saude no dash)
+
+
+def _stale_sources():
+    """Rotulos das fontes de video NA MISTURA (camera/tela/video) sem frame novo ha SRC_STALE_S —
+    camera desplugada, ffmpeg morto. Imagem parada nao entra (nao tem leitor)."""
+    now, out = time.monotonic(), []
+    for m, a, _ in _overlay_items(chans=True):
+        if a <= 0:
+            continue
+        e = _ovl.get(m) if _is_live(m) else (_pool.get(_media_v(m)['path']) or _ovl.get(_media_v(m)['path']))
+        if e and 'v' in e and now - e.get('t', now) > SRC_STALE_S:
+            lab = _video_label(e['v']) or str(m)
+            if lab not in out:
+                out.append(lab)
+    return out
 
 
 _alpha_now = {}   # chave do canal -> alpha do frame atual (np.uint8[FRAME_SIZE], replicado em RGB) | None
@@ -1993,6 +2012,7 @@ def audio_thread(device):
                     _kill(listen)
                     listen = None
                 data = ready[-1]
+                state['audio_t'] = time.monotonic()
             else:
                 if state['audio_source'] != cur_src:  # troca pedida pelo dash
                     _kill(proc)
@@ -2014,6 +2034,7 @@ def audio_thread(device):
                 else:
                     stall_t = 0.0
                     data = read_exact(proc.stdout, chunk_bytes)
+                    state['audio_t'] = time.monotonic()   # saude do dash: audio_age
                 if data is None:
                     if not running:
                         break
@@ -2517,6 +2538,7 @@ def main():
         except (RuntimeError, OSError) as e:
             print('erro no shader', rel, '->\n', e)
             state['output']['shader_status'] = f'erro em {os.path.basename(rel)}'
+            state['output']['shader_error'] = f'{rel}\n{e}'[:2000]   # detalhe no clique da saude (dash v2)
             layer_bad[lp] = mt
             return None
         if hit:
@@ -2524,6 +2546,7 @@ def main():
         manifest = dash_data.parse_fx_defaults(src)
         prog_cache[lp] = (mt, prog, src, manifest)
         state['output']['shader_status'] = 'ok'
+        state['output'].pop('shader_error', None)
         return prog_cache[lp]
 
     blend_prog, blend_u = build_layer_blend_program()
@@ -2629,13 +2652,21 @@ def main():
     comp_last = [None, None]   # [assinatura das fontes da mistura na CPU, frame_in]
     out_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
                'prev_val': [None], 'prev_mean': [None]}
+    esc_t = []   # instantes dos ultimos Esc: 3 em ESC_QUIT_S fecha o app (no dash: POST /quit)
+    ESC_QUIT_S = 1.2
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_F11):
-                # Esc SAI da tela cheia (nao fecha mais o app: era o gesto natural e derrubava o
-                # show); F11 alterna. Fechar = fechar a janela. Mesmo caminho do dash (output_req)
+                # Esc SAI da tela cheia (1 Esc so nao fecha: era o gesto natural e derrubava o
+                # show); 3x Esc seguidos fecha o app. F11 alterna. Mesmo caminho do dash (output_req)
+                if event.key == pygame.K_ESCAPE:
+                    now = time.monotonic()
+                    esc_t = [t for t in esc_t if now - t < ESC_QUIT_S] + [now]
+                    if len(esc_t) >= 3:
+                        running = False
+                        break
                 if event.key == pygame.K_F11 or out_cfg.get('fullscreen'):
                     fs = not out_cfg.get('fullscreen')
                     set_output({**out_cfg, 'fullscreen': fs, **({} if fs else {'w': 0, 'h': 0})})   # janela = tamanho padrao
@@ -3079,6 +3110,9 @@ def main():
             v = state['video']
             dims = _dims_cache.get(v['path']) if v and v.get('mode') == 'media' else None
             state['output']['media_dims'] = list(dims) if dims else None
+            at = state.get('audio_t')
+            state['health'] = {'audio_age': round(time.monotonic() - at, 1) if at else None,
+                               'stale': _stale_sources()}
 
     # da um instante pras threads daemon (audio_thread) notarem running=False e rodarem
     # seu "finally" (ex. sair da tela alternada) antes do processo sumir de baixo delas

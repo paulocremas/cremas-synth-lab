@@ -1677,6 +1677,7 @@ def _payload():
         # ids no formato das opcoes dos <select> — pro dash sincronizar os dropdowns entre abas
         'inputs': {'audio': _state.get('audio_source', ''), 'video': _state.get('video_id', '')},
         'output': _state.get('output', {}),   # geometria/fps da janela de saida (imagem sintetizada)
+        'health': _state.get('health', {}),   # audio_age (s sem chunk) + stale (fontes paradas) — saude v2
         'output_fps': int(getattr(_tuning, 'OUTPUT_FPS', 60) or 60),   # escolhido no dash v2 (Saida)
         'bands_hz': {'overlap': int(getattr(_tuning, 'HZ_OVERLAP', 0)),
                      'enabled': int(getattr(_tuning, 'BANDS_ENABLED', 1)),
@@ -2036,6 +2037,11 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(200, 'application/json', json.dumps({'enabled': out}).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/quit':   # 3x Esc no dash = Alt+F4 em tudo: SIGTERM no proprio processo -> o
+            # handle_sigterm do native zera running (sai pelo fluxo normal) e o atexit fecha o Brave
+            self._send(200, 'application/json', b'{"ok":true}')
+            threading.Timer(0.1, os.kill, (os.getpid(), signal.SIGTERM)).start()
             return
         if path == '/output':
             fn = _cfg.get('on_set_output')

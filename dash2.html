@@ -25,6 +25,12 @@
   - 60 FPS: um loop requestAnimationFrame so' (aba escondida = para); o stream (30 Hz) so' muda
     o ALVO, os medidores/espectro interpolam ate ele a cada frame de tela (transform, sem reflow).
     Aba escondida: o ESTADO segue atualizando (200 ms) pro MIDI nao postar lista velha.
+  - SAUDE (renderHealth): "annunciator" de cabine/broadcast — cada checagem tem gravidade
+    ok/warn/crit; o PIOR vira a moldura da tela inteira (#hframe: fixa, sem ocupar layout, pega
+    na visao periferica; so' crit pulsa, devagar) e um chip COM NOME por checagem no topo (hover =
+    o que vigia; clique = detalhe do problema: agora / por que / o que fazer + botao que resolve).
+    fps e silencio so' acusam depois de
+    persistirem (HOLD) — alarme que pisca por 1 frame cansa e passa a ser ignorado.
   - cores fixas: verde = no ar/ativo, laranja = selecionado, azul = MIDI, vermelho = blackout/erro.
     Fundo cinza-escuro (nao preto puro), texto nao-branco (halation). Sem CDN: roda offline.
 -->
@@ -102,13 +108,38 @@
   .vb i { position: absolute; inset: 0; transform-origin: bottom; transform: scaleY(0); }
   #tm .src { font-size: 11px; color: var(--tx3); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #tm .src b { color: var(--live); font-weight: 600; }
-  #status { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--tx2); }
-  #conn { display: inline-flex; align-items: center; gap: 6px; }
-  #conn::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
-  #conn.up::before { background: var(--live); box-shadow: 0 0 6px var(--live); }
-  #fps { cursor: pointer; padding: 3px 7px; border-radius: 6px; background: var(--s2); }
-  #fps.low { color: #1a1406; background: var(--warn); }
-  #sherr { color: #fff; background: var(--bad); border-radius: 6px; padding: 3px 7px; font-weight: 700; cursor: help; }
+  /* SAUDE: moldura da tela (visao periferica) + pilula de lampadas no topo (detalhe no clique) */
+  #hframe { position: fixed; inset: 0; z-index: 50; pointer-events: none; box-shadow: inset 0 0 0 2px rgba(63,208,143,.35); }
+  #hframe.warn { box-shadow: inset 0 0 0 3px var(--warn); }
+  #hframe.crit { box-shadow: inset 0 0 0 5px var(--bad), inset 0 0 28px rgba(255,91,97,.35); animation: hpulse 1.4s ease-in-out infinite; }
+  #hframe.dead { box-shadow: inset 0 0 0 5px var(--bad); animation: none; }
+  @keyframes hpulse { 50% { box-shadow: inset 0 0 0 5px rgba(255,91,97,.45), inset 0 0 12px rgba(255,91,97,.15); } }
+  #health { position: relative; display: inline-flex; align-items: center; gap: 3px; padding: 3px; border-radius: var(--r2);
+            background: var(--bg); border: 1px solid var(--line); }
+  #health.warn { border-color: var(--warn); } #health.crit { border-color: var(--bad); }
+  .hc { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 5px; border: 1px solid transparent; border-radius: 6px;
+        background: none; color: var(--tx3); cursor: pointer; font: 700 10px var(--sans); letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+  .hc:hover { background: var(--s2); color: var(--tx2); }
+  .hc::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--live); opacity: .7; flex: none; }
+  .hc.off::before { background: var(--s4); opacity: 1; }
+  .hc .v { font: 500 11px var(--mono); letter-spacing: 0; text-transform: none; color: var(--tx2); }
+  .hc.warn { background: #3a3110; border-color: var(--warn); color: #f7e3a1; } .hc.warn::before { background: var(--warn); opacity: 1; }
+  .hc.crit { background: var(--bad); border-color: var(--bad); color: #fff; } .hc.crit::before { background: #fff; opacity: 1; }
+  .hc.warn .v, .hc.crit .v { color: inherit; font-weight: 700; }
+  .hc.open { box-shadow: 0 0 0 2px var(--sel); }
+  #health.tight .hc .v:not(.keep) { display: none; }   /* nao coube na faixa do topo: fica cor + nome */
+  #hpop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; width: 380px; max-height: calc(100vh - 80px); overflow: auto;
+          background: var(--s1); border: 1px solid var(--line2); border-radius: var(--r); padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  #hpop .hh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #hpop .hh b { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--tx3); }
+  #hpop .st { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; background: var(--live-d); color: var(--live); }
+  #hpop .st.warn { background: #3a3110; color: var(--warn); } #hpop .st.crit { background: var(--bad); color: #fff; } #hpop .st.off { background: var(--s3); color: var(--tx3); }
+  #hpop .what { color: var(--tx3); font-size: 12px; margin: 0 0 10px; }
+  #hpop .now { font-size: 13px; color: var(--tx); margin: 0 0 10px; white-space: pre-line; }
+  #hpop h6 { margin: 10px 0 4px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--tx3); }
+  #hpop ul { margin: 0; padding-left: 18px; color: var(--tx2); font-size: 12px; } #hpop li { margin: 2px 0; }
+  #hpop pre { margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: 6px; font: 11px/1.4 var(--mono); color: #ffb3b6; white-space: pre-wrap; max-height: 180px; overflow: auto; }
+  #hpop .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
   #midi-btn .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line2); }
   #midi-btn.ok .dot { background: var(--midi); opacity: .5; }
   #midi-btn .dot.hit { opacity: 1; box-shadow: 0 0 6px var(--midi); }
@@ -119,7 +150,6 @@
              color: #ffb3b6; cursor: pointer; font-weight: 800; letter-spacing: .06em; font-size: 12px; }
   #blk-btn.on { background: var(--bad); color: #fff; border-color: var(--bad); animation: pulse 1s ease-in-out infinite; }
   #blk-btn kbd { font: 10px var(--mono); opacity: .7; margin-left: 5px; }
-  body.blk #top { box-shadow: inset 0 -3px 0 var(--bad); }
   @keyframes pulse { 50% { opacity: .6; } }
 
   main { padding: 12px; }
@@ -387,7 +417,7 @@
   .mon { position: relative; border-radius: var(--r2); overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
   .mon canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
   .mon .mon-blk { position: absolute; left: 8px; top: 8px; display: none; background: var(--bad); color: #fff; font: 800 11px var(--sans); letter-spacing: .08em; padding: 3px 8px; border-radius: 5px; }
-  body.blk .mon .mon-blk { display: block; }
+  body.blackout .mon .mon-blk { display: block; }
   .mon .mon-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tx3); font-size: 12px; }
   .mon canvas.ok ~ .mon-wait { display: none; }
   /* inspetor */
@@ -421,11 +451,17 @@
   .outgrid .mon-p .mon { flex: 1; aspect-ratio: auto; min-height: 240px; }
   /* IMAGEM: previa ao vivo com mapa por cima + Luz / Cor / Forma */
   .cols2 { grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); align-items: start; }
-  .ipv { position: relative; border-radius: var(--r2); overflow: hidden; background: #000; aspect-ratio: 4 / 3; width: 100%; max-width: 400px; margin: 0 auto; }
-  .ipv canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  /* moldura FIXA 16:9 nas duas colunas (entrada e saida podem ter proporcoes diferentes — com a
+     moldura seguindo a imagem os cards ficavam de alturas diferentes); a imagem + mapa (.ipv-in)
+     ficam centrados dentro, na proporcao deles (fitIpv) */
+  #imagem .cols2 { align-items: stretch; }
+  #imagem .ph { min-height: 30px; }
+  .ipv { position: relative; border-radius: var(--r2); overflow: hidden; background: #000; aspect-ratio: 16 / 9; width: 100%; max-width: 440px; margin: 0 auto; }
+  .ipv-in { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; }
+  .ipv canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .ipv .ov { pointer-events: none; }
   .ipv .mon-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tx3); font-size: 12px; }
-  .ipv canvas.ok ~ .mon-wait { display: none; }
+  .ipv:has(canvas.ok) .mon-wait { display: none; }
   .maps { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, 1fr); gap: 4px; margin: 8px 0 10px; overflow-x: auto; padding-bottom: 2px; }
   .mapc .mn { flex-direction: column; align-items: flex-start; line-height: 1.25; }
   .mapc .mn .num { font-weight: 500; color: var(--tx3); }
@@ -466,11 +502,7 @@
     <span class="src" id="tm-src">—</span>
   </span>
   <span class="grow"></span>
-  <span id="status">
-    <span id="sherr" hidden></span>
-    <span id="fps" class="num" title="fps da saída / alvo — clique pra mudar">— fps</span>
-    <span id="conn">offline</span>
-  </span>
+  <span id="health"><span id="h-chips" style="display:contents"></span><div id="hpop" hidden></div></span>
   <button class="btn sm" id="midi-btn" title="controlador MIDI: mapear knobs físicos"><span class="dot"></span>MIDI</button>
   <button class="btn sm" id="mode-btn" title="Palco = só controles de performance (nada se apaga sem querer). Editar = estrutura: adicionar/remover/reordenar, Biblioteca.">✎ editar</button>
   <span id="master-wrap"></span>
@@ -478,6 +510,7 @@
   <a class="btn sm" href="/" title="dash antigo (v1)">v1</a>
 </header>
 
+<div id="hframe"></div>
 <main>
   <!-- ================= PALCO ================= -->
   <section id="palco">
@@ -744,7 +777,7 @@ $$('#tabs button').forEach(b => b.onclick = e => {
   showTab(p);
 });
 $('#tm').onclick = () => showTab('audio');
-$('#fps').onclick = () => showTab('saida');
+document.addEventListener('pointerdown', e => { if (hpopId && !e.target.closest('#health')) openHealth(null); });
 function setPerform(on){
   perform = on; LS.set('v2perform', on);
   document.body.classList.toggle('perform', on);
@@ -975,7 +1008,7 @@ $('#blk-btn').onclick = blackout;
 function syncMaster(){
   const m = masterVal();
   if (activeDrag !== 'master') masterF._show(m);
-  $('#blk-btn').classList.toggle('on', m <= 0.001); document.body.classList.toggle('blk', m <= 0.001);
+  $('#blk-btn').classList.toggle('on', m <= 0.001); document.body.classList.toggle('blackout', m <= 0.001);
 }
 const GRADE_GROUPS = [['Balanço de branco', ['temperatura', 'matiz']], ['Luz', ['exposicao', 'contraste', 'realces', 'sombras', 'brancos', 'pretos']],
   ['Presença', ['claridade', 'neblina', 'vibracao', 'saturacao']], ['Aparelho (telão)', ['vermelho', 'verde', 'azul', 'gama']]];
@@ -1148,12 +1181,10 @@ function drawFps(){
   $('#fps-stats').textContent = `últimos ${Math.round((t1 - FPS_HIST[0].t) / 1000)} s · mín ${Math.min(...vs).toFixed(0)} · média ${avg.toFixed(1)} · máx ${Math.max(...vs).toFixed(0)}`;
 }
 function renderTop(d){
-  const o = d.output || {}, f = $('#fps');
+  const o = d.output || {};
   if (o.fps_target) pushFps(o);
   if (o.fps_target) $('#mon-fps').textContent = `${o.window_w || ''}×${o.window_h || ''} · ${(o.fps || 0).toFixed(0)}/${o.fps_target} fps`;
-  if (o.fps_target){ f.textContent = `${(o.fps || 0).toFixed(0)}/${o.fps_target} fps`; f.classList.toggle('low', (o.fps || 0) < o.fps_target * 0.85); }
-  const bad = o.shader_status && o.shader_status !== 'ok';
-  const se = $('#sherr'); se.hidden = !bad; if (bad){ se.textContent = '⚠ shader'; se.title = o.shader_status; }
+  renderHealth(d);
   const a = d.audio || {};
   if (a.kick) TM.kick.tgt = clamp01(a.kick.final);
   for (const b of a.bands || []){ if (b.name === 'amp') TM.amp.tgt = clamp01(b.final); else if (TM.bands[b.name]) TM.bands[b.name].tgt = clamp01(b.final); }
@@ -2117,8 +2148,16 @@ function imgCol(root, which){
   const S = { which, im: null, map: LS.get('v2map-' + which, 'BRILHO') };
   const cv = h('canvas'), ov = h('canvas', { class: 'ov' });
   S.ov = ov; S.cv = cv;
-  root.append(h('div', { class: 'ipv' }, cv, ov, h('span', { class: 'mon-wait', text: 'aguardando imagem…' })));
-  addPreview(cv, '/frame?which=' + which, 15, 'imagem', () => { const r = cv.width / cv.height; cv.parentElement.style.aspectRatio = r ? r.toFixed(4) : ''; drawOverlay(S); });
+  const inner = h('div', { class: 'ipv-in' }, cv, ov), box = h('div', { class: 'ipv' }, inner, h('span', { class: 'mon-wait', text: 'aguardando imagem…' }));
+  root.append(box);
+  const fitIpv = () => {   // encaixa a imagem (proporcao do frame) dentro da moldura 16:9
+    const W = box.clientWidth, H = box.clientHeight, r = cv.width / cv.height;
+    if (!W || !H || !r) return;
+    const w = Math.min(W, H * r), hh = w / r;
+    if (inner._wh !== w + 'x' + hh){ inner._wh = w + 'x' + hh; inner.style.width = w + 'px'; inner.style.height = hh + 'px'; }
+  };
+  new ResizeObserver(() => { fitIpv(); drawOverlay(S); }).observe(box);
+  addPreview(cv, '/frame?which=' + which, 15, 'imagem', () => { fitIpv(); drawOverlay(S); });
   S.maps = h('div', { class: 'maps' }); root.append(S.maps); wheelX(S.maps);
   const blocks = h('div', { class: 'blocks' }); root.append(blocks);
   const mm = (box, label) => { const f = h('i'), v = h('span', { class: 'v', text: '—' }); box.append(h('div', { class: 'mm' }, h('span', { class: 'l', text: label }), h('span', { class: 'track' }, f), v)); return { f, v }; };
@@ -2332,16 +2371,159 @@ $('#trans-reload').onclick = loadTransitions;
 // (1 JSON.parse por frame no maximo) e anima medidores/espectro a cada frame.
 // =====================================================================================
 let html2Mtime = null, rawD = null, deadT = null, hiddenT = null;
+// =====================================================================================
+// SAUDE — ver o comentario do topo. Cada checagem = um chip com NOME (hover = o que vigia);
+// clique = detalhe daquela: agora / por que pode ser / o que fazer + botoes que resolvem.
+// =====================================================================================
+let linkUp = false, lastHealthD = null, healthRows = [], hpopId = null;
+const FPS_WARN = 28, FPS_CRIT = 15;          // fps absoluto (nao % do alvo): abaixo de 28 o movimento ja' engasga
+const HOLD = { fps: 1500, silence: 8000 };   // ms que a condicao tem que durar antes de acusar
+const holdSince = {};
+function held(id, cond){   // true so' depois de cond ficar verdadeira por HOLD[id] ms seguidos
+  if (!cond){ delete holdSince[id]; return false; }
+  holdSince[id] ??= now();
+  return now() - holdSince[id] >= (HOLD[id] || 0);
+}
+const SEV = { ok: 0, off: 0, warn: 1, crit: 2 };
+const SEV_TXT = { ok: 'ok', off: 'sem dado', warn: 'atenção', crit: 'crítico' };
+const HWHAT = {
+  link: 'Conexão deste painel com o motor do prisma (o programa que desenha a saída).',
+  telao: 'O que chega no telão no fim de tudo: MASTER, BLACKOUT e o padrão de teste da calibração.',
+  fps: 'Quadros por segundo da janela de saída contra o alvo escolhido na aba Saída.',
+  audio: 'Som chegando no motor (captura do sistema ou o 🔊 de um vídeo da mesa) — é o que move kick e faixas.',
+  video: 'Fontes de imagem na mistura (câmera, tela, vídeos) mandando quadros novos.',
+  shader: 'Compilação dos efeitos (.frag) da pilha. Efeito com erro é pulado: a saída segue sem ele.'
+};
+// linha: { id, label, sev, v (texto curto no chip), tab }
+function healthChecks(d){
+  const o = d?.output || {}, hl = d?.health || {}, g = d?.output_grade || lastGrade, rows = [];
+  rows.push({ id: 'link', label: 'link', sev: linkUp ? 'ok' : 'crit', v: linkUp ? '' : 'caiu' });
+  if (!d) return rows;
+  const m = g.master ?? 1;
+  rows.push({ id: 'telao', label: 'telão', tab: 'saida', sev: g.test || m <= 0.001 ? 'crit' : m < 1 ? 'warn' : 'ok',
+    v: g.test ? 'teste' : m <= 0.001 ? 'blackout' : m < 1 ? Math.round(m * 100) + '%' : '' });
+  const fps = o.fps || 0, tgt = o.fps_target || 0;
+  const fl = held('fps', tgt && fps < FPS_WARN), fc = fl && fps < FPS_CRIT;
+  rows.push({ id: 'fps', label: 'fps', tab: 'saida', sev: !tgt ? 'off' : fc ? 'crit' : fl ? 'warn' : 'ok', v: tgt ? fps.toFixed(0) : '—' });
+  const age = hl.audio_age, amp = (d.audio?.bands || []).find(b => b.name === 'amp');
+  const quiet = held('silence', amp && amp.raw_mag < 0.0005);
+  rows.push({ id: 'audio', label: 'áudio', tab: 'audio', sev: age == null ? 'off' : age > 2 ? 'crit' : quiet ? 'warn' : 'ok',
+    v: age == null ? '' : age > 2 ? 'parado' : quiet ? 'silêncio' : '' });
+  const st = hl.stale || [], nsrc = parseInt(o.shader) || 0;
+  rows.push({ id: 'video', label: 'vídeo', tab: 'palco', sev: st.length ? 'crit' : o.shader && !nsrc ? 'warn' : 'ok',
+    v: st.length ? 'parou' : o.shader && !nsrc ? 'sem fonte' : '' });
+  const shBad = o.shader_status && o.shader_status !== 'ok';
+  rows.push({ id: 'shader', label: 'shader', tab: 'saida', sev: shBad ? 'crit' : 'ok', v: shBad ? 'erro' : '' });
+  return rows;
+}
+const TAB_NAME = { palco: 'Palco', audio: 'Áudio', saida: 'Saída' };
+// detalhe de uma checagem: { now, why: [], todo: [], pre, acts: [[rotulo, fn]] }
+function healthDetail(r, d){
+  const o = d?.output || {}, hl = d?.health || {}, g = d?.output_grade || lastGrade, bad = SEV[r.sev] > 0, D = { why: [], todo: [], acts: [] };
+  const go = r.tab ? [['abrir ' + TAB_NAME[r.tab], () => showTab(r.tab)]] : [];
+  if (r.id === 'link'){
+    D.now = linkUp ? 'Conectado — recebendo o estado ao vivo.' : 'Sem resposta do motor.';
+    if (bad){ D.why = ['o prisma foi fechado ou travou', 'o motor está recarregando (volta sozinho em ~1 s)'];
+      D.todo = ['espere alguns segundos', 'se não voltar, reabra o prisma']; D.acts = [['recarregar painel', () => location.reload()]]; }
+  } else if (r.id === 'telao'){
+    const m = g.master ?? 1;
+    D.now = `MASTER ${Math.round(m * 100)}%${m <= 0.001 ? ' — BLACKOUT: saída preta' : ''}${g.test ? '\nPadrão de teste NO LUGAR da imagem' : ''}`;
+    if (g.test){ D.why.push('"padrão de teste" ligado na calibração (aba Saída)'); D.todo.push('desligue o padrão de teste');
+      D.acts.push(['desligar padrão de teste', () => { lastGrade.test = 0; syncGrade(); sendGrade(true); }]); }
+    if (m <= 0.001){ D.why.push('BLACKOUT ligado (botão, tecla . ou MIDI)'); D.todo.push('aperte . ou BLACKOUT de novo — volta ao master de antes');
+      D.acts.push(['voltar do blackout', blackout]); }
+    else if (m < 1){ D.why.push('fader MASTER abaixo de 100%'); D.todo.push('duplo-clique no MASTER = 100%');
+      D.acts.push(['master 100%', () => { delete lastGrade.master; syncMaster(); sendGrade(true); }]); }
+  } else if (r.id === 'fps'){
+    const last = FPS_HIST.filter(x => now() - x.t < 10000).map(x => x.v);
+    D.now = o.fps_target ? `${(o.fps || 0).toFixed(0)} de ${o.fps_target} fps` + (last.length > 2 ? `\núltimos 10 s: mín ${Math.min(...last).toFixed(0)} · média ${(last.reduce((a, b) => a + b, 0) / last.length).toFixed(0)}` : '') : 'Janela de saída ainda não mandou fps.';
+    if (bad){ D.now += `\n(amarelo abaixo de ${FPS_WARN} fps, vermelho abaixo de ${FPS_CRIT})`;
+      D.why = ['efeitos pesados na pilha (fumaça, fluido…)', 'muitas fontes/vídeos ao mesmo tempo', 'janela de saída grande ou tela cheia em resolução alta', 'outro programa usando a GPU'];
+      D.todo = ['baixe o alvo pra 30 fps', 'desligue um efeito pesado e veja se sobe'];
+      if (outFps > 30) D.acts.push(['alvo 30 fps', () => { outFps = 30; fpsTouched = now(); renderFpsSeg(); post('/output-fps', { fps: 30 }).catch(() => {}); }]); }
+  } else if (r.id === 'audio'){
+    const age = hl.audio_age, amp = (d?.audio?.bands || []).find(b => b.name === 'amp');
+    D.now = age == null ? 'Sem captura de áudio.' : `fonte: ${lastAudioMedia ? '🔊 ' + srcInfo(lastAudioMedia).name : (d.audio_source || '—')}\núltimo pedaço há ${age.toFixed(1)} s · nível ${amp ? amp.raw_level.toFixed(2) : '—'}`;
+    if (r.v === 'parado'){ D.why = ['a fonte de áudio sumiu (fone/placa desconectada) ou foi trocada', 'o PipeWire suspendeu a saída — o motor reinicia a captura sozinho a cada 2 s'];
+      D.todo = ['confira a fonte na aba Áudio', 'se persistir, escolha outra fonte e volte pra ela']; }
+    else if (r.v === 'silêncio'){ D.why = ['nada tocando na fonte escolhida', 'fonte errada (ex.: monitor de uma saída muda)', 'volume do sistema zerado ou mudo'];
+      D.todo = ['toque algo e veja se as barras do topo mexem', 'troque a fonte na aba Áudio']; }
+    else if (age == null){ D.why = ['o motor não conseguiu abrir a captura (parec ausente?)']; D.todo = ['veja o terminal do prisma']; }
+  } else if (r.id === 'video'){
+    const st = hl.stale || [];
+    D.now = `${parseInt(o.shader) || 0} fonte(s) na saída` + (st.length ? '\nsem quadro novo há mais de 2 s: ' + st.join(', ') : '');
+    if (st.length){ D.why = ['câmera desconectada ou aberta por outro programa', 'vídeo corrompido / ffmpeg caiu (o motor tenta reabrir)', 'captura de tela perdeu o monitor'];
+      D.todo = ['reconecte a câmera ou feche o outro programa', 'tire a fonte da mesa e ponha de novo']; }
+    else if (r.v === 'sem fonte'){ D.why = ['mesa vazia ou todas as fontes com opacidade 0']; D.todo = ['suba o fader de uma fonte no Palco']; }
+  } else if (r.id === 'shader'){
+    D.now = bad ? o.shader_status : 'Todos os efeitos da pilha compilaram.';
+    if (bad){ D.pre = o.shader_error || ''; D.why = ['erro de sintaxe/tipo no .frag (normalmente o que acabou de ser editado)'];
+      D.todo = ['corrija e salve o arquivo — recarrega sozinho', 'ou tire o efeito da pilha']; }
+  }
+  D.acts.push(...go);
+  return D;
+}
+function renderHealth(d){
+  if (d) lastHealthD = d; else d = linkUp ? lastHealthD : null;
+  healthRows = healthChecks(d);
+  const worst = healthRows.reduce((a, r) => SEV[r.sev] > SEV[a.sev] ? r : a, healthRows[0]);
+  const lvl = SEV[worst.sev] === 2 ? 'crit' : SEV[worst.sev] === 1 ? 'warn' : '';
+  const sig = JSON.stringify([healthRows, lvl, hpopId]);
+  if (sig !== renderHealth.sig){
+    renderHealth.sig = sig;
+    $('#health').className = lvl;
+    $('#hframe').className = !linkUp ? 'dead' : lvl;
+    // chips criados UMA vez e so' atualizados: recriar a cada mudanca (o fps muda sempre) trocava o
+    // botao entre o mousedown e o mouseup e o clique se perdia (precisava clicar 2x)
+    const C = $('#h-chips');
+    for (const r of healthRows){
+      let b = C.querySelector(`[data-h="${r.id}"]`);
+      if (!b){
+        b = h('button', { 'data-h': r.id }, r.label, h('span', { class: 'v' + (r.id === 'fps' ? ' keep' : '') }));
+        b.onclick = () => openHealth(hpopId === r.id ? null : r.id);
+        C.append(b);
+      }
+      b.className = 'hc ' + (r.sev === 'ok' ? '' : r.sev) + (hpopId === r.id ? ' open' : '');
+      b.title = `${r.label.toUpperCase()}${r.v ? ': ' + r.v : ''} — ${HWHAT[r.id]}\n(clique pra detalhes)`;
+      const v = b.lastChild; v.textContent = r.v || ''; v.hidden = !r.v;
+    }
+    for (const b of C.querySelectorAll('[data-h]')) if (!healthRows.some(r => r.id === b.dataset.h)) b.remove();
+    // varios problemas alargam os chips: se a faixa do topo quebraria de linha, esconde os textos curtos
+    const hb = $('#health'); hb.classList.remove('tight');
+    if ($('#blk-btn').offsetTop > hb.offsetTop + 10) hb.classList.add('tight');
+  }
+  if (hpopId && now() - (renderHealth.popT || 0) > 250){ renderHealth.popT = now(); drawHealthPop(); }   // valores (idade, fps) andam
+}
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && hpopId) openHealth(null); });
+function openHealth(id){ hpopId = id; $('#hpop').hidden = !id; renderHealth.popT = 0; renderHealth(null); }
+function drawHealthPop(){
+  const r = healthRows.find(x => x.id === hpopId), p = $('#hpop');
+  if (!r){ p.hidden = true; return; }
+  const D = healthDetail(r, linkUp ? lastHealthD : null);
+  const sig = JSON.stringify([r, D.now, D.pre, D.why, D.acts.map(a => a[0])]);
+  if (sig === drawHealthPop.sig && !p.hidden) return; drawHealthPop.sig = sig;
+  p.innerHTML = '';
+  p.append(h('div', { class: 'hh' }, h('b', { text: r.label }), h('span', { class: 'st ' + r.sev, text: SEV_TXT[r.sev] }), h('span', { class: 'grow' }),
+    h('button', { class: 'x', text: '×', onclick: () => openHealth(null) })));
+  p.append(h('p', { class: 'what', text: HWHAT[r.id] }), h('p', { class: 'now', text: D.now || '' }));
+  if (D.pre) p.append(h('pre', { text: D.pre }));
+  if (D.why.length){ p.append(h('h6', { text: 'por que pode ser' })); const u = h('ul'); D.why.forEach(t => u.append(h('li', { text: t }))); p.append(u); }
+  if (D.todo.length){ p.append(h('h6', { text: 'o que fazer' })); const u = h('ul'); D.todo.forEach(t => u.append(h('li', { text: t }))); p.append(u); }
+  if (D.acts.length){ const a = h('div', { class: 'acts' });
+    D.acts.forEach(([t, fn], k) => { const b = h('button', { class: 'btn sm' + (k === 0 && SEV[r.sev] > 0 && D.acts.length > 1 ? ' on' : ''), text: t }); b.onclick = () => { fn(); if (t.startsWith('abrir')) openHealth(null); }; a.append(b); });
+    p.append(a); }
+  p.hidden = false;
+}
 function connect(){
   const es = new EventSource('/events');
-  const alive = () => { const c = $('#conn'); c.textContent = 'ao vivo'; c.classList.add('up'); clearTimeout(deadT); deadT = null; };
+  const alive = () => { linkUp = true; clearTimeout(deadT); deadT = null; };
   es.onopen = alive;
   es.onmessage = e => {
     alive(); rawD = e.data;
     // aba escondida: o loop para, mas o ESTADO tem que seguir o vivo (MIDI continua mandando)
     if (document.hidden && !hiddenT) hiddenT = setTimeout(() => { hiddenT = null; if (document.hidden) process(true); }, 200);
   };
-  es.onerror = () => { const c = $('#conn'); c.textContent = 'reconectando'; c.classList.remove('up'); if (!deadT) deadT = setTimeout(serverGone, 3500); };
+  es.onerror = () => { linkUp = false; renderHealth(null); if (!deadT) deadT = setTimeout(serverGone, 3500); };
 }
 function serverGone(){
   try { window.close(); } catch {}
@@ -2402,4 +2584,20 @@ showTab(panelParam || LS.get('v2tab', 'palco'));
 loadInputs(); loadShaders(); loadMedia(); loadTransitions(); loadScenes();
 connect();
 requestAnimationFrame(loop);
+// 3x Esc (em ESC_QUIT_MS) fecha o app — igual na janela de saida. Captura na window: os outros
+// handlers de Esc (sair do learn/efeitos/edicao) continuam rodando, isto so' conta.
+const ESC_QUIT_MS = 1200;
+let escTimes = [];
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.repeat) return;
+  const t0 = performance.now();
+  escTimes = escTimes.filter(t => t0 - t < ESC_QUIT_MS).concat(t0);
+  if (escTimes.length < 3) return;
+  escTimes = [];
+  fetch('/quit', {method: 'POST'}).catch(() => {});
+  const d = document.createElement('div');
+  d.textContent = 'fechando o prisma…';
+  d.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);color:#fff;font:600 24px system-ui';
+  document.body.appendChild(d);
+}, true);
 </script>
