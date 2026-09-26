@@ -759,6 +759,18 @@ def _norm_fx(lv):
     return {str(n): round(max(0.0, min(1.0, float(x))), 4) for n, x in dict(lv or {}).items()}
 
 
+def _norm_rect(r):
+    """[x, y, w, h] de um canal no canvas (0..1, origem em cima a esquerda; pode sair um pouco do
+    canvas, o que sobra e' cortado). None = canvas inteiro (o padrao nao vai pro tuning.py)."""
+    try:
+        x, y, w, h = (float(v) for v in r)
+    except (TypeError, ValueError):
+        return None
+    w, h = (round(max(0.02, min(4.0, v)), 4) for v in (w, h))
+    x, y = (round(max(-2.0, min(2.0, v)), 4) for v in (x, y))
+    return None if [x, y, w, h] == [0, 0, 1, 1] else [x, y, w, h]
+
+
 def _norm_overlays(items, dedupe=True):
     """dedupe=False na pilha de shaders: o mesmo .frag pode entrar 2x na mesma fonte (cada entrada
     com as suas forcas em 'fx')."""
@@ -781,6 +793,9 @@ def _norm_overlays(items, dedupe=True):
             o['audio'], aud = 1, True
         if isinstance(it.get('fx'), dict):   # forcas desta entrada da pilha (ausente = fx[shader] da fonte)
             o['fx'] = _norm_fx(it['fx'])
+        r = _norm_rect(it.get('rect'))
+        if r:               # objeto no CANVAS (posicao/tamanho); ausente = canvas inteiro
+            o['rect'] = r
         out.append(o)
     return out
 
@@ -1529,6 +1544,43 @@ def set_output_fps(fps, tuning_path=None):
     return fps
 
 
+def _norm_screens(items):
+    """TELAS do palco fisico: [{name, x, y, w, h (metros, origem em cima a esquerda), pw, ph (pixels
+    do painel)}]. O canvas da saida e' o contorno delas (native_synth._stage). Ate 16."""
+    out = []
+    for i, t in enumerate(items or []):
+        try:
+            x, y = (round(max(-100.0, min(100.0, float(t[k]))), 3) for k in ('x', 'y'))
+            w, h = (round(max(0.05, min(100.0, float(t[k]))), 3) for k in ('w', 'h'))
+            pw, ph = (max(1, min(16384, int(t[k]))) for k in ('pw', 'ph'))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        name = str(t.get('name') or f'tela {i + 1}')[:24]
+        out.append({'name': name, 'x': x, 'y': y, 'w': w, 'h': h, 'pw': pw, 'ph': ph})
+    return out[:16]
+
+
+def set_screens(items, save=True, tuning_path=None):
+    """Telas do palco (dash v2, aba Saida): patcha tuning.SCREENS na hora (o loop GL le a cada
+    frame); save=True grava o bloco `SCREENS = [...]` no tuning.py (acrescenta se nao houver).
+    Global (o palco fisico e' o mesmo em todas as scenes)."""
+    clean = _norm_screens(items)
+    if _tuning is not None:
+        _tuning.SCREENS = clean
+    if save:
+        body = '\n'.join('    ' + json.dumps(t, ensure_ascii=False) + ',' for t in clean)
+        block = f'SCREENS = [\n{body}\n]' if clean else 'SCREENS = [\n]'
+        path = tuning_path or _cfg['tuning_path']
+        with _knob_lock:
+            src = open(path).read()
+            src, n = re.subn(r'(?ms)^SCREENS = \[.*?^\]', lambda m: block, src)
+            if n == 0:
+                src = src.rstrip('\n') + ('\n\n# telas do palco fisico (dash v2 > Saida): metros (x, y, w, h; origem em cima'
+                                          ' a esquerda) + pixels (pw, ph). O canvas e\' o contorno delas\n' + block + '\n')
+            _write_atomic(path, src)
+    return clean
+
+
 def set_out_analysis(enabled, tuning_path=None):
     """Reescreve OUT_ANALYSIS_ENABLED em tuning.py — checkbox "calcular" na tab Output Image
     (liga a leitura pos-shader pros mesmos medidores do Source Image, ver native_synth.main)."""
@@ -1679,6 +1731,7 @@ def _payload():
         'output': _state.get('output', {}),   # geometria/fps da janela de saida (imagem sintetizada)
         'health': _state.get('health', {}),   # audio_age (s sem chunk) + stale (fontes paradas) — saude v2
         'output_fps': int(getattr(_tuning, 'OUTPUT_FPS', 60) or 60),   # escolhido no dash v2 (Saida)
+        'screens': list(getattr(_tuning, 'SCREENS', None) or []),   # telas do palco (dash v2, Saida)
         'bands_hz': {'overlap': int(getattr(_tuning, 'HZ_OVERLAP', 0)),
                      'enabled': int(getattr(_tuning, 'BANDS_ENABLED', 1)),
                      'ranges': [list(x) for x in getattr(_tuning, 'FREQ_BAND_HZ', [])],
@@ -2020,6 +2073,14 @@ class _Handler(BaseHTTPRequestHandler):
                 b = json.loads(raw.decode())
                 out = set_output_grade(b['grade'], save=bool(b.get('save', True)))
                 self._send(200, 'application/json', json.dumps({'grade': out}).encode())
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/screens':  # {screens: [{name, x, y, w, h, pw, ph}], save: bool}
+            try:
+                b = json.loads(raw.decode())
+                out = set_screens(b['screens'], save=bool(b.get('save', True)))
+                self._send(200, 'application/json', json.dumps({'screens': out}).encode())
             except (KeyError, ValueError, TypeError, AttributeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
@@ -2730,6 +2791,19 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     ns = {}; exec(open(p2).read(), ns); assert ns['OUTPUT_GRADE'] == {'on': 1, 'test': 0, 'fx': {}}
     assert set_output_fps(60, tuning_path=p2) == 60 and _tuning.OUTPUT_FPS == 60   # fps da saida (v2)
     set_output_fps(30, tuning_path=p2); assert open(p2).read().count('OUTPUT_FPS = 30') == 1
+    # telas do palco: normaliza, grava o bloco 1x, save=False so' patcha
+    t = set_screens([{'name': 'coluna', 'x': 0, 'y': 1, 'w': 1, 'h': 4, 'pw': 256, 'ph': 1024},
+                     {'x': 'ruim'}, {'x': 3, 'y': 1, 'w': 0, 'h': 4, 'pw': 0, 'ph': 1024}], tuning_path=p2)
+    assert t == [{'name': 'coluna', 'x': 0.0, 'y': 1.0, 'w': 1.0, 'h': 4.0, 'pw': 256, 'ph': 1024},
+                 {'name': 'tela 3', 'x': 3.0, 'y': 1.0, 'w': 0.05, 'h': 4.0, 'pw': 1, 'ph': 1024}] == _tuning.SCREENS, t
+    ns = {}; exec(open(p2).read(), ns); assert ns['SCREENS'] == t
+    set_screens(t[:1], save=False, tuning_path=p2); assert len(_tuning.SCREENS) == 1
+    set_screens([], tuning_path=p2)
+    ns = {}; exec(open(p2).read(), ns); assert ns['SCREENS'] == [] and open(p2).read().count('SCREENS =') == 1
+    # objeto no canvas: rect normalizado; canvas inteiro = sem campo
+    r = _norm_overlays([{'file': 'a.png', 'rect': [0.1, 0.2, 0.5, 0.5]}, {'file': 'b.png', 'rect': [0, 0, 1, 1]},
+                        {'file': 'c.png', 'rect': [9, 0, 0, 1]}, {'file': 'd.png', 'rect': 'x'}])
+    assert [o.get('rect') for o in r] == [[0.1, 0.2, 0.5, 0.5], None, [2.0, 0.0, 0.02, 1.0], None], r
     try:
         set_output_fps(33, tuning_path=p2); raise AssertionError('33 fps devia falhar')
     except ValueError:

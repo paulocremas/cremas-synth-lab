@@ -420,6 +420,64 @@
   body.blackout .mon .mon-blk { display: block; }
   .mon .mon-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tx3); font-size: 12px; }
   .mon canvas.ok ~ .mon-wait { display: none; }
+  /* canvas (objetos arrastaveis por cima do monitor do Palco) */
+  .cvpanel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .cvrow { flex: 1; min-height: 0; display: flex; gap: 8px; }
+  .objlist { width: 220px; flex: none; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .objlist .oh { font: 700 11px var(--sans); letter-spacing: .06em; color: var(--tx3); padding: 2px 4px 4px; }
+  .orow { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 3px 6px; border-radius: var(--r2); border: 1px solid var(--line2); background: var(--s2); cursor: pointer; font-size: 12px; }
+  .orow:hover { background: var(--s3); }
+  .orow.sel { border-color: var(--sel); background: var(--sel-d); }
+  .orow .on { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .orow .pos { font: 700 11px var(--mono); color: var(--tx3); }
+  .orow button { min-width: 24px; height: 24px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--line2); background: var(--bg); color: var(--tx2); cursor: pointer; font-size: 12px; }
+  .orow button:hover { color: var(--tx); }
+  .cobj { opacity: .55; } .cobj.sel, .cobj.hl { opacity: 1; }
+  .cobj.hl { border-color: #fff; border-width: 2px; }
+  .cvarea { position: relative; flex: 1; min-height: 260px; border-radius: var(--r2); overflow: hidden;
+            background: repeating-conic-gradient(#0b0d10 0 25%, #0f1216 0 50%) 0 0 / 18px 18px; }
+  .cvs { position: absolute; background: #000; outline: 1px solid var(--line2); touch-action: none; }
+  .cvs.drop { outline: 2px solid var(--live); }
+  .cobj canvas, .cobj img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .cvs .cvmask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 150; }
+  .cvs .cscr { z-index: 160; background: none; }
+  .cvs .cscr.hot { background: rgba(63,208,143,.25); border: 2px solid var(--live); }
+  .cobj b, .cobj i { z-index: 2; }
+  .tray { display: flex; gap: 8px; overflow-x: auto; min-height: 78px; padding: 6px; border: 1px dashed var(--line2); border-radius: var(--r2); align-items: center; }
+  .tray.over { border-color: var(--bad); background: var(--bad-d); }
+  .tray .empty { padding: 0 6px; }
+  .tcard { position: relative; width: 112px; height: 63px; flex: none; border-radius: 6px; overflow: hidden; background: #07080a; cursor: grab; border: 1px solid var(--line2); user-select: none; touch-action: none; }
+  .tcard img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; opacity: .6; }
+  .tcard span { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; background: rgba(0,0,0,.7); padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dghost { position: fixed; z-index: 500; pointer-events: none; opacity: .85; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+  .cobj { position: absolute; border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.04); cursor: move; user-select: none; }
+  .cobj:hover { border-color: #fff; }
+  .cobj.sel { border: 2px solid var(--sel); background: rgba(255,157,82,.08); }
+  .cobj b { position: absolute; left: 0; top: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font: 600 10px var(--sans); padding: 1px 5px; background: rgba(0,0,0,.65); color: var(--tx); pointer-events: none; }
+  .cobj.sel b { background: var(--sel); color: #1a0e04; }
+  .cobj.sel i { background: var(--sel); }
+  .cobj i[data-c=nw] { left: -5px; top: -5px; cursor: nwse-resize; } .cobj i[data-c=se] { right: -5px; bottom: -5px; cursor: nwse-resize; }
+  .cobj i[data-c=ne] { right: -5px; top: -5px; cursor: nesw-resize; } .cobj i[data-c=sw] { left: -5px; bottom: -5px; cursor: nesw-resize; }
+  .cvs .cscr { position: absolute; border: 1px solid rgba(94,176,255,.7); background: rgba(94,176,255,.06); pointer-events: none; }
+  .cvs .cscr span { position: absolute; right: 3px; bottom: 2px; font: 600 9px var(--sans); color: rgba(94,176,255,.9); }
+  /* editor de telas (aba Saida) */
+  .stg { position: relative; height: clamp(260px, 46vh, 520px); margin: 10px 0; border-radius: var(--r2); background-color: #07080a; overflow: hidden; touch-action: none; }
+  .stg-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tx3); font-size: 12px; }
+  .stg .scr { position: absolute; border: 1px solid #5eb0ff; background: rgba(94,176,255,.14); cursor: move; user-select: none; overflow: hidden; }
+  .stg .scr.sel { border: 2px solid var(--sel); background: rgba(255,157,82,.16); }
+  .stg .scr b { display: block; font: 600 11px var(--sans); padding: 2px 5px 2px 13px; color: var(--tx); white-space: nowrap; }
+  .stg .scr small { display: block; font: 10px var(--mono); padding: 0 5px 0 13px; color: var(--tx2); white-space: nowrap; }
+  .stg .scr i, .cobj i { position: absolute; width: 10px; height: 10px; background: var(--tx); border: 1px solid #000; }
+  .stg .scr.sel i { background: var(--sel); }
+  .stg .scr i[data-c=nw] { left: 0; top: 0; cursor: nwse-resize; } .stg .scr i[data-c=se] { right: 0; bottom: 0; cursor: nwse-resize; }
+  .stg .scr i[data-c=ne] { right: 0; top: 0; cursor: nesw-resize; } .stg .scr i[data-c=sw] { left: 0; bottom: 0; cursor: nesw-resize; }
+  .stg .guide, .cvs .guide { position: absolute; background: var(--midi); pointer-events: none; z-index: 200; }
+  .stg .ruler { position: absolute; font: 10px var(--mono); color: var(--tx3); pointer-events: none; }
+  #stg-list .srow2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 6px; border-radius: var(--r2); font-size: 12px; color: var(--tx2); }
+  #stg-list .srow2.sel { background: var(--sel-d); }
+  #stg-list .srow2 input { width: 64px; } #stg-list .srow2 input.nm { width: 120px; }
+  #stg-list .srow2 label { display: inline-flex; gap: 4px; align-items: center; }
   /* inspetor */
   .insp-top { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 10px; }
   .insp-top .pv { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r2); overflow: hidden; background: #07080a; }
@@ -529,14 +587,20 @@
         <div id="scene-edit"></div>
       </div>
       <div class="panel mesa-p">
-        <div class="ph"><b>Mesa</b><span class="hint">1 = embaixo · o último fica por cima · 2 cliques no card = efeitos</span><span class="grow"></span>
+        <div class="ph"><span class="seg" id="mesa-view"><button data-v="mesa">Mesa</button><button data-v="canvas" title="cada fonte (com os efeitos) é um objeto no canvas das telas">Canvas</button></span>
+          <span class="hint" id="mesa-hint"></span><span class="grow"></span>
           <button class="btn sm" id="keys-btn" title="atalhos do teclado">⌨ atalhos</button></div>
         <div class="mixer" id="mixer"></div>
+        <div class="cvpanel" id="cvpanel" hidden>
+          <div class="cvrow"><div class="cvarea" id="cvarea"><div class="cvs" id="cvs"></div></div>
+            <div class="objlist" id="objlist"></div></div>
+          <div class="tray" id="tray" title="fontes FORA do ar — arraste pro canvas pra pôr no ar (solte numa tela = enche a tela); arraste um objeto pra cá pra tirar"></div>
+        </div>
       </div>
       <div class="side">
         <div class="panel mon-p">
           <div class="ph"><b>Saída</b><span class="grow"></span><span class="hint num" id="mon-fps"></span></div>
-          <div class="mon"><canvas id="mon-out"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div>
+          <div class="mon" id="mon-palco"><canvas id="mon-out"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div>
         </div>
         <div class="panel insp-p" id="inspector"></div>
       </div>
@@ -598,6 +662,13 @@
       </div>
       <div class="panel mon-p"><div class="ph"><b>Monitor</b><span class="hint">o que está indo pro telão · ~15 quadros/s</span></div>
         <div class="mon"><canvas id="mon-out2"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div></div>
+    </div>
+    <div class="panel" id="stage-p">
+      <div class="ph"><b>Telas do palco</b><span class="hint" id="stg-info"></span><span class="grow"></span>
+        <span class="hint">adicionar:</span><span id="stg-add" style="display:contents"></span></div>
+      <div class="hint">Monte o palco físico em metros: arraste as telas, cantos = tamanho (Shift = proporção), elas grudam nas bordas umas das outras (Alt = sem ímã). O contorno delas é o <b>canvas</b> — no Palco (✥ posicionar) as imagens vão por cima; fora das telas sai preto. Sem telas, o canvas é a janela.</div>
+      <div class="stg" id="stg"><div class="stg-empty" id="stg-empty">sem telas — o canvas é a janela de saída inteira</div></div>
+      <div id="stg-list"></div>
     </div>
     <div class="panel">
       <div class="ph"><b>Calibração do telão</b><span class="hint">último passe, na saída inteira · centro = neutro · duplo-clique zera</span><span class="grow"></span>
@@ -728,7 +799,7 @@ function pumpPreviews(){
   for (let i = PV.length - 1; i >= 0; i--){
     const p = PV[i];
     if (!p.canvas.isConnected){ PV.splice(i, 1); continue; }
-    if ((p.tab !== '*' && p.tab !== curTab) || p.busy || t - p.last < 1000 / p.fps) continue;
+    if ((p.tab !== '*' && p.tab !== curTab) || p.busy || t - p.last < 1000 / p.fps || !p.canvas.getClientRects().length) continue;
     pullPreview(p);
   }
 }
@@ -1144,6 +1215,307 @@ for (const id of ['#out-w', '#out-h']){ $(id).addEventListener('input', () => { 
 addPreview($('#mon-out'), '/frame?which=out', 15, 'palco');
 addPreview($('#mon-out2'), '/frame?which=out', 15, 'saida');
 
+// ---- ARRASTAR RETANGULO (telas na aba Saida, fontes no Palco) — mesma mecanica nos dois:
+// meio = move, canto (i[data-c]) = redimensiona com o canto oposto parado, Shift = proporcao do
+// comeco, ima nos alvos (tx/ty = linhas em unidades; Alt desliga), guias azuis onde grudou.
+// o: {r0: [x,y,w,h] em unidades, ux/uy = px por unidade, tx/ty = alvos, min, move(r, guias), end()}
+function rectDrag(e, el, o){
+  if (e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  el.setPointerCapture(e.pointerId);
+  const c = e.target.dataset.c || '', px = e.clientX, py = e.clientY, thx = 8 / o.ux, thy = 8 / o.uy, MIN = o.min || 0.02;
+  const snap = (vals, ts, thr) => { let b = null; for (const v of vals) for (const t of ts){ const d = t - v; if (Math.abs(d) < thr && (!b || Math.abs(d) < Math.abs(b[0]))) b = [d, t]; } return b; };
+  activeDrag = 'rect';
+  el.onpointermove = ev => {
+    const dx = (ev.clientX - px) / o.ux, dy = (ev.clientY - py) / o.uy, gs = [];
+    let [rx, ry, rw, rh] = o.r0;
+    if (!c){
+      rx += dx; ry += dy;
+      const sx = !ev.altKey && snap([rx, rx + rw / 2, rx + rw], o.tx, thx), sy = !ev.altKey && snap([ry, ry + rh / 2, ry + rh], o.ty, thy);
+      if (sx){ rx += sx[0]; gs.push(['x', sx[1]]); }
+      if (sy){ ry += sy[0]; gs.push(['y', sy[1]]); }
+    } else {
+      const L = c[1] === 'w', T = c[0] === 'n';
+      let x0 = rx, y0 = ry, x1 = rx + rw, y1 = ry + rh;
+      if (L) x0 += dx; else x1 += dx;
+      if (T) y0 += dy; else y1 += dy;
+      if (!ev.altKey){
+        const sx = snap([L ? x0 : x1], o.tx, thx), sy = snap([T ? y0 : y1], o.ty, thy);
+        if (sx){ if (L) x0 += sx[0]; else x1 += sx[0]; gs.push(['x', sx[1]]); }
+        if (sy){ if (T) y0 += sy[0]; else y1 += sy[0]; gs.push(['y', sy[1]]); }
+      }
+      let w = Math.max(MIN, x1 - x0), hh = Math.max(MIN, y1 - y0);
+      if (ev.shiftKey){ const a = o.r0[2] / o.r0[3]; if (w / hh > a) hh = w / a; else w = hh * a; gs.length = 0; }
+      rx = L ? rx + rw - w : rx; ry = T ? ry + rh - hh : ry; rw = w; rh = hh;
+    }
+    o.move([rx, ry, rw, rh], gs, ev);
+  };
+  el.onpointerup = el.onpointercancel = ev => { el.onpointermove = el.onpointerup = el.onpointercancel = null; activeDrag = ''; o.end(ev); };
+}
+function drawGuides(box, gs, toX, toY){
+  $$('.guide', box).forEach(g => g.remove());
+  for (const [ax, t] of gs) box.append(h('div', { class: 'guide', style: ax === 'x' ? `left:${toX(t)}px;top:0;bottom:0;width:1px` : `top:${toY(t)}px;left:0;right:0;height:1px` }));
+}
+
+// ---- TELAS DO PALCO (tuning.SCREENS, global) — metros (x, y, w, h; origem em cima) + pixels
+// (pw, ph). O CANVAS da saida e' o contorno delas (native _stage: resolucao pela maior densidade);
+// fora das telas sai preto. Redimensionar em metros mantem a densidade (px/m) da tela.
+const SCR_ADD = [['coluna', 1, 4, 256, 1024], ['faixa', 4, 1, 1024, 256], ['tela 16:9', 3.2, 1.8, 1920, 1080], ['painel', 0.5, 0.5, 128, 128]];
+let lastScreens = [], scrTouched = 0, scrSel = -1, stgView = null;
+const rnd = (v, n = 1000) => Math.round(v * n) / n;
+function stageOf(scr){   // = native _stage
+  if (!scr.length) return null;
+  const x0 = Math.min(...scr.map(t => t.x)), y0 = Math.min(...scr.map(t => t.y));
+  const W = Math.max(...scr.map(t => t.x + t.w)) - x0, H = Math.max(...scr.map(t => t.y + t.h)) - y0;
+  const dens = Math.max(...scr.map(t => Math.max(t.pw / t.w, t.ph / t.h))) || 100, k = Math.min(dens, 8192 / W, 8192 / H);
+  return { x0, y0, W, H, cw: Math.max(16, Math.round(W * k)), ch: Math.max(16, Math.round(H * k)),
+           rects: scr.map(t => [(t.x - x0) / W, (t.y - y0) / H, t.w / W, t.h / H]) };
+}
+function sendScreens(save){ scrTouched = now(); post('/screens', { screens: lastScreens, save }).catch(e => toast('telas: ' + e, 'err')); }
+let scrLiveT = null;
+function sendScreensLive(){ scrTouched = now(); if (!scrLiveT) scrLiveT = setTimeout(() => { scrLiveT = null; sendScreens(false); }, 60); }
+for (const [n, w, hh, pw, ph] of SCR_ADD) $('#stg-add').append(h('button', { class: 'btn sm', text: '+ ' + n, title: `${w}×${hh} m · ${pw}×${ph} px`, onclick: () => {
+  const st = stageOf(lastScreens), x = st ? rnd(st.x0 + st.W + 0.2) : 0, y = st ? rnd(st.y0) : 0;   // entra a direita das que ja existem
+  lastScreens.push({ name: n + ' ' + (lastScreens.filter(t => t.name.startsWith(n)).length + 1), x, y, w, h: hh, pw, ph });
+  scrSel = lastScreens.length - 1; stgView = null; sendScreens(true); renderStage(true);
+} }));
+function stgFit(){   // enquadra as telas (com folga) na area do editor; congelado durante o arrasto
+  const el = $('#stg'), st = stageOf(lastScreens), W = el.clientWidth, H = el.clientHeight;
+  const bx = st ? st.x0 : 0, by = st ? st.y0 : 0, bw = st ? st.W : 4, bh = st ? st.H : 3, pad = Math.max(0.5, Math.max(bw, bh) * 0.15);
+  const u = Math.min(W / (bw + 2 * pad), H / (bh + 2 * pad));
+  return { u, ox: (W - bw * u) / 2 - bx * u, oy: (H - bh * u) / 2 - by * u };
+}
+function renderStage(full){
+  const el = $('#stg'); if (!el || !el.clientWidth) return;   // (sem #stg = pagina 'encerrado')
+  if (!stgView || (full && activeDrag !== 'rect')) stgView = stgFit();
+  const v = stgView, st = stageOf(lastScreens);
+  $('#stg-empty').hidden = !!lastScreens.length;
+  $('#stg-info').textContent = st ? `· canvas ${st.W.toFixed(2)}×${st.H.toFixed(2)} m · ${st.cw}×${st.ch} px` : '· sem telas (canvas = janela)';
+  const step = v.u >= 40 ? 1 : v.u >= 12 ? 5 : 10;   // grade de 1 m (ou 5/10 m se o palco for grande)
+  el.style.backgroundImage = 'linear-gradient(to right, #1a1e23 1px, transparent 1px), linear-gradient(to bottom, #1a1e23 1px, transparent 1px)';
+  el.style.backgroundSize = `${v.u * step}px ${v.u * step}px`;
+  el.style.backgroundPosition = `${v.ox}px ${v.oy}px`;
+  // elementos atualizados NO LUGAR (recriar no meio do arrasto perde o pointer capture)
+  const els = $$('.scr', el);
+  for (let i = lastScreens.length; i < els.length; i++) els[i].remove();
+  lastScreens.forEach((t, i) => {
+    let d = els[i];
+    if (!d){
+      d = h('div', { class: 'scr' }, h('b'), h('small'), h('small'), ['nw', 'ne', 'sw', 'se'].map(c => h('i', { 'data-c': c })));
+      d.onpointerdown = e => scrStart(e, d, i);
+      el.append(d);
+    }
+    Object.assign(d.style, { left: v.ox + t.x * v.u + 'px', top: v.oy + t.y * v.u + 'px', width: t.w * v.u + 'px', height: t.h * v.u + 'px' });
+    d.classList.toggle('sel', i === scrSel);
+    d.children[0].textContent = t.name; d.children[1].textContent = `${t.w}×${t.h} m`; d.children[2].textContent = `${t.pw}×${t.ph} px`;
+  });
+}
+function scrStart(e, d, i){
+  const t = lastScreens[i], el = $('#stg'), v = stgView; if (!t || !v) return;
+  if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); }
+  const others = lastScreens.filter((_, j) => j !== i), dens = [t.pw / t.w, t.ph / t.h];
+  rectDrag(e, d, { r0: [t.x, t.y, t.w, t.h], ux: v.u, uy: v.u, min: 0.05,
+    tx: others.flatMap(o => [o.x, o.x + o.w]), ty: others.flatMap(o => [o.y, o.y + o.h]),
+    move: ([x, y, w, hh], gs) => {
+      const g = 20;                                 // grade de 5 cm quando nao grudou
+      Object.assign(t, { x: gs.some(q => q[0] === 'x') ? rnd(x) : rnd(x, g), y: gs.some(q => q[0] === 'y') ? rnd(y) : rnd(y, g),
+                         w: rnd(Math.max(0.05, w), 100), h: rnd(Math.max(0.05, hh), 100) });
+      t.pw = Math.max(1, Math.round(t.w * dens[0])); t.ph = Math.max(1, Math.round(t.h * dens[1]));
+      drawGuides(el, gs, x => v.ox + x * v.u, y => v.oy + y * v.u);
+      renderStage(); renderStageList(); renderCanvas(); sendScreensLive();
+    },
+    end: () => { drawGuides(el, [], null, null); clearTimeout(scrLiveT); scrLiveT = null; sendScreens(true); renderStage(true); renderStageList(); } });
+}
+function renderStageList(){
+  const box = $('#stg-list'); if (box.contains(document.activeElement)) return;   // nao atropela quem digita
+  box.innerHTML = '';
+  lastScreens.forEach((t, i) => {
+    const num = (k, step, lbl, int) => h('label', {}, lbl, (() => {
+      const inp = h('input', { type: 'number', class: 'inp sm num', step, value: t[k] });
+      inp.onchange = () => { const x = +inp.value; if (!isFinite(x)) return; t[k] = int ? Math.max(1, Math.round(x)) : rnd(x); sendScreens(true); inp.blur(); renderStage(true); renderStageList(); renderCanvas(); };
+      return inp; })());
+    const nm = h('input', { class: 'inp sm nm', value: t.name, maxlength: 24 });
+    nm.onchange = () => { t.name = nm.value.trim() || t.name; sendScreens(true); nm.blur(); renderStage(); renderStageList(); };
+    box.append(h('div', { class: 'srow2' + (i === scrSel ? ' sel' : ''), onpointerdown: () => { if (scrSel !== i){ scrSel = i; renderStage(); } } },
+      nm, num('x', 0.05, 'x'), num('y', 0.05, 'y'), num('w', 0.05, 'larg. m'), num('h', 0.05, 'alt. m'),
+      num('pw', 1, 'px', 1), '×', num('ph', 1, '', 1),
+      h('span', { class: 'hint num', text: `${Math.round(t.pw / t.w)} px/m` }), h('span', { class: 'grow' }),
+      h('button', { class: 'btn sm', text: '⧉', title: 'duplicar (entra ao lado)', onclick: () => { lastScreens.push({ ...t, name: t.name + ' b', x: rnd(t.x + t.w) }); scrSel = lastScreens.length - 1; sendScreens(true); renderStage(true); renderStageList(); } }),
+      h('button', { class: 'x', text: '×', title: 'tirar esta tela', onclick: () => { lastScreens.splice(i, 1); scrSel = -1; sendScreens(true); renderStage(true); renderStageList(); renderCanvas(); } })));
+  });
+}
+new ResizeObserver(() => { stgView = null; renderStage(); }).observe($('#stg'));
+
+// ---- CANVAS NO PALCO (vista "Canvas" do painel da mesa): cada fonte NO AR e' um objeto no canvas
+// das telas, com a previa DEPOIS da pilha de efeitos (/frame?which=fx, native fx_pv), esticada no
+// retangulo como na saida. Arrastar move, cantos redimensionam, ima nas bordas/centro do canvas e
+// de cada tela, 2 cliques = enche a tela embaixo (sem telas: o canvas). Bandeja = fontes FORA do
+// ar: arrastar pro canvas poe no ar (soltou numa tela = enche ela); objeto solto na bandeja sai.
+// rect = [x, y, w, h] no canvas, 0..1, origem em cima (OVERLAYS[i].rect; native _rect_uv).
+let mesaView = LS.get('v2mesaView', 'mesa');
+const cvEls = {};
+function cvDims(){   // canvas em vigor: o contorno das telas, ou a janela
+  const st = stageOf(lastScreens), o = lastOutput || {};
+  return st ? [st.cw, st.ch] : [o.window_w || 16, o.window_h || 9];
+}
+function setMesaView(v){
+  mesaView = v === 'canvas' ? 'canvas' : 'mesa'; LS.set('v2mesaView', mesaView);
+  $$('#mesa-view button').forEach(b => b.classList.toggle('on', b.dataset.v === mesaView));
+  $('#mixer').hidden = mesaView === 'canvas'; $('#cvpanel').hidden = mesaView !== 'canvas';
+  $('#mesa-hint').textContent = mesaView === 'canvas'
+    ? 'arraste · cantos = tamanho (Shift = proporção) · 2 cliques = encher a tela · Alt = sem ímã'
+    : '1 = embaixo · o último fica por cima · 2 cliques no card = efeitos';
+  renderCanvas();
+}
+$$('#mesa-view button').forEach(b => b.onclick = () => setMesaView(b.dataset.v));
+const cvRect = o => (o && o.rect && o.rect.length === 4) ? o.rect.slice() : [0, 0, 1, 1];
+const r4 = v => Math.round(v * 10000) / 10000;
+function setRect(x, r){ r = r.map(r4); if (r[0] === 0 && r[1] === 0 && r[2] === 1 && r[3] === 1) delete x.rect; else x.rect = r; }
+function cvHit(ev){   // ponto do ponteiro no canvas (0..1) + a tela embaixo dele
+  const b = $('#cvs').getBoundingClientRect(), u = (ev.clientX - b.left) / b.width, v = (ev.clientY - b.top) / b.height;
+  if (!(u >= 0 && u <= 1 && v >= 0 && v <= 1)) return null;
+  const st = stageOf(lastScreens), rs = st ? st.rects : [];
+  const si = rs.findIndex(r => u >= r[0] && u <= r[0] + r[2] && v >= r[1] && v <= r[1] + r[3]);
+  return { u, v, si, scr: si >= 0 ? rs[si] : null };
+}
+const overTray = ev => { const b = $('#tray').getBoundingClientRect(); return ev.clientX >= b.left && ev.clientX <= b.right && ev.clientY >= b.top && ev.clientY <= b.bottom; };
+function hotScreen(si){ $$('#cvs .cscr').forEach(c => c.classList.toggle('hot', +c.dataset.i === si)); }
+function renderCanvas(){
+  const area = $('#cvarea'), box = $('#cvs');
+  if (mesaView !== 'canvas' || !area || !area.clientWidth) return;
+  const [cw, ch] = cvDims(), W = area.clientWidth, H = area.clientHeight, s = Math.min((W - 24) / cw, (H - 24) / ch);
+  const bw = cw * s, bh = ch * s;
+  Object.assign(box.style, { left: (W - bw) / 2 + 'px', top: (H - bh) / 2 + 'px', width: bw + 'px', height: bh + 'px' });
+  box.title = `canvas ${cw}×${ch}`;
+  // telas: contorno por cima + escurece o que cai fora delas (na saida, fora = preto)
+  const st = stageOf(lastScreens), rs = st ? st.rects : [], sig = JSON.stringify([rs, lastScreens.map(t => t.name)]);
+  if (box._scr !== sig){
+    box._scr = sig; $$('.cscr, .cvmask', box).forEach(x => x.remove());
+    if (rs.length){
+      const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'), path = document.createElementNS(NS, 'path');
+      svg.setAttribute('class', 'cvmask'); svg.setAttribute('viewBox', '0 0 1 1'); svg.setAttribute('preserveAspectRatio', 'none');
+      path.setAttribute('fill-rule', 'evenodd'); path.setAttribute('fill', 'rgba(0,0,0,.72)');
+      path.setAttribute('d', 'M0 0H1V1H0Z ' + rs.map(([x, y, w, hh]) => `M${x} ${y}h${w}v${hh}h${-w}Z`).join(' '));
+      svg.append(path); box.append(svg);
+      rs.forEach(([x, y, w, hh], i) => box.append(h('div', { class: 'cscr', 'data-i': i, style: `left:${x * 100}%;top:${y * 100}%;width:${w * 100}%;height:${hh * 100}%` }, h('span', { text: lastScreens[i].name }))));
+    }
+  }
+  const on = mixStrips().filter(x => !x.off), keys = on.map(chKey);
+  for (const kk of Object.keys(cvEls)) if (!keys.includes(kk)){ cvEls[kk].remove(); delete cvEls[kk]; }
+  on.forEach((x, i) => {
+    const key = chKey(x);
+    let el = cvEls[key];
+    if (!el){
+      const img = h('img', { alt: '', draggable: 'false' }), cv = h('canvas');
+      img.onerror = () => img.remove(); img.src = thumbSrc(x.file, _isLiveKey(x.file));
+      addPreview(cv, '/frame?which=fx&src=' + encodeURIComponent(key), 10, 'palco');
+      el = cvEls[key] = h('div', { class: 'cobj' }, img, cv, h('b'), ['nw', 'ne', 'sw', 'se'].map(c => h('i', { 'data-c': c })));
+      el.onpointerdown = e => cvStart(e, key);
+      el.ondblclick = e => {
+        const y = lastOverlays.find(z => chKey(z) === key), hit = cvHit(e); if (!y) return;
+        if (hit && hit.scr) setRect(y, hit.scr); else delete y.rect;
+        sendOverlays(true); renderCanvas();
+      };
+      box.append(el);
+    }
+    const [rx, ry, rw, rh] = cvRect(x), sel = key === lastSelected;
+    Object.assign(el.style, { left: rx * 100 + '%', top: ry * 100 + '%', width: rw * 100 + '%', height: rh * 100 + '%', zIndex: sel ? 99 : i + 1 });
+    el.classList.toggle('sel', sel);
+    const lbl = posLabel(i + 1) + ' · ' + srcInfo(key).name + (stackOf(key).length ? ` · ${stackOf(key).length} fx` : '');
+    if (el.children[2].textContent !== lbl) el.children[2].textContent = lbl;
+  });
+  renderTray(); renderObjList(on);
+}
+// LISTA DE OBJETOS (estilo OBS): de cima (frente) pra baixo. Clique = seleciona (a selecionada vem
+// pra frente no canvas, mesmo embaixo de outra); passar o mouse acende o objeto; ⛶ = canvas inteiro.
+function renderObjList(on){
+  const box = $('#objlist');
+  const sig = JSON.stringify([on.map(o => [chKey(o), !!o.rect, stackOf(chKey(o)).length]), lastSelected, perform, mixKeys.family]);
+  if (box._sig === sig) return;
+  box._sig = sig; box.innerHTML = '';
+  box.append(h('div', { class: 'oh', text: 'OBJETOS · frente → fundo' }));
+  if (!on.length) box.append(h('div', { class: 'empty', text: 'nada no ar — arraste da bandeja' }));
+  on.map((o, i) => [o, i]).reverse().forEach(([o, i]) => {
+    const key = chKey(o), n = stackOf(key).length;
+    const row = h('div', { class: 'orow' + (key === lastSelected ? ' sel' : ''), title: srcInfo(key).name + (n ? ` · ${n} efeito(s)` : '') },
+      h('span', { class: 'pos', text: posLabel(i + 1) }), h('span', { class: 'on', text: srcInfo(key).name + (n ? ` · ${n} fx` : '') }),
+      o.rect ? h('button', { text: '⛶', title: 'encher o canvas', onclick: e => { e.stopPropagation(); const x = lastOverlays.find(z => chKey(z) === key); if (x){ delete x.rect; sendOverlays(true); renderCanvas(); } } }) : null,
+      perform ? null : h('button', { text: '↑', title: 'pra frente', onclick: e => { e.stopPropagation(); const v = on.map(chKey); if (i < v.length - 1) moveSource(key, v[i + 1]); } }),
+      perform ? null : h('button', { text: '↓', title: 'pra trás', onclick: e => { e.stopPropagation(); const v = on.map(chKey); if (i > 0) moveSource(key, v[i - 1]); } }));
+    row.onclick = () => { if (key !== lastSelected) selectSource(key); };
+    row.onmouseenter = () => cvEls[key] && cvEls[key].classList.add('hl');
+    row.onmouseleave = () => cvEls[key] && cvEls[key].classList.remove('hl');
+    box.append(row);
+  });
+}
+const _isLiveKey = f => /^(webcam|screen):/.test(f);
+function renderTray(){
+  const tray = $('#tray'), off = mixStrips().filter(x => x.off);
+  const sig = JSON.stringify([off.map(chKey), perform, lastMedia.length, lastVideoInputs.length]);
+  if (tray._sig === sig) return;
+  tray._sig = sig; tray.innerHTML = '';
+  for (const x of off){
+    const key = chKey(x), img = h('img', { alt: '', draggable: 'false' });
+    img.onerror = () => img.remove(); img.src = thumbSrc(x.file);
+    const c = h('div', { class: 'tcard', title: srcInfo(key).name + ' — arraste pro canvas' }, img, h('span', { text: srcInfo(key).name }));
+    c.onpointerdown = e => trayDrag(e, key, c);
+    tray.append(c);
+  }
+  if (!off.length) tray.append(h('div', { class: 'empty', text: 'todas as fontes da mesa estão no ar — arraste um objeto pra cá pra tirar' }));
+  if (!perform) tray.append(addSourceEl(mixStrips()));
+}
+function trayDrag(e, key, card){
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const g = card.cloneNode(true), w = card.offsetWidth, hh = card.offsetHeight;
+  g.classList.add('dghost'); Object.assign(g.style, { width: w + 'px', height: hh + 'px' }); document.body.append(g);
+  activeDrag = 'tray';
+  const pos = ev => {
+    g.style.left = ev.clientX - w / 2 + 'px'; g.style.top = ev.clientY - hh / 2 + 'px';
+    const hit = cvHit(ev); $('#cvs').classList.toggle('drop', !!hit); hotScreen(hit ? hit.si : -1);
+  };
+  pos(e);
+  const up = ev => {
+    window.removeEventListener('pointermove', pos); window.removeEventListener('pointerup', up);
+    g.remove(); activeDrag = ''; $('#cvs').classList.remove('drop'); hotScreen(-1);
+    const hit = cvHit(ev), x = lastOverlays.find(z => chKey(z) === key);
+    if (!hit || !x) return;
+    if (hit.scr) setRect(x, hit.scr);                        // caiu numa tela: enche ela
+    else if (x.rect || lastScreens.length){                  // fora das telas: centra o tamanho que tinha
+      const [, , rw, rh] = x.rect ? x.rect : [0, 0, 0.4, 0.4];
+      setRect(x, [hit.u - rw / 2, hit.v - rh / 2, rw, rh]);
+    }
+    delete x.off; sendOverlays(true); selectSource(key);
+  };
+  window.addEventListener('pointermove', pos); window.addEventListener('pointerup', up);
+}
+new ResizeObserver(() => renderCanvas()).observe($('#cvarea'));
+function cvStart(e, key){
+  const x = lastOverlays.find(z => chKey(z) === key); if (!x || e.button !== 0) return;
+  if (key !== lastSelected) selectSource(key);
+  const box = $('#cvs'), bw = box.clientWidth, bh = box.clientHeight, st = stageOf(lastScreens), rs = st ? st.rects : [];
+  const r0 = cvRect(x), had = !!x.rect;
+  rectDrag(e, cvEls[key], { r0, ux: bw, uy: bh,
+    tx: [0, 0.5, 1, ...rs.flatMap(r => [r[0], r[0] + r[2] / 2, r[0] + r[2]])], ty: [0, 0.5, 1, ...rs.flatMap(r => [r[1], r[1] + r[3] / 2, r[1] + r[3]])],
+    move: (r, gs, ev) => {
+      const y = lastOverlays.find(z => chKey(z) === key); if (!y) return;
+      $('#tray').classList.toggle('over', overTray(ev));
+      setRect(y, r);
+      drawGuides(box, gs, t => t * bw, t => t * bh); renderCanvas(); sendOverlaysLive();
+    },
+    end: ev => {
+      drawGuides(box, [], null, null);
+      const y = lastOverlays.find(z => chKey(z) === key);
+      if (y && ev && overTray(ev)){                          // solto na bandeja: sai do ar (lugar de antes lembrado)
+        if (had) y.rect = r0; else delete y.rect;
+        y.off = 1;
+      }
+      $('#tray').classList.remove('over');
+      sendOverlays(true); remix();
+    } });
+}
+setMesaView(mesaView);
+
 // =====================================================================================
 // TOPO: medidores + status
 // =====================================================================================
@@ -1400,7 +1772,7 @@ function renderMixer(){
   strips.forEach((o, i) => box.append(stripEl(o, i)));
   box.append(addSourceEl(strips));
   if (!strips.length) box.prepend(h('div', { class: 'empty', style: 'padding:20px', text: 'Mesa vazia — escolha uma fonte →' }));
-  renderInspector(); renderKeys(); paintMidiMarks();
+  renderInspector(); renderKeys(); paintMidiMarks(); renderCanvas();
 }
 function stripEl(o, i){
   const key = chKey(o), info = srcInfo(key), sel = key === lastSelected, fxOn = sel && mixMode === 'fx';
@@ -2544,13 +2916,16 @@ function process(stateOnly){
   if (d.output_grade && now() - gradeTouched > TOUCH_MS && !activeDrag.startsWith('grade:') && activeDrag !== 'master'){ lastGrade = d.output_grade; syncGrade(); }
   if (d.scene_grade && now() - sgTouched > TOUCH_MS && !activeDrag.startsWith('sgrade:') && JSON.stringify(d.scene_grade) !== JSON.stringify(lastSGrade)){ lastSGrade = d.scene_grade; syncSGrade(); }
   if (d.output_fps && now() - fpsTouched > TOUCH_MS && d.output_fps !== outFps){ outFps = d.output_fps; renderFpsSeg(); }
+  if (d.output && d.output.window_w) lastOutput = d.output;   // o canvas do Palco precisa da janela em qualquer aba
+  if (d.screens && now() - scrTouched > TOUCH_MS && activeDrag !== 'rect' && JSON.stringify(d.screens) !== JSON.stringify(lastScreens)){
+    lastScreens = d.screens; if (scrSel >= lastScreens.length) scrSel = -1; stgView = null; renderStage(true); renderStageList(); renderCanvas(); }
   syncKnobs(d.knobs); syncDyn(d.band_tweaks);
   if (d.inputs && d.inputs.audio && now() - selTouched.audio >= TOUCH_MS){ const s = $('#sel-audio'); if (s.value !== d.inputs.audio && [...s.options].some(o => o.value === d.inputs.audio)) s.value = d.inputs.audio; }
   renderMixer();   // em qualquer aba: registra os controles da mesa pro MIDI (so' refaz se a estrutura mudou)
   if (stateOnly) return;
   renderTop(d);
   const tab = curTab;
-  if (tab === 'palco') syncMixer();
+  if (tab === 'palco'){ syncMixer(); if (activeDrag !== 'rect') renderCanvas(); }
   else if (tab === 'audio'){
     const a = d.audio || {};
     renderLevels(a); if (a.spectrum) setSpec(a.spectrum);

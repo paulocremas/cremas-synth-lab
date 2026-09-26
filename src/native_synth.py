@@ -52,6 +52,10 @@ DASH_EVERY_N_CHUNKS = 2   # analise de imagem pro dash a cada 2 chunks de audio 
 
 WIDTH, HEIGHT = 640, 480  # resolucao do conteudo (textura); recalculada no --screen
 WIN_W, WIN_H = WIDTH, HEIGHT  # resolucao da janela; recalculada no --fullscreen
+# CANVAS = o contorno das TELAS do palco fisico (tuning.SCREENS, dash v2 > Saida; ver _stage),
+# encaixado na janela com barras. FIT_W:FIT_H = o aspecto que o 'fit' das fontes mira (o do canvas;
+# sem telas, o da janela) — recalculado a cada frame no main
+FIT_W, FIT_H = WIN_W, WIN_H
 FRAME_SIZE = WIDTH * HEIGHT * 3  # rgb24
 SIM_W, SIM_H = WIDTH // 4, HEIGHT // 4  # grade da simulacao de fumaca — Jacobi nao precisa de
 # resolucao de tela, so de mais iteracoes; recalculada junto com WIDTH/HEIGHT em main()
@@ -728,16 +732,63 @@ def _bounce_source(path):
     return path
 
 
+MAX_SCREENS = 16   # = tamanho do u_scr[] no LAYER_BLEND_SRC
+
+
+def _stage(screens, win_w, win_h):
+    """Telas do palco fisico (tuning.SCREENS = [{name, x, y, w, h (metros, origem em cima a
+    esquerda), pw, ph (pixels do painel)}]) -> (cw, ch, rects). O CANVAS e' o retangulo que envolve
+    todas; a resolucao dele usa a MAIOR densidade (px/m) entre as telas (ate 8192). rects = cada
+    tela no canvas (0..1, origem em cima). Sem telas: o canvas e' a janela, sem recorte."""
+    scr = []
+    for t in screens or []:
+        try:
+            x, y, w, h = (float(t[k]) for k in ('x', 'y', 'w', 'h'))
+            pw, ph = int(t.get('pw') or 0), int(t.get('ph') or 0)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        if w > 0 and h > 0:
+            scr.append((x, y, w, h, pw, ph))
+    scr = scr[:MAX_SCREENS]
+    if not scr:
+        return win_w, win_h, []
+    x0, y0 = min(t[0] for t in scr), min(t[1] for t in scr)
+    W = max(t[0] + t[2] for t in scr) - x0
+    H = max(t[1] + t[3] for t in scr) - y0
+    dens = max(max(t[4] / t[2], t[5] / t[3]) for t in scr) or 100.0
+    k = min(dens, 8192 / W, 8192 / H)
+    return (max(16, int(round(W * k))), max(16, int(round(H * k))),
+            [((t[0] - x0) / W, (t[1] - y0) / H, t[2] / W, t[3] / H) for t in scr])
+
+
+def _canvas_box(win_w, win_h, cw, ch):
+    """Onde o canvas cw x ch cai na janela, ENCAIXADO (barras pretas no que sobra), em uv da
+    janela com origem EMBAIXO (gl_FragCoord / u_res): (x, y, w, h)."""
+    if not (win_w and win_h and cw and ch):
+        return (0.0, 0.0, 1.0, 1.0)
+    k = (cw / ch) / (win_w / win_h)
+    return ((1 - k) / 2, 0.0, k, 1.0) if k < 1 else (0.0, (1 - 1 / k) / 2, 1.0, 1 / k)
+
+
+def _rect_uv(rect, box):
+    """rect de um canal (OVERLAYS[i]['rect'] = [x, y, w, h] no canvas, 0..1, origem EM CIMA como
+    no dash; ausente = canvas inteiro) -> uv da janela (origem embaixo) dentro de `box`."""
+    x, y, w, h = rect if rect and len(rect) == 4 else (0.0, 0.0, 1.0, 1.0)
+    bx, by, bw, bh = box
+    return (bx + x * bw, by + (1 - y - h) * bh, max(1e-4, w * bw), max(1e-4, h * bh))
+
+
 def _fit_vf(fit, src_w=0, src_h=0, pad='black'):
     """-vf de uma fonte (camera, tela ou midia) no OUTPUT: 'fill' (preencher) = ESTICA pra
     cobrir a saida inteira (pode distorcer); 'fit' = ENCAIXA inteira sem distorcer, com margens
-    pretas. O 'fit' corrige o aspecto da JANELA (WIN_W:WIN_H), nao so o da textura WIDTHxHEIGHT:
-    o shader depois estica a textura pra janela, entao a correcao antecipa esse esticao. Sem as
+    pretas. O 'fit' corrige o aspecto do CANVAS (FIT_W:FIT_H; sem canvas = a janela), nao so o da
+    textura WIDTHxHEIGHT: a saida depois estica a textura pro canvas, entao a correcao antecipa
+    esse esticao (objeto redimensionado fora do aspecto do canvas estica junto). Sem as
     dims da fonte (src_w/h=0) cai no estica."""
-    if fit != 'fit' or not (src_w and src_h and WIN_W and WIN_H):
+    if fit != 'fit' or not (src_w and src_h and FIT_W and FIT_H):
         return f'scale={WIDTH}:{HEIGHT},setsar=1'
     ta = WIDTH / HEIGHT
-    r = (src_w / src_h) * ta / (WIN_W / WIN_H)   # aspecto alvo DENTRO da textura
+    r = (src_w / src_h) * ta / (FIT_W / FIT_H)   # aspecto alvo DENTRO da textura
     tw, th = (WIDTH, WIDTH / r) if r >= ta else (HEIGHT * r, HEIGHT)
     tw, th = int(round(tw)), int(round(th))
     return f'scale={tw}:{th},pad={WIDTH}:{HEIGHT}:({WIDTH}-{tw})/2:({HEIGHT}-{th})/2:{pad},setsar=1'
@@ -832,7 +883,7 @@ def _decode_still(v):
     (arquivo, fit, tamanho da janela): o -vf depende do aspecto da janela (ver _fit_vf). Decodifica
     em RGBA: se a imagem tem transparencia (PNG/WebP/GIF), o alpha vai pro _still_alpha e a saida
     mistura por pixel (as margens do 'fit' tambem ficam transparentes)."""
-    key = (v['path'], v.get('fit', 'fill'), WIN_W, WIN_H)
+    key = (v['path'], v.get('fit', 'fill'), FIT_W, FIT_H)
     arr = _still_cache.get(key)
     if arr is None:
         vf = 'format=rgba,' + _fit_vf(v.get('fit', 'fill'), *(_probe_dims(v['path']) or (0, 0)), pad='black@0')
@@ -931,7 +982,7 @@ def _desired_pool():
 
 def _sync_pool():
     """Alinha _pool com _desired_pool() no tamanho de janela atual. Idempotente."""
-    win = (WIN_W, WIN_H)
+    win = (FIT_W, FIT_H)
     want = _desired_pool()
     want_paths = {p for p, _ in want}
     for path, e in list(_pool.items()):
@@ -994,7 +1045,7 @@ def _overlay_items(chans=False):
 
 def _sync_overlays():
     """Alinha _ovl com as camadas atuais (idempotente) e aquece o cache das imagens."""
-    win = (WIN_W, WIN_H)
+    win = (FIT_W, FIT_H)
     want = {}
     apath = _audio_media()
     for m, _ in _overlay_items():
@@ -1077,6 +1128,9 @@ def _preview_frame(which, key='', max_w=320):
     if which == 'out':
         state['out_want'] = time.time()
         return state.get('out_small')
+    if which == 'fx':                          # canal da mesa DEPOIS da pilha de efeitos (key = chave do canal)
+        state.setdefault('fx_want', {})[key] = time.time()
+        return (state.get('fx_small') or {}).get(key)
     if which == 'comp':                        # mistura crua das fontes NO AR (so' opacidade/alpha, sem efeitos)
         f = state.get('frame_comp')
         if f is None:
@@ -1125,7 +1179,7 @@ def _composite(frames):
 def _overlay_alpha(m):
     """alpha de uma camada de MIDIA (so imagem com transparencia; None = opaca)."""
     v = _media_v(m)
-    return None if v['media_kind'] == 'video' else _still_alpha.get((v['path'], v['fit'], WIN_W, WIN_H))
+    return None if v['media_kind'] == 'video' else _still_alpha.get((v['path'], v['fit'], FIT_W, FIT_H))
 
 
 def _overlay_frame(m):
@@ -1135,7 +1189,7 @@ def _overlay_frame(m):
         e = _ovl.get(v['path']) or _pool.get(v['path'])
         f = e['frame'] if e else None
     else:
-        f = _still_cache.get((v['path'], v['fit'], WIN_W, WIN_H))
+        f = _still_cache.get((v['path'], v['fit'], FIT_W, FIT_H))
     return f if f is not None and len(f) == FRAME_SIZE else None
 
 
@@ -1156,7 +1210,7 @@ def video_thread(mode, region=None, device='/dev/video0'):
     state['video_label'] = _video_label(state['video'])
     state['video_id'] = _video_id(state['video'])
     cur = dict(state['video'])
-    cur_win = (WIN_W, WIN_H)
+    cur_win = (FIT_W, FIT_H)
     pool_sig = None
     ovl_sig = None
     proc = None
@@ -1186,7 +1240,7 @@ def video_thread(mode, region=None, device='/dev/video0'):
     try:
         while running:
             # pool: reconstroi quando muda set / lista de video / tamanho de janela / os flags
-            sig = (getattr(tuning, 'MEDIA_SET', 'default'), (WIN_W, WIN_H),
+            sig = (getattr(tuning, 'MEDIA_SET', 'default'), (FIT_W, FIT_H),
                    getattr(tuning, 'VIDEO_POOL', 0), getattr(tuning, 'VIDEO_POOL_MAX', 4),
                    tuple((m.get('file', ''), m.get('fit'), bool(m.get('bounce')))
                          for m in getattr(tuning, 'MEDIA', []) if m.get('kind') == 'video'))
@@ -1206,7 +1260,7 @@ def video_thread(mode, region=None, device='/dev/video0'):
                     proc = None
                 _sync_overlays()
 
-            win_moved = (cur.get('mode') == 'media' or cur.get('fit') == 'fit') and (WIN_W, WIN_H) != cur_win
+            win_moved = (cur.get('mode') == 'media' or cur.get('fit') == 'fit') and (FIT_W, FIT_H) != cur_win
 
             if state['video'] != cur:
                 newcur = dict(state['video'])
@@ -1231,13 +1285,13 @@ def video_thread(mode, region=None, device='/dev/video0'):
                     if first is not None:
                         state['frame'] = first
                 cur = newcur
-                cur_win = (WIN_W, WIN_H)
+                cur_win = (FIT_W, FIT_H)
                 _labels(cur)
                 print('video: fonte ->', _video_label(cur))
                 continue
 
             if win_moved:                                     # so o -vf mudou (aspecto da janela)
-                cur_win = (WIN_W, WIN_H)
+                cur_win = (FIT_W, FIT_H)
                 if _is_still(cur):
                     _apply_still(cur)
                 elif _pooled(cur):
@@ -2301,6 +2355,8 @@ def build_sim_programs():
 # textura propria e misturada com o acumulado (base) aqui, com opacidade u_a e modo u_mode —
 # indice de dash_server.LAYER_BLENDS: 0 normal, 1 soma, 2 tela, 3 multiplicar, 4 clarear.
 # Modo 0 com a=1 = copia simples de u_layer (blit final na tela; com u_flip, a fonte crua).
+# u_rect/u_clip/u_scr: so' a entrada da FONTE na saida usa (objeto no canvas, recortado nas telas);
+# o resto passa FULL_UV e u_nscr = 0.
 LAYER_BLEND_SRC = """
 #ifdef GL_ES
 precision mediump float;
@@ -2313,12 +2369,28 @@ uniform int u_mode;
 uniform int u_flip;   // 1 = u_layer e' a fonte CRUA (textura topo->baixo, como os presets leem)
 uniform sampler2D u_mask;   // alpha da fonte (imagem com transparencia), topo->baixo como a crua
 uniform int u_use_mask;
+uniform vec4 u_rect;   // onde u_layer entra na tela (uv da janela, origem embaixo): x, y, w, h
+uniform vec4 u_clip;   // o CANVAS na janela: fora dele a camada nao aparece (barras ficam na base)
+uniform int u_nscr;    // telas do palco (uv da janela): com telas, a camada so' aparece DENTRO delas
+uniform vec4 u_scr[16];
 void main() {
     vec2 uv = gl_FragCoord.xy / u_res;
+    vec2 lu = (uv - u_rect.xy) / u_rect.zw;
     float a = u_a;
-    if (u_use_mask == 1) a *= texture2D(u_mask, vec2(uv.x, 1.0 - uv.y)).r;
+    if (any(lessThan(lu, vec2(0.0))) || any(greaterThan(lu, vec2(1.0))) ||
+        any(lessThan(uv, u_clip.xy)) || any(greaterThan(uv, u_clip.xy + u_clip.zw))) a = 0.0;
+    if (u_nscr > 0) {
+        float in_ = 0.0;
+        for (int i = 0; i < 16; i++) {
+            if (i >= u_nscr) break;
+            vec4 r = u_scr[i];
+            if (all(greaterThanEqual(uv, r.xy)) && all(lessThanEqual(uv, r.xy + r.zw))) in_ = 1.0;
+        }
+        a *= in_;
+    }
+    if (u_use_mask == 1) a *= texture2D(u_mask, vec2(lu.x, 1.0 - lu.y)).r;
     vec3 b = texture2D(u_base, uv).rgb;
-    vec3 l = texture2D(u_layer, u_flip == 1 ? vec2(uv.x, 1.0 - uv.y) : uv).rgb;
+    vec3 l = texture2D(u_layer, u_flip == 1 ? vec2(lu.x, 1.0 - lu.y) : lu).rgb;
     vec3 m = l;
     if (u_mode == 1) m = min(b + l, 1.0);
     else if (u_mode == 2) m = 1.0 - (1.0 - b) * (1.0 - l);
@@ -2328,16 +2400,20 @@ void main() {
 }
 """
 LAYER_BLEND_UNIT_BASE, LAYER_BLEND_UNIT_LAYER, LAYER_BLEND_UNIT_MASK = 5, 6, 7   # fora das do preset (0..4)
+FULL_UV = (0.0, 0.0, 1.0, 1.0)
 
 
 def build_layer_blend_program():
     p = build_program(LAYER_BLEND_SRC)
     _use_basic(p)
-    u = _locs(p, 'u_res', 'u_base', 'u_layer', 'u_a', 'u_mode', 'u_flip', 'u_mask', 'u_use_mask')
+    u = _locs(p, 'u_res', 'u_base', 'u_layer', 'u_a', 'u_mode', 'u_flip', 'u_mask', 'u_use_mask', 'u_rect', 'u_clip', 'u_nscr', 'u_scr')
     glUniform1i(u['u_base'], LAYER_BLEND_UNIT_BASE)
     glUniform1i(u['u_layer'], LAYER_BLEND_UNIT_LAYER)
     glUniform1i(u['u_mask'], LAYER_BLEND_UNIT_MASK)
     glUniform1i(u['u_use_mask'], 0)
+    glUniform4f(u['u_rect'], *FULL_UV)
+    glUniform4f(u['u_clip'], *FULL_UV)
+    glUniform1i(u['u_nscr'], 0)
     return p, u
 
 
@@ -2370,7 +2446,7 @@ def build_fumaca_program():
 
 
 def main():
-    global running, WIDTH, HEIGHT, WIN_W, WIN_H, FRAME_SIZE, SIM_W, SIM_H
+    global running, WIDTH, HEIGHT, WIN_W, WIN_H, FIT_W, FIT_H, FRAME_SIZE, SIM_W, SIM_H
 
     def handle_sigterm(signum, frame):
         # SIGTERM (ex. o watch_synth.sh reiniciando o processo) nao roda blocos "finally"
@@ -2645,6 +2721,10 @@ def main():
     out_an_t = [0.0]
     out_pv_t = [0.0]
     out_pv = {'fbo': None, 'tex': None, 'wh': None}
+    # previa de cada FONTE JA COM OS EFEITOS (canvas do Palco v2: GET /frame?which=fx): a textura
+    # da fonte depois da pilha (lt['src']) reduzida por blit, so' das pedidas (state['fx_want'])
+    FX_PV_HZ, FX_PV_W = 10, 240
+    fx_pv = {'fbo': None, 'tex': None, 'wh': None, 't': {}}
     # textura POR FONTE: so' sobe (glTexSubImage2D) quando o frame da fonte e' OUTRO objeto —
     # camera/video chegam a ~30 fps, a saida roda a 60: sem isso metade dos uploads e' repetida.
     # Guarda o proprio frame (nao id()) pra o endereco nao ser reusado por outro array.
@@ -2696,11 +2776,14 @@ def main():
             ltargets[0] = None           # FBO/texturas das camadas eram do contexto velho
             src_tex.clear()              # texturas por fonte idem (sem glDelete: o contexto ja foi)
             out_pv['wh'] = None          # FBO da previa da saida idem
+            fx_pv.update(fbo=None, tex=None, wh=None)
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
             scene_tr = None              # o snapshot (ltargets 'from') era do contexto velho
             state['output'].update(mode=out_mode, window_w=WIN_W, window_h=WIN_H, pos=list(out_pos),
                                     monitor=out_cfg['monitor'], fullscreen=out_cfg['fullscreen'])
 
+        FIT_W, FIT_H, scr_rects = _stage(getattr(tuning, 'SCREENS', None), WIN_W, WIN_H)   # o 'fit' mira o canvas
+        state['output']['canvas'] = [FIT_W, FIT_H]
         src_frames = _source_frames()             # fontes MARCADAS com frame pronto (a saida)
         # mistura na CPU (so' pra fumaca / analise / cor dominante): refeita so' se alguma fonte
         # trouxe frame novo (ou mudou opacidade/alpha/ordem). Igual = mesma tex/tex_prev de antes,
@@ -2868,10 +2951,15 @@ def main():
             scene_tr = None
         lt = layer_targets()
 
-        def blend_into(dst, base, layer, a, mode, flip=0, mask=0):
+        def blend_into(dst, base, layer, a, mode, flip=0, mask=0, rect=FULL_UV, clip=FULL_UV, scr=()):
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0)
             _use_basic(blend_prog)
             glUniform2f(blend_u['u_res'], WIN_W, WIN_H)
+            glUniform4f(blend_u['u_rect'], *rect)
+            glUniform4f(blend_u['u_clip'], *clip)
+            glUniform1i(blend_u['u_nscr'], len(scr))
+            if scr:
+                glUniform4fv(blend_u['u_scr'], len(scr), np.array(scr, np.float32).ravel())
             glUniform1f(blend_u['u_a'], a)
             glUniform1i(blend_u['u_mode'], mode)
             glUniform1i(blend_u['u_flip'], flip)
@@ -2889,6 +2977,9 @@ def main():
         bindings = state.get('bindings') or {}
         sh_avail = (state.get('pool') or {}).get('shaders')   # disponiveis no set (None = todos)
         src_blend = {_chkey(o): o.get('blend') for o in state.get('overlays') or []}
+        src_rect = {_chkey(o): o.get('rect') for o in state.get('overlays') or []}
+        cbox = _canvas_box(WIN_W, WIN_H, FIT_W, FIT_H)   # canvas encaixado na janela (barras fora)
+        scr_uv = [_rect_uv(r, cbox) for r in scr_rects]   # telas na janela: fora delas fica preto
         for k in [k for k in src_tex if k not in {x[0] for x in src_frames}]:
             glDeleteTextures([src_tex.pop(k)[0]])       # canal saiu da saida: libera a textura
         for key, src_a, frame in src_frames:
@@ -2929,6 +3020,34 @@ def main():
                 mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
                 blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode)
                 si = 1 - si
+            fx_want = state.get('fx_want') or {}
+            if time.time() - fx_want.get(key, 0) < 1.5 and time.perf_counter() - fx_pv['t'].get(key, 0) >= 1.0 / FX_PV_HZ:
+                fx_pv['t'][key] = time.perf_counter()
+                try:
+                    pw = min(FX_PV_W, WIN_W)
+                    ph = max(2, int(round(pw * WIN_H / max(1, WIN_W))))
+                    if fx_pv['wh'] != (pw, ph):
+                        if fx_pv['fbo'] is None:
+                            fx_pv['fbo'], fx_pv['tex'] = glGenFramebuffers(1), glGenTextures(1)
+                        glBindTexture(GL_TEXTURE_2D, fx_pv['tex'])
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, pw, ph, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
+                        glBindFramebuffer(GL_FRAMEBUFFER, fx_pv['fbo'])
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fx_pv['tex'], 0)
+                        fx_pv['wh'] = (pw, ph)
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['src'][si], 0)
+                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fx_pv['fbo'])
+                    glBlitFramebuffer(0, 0, WIN_W, WIN_H, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, fx_pv['fbo'])
+                    glPixelStorei(GL_PACK_ALIGNMENT, 1)
+                    buf = glReadPixels(0, 0, pw, ph, GL_RGB, GL_UNSIGNED_BYTE)
+                    a = np.ascontiguousarray(np.frombuffer(buf, dtype=np.uint8).reshape(ph, pw, 3)[::-1])
+                    state.setdefault('fx_small', {})[key] = (a.tobytes(), pw, ph)
+                except Exception as e:                  # sem blit: fica sem previa com efeito (o dash cai na crua)
+                    if not fx_pv.get('warned'):
+                        print('previa com efeitos indisponivel ->', e)
+                        fx_pv['warned'] = True
+                glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
             sm = src_blend.get(key)                     # modo da FONTE sobre as de baixo (normal = cobre)
             sm = dash_server.LAYER_BLENDS.index(sm) if sm in dash_server.LAYER_BLENDS else 0
             al = _alpha_now.get(key)                    # imagem com transparencia: so' onde e' opaca
@@ -2939,7 +3058,7 @@ def main():
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, al)
             blend_into(lt['out'][1 - oi], lt['out'][oi], lt['src'][si], min(1.0, src_a), sm,
-                       mask=int(al is not None))
+                       mask=int(al is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
             oi = 1 - oi
         # IMAGEM DA CENA (tuning.SCENE_GRADE = campo 'grade' do set ativo; knobs no Palco do v2):
         # o mesmo calibrar.frag, mas na MISTURA da cena -> vem antes da transicao (o `from` ja
@@ -3000,6 +3119,9 @@ def main():
             glUniform1i(blend_u['u_mode'], 0)
             glUniform1i(blend_u['u_flip'], 0)
             glUniform1i(blend_u['u_use_mask'], 0)
+            glUniform4f(blend_u['u_rect'], *FULL_UV)
+            glUniform4f(blend_u['u_clip'], *FULL_UV)
+            glUniform1i(blend_u['u_nscr'], 0)
             glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
             glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
             glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_LAYER)
@@ -3123,6 +3245,20 @@ def main():
 def _selfcheck():
     """Sem GL: so o cache de imagem parada. Precisa do ffmpeg (dep do app de qualquer jeito)."""
     import tempfile
+    # canvas encaixado na janela: 16:9 numa janela 4:3 = barras em cima/embaixo; 4:3 em 16:9 = dos lados
+    ok = lambda a, b: all(abs(x - y) < 1e-6 for x, y in zip(a, b))
+    assert ok(_canvas_box(1600, 900, 1920, 1080), FULL_UV)
+    assert ok(_canvas_box(800, 600, 1600, 900), (0, 0.125, 1, 0.75))
+    assert ok(_canvas_box(1600, 900, 800, 600), (0.125, 0, 0.75, 1))
+    assert ok(_rect_uv(None, (0.125, 0, 0.75, 1)), (0.125, 0, 0.75, 1))
+    # telas: portal = 2 colunas 1x4 m (256x1024) + faixa 4x1 m (1024x256) em cima -> canvas 4x5 m
+    arco = [{'x': 0, 'y': 1, 'w': 1, 'h': 4, 'pw': 256, 'ph': 1024}, {'x': 3, 'y': 1, 'w': 1, 'h': 4, 'pw': 256, 'ph': 1024},
+            {'x': 0, 'y': 0, 'w': 4, 'h': 1, 'pw': 1024, 'ph': 256}, {'x': 'ruim'}]
+    cw, ch, rs = _stage(arco, 800, 600)
+    assert (cw, ch) == (1024, 1280) and len(rs) == 3, (cw, ch, rs)
+    assert ok(rs[1], (0.75, 0.2, 0.25, 0.8)) and ok(rs[2], (0, 0, 1, 0.2))
+    assert _stage([], 800, 600) == (800, 600, [])
+    assert ok(_rect_uv([0.5, 0, 0.5, 0.5], FULL_UV), (0.5, 0.5, 0.5, 0.5))   # canto de CIMA a direita
     p = os.path.join(tempfile.mkdtemp(), 't.png')
     subprocess.run(['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=320x240',
                     '-frames:v', '1', p], check=True)
@@ -3188,7 +3324,7 @@ def _selfcheck():
                    {'name': 'v', 'file': 'default/v.mp4', 'kind': 'video'},
                    {'name': 'c', 'file': 'S2/c.png', 'kind': 'image'}]
     tuning.MEDIA_SET = 'default'
-    key = lambda f: (os.path.join(MEDIA_DIR, f), 'fill', WIN_W, WIN_H)
+    key = lambda f: (os.path.join(MEDIA_DIR, f), 'fill', FIT_W, FIT_H)
     _still_cache[key('default/a.png')] = np.full(FRAME_SIZE, 200, np.uint8)
     _still_cache[key('default/b.png')] = np.full(FRAME_SIZE, 0, np.uint8)
     _still_cache[key('S2/c.png')] = np.full(FRAME_SIZE, 255, np.uint8)
