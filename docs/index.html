@@ -697,7 +697,7 @@ o loop atrasa, os frames do meio são sobrescritos e perdidos. No modo <code>--w
 (<code>_ovl</code>) ou saem do pool/cache abaixo; a selecionada, se também marcada, reaproveita
 <code>state['frame']</code> (v4l2 é exclusivo). O <code>-vf</code> de cada fonte vem de
 <code>_fit_vf</code>: <b>preencher</b> estica pra cobrir a saída, <b>encaixar</b> mantém o aspecto
-com margens pretas (ciente do aspecto da janela).</p>
+com margens pretas (ciente do aspecto do <b>canvas</b> — <code>FIT_W:FIT_H</code>; sem telas, o da janela).</p>
 <p><b>Troca de fonte rápida</b>: imagem parada da biblioteca vem do
 <code>_still_cache</code> (1 decode, depois só troca o ponteiro — sem <code>ffmpeg</code> rodando à
 toa); vídeo, se <code>tuning.VIDEO_POOL</code>, fica num <code>ffmpeg -re</code> sempre vivo por
@@ -795,6 +795,10 @@ ativo <b>auto-salva</b>: toda edição abaixo grava nele. <code>+ set</code> cop
 desmarcado = encaixa com margens (config da fonte, vale em todos os sets); <b>rebate</b> (vídeo) =
 vai-e-volta pré-renderizado. <b>Clique no nome</b> = só <b>seleciona</b> (a lista de efeitos passa a
 ser a dela e a <a href="#vis-img">aba imagem</a> analisa ela).</p>
+<p><b>Telas e canvas</b> (dash v2): as <b>telas do palco</b> (<code>SCREENS</code>, metros + pixels,
+aba Saída) formam o <b>canvas</b> — o retângulo que as envolve (<code>_stage</code>), encaixado na
+janela com barras. No Palco (vista Canvas) cada fonte no ar é um objeto: <code>rect</code> no item
+do <code>OVERLAYS</code> (posição/tamanho no canvas); fora das telas a saída fica preta.</p>
 <p><b>Efeitos de X</b>: a pilha de shaders <b>dessa</b> fonte (<code>BINDINGS[fonte].shaders</code>),
 cada um com camada + opacidade + modo de mistura (normal / soma / tela / multiplicar / clarear).
 Cada fonte tem a sua, lembrada mesmo desmarcada; sem shader, entra crua. Clique no nome do shader =
@@ -824,7 +828,8 @@ cópia crua num FBO; cada shader marcado da pilha dela (<a href="#shader-file"><
 recompila se o <code>mtime</code> mudou) desenha com os <a href="#uniforms">uniforms</a> — 13 floats de
 áudio, <code>u_dominant</code>, <code>u_resolution</code>, <code>u_time</code> e os
 <a href="#u_fx"><code>u_fx_*</code></a> daquele par fonte/shader — e mistura por cima (opacidade +
-modo, <code>LAYER_BLEND_SRC</code>); o resultado entra na saída com a opacidade da fonte (saída começa
+modo, <code>LAYER_BLEND_SRC</code>); o resultado entra na saída no <code>rect</code> dela no canvas,
+recortado nas telas (<code>u_rect</code>/<code>u_scr</code>), com a opacidade da fonte (saída começa
 preta);</li>
 <li>saída → tela: cópia, ou, logo depois de uma troca de set, o passe de <b>transição</b> (o
 <code>.glsl</code> mistura a última imagem do set que saiu com a do novo);</li>

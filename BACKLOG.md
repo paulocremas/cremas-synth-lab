@@ -2,11 +2,14 @@
 
 Ideias combinadas e ainda não feitas. Ao começar uma, mover pro código/commit e tirar daqui.
 
-## Canvas da saída (estilo OBS)
-- Configurar o **canvas** (resolução/proporção da cena) na aba **Saída** do dash v2.
-- O mesmo canvas aparece na aba **Palco**, como área de composição.
-- Cada mídia/fonte da mesa vira um **objeto arrastável** nesse canvas: posição, tamanho, talvez
-  rotação/recorte (hoje cada fonte ocupa a tela inteira: `preencher`/modo de mistura).
-- Pontos a decidir: onde guardar a transformação por canal (junto do `OVERLAYS`/`BINDINGS`,
-  por posição como a pilha), como isso entra na mistura (CPU `comp_last` vs. passe GL por
-  camada) e o que o canvas faz quando a janela de saída tem outra proporção.
+## Canvas / telas — o que falta
+Feito: telas do palco físico (`tuning.SCREENS`, metros + pixels, editor na aba Saída) cujo contorno
+é o canvas; fontes posicionadas nele (`OVERLAYS[i].rect`, vista Canvas da mesa no Palco, com prévia
+com efeitos e bandeja arrasta-e-solta); fora das telas = preto.
+Ainda não:
+- **Mapa de saída**: hoje a janela mostra o canvas na forma física. Falta a saída reorganizar as
+  telas — pixel map pra processadora de LED (retângulos reempacotados num raster) e/ou uma janela
+  por tela/monitor. A entrada continua sendo um canvas só.
+- **Rotação** e **recorte** (crop) por objeto; tela girada/não retangular (mapping).
+- Imagem da cena e calibração ainda passam na janela inteira; a análise/fumaça (`_composite` na
+  CPU) ignora `rect`/telas; shaders da pilha rodam com `u_resolution` da janela.
