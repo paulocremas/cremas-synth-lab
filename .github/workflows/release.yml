@@ -31,6 +31,7 @@ jobs:
           python src/telao_sim.py --selfcheck
           python src/native_synth.py --selfcheck
           python packaging/updater.py
+          python packaging/check_imports.py
       - name: .deb
         env:
           PYTHON: python
@@ -63,6 +64,7 @@ jobs:
           python src/dash_server.py
           python src/native_synth.py --selfcheck
           python packaging/updater.py
+          python packaging/check_imports.py
           python -c "import pyaudiowpatch, cv2, pygame, OpenGL.GL; print('imports ok')"
       - name: dist/prisma
         env:
