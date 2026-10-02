@@ -11,12 +11,12 @@ cd "$(dirname "$0")/.."
 PY=${PYTHON:-.venv/bin/python}
 DIST=${DIST:-dist}   # pasta de saida (teste local fora do dist/ que o atalho usa)
 EXTRA=()
+mkdir -p build
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN=1 ;; *) WIN= ;; esac
 if [ -n "$WIN" ]; then
   "$PY" -c "from PIL import Image; Image.open('favicon.png').save('build/prisma.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
   EXTRA=(--windowed --icon "$PWD/build/prisma.ico")
 fi
-mkdir -p build
 "$PY" -m PyInstaller --noconfirm --clean --log-level ERROR \
   --name prisma --onedir "${EXTRA[@]}" \
   --collect-submodules OpenGL \
