@@ -14,8 +14,21 @@ Ainda não:
 - Imagem da cena e calibração ainda passam na janela inteira; a análise/fumaça (`_composite` na
   CPU) ignora `rect`/telas; shaders da pilha rodam com `u_resolution` da janela.
 
-## Simulador de telão
-Testar pixel mapping e projeção sem o hardware: uma janela/vista que pega o raster de saída
-(`MAP_SRC`) e o "desempacota" de volta nas telas físicas do `SCREENS` (m + px, `ox/oy`), desenhando
-o palco em escala — LED com grade de pixels/módulos visível, projetor com keystone/sobreposição.
-Serve pra conferir se cada fatia caiu na tela certa, na orientação certa, e como fica de longe.
+## Telão simulado — o que falta (`src/telao_sim.py` já desempacota o raster no palco)
+- Grade de LEDs/módulos visível no zoom; projetor com keystone/sobreposição.
+- Versão Windows (hoje X11: wmctrl/xwininfo/x11grab por id).
+
+## Saída no telão real
+- Reconhecimento automático só roda com o dash aberto (`pollOutputs`); telão que some deixa a janela de saída
+  sem destino (só avisa) — voltar pra janela normal?
+- vsync explícito na janela de saída (tearing no LED); fontes/shaders em 640×480 e mistura limitada por
+  `_comp_size` deixam o conteúdo mais mole que o painel.
+
+## Windows / distribuição
+- 1º teste real no Windows: `v0.1.0-beta.1` (pré-lançamento, zip portátil) foi pra um amigo — esperar o
+  `prisma.log` (`dados\prisma.log` no portátil). Pontos não vistos rodando: OpenGL com driver de verdade,
+  loopback WASAPI (`plat.PcmProc`), câmera dshow, dash no Edge, monitores DPI-aware.
+- `--region`/`--window` e `_raise_output_over_dash` só no Linux.
+- Release final `v0.1.0`: juntar `dashboard-channels-output` no `master` e taggear de lá.
+- Actions avisa Node 20 depreciado (`checkout@v4`, `setup-python@v5`) — subir as versões.
+- Instalador/zip sem assinatura de código (SmartScreen avisa).

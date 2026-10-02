@@ -470,6 +470,9 @@ não precisa instalar biblioteca de áudio no Python.</li>
 meio — o resto segue, só sem os uniforms de som.</li>
 <li>O Python liga a ponta do cano (<code>stdout</code> do <code>parec</code>) na entrada dele e
 lê de lá.</li>
+<li>No <b>Windows</b> não há <code>parec</code>: o <code>src/plat.py</code> grava o som do sistema
+por <i>loopback</i> WASAPI e entrega no mesmo formato (mono, 44&nbsp;100&nbsp;Hz, 16&nbsp;bits) —
+o resto do caminho não muda.</li>
 </ul>
 <p><b>O comando:</b>
 <code>parec --device=FONTE --format=s16le --rate=44100 --channels=1 --latency-msec=50</code></p>
@@ -799,6 +802,13 @@ ser a dela e a <a href="#vis-img">aba imagem</a> analisa ela).</p>
 aba Saída) formam o <b>canvas</b> — o retângulo que as envolve (<code>_stage</code>), encaixado na
 janela com barras. No Palco (vista Canvas) cada fonte no ar é um objeto: <code>rect</code> no item
 do <code>OVERLAYS</code> (posição/tamanho no canvas); fora das telas a saída fica preta.</p>
+<p><b>Pixel map / telão</b>: a mesma lista de telas tem duas vistas — <b>Palco</b> (metros) e
+<b>Telão</b> (o <i>raster</i> em px que vai pra processadora de LED, <code>PIXEL_MAP</code> +
+<code>ox/oy</code> por tela). Ligado, o último passe (<code>MAP_SRC</code>) recorta cada tela do
+canvas e cola no raster, que é a janela de saída. <b>⚡ detectar telão</b> lê as saídas de vídeo
+na hora, usa a resolução da extra como raster e abre a saída nela; o dash consulta a cada 2&nbsp;s
+e reconhece telão novo ou formato trocado. Sem hardware, <code>src/telao_sim.py</code> finge um
+telão (<code>SIM-1</code>) e remonta o palco a partir do que recebe.</p>
 <p><b>Efeitos de X</b>: a pilha de shaders <b>dessa</b> fonte (<code>BINDINGS[fonte].shaders</code>),
 cada um com camada + opacidade + modo de mistura (normal / soma / tela / multiplicar / clarear).
 Cada fonte tem a sua, lembrada mesmo desmarcada; sem shader, entra crua. Clique no nome do shader =
