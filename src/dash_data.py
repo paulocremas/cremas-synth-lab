@@ -5,6 +5,7 @@ o dict em state['audio_dash']; tanto o dash de terminal quanto o payload HTTP so
 esse mesmo dict. Sem import de native_synth (evita circular) — so numpy.
 """
 import json
+import math
 import os
 import re
 import tempfile
@@ -192,6 +193,90 @@ def pick_led_output(outs):
     return (rest + virt)[0] if rest + virt else None
 
 
+# ---------- TELAS DO PALCO com forma livre (tuning.SCREENS[i].rot / .poly) ----------
+# Uma tela = o PAINEL retangular (x, y, w, h em metros, origem em cima; pw x ph LEDs) GIRADO `rot`
+# graus (horario, em volta do centro) e, opcional, recortado pelo poligono `poly` ([[u, v], ...]
+# 0..1 no painel SEM giro, origem em cima): fora dele o painel fica apagado. Sem rot/poly = o
+# retangulo de sempre. Mesma conta no native (_stage), no dash v2 (shapeAxes) e no telao_sim.
+MAX_POLY = 32   # = largura da textura de poligonos do native (POLY_TEX_W)
+
+
+def screen_poly(t):
+    """`poly` valido da tela -> [(u, v), ...] (3..MAX_POLY pontos, 0..1) ou None (= o painel inteiro)."""
+    try:
+        pts = [(min(1.0, max(0.0, float(p[0]))), min(1.0, max(0.0, float(p[1])))) for p in t.get('poly') or ()]
+    except (TypeError, ValueError, IndexError, AttributeError):
+        return None
+    return pts[:MAX_POLY] if len(pts) >= 3 else None
+
+
+def screen_axes(t):
+    """O painel em metros: (o, ex, ey) — o = canto (u, v) = (0, 0) dele, ex/ey = vetores de u e v
+    de 0 a 1. Ponto do painel em metros = o + u*ex + v*ey (ja girado)."""
+    x, y, w, h = (float(t[k]) for k in ('x', 'y', 'w', 'h'))
+    a = math.radians(float(t.get('rot') or 0.0))
+    c, s = math.cos(a), math.sin(a)
+    ex, ey = (w * c, w * s), (-h * s, h * c)
+    cx, cy = x + w / 2, y + h / 2
+    return (cx - (ex[0] + ey[0]) / 2, cy - (ex[1] + ey[1]) / 2), ex, ey
+
+
+def screen_pts(t):
+    """Contorno da tela em metros (o poligono, ou os 4 cantos do painel), ja girado."""
+    o, ex, ey = screen_axes(t)
+    return [(o[0] + u * ex[0] + v * ey[0], o[1] + u * ex[1] + v * ey[1])
+            for u, v in (screen_poly(t) or ((0, 0), (1, 0), (1, 1), (0, 1)))]
+
+
+def screen_bbox(t):
+    """Retangulo (x0, y0, x1, y1) em metros que envolve o contorno da tela."""
+    p = screen_pts(t)
+    return min(q[0] for q in p), min(q[1] for q in p), max(q[0] for q in p), max(q[1] for q in p)
+
+
+def pack_raster(screens, rw, rh):
+    """ox/oy de cada tela (pw x ph) no raster rw x rh, como a processadora reempacota: 1o canto livre
+    (de cima pra baixo) em algumas ordens; fica a 1a que cabe inteira, senao a que deixa menos px de
+    fora (essas vao pra baixo do raster). = pmPack do dash v2. Muda as telas; -> as que nao couberam."""
+    def hit(a, b):
+        return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+    orders = [lambda t: (-t['ph'], -t['pw']), lambda t: (-t['pw'], -t['ph']),
+              lambda t: -t['pw'] * t['ph'], lambda t: -max(t['pw'], t['ph'])]
+    best = None
+    for key in orders:
+        placed, pos, out, bottom = [], {}, 0, 0
+        for i, t in sorted(enumerate(screens), key=lambda it: key(it[1])):
+            cand = sorted([(0, 0)] + [c for o in placed for c in ((o[0] + o[2], o[1]), (o[0], o[1] + o[3]), (0, o[1] + o[3]))],
+                          key=lambda c: (c[1], c[0]))
+            at = next((c for c in cand if c[0] + t['pw'] <= rw and c[1] + t['ph'] <= rh
+                       and not any(hit((c[0], c[1], t['pw'], t['ph']), o) for o in placed)), None)
+            if at is None:
+                out += t['pw'] * t['ph']
+                at = (0, max(rh, bottom))
+            r = (at[0], at[1], t['pw'], t['ph'])
+            placed.append(r)
+            pos[i] = r
+            bottom = max(bottom, r[1] + r[3])
+        if best is None or out < best[0]:
+            best = (out, pos)
+        if not out:
+            break
+    for i, r in best[1].items():
+        screens[i]['ox'], screens[i]['oy'] = r[0], r[1]
+    return [t for t in screens if t['ox'] + t['pw'] > rw or t['oy'] + t['ph'] > rh]
+
+
+def in_poly(pts, x, y):
+    """Ponto dentro do poligono (par-impar)."""
+    ins, j = False, len(pts) - 1
+    for i in range(len(pts)):
+        (xi, yi), (xj, yj) = pts[i], pts[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            ins = not ins
+        j = i
+    return ins
+
+
 if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert parse_fx_manifest('// fx: wave, grain ,vignette\nfoo bar') == ['wave', 'grain', 'vignette']
     assert parse_fx_manifest('//fx:wave') == ['wave']
@@ -241,4 +326,17 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert len(vo) == 1 and vo[0]['x'] == 1366 and vo[0]['pref'] == [3840, 2160] and vo[0]['virtual'], vo
     assert virtual_outputs(1366, vp, alive=lambda p: False) == []
     os.remove(vp); assert virtual_outputs(1366, vp) == []
+    # telas com forma livre: giro em volta do centro, poligono no painel sem giro
+    sq = {'x': 0, 'y': 0, 'w': 2, 'h': 1}
+    assert [tuple(round(c, 6) for c in p) for p in screen_pts(sq)] == [(0, 0), (2, 0), (2, 1), (0, 1)]
+    r = [tuple(round(c, 6) + 0.0 for c in p) for p in screen_pts(dict(sq, rot=90))]
+    assert r == [(1.5, -0.5), (1.5, 1.5), (0.5, 1.5), (0.5, -0.5)], r     # em pe', mesmo centro
+    assert [round(c, 6) for c in screen_bbox(dict(sq, rot=90))] == [0.5, -0.5, 1.5, 1.5]
+    tri = dict(sq, poly=[[0, 1], [0.5, 0], [1, 1]])
+    assert screen_bbox(tri) == (0, 0, 2, 1) and in_poly(screen_pts(tri), 1, 0.6) and not in_poly(screen_pts(tri), 0.2, 0.2)
+    assert screen_poly({'poly': [[0, 0], [1, 1]]}) is None and screen_poly({'poly': [[0, 0], [2, 'x']]}) is None
+    assert screen_poly({'poly': [[-1, 0], [1, 0], [1, 5]]}) == [(0, 0), (1, 0), (1, 1)]
+    pk = [{'pw': 256, 'ph': 1024}, {'pw': 1024, 'ph': 256}, {'pw': 256, 'ph': 1024}]
+    assert pack_raster(pk, 1920, 1080) == [] and [(t['ox'], t['oy']) for t in pk] == [(0, 0), (512, 0), (256, 0)], pk
+    assert [t['pw'] for t in pack_raster([{'pw': 2000, 'ph': 10}, {'pw': 10, 'ph': 10}], 1920, 1080)] == [2000]
     print('dash_data self-check ok')

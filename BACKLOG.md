@@ -5,12 +5,14 @@ Ideias combinadas e ainda não feitas. Ao começar uma, mover pro código/commit
 ## Canvas / telas — o que falta
 Feito: telas do palco físico (`tuning.SCREENS`, metros + pixels, editor na aba Saída) cujo contorno
 é o canvas; fontes posicionadas nele (`OVERLAYS[i].rect`, vista Canvas da mesa no Palco, com prévia
-com efeitos e bandeja arrasta-e-solta); fora das telas = preto.
+com efeitos e bandeja arrasta-e-solta); fora das telas = preto. Tela com forma livre (`rot` + `poly`,
+editor com giro/vértices/formas prontas/lápis; native, pixel map e telao_sim).
 Ainda não:
-- **Várias saídas**: o pixel map (`PIXEL_MAP` + `ox/oy` por tela) já reempacota as telas num raster,
-  mas é uma janela só. Falta mais de um raster (uma janela por saída/monitor, cada uma com suas
-  telas) pra parede maior que um 4K ou LED + projetor. Rotação da fatia no raster (coluna deitada).
-- **Rotação** e **recorte** (crop) por objeto; tela girada/não retangular (mapping).
+- **Várias saídas**: o pixel map (`PIXEL_MAP` + blocos `ox/oy/pw/ph`) é um raster/janela só. Falta mais de
+  um (uma janela por saída/monitor) pra parede maior que um 4K ou LED + projetor. Bloco girado no raster
+  (gabinete deitado na processadora).
+- **Rotação** e **recorte** (crop) por OBJETO (fonte no canvas). Tela com keystone/quad livre (projeção;
+  hoje o painel é retângulo girado + polígono). Ímã com tela girada (hoje desliga).
 - Imagem da cena e calibração ainda passam na janela inteira; a análise/fumaça (`_composite` na
   CPU) ignora `rect`/telas; shaders da pilha rodam com `u_resolution` da janela.
 
@@ -21,8 +23,8 @@ Ainda não:
 ## Saída no telão real
 - Reconhecimento automático só roda com o dash aberto (`pollOutputs`); telão que some deixa a janela de saída
   sem destino (só avisa) — voltar pra janela normal?
-- vsync explícito na janela de saída (tearing no LED); fontes/shaders em 640×480 e mistura limitada por
-  `_comp_size` deixam o conteúdo mais mole que o painel.
+- vsync explícito na janela de saída (tearing no LED); fontes/shaders em 640×480 deixam o conteúdo mais mole
+  que o painel.
 
 ## Windows / distribuição
 - 1º teste real no Windows: `v0.1.0-beta.1` (pré-lançamento, zip portátil) foi pra um amigo — esperar o

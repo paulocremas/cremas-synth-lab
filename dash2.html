@@ -440,8 +440,9 @@
   .cvs.drop { outline: 2px solid var(--live); }
   .cobj canvas, .cobj img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .cvs .cvmask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 150; }
-  .cvs .cscr { z-index: 160; background: none; }
-  .cvs .cscr.hot { background: rgba(63,208,143,.25); border: 2px solid var(--live); }
+  .cvs .cvlines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 160; overflow: visible; }
+  .cvs .cscr { fill: rgba(94,176,255,.06); stroke: rgba(94,176,255,.7); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  .cvs .cscr.hot { fill: rgba(63,208,143,.25); stroke: var(--live); stroke-width: 2px; }
   .cobj b, .cobj i { z-index: 2; }
   .tray { display: flex; gap: 8px; overflow-x: auto; min-height: 78px; padding: 6px; border: 1px dashed var(--line2); border-radius: var(--r2); align-items: center; }
   .tray.over { border-color: var(--bad); background: var(--bad-d); }
@@ -459,8 +460,8 @@
   .cobj.sel i { background: var(--sel); }
   .cobj i[data-c=nw] { left: -5px; top: -5px; cursor: nwse-resize; } .cobj i[data-c=se] { right: -5px; bottom: -5px; cursor: nwse-resize; }
   .cobj i[data-c=ne] { right: -5px; top: -5px; cursor: nesw-resize; } .cobj i[data-c=sw] { left: -5px; bottom: -5px; cursor: nesw-resize; }
-  .cvs .cscr { position: absolute; border: 1px solid rgba(94,176,255,.7); background: rgba(94,176,255,.06); pointer-events: none; }
-  .cvs .cscr span { position: absolute; right: 3px; bottom: 2px; font: 600 9px var(--sans); color: rgba(94,176,255,.9); }
+  .cvs .cvlbl { position: absolute; pointer-events: none; z-index: 161; }
+  .cvs .cvlbl span { position: absolute; right: 3px; bottom: 2px; font: 600 9px var(--sans); color: rgba(94,176,255,.9); }
   /* editor de telas (aba Saida) */
   .stg { position: relative; height: clamp(260px, 46vh, 520px); margin: 10px 0; border-radius: var(--r2); background-color: #07080a; overflow: hidden; touch-action: none; }
   .stg-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tx3); font-size: 12px; }
@@ -472,22 +473,46 @@
   .stg .scr.sel i { background: var(--sel); }
   .stg .scr i[data-c=nw] { left: 0; top: 0; cursor: nwse-resize; } .stg .scr i[data-c=se] { right: 0; bottom: 0; cursor: nwse-resize; }
   .stg .scr i[data-c=ne] { right: 0; top: 0; cursor: nesw-resize; } .stg .scr i[data-c=sw] { left: 0; bottom: 0; cursor: nesw-resize; }
-  .stg .guide, .cvs .guide { position: absolute; background: var(--midi); pointer-events: none; z-index: 200; }
-  .stg .ruler { position: absolute; font: 10px var(--mono); color: var(--tx3); pointer-events: none; }
-  /* pixel map (aba Saida): o raster da processadora, telas no tamanho nativo */
+  /* forma livre: painel girado (transform) + poligono aceso (svg); vertices = bolinhas, giro = alca em cima */
+  .stg .scr.sel { overflow: visible; }
+  .stg .scr.poly { background: transparent; border-style: dashed; border-color: rgba(94,176,255,.5); }
+  .stg .scr.poly.sel { border-color: rgba(255,157,82,.6); }
+  .stg .scr svg, .stg .pan svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .stg .scr polygon { fill: rgba(94,176,255,.22); stroke: #5eb0ff; stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  .stg .scr.sel polygon { fill: rgba(255,157,82,.2); stroke: var(--sel); stroke-width: 2px; }
+  .stg .scr i.vx { width: 11px; height: 11px; border-radius: 50%; transform: translate(-50%, -50%); cursor: grab; z-index: 3; background: #fff; }
+  .stg .scr i.rot { left: 50%; top: -22px; width: 13px; height: 13px; border-radius: 50%; transform: translateX(-50%); cursor: grab; z-index: 3; }
+  .stg .scr i.rot::after { content: ''; position: absolute; left: 5px; top: 12px; width: 1px; height: 10px; background: var(--sel); }
+  .stg .scr:not(.sel) i.rot, .stg .scr:not(.sel) i.vx { display: none; }
+  .stg.pen, .stg.pen .scr { cursor: crosshair; }
+  /* telao: preview do bloco (a regiao dele no raster de saida) dentro da tela no palco */
+  .stg .scr canvas.pv { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .stg .scr.blk { background: #000; }
+  .stg .scr.blk b, .stg .scr.blk small { position: relative; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  /* pixel map (raster do telao): os blocos em px, no tamanho que o telao recebe */
   .pmap .pm-raster { position: absolute; border: 1px dashed var(--tx3); background: #0d0f12; pointer-events: none; }
   .pmap .pm-raster span { position: absolute; right: 4px; bottom: 2px; font: 10px var(--mono); color: var(--tx3); }
   .pmap .scr.bad { border-color: var(--bad); background: rgba(255,91,97,.18); }
+  .pmap.draw, .pmap.draw .scr { cursor: crosshair; }
+  .pmap .pm-new { position: absolute; border: 2px dashed var(--sel); background: rgba(255,157,82,.15); pointer-events: none; z-index: 210; }
+  #stage-p[data-view=palco] [data-v=raster], #stage-p[data-view=raster] [data-v=palco] { display: none !important; }
+  #pm-list .srow2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 6px; border-radius: var(--r2); font-size: 12px; color: var(--tx2); }
+  #pm-list .srow2.sel { background: var(--sel-d); }
+  #pm-list .srow2 input { width: 64px; } #pm-list .srow2 b { min-width: 110px; color: var(--tx); font-weight: 600; }
+  #pm-list .srow2 label { display: inline-flex; gap: 4px; align-items: center; }
+  .stg .penpath { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 210; }
+  .stg .penpath polyline { fill: rgba(255,157,82,.15); stroke: var(--sel); stroke-width: 2px; stroke-dasharray: 6 4; }
+  .stg .penpath circle { fill: var(--sel); }
+  .stg .penpath circle.first { fill: #fff; }
+  .stg .guide, .cvs .guide { position: absolute; background: var(--midi); pointer-events: none; z-index: 200; }
+  .stg .ruler { position: absolute; font: 10px var(--mono); color: var(--tx3); pointer-events: none; }
   #pm-warn { margin: -4px 0 6px; } #pm-warn b { color: var(--warn); font-weight: 600; }
   .stgbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 2px 0 6px; }
-  #stage-p[data-view=palco] [data-v=telao], #stage-p[data-view=telao] [data-v=palco] { display: none !important; }
   #tl-status:empty { display: none; } #tl-status { margin: -4px 0 6px; } #tl-status b { color: var(--live); font-weight: 600; }
-  #pm-list .srow2, #stg-list .srow2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 6px; border-radius: var(--r2); font-size: 12px; color: var(--tx2); }
-  #stg-list .srow2.sel, #pm-list .srow2.sel { background: var(--sel-d); }
-  #stg-list .srow2 input, #pm-list .srow2 input { width: 64px; } #stg-list .srow2 input.nm { width: 120px; }
-  #stg-list .srow2 label, #pm-list .srow2 label { display: inline-flex; gap: 4px; align-items: center; }
-  #pm-list .srow2 b { min-width: 120px; font-weight: 600; color: var(--tx); }
-  #pm-list .srow2 input[type=checkbox] { width: auto; }
+  #stg-list .srow2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 6px; border-radius: var(--r2); font-size: 12px; color: var(--tx2); }
+  #stg-list .srow2.sel { background: var(--sel-d); }
+  #stg-list .srow2 input { width: 64px; } #stg-list .srow2 input.nm { width: 120px; }
+  #stg-list .srow2 label { display: inline-flex; gap: 4px; align-items: center; }
   /* inspetor */
   .insp-top { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 10px; }
   .insp-top .pv { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r2); overflow: hidden; background: #07080a; }
@@ -673,26 +698,28 @@
       <div class="panel mon-p"><div class="ph"><b>Monitor</b><span class="hint">o que está indo pro telão · ~15 quadros/s</span></div>
         <div class="mon"><canvas id="mon-out2"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div></div>
     </div>
-    <div class="panel" id="stage-p">
+    <div class="panel" id="stage-p" data-view="palco">
       <div class="ph"><b>Telas do palco</b>
-        <span class="seg" id="stg-view"><button data-s="palco" title="o palco físico, em metros: onde as telas estão">Palco · m</button><button data-s="telao" title="o raster que vai pra processadora de LED, em px: onde cada tela sai na imagem">Telão · px</button></span>
+        <span class="seg" id="stg-view"><button data-s="palco" title="as telas no palco físico, em metros — com telão é só o PREVIEW (mover aqui não muda a saída)">Palco</button><button data-s="raster" title="pixel map: os blocos no raster que o telão recebe, em px — isso é o que sai">Pixel map</button></span>
         <span class="hint" id="stg-info"></span><span class="grow"></span>
-        <button class="btn sm" id="tl-detect" title="lê a saída de vídeo extra (processadora/telão), usa a resolução dela como raster, empacota as telas, liga o pixel map e abre a saída nela em tela cheia">⚡ detectar telão</button></div>
-      <div class="stgbar" data-v="palco"><span class="hint">adicionar:</span><span id="stg-add" style="display:contents"></span></div>
-      <div class="stgbar" data-v="telao">
-        <label class="chk" title="ligado: a janela de saída vira o raster (desligado: mostra o palco)"><input type="checkbox" id="pm-on"> pixel map</label>
-        <label class="hint">raster <input type="number" class="inp sm num" id="pm-w" min="16" max="16384" step="1" style="width:70px">×<input type="number" class="inp sm num" id="pm-h" min="16" max="16384" step="1" style="width:70px"></label>
-        <span id="pm-presets" style="display:contents"></span>
-        <button class="btn sm" id="pm-pack" title="coloca TODAS as telas no raster, o mais compacto que couber">empacotar</button>
-        <span class="hint" id="pm-info"></span></div>
-      <div class="hint" data-v="palco">Monte o palco físico em metros: arraste as telas, cantos = tamanho (Shift = proporção), elas grudam nas bordas umas das outras (Alt = sem ímã). O contorno delas é o <b>canvas</b> — no Palco (✥ posicionar) as imagens vão por cima; fora das telas sai preto. Sem telas, o canvas é a janela.</div>
-      <div class="hint" data-v="telao">As mesmas telas, agora no <b>raster</b> que a processadora de LED recebe: cada uma recortada do canvas e colada no tamanho nativo dela (px). Arraste pra posicionar (gruda nas bordas; Alt = sem ímã) e passe as mesmas posições pra processadora. Pixel a pixel só com a janela = raster — o <b>⚡ detectar telão</b> acerta tudo de uma vez.</div>
-      <div class="stg" id="stg" data-v="palco"><div class="stg-empty" id="stg-empty">sem telas — o canvas é a janela de saída inteira</div></div>
-      <div class="stg pmap" id="pmap" data-v="telao"><div class="pm-raster" id="pm-raster"><span></span></div><div class="stg-empty" id="pm-empty">nenhuma tela no raster — marque na lista ou “empacotar”</div></div>
+        <label class="chk" title="ligado: o canvas é o raster do telão e sai como está (as telas viram blocos dele, em px); desligado: o canvas é o palco físico"><input type="checkbox" id="pm-on"> pixel map</label>
+        <span class="hint" id="pm-info"></span>
+        <button class="btn sm" id="tl-detect" title="lê a resolução que o telão anuncia (processadora ou o simulador): vira o raster, liga o pixel map e abre a saída nela em tela cheia">⚡ detectar telão</button></div>
+      <div class="stgbar" data-v="palco" id="stg-addbar"><span class="hint">adicionar:</span><span id="stg-add" style="display:contents"></span></div>
+      <div class="stgbar" data-v="raster">
+        <span class="hint">dividir em grade</span>
+        <input type="number" class="inp sm num" id="pm-cols" min="1" max="16" step="1" value="2" style="width:52px" title="colunas">×<input type="number" class="inp sm num" id="pm-rows" min="1" max="16" step="1" value="1" style="width:52px" title="linhas">
+        <button class="btn sm" id="pm-grid" title="troca os blocos do raster por uma grade de blocos iguais">dividir</button>
+        <button class="btn sm" id="pm-draw" title="arraste no raster pra criar um bloco do tamanho exato">▭ desenhar bloco</button>
+        <span class="grow"></span><span class="hint" id="pm-hint"></span></div>
+      <div class="hint" data-v="palco">Monte o palco físico em metros: arraste as telas, cantos = tamanho (Shift = proporção), elas grudam nas bordas umas das outras (Alt = sem ímã). O contorno delas é o <b>canvas</b>; fora das telas sai preto. Com <b>telão</b> (pixel map ligado) o canvas é o raster dele e as telas são os <b>blocos</b>: aqui é só o preview físico (posição, giro, espaço entre eles) — cada bloco mostra a parte dele da saída; o que sai é definido no Pixel map.</div>
+      <div class="hint" data-v="raster">O telão chega como <b>uma imagem só</b> (a resolução que ele anuncia — os blocos e o espaço entre eles ficam na processadora). Divida o raster nos blocos que a processadora usa: grade ou ▭ desenhar; arraste/redimensione em px pra acertar (gruda nas bordas; Alt = solto). Fora dos blocos sai preto.</div>
+      <div class="stg" id="stg" data-v="palco"><div class="stg-empty" id="stg-empty">sem telas — o canvas é a janela de saída inteira</div><canvas id="stg-src" style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none"></canvas></div>
+      <div class="stg pmap" id="pmap" data-v="raster"><div class="pm-raster" id="pm-raster"><span></span></div><div class="stg-empty" id="pm-empty">sem blocos — divida o raster (grade) ou ▭ desenhe</div></div>
       <div class="hint" id="tl-status"></div>
       <div class="hint" id="pm-warn"></div>
       <div id="stg-list" data-v="palco"></div>
-      <div id="pm-list" data-v="telao"></div>
+      <div id="pm-list" data-v="raster"></div>
     </div>
     <div class="panel">
       <div class="ph"><b>Calibração do telão</b><span class="hint">último passe, na saída inteira · centro = neutro · duplo-clique zera</span><span class="grow"></span>
@@ -1245,7 +1272,8 @@ addPreview($('#mon-out2'), '/frame?which=out', 15, 'saida');
 // ---- ARRASTAR RETANGULO (telas na aba Saida, fontes no Palco) — mesma mecanica nos dois:
 // meio = move, canto (i[data-c]) = redimensiona com o canto oposto parado, Shift = proporcao do
 // comeco, ima nos alvos (tx/ty = linhas em unidades; Alt desliga), guias azuis onde grudou.
-// o: {r0: [x,y,w,h] em unidades, ux/uy = px por unidade, tx/ty = alvos, min, move(r, guias), end()}
+// o: {r0: [x,y,w,h] em unidades, ux/uy = px por unidade, tx/ty = alvos, min, rot (graus: o canto anda
+// no eixo do retangulo girado; quem chama segura o canto oposto), move(r, guias), end()}
 function rectDrag(e, el, o){
   if (e.button !== 0) return;
   e.preventDefault(); e.stopPropagation();
@@ -1253,8 +1281,10 @@ function rectDrag(e, el, o){
   const c = e.target.dataset.c || '', px = e.clientX, py = e.clientY, thx = 8 / o.ux, thy = 8 / o.uy, MIN = o.min || 0.02;
   const snap = (vals, ts, thr) => { let b = null; for (const v of vals) for (const t of ts){ const d = t - v; if (Math.abs(d) < thr && (!b || Math.abs(d) < Math.abs(b[0]))) b = [d, t]; } return b; };
   activeDrag = 'rect';
+  const ra = (o.rot || 0) * Math.PI / 180, rc = Math.cos(ra), rs = Math.sin(ra);
   el.onpointermove = ev => {
-    const dx = (ev.clientX - px) / o.ux, dy = (ev.clientY - py) / o.uy, gs = [];
+    let dx = (ev.clientX - px) / o.ux, dy = (ev.clientY - py) / o.uy; const gs = [];
+    if (c && ra) [dx, dy] = [dx * rc + dy * rs, -dx * rs + dy * rc];   // canto de painel girado: arrasto no eixo DELE
     let [rx, ry, rw, rh] = o.r0;
     if (!c){
       rx += dx; ry += dy;
@@ -1287,37 +1317,81 @@ function drawGuides(box, gs, toX, toY){
 // ---- TELAS DO PALCO (tuning.SCREENS, global) — metros (x, y, w, h; origem em cima) + pixels
 // (pw, ph). O CANVAS da saida e' o contorno delas (native _stage: resolucao pela maior densidade);
 // fora das telas sai preto. Redimensionar em metros mantem a densidade (px/m) da tela.
+// FORMA LIVRE (= dash_data.screen_axes): o painel gira `rot` graus (horario, em volta do centro) e
+// `poly` ([[u, v]] 0..1 no painel SEM giro, origem em cima) e' a parte acesa — fora dela o painel
+// fica preto. O painel continua pw x ph no raster (o pixel map recorta girado). Sem os 2 = retangulo.
 const SCR_ADD = [['coluna', 1, 4, 256, 1024], ['faixa', 4, 1, 1024, 256], ['tela 16:9', 3.2, 1.8, 1920, 1080], ['painel', 0.5, 0.5, 128, 128]];
-let lastScreens = [], scrTouched = 0, scrSel = -1, stgView = null, pmReady = false;   // pmReady: o pixel map (abaixo) ja' existe
+let lastScreens = [], scrTouched = 0, scrSel = -1, stgView = null, pmReady = false, stgPen = null;   // pmReady: o pixel map (abaixo) ja' existe; stgPen: o lapis (abaixo)
 const rnd = (v, n = 1000) => Math.round(v * n) / n;
-function stageOf(scr){   // = native _stage
+const RECT_UV = [[0, 0], [1, 0], [1, 1], [0, 1]];
+const polyOf = t => (t.poly && t.poly.length >= 3) ? t.poly : null;
+function shapeAxes(t){   // o painel girado: ponto (u, v) = o + u*ex + v*ey, em metros
+  const a = (t.rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), ex = [t.w * c, t.w * s], ey = [-t.h * s, t.h * c];
+  return { o: [t.x + t.w / 2 - (ex[0] + ey[0]) / 2, t.y + t.h / 2 - (ex[1] + ey[1]) / 2], ex, ey };
+}
+const shapeAt = (A, u, v) => [A.o[0] + u * A.ex[0] + v * A.ey[0], A.o[1] + u * A.ex[1] + v * A.ey[1]];
+function shapeUV(t, x, y){   // ponto do palco (m) -> (u, v) no painel (eixos ortogonais)
+  const A = shapeAxes(t), d = [x - A.o[0], y - A.o[1]];
+  return [(d[0] * A.ex[0] + d[1] * A.ex[1]) / (t.w * t.w), (d[0] * A.ey[0] + d[1] * A.ey[1]) / (t.h * t.h)];
+}
+const shapePts = t => { const A = shapeAxes(t); return (polyOf(t) || RECT_UV).map(([u, v]) => shapeAt(A, u, v)); };
+function shapeBox(t){ const p = shapePts(t), xs = p.map(q => q[0]), ys = p.map(q => q[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; }
+function inPoly(p, x, y){ let ins = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++){ const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) ins = !ins; } return ins; }
+function stageOf(scr){   // = native _stage (o contorno das formas, ja giradas)
   if (!scr.length) return null;
-  const x0 = Math.min(...scr.map(t => t.x)), y0 = Math.min(...scr.map(t => t.y));
-  const W = Math.max(...scr.map(t => t.x + t.w)) - x0, H = Math.max(...scr.map(t => t.y + t.h)) - y0;
+  const bs = scr.map(shapeBox), x0 = Math.min(...bs.map(b => b[0])), y0 = Math.min(...bs.map(b => b[1]));
+  const W = Math.max(...bs.map(b => b[2])) - x0, H = Math.max(...bs.map(b => b[3])) - y0;
   const dens = Math.max(...scr.map(t => Math.max(t.pw / t.w, t.ph / t.h))) || 100, k = Math.min(dens, 8192 / W, 8192 / H);
   return { x0, y0, W, H, cw: Math.max(16, Math.round(W * k)), ch: Math.max(16, Math.round(H * k)),
-           rects: scr.map(t => [(t.x - x0) / W, (t.y - y0) / H, t.w / W, t.h / H]) };
+           rects: bs.map(b => [(b[0] - x0) / W, (b[1] - y0) / H, (b[2] - b[0]) / W, (b[3] - b[1]) / H]),
+           polys: scr.map(t => shapePts(t).map(([x, y]) => [(x - x0) / W, (y - y0) / H])) };
 }
-function sendScreens(save){ scrTouched = now(); post('/screens', { screens: lastScreens, save }).catch(e => toast('telas: ' + e, 'err')); }
+// formas prontas (u, v no painel); 'livre' = o que o lapis/os vertices fizeram
+const ngon = (n, a0 = -90) => Array.from({ length: n }, (_, i) => { const a = (a0 + i * 360 / n) * Math.PI / 180; return [rnd(0.5 + 0.5 * Math.cos(a), 1e4), rnd(0.5 + 0.5 * Math.sin(a), 1e4)]; });
+const arcUV = (r, n, a0, a1) => Array.from({ length: n }, (_, i) => { const a = (a0 + (a1 - a0) * i / (n - 1)) * Math.PI / 180; return [rnd(0.5 + r * Math.cos(a), 1e4), rnd(1 + 2 * r * Math.sin(a), 1e4)]; });   // meio anel, base embaixo
+const SHAPES = { 'retângulo': null, 'triângulo': [[0.5, 0], [1, 1], [0, 1]], 'losango': [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]],
+  'trapézio': [[0.2, 0], [0.8, 0], [1, 1], [0, 1]], 'hexágono': ngon(6, 0), 'círculo': ngon(32), 'L': [[0, 0], [0.4, 0], [0.4, 0.6], [1, 0.6], [1, 1], [0, 1]],
+  'arco': [...arcUV(0.5, 16, 180, 360), ...arcUV(0.25, 16, 360, 180)] };
+const shapeName = t => { const p = JSON.stringify(polyOf(t)); return Object.keys(SHAPES).find(k => JSON.stringify(SHAPES[k]) === p) || 'livre'; };
+function sendScreens(save){
+  scrTouched = now(); post('/screens', { screens: lastScreens, save }).catch(e => toast('telas: ' + e, 'err'));
+}
 let scrLiveT = null;
 function sendScreensLive(){ scrTouched = now(); if (!scrLiveT) scrLiveT = setTimeout(() => { scrLiveT = null; sendScreens(false); }, 60); }
 for (const [n, w, hh, pw, ph] of SCR_ADD) $('#stg-add').append(h('button', { class: 'btn sm', text: '+ ' + n, title: `${w}×${hh} m · ${pw}×${ph} px`, onclick: () => {
   const st = stageOf(lastScreens), x = st ? rnd(st.x0 + st.W + 0.2) : 0, y = st ? rnd(st.y0) : 0;   // entra a direita das que ja existem
   lastScreens.push({ name: n + ' ' + (lastScreens.filter(t => t.name.startsWith(n)).length + 1), x, y, w, h: hh, pw, ph });
-  scrSel = lastScreens.length - 1; stgView = null; sendScreens(true); renderStage(true);
+  scrSel = lastScreens.length - 1; stgView = null; sendScreens(true); renderStage(true); renderStageList(); renderCanvas();
 } }));
-function stgFit(){   // enquadra as telas (com folga) na area do editor; congelado durante o arrasto
-  const el = $('#stg'), st = stageOf(lastScreens), W = el.clientWidth, H = el.clientHeight;
-  const bx = st ? st.x0 : 0, by = st ? st.y0 : 0, bw = st ? st.W : 4, bh = st ? st.H : 3, pad = Math.max(0.5, Math.max(bw, bh) * 0.15);
+function stgFit(){   // enquadra as telas (+ paineis do telao) com folga na area do editor; congelado durante o arrasto
+  const el = $('#stg'), W = el.clientWidth, H = el.clientHeight;
+  const bs = lastScreens.map(shapeBox);
+  const bx = bs.length ? Math.min(...bs.map(b => b[0])) : 0, by = bs.length ? Math.min(...bs.map(b => b[1])) : 0;
+  const bw = bs.length ? Math.max(...bs.map(b => b[2])) - bx : 4, bh = bs.length ? Math.max(...bs.map(b => b[3])) - by : 3, pad = Math.max(0.5, Math.max(bw, bh) * 0.15);
   const u = Math.min(W / (bw + 2 * pad), H / (bh + 2 * pad));
   return { u, ox: (W - bw * u) / 2 - bx * u, oy: (H - bh * u) / 2 - by * u };
+}
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgPoly(cls){   // <svg viewBox 0..1><polygon></svg>, esticado na caixa (u, v do painel)
+  const svg = document.createElementNS(SVGNS, 'svg'), pg = document.createElementNS(SVGNS, 'polygon');
+  svg.setAttribute('viewBox', '0 0 1 1'); svg.setAttribute('preserveAspectRatio', 'none'); if (cls) svg.setAttribute('class', cls);
+  svg.append(pg); return svg;
+}
+function setPolyEl(d, t){   // painel com poligono: classe .poly + o svg com a forma (atualizado no lugar)
+  const poly = polyOf(t); let svg = d.querySelector(':scope > svg');
+  d.classList.toggle('poly', !!poly);
+  if (!poly){ if (svg) svg.remove(); return; }
+  if (!svg) d.prepend(svg = svgPoly());
+  const pts = poly.map(q => q.join(',')).join(' ');
+  if (svg.firstChild.getAttribute('points') !== pts) svg.firstChild.setAttribute('points', pts);
 }
 function renderStage(full){
   const el = $('#stg'); if (!el || !el.clientWidth) return;   // (sem #stg = pagina 'encerrado')
   if (!stgView || (full && activeDrag !== 'rect')) stgView = stgFit();
   const v = stgView, st = stageOf(lastScreens);
-  $('#stg-empty').hidden = !!lastScreens.length;
-  $('#stg-info').textContent = st ? `· canvas ${st.W.toFixed(2)}×${st.H.toFixed(2)} m · ${st.cw}×${st.ch} px` : '· sem telas (canvas = janela)';
+  $('#stg-empty').hidden = !!lastScreens.length || !!stgPen;
+  $('#stg-info').textContent = lastPM.on ? `· telão ${lastPM.w}×${lastPM.h} · ${lastScreens.filter(isBlock).length} bloco(s) — no Palco é só preview`
+    : st ? `· canvas ${st.W.toFixed(2)}×${st.H.toFixed(2)} m · ${st.cw}×${st.ch} px` : '· sem telas (canvas = janela)';
   const step = v.u >= 40 ? 1 : v.u >= 12 ? 5 : 10;   // grade de 1 m (ou 5/10 m se o palco for grande)
   el.style.backgroundImage = 'linear-gradient(to right, #1a1e23 1px, transparent 1px), linear-gradient(to bottom, #1a1e23 1px, transparent 1px)';
   el.style.backgroundSize = `${v.u * step}px ${v.u * step}px`;
@@ -1328,32 +1402,168 @@ function renderStage(full){
   lastScreens.forEach((t, i) => {
     let d = els[i];
     if (!d){
-      d = h('div', { class: 'scr' }, h('b'), h('small'), h('small'), ['nw', 'ne', 'sw', 'se'].map(c => h('i', { 'data-c': c })));
+      d = h('div', { class: 'scr' }, h('b'), h('small'), h('small'), ['nw', 'ne', 'sw', 'se'].map(c => h('i', { 'data-c': c })),
+            h('i', { class: 'rot', 'data-r': '', title: 'girar (Shift = de 15 em 15°; gruda em 0/90/180°, Alt = solto)' }));
       d.onpointerdown = e => scrStart(e, d, i);
+      d.ondblclick = e => scrDbl(e, i);
       el.append(d);
     }
-    Object.assign(d.style, { left: v.ox + t.x * v.u + 'px', top: v.oy + t.y * v.u + 'px', width: t.w * v.u + 'px', height: t.h * v.u + 'px' });
+    Object.assign(d.style, { left: v.ox + t.x * v.u + 'px', top: v.oy + t.y * v.u + 'px', width: t.w * v.u + 'px', height: t.h * v.u + 'px',
+                             transform: t.rot ? `rotate(${t.rot}deg)` : '' });
     d.classList.toggle('sel', i === scrSel);
-    d.children[0].textContent = t.name; d.children[1].textContent = `${t.w}×${t.h} m`; d.children[2].textContent = `${t.pw}×${t.ph} px`;
+    setPolyEl(d, t);
+    // vertices (so' na selecionada com poligono): um <i.vx> por ponto, no lugar
+    const poly = i === scrSel ? polyOf(t) : null, vx = $$(':scope > i.vx', d);
+    for (let j = poly ? poly.length : 0; j < vx.length; j++) vx[j].remove();
+    (poly || []).forEach(([u, vv], j) => {
+      let q = vx[j];
+      if (!q) d.append(q = h('i', { class: 'vx', 'data-v': j, title: 'arraste o vértice · 2 cliques = tira · 2 cliques na borda = põe outro' }));
+      Object.assign(q.style, { left: u * 100 + '%', top: vv * 100 + '%' });
+    });
+    const lbl = [t.name, `${t.w}×${t.h} m` + (t.rot ? ` · ${t.rot}°` : ''), `${t.pw}×${t.ph} px`];
+    const le = $$(':scope > b, :scope > small', d);
+    lbl.forEach((x, k) => { if (le[k].textContent !== x) le[k].textContent = x; });
   });
-  if (pmReady) renderPmap();
+  renderPen();
+  if (pmReady){ renderPmap(); paintBlocks(); }
 }
 function scrStart(e, d, i){
-  const t = lastScreens[i], el = $('#stg'), v = stgView; if (!t || !v) return;
+  const t = lastScreens[i], el = $('#stg'), v = stgView; if (!t || !v || stgPen) return;   // lapis: o clique e' do #stg
   if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); }
-  const others = lastScreens.filter((_, j) => j !== i), dens = [t.pw / t.w, t.ph / t.h];
-  rectDrag(e, d, { r0: [t.x, t.y, t.w, t.h], ux: v.u, uy: v.u, min: 0.05,
-    tx: others.flatMap(o => [o.x, o.x + o.w]), ty: others.flatMap(o => [o.y, o.y + o.h]),
+  if (e.target.classList.contains('vx')) return vxStart(e, d, i, +e.target.dataset.v);
+  if (e.target.dataset.r != null) return rotStart(e, d, i);
+  const c = e.target.dataset.c || '', rot = t.rot || 0, r0 = [t.x, t.y, t.w, t.h];
+  const ob = lastScreens.filter((_, j) => j !== i).map(shapeBox), dens = [t.pw / t.w, t.ph / t.h];
+  rectDrag(e, d, { r0, ux: v.u, uy: v.u, min: 0.05, rot,
+    tx: rot ? [] : ob.flatMap(b => [b[0], b[2]]), ty: rot ? [] : ob.flatMap(b => [b[1], b[3]]),   // girada: sem ima
     move: ([x, y, w, hh], gs) => {
+      if (rot && c){   // o giro e' em volta do centro, que andou: segura o canto OPOSTO no palco
+        const fu = c[1] === 'w' ? 1 : 0, fv = c[0] === 'n' ? 1 : 0;
+        const p0 = shapeAt(shapeAxes({ x: r0[0], y: r0[1], w: r0[2], h: r0[3], rot }), fu, fv), p1 = shapeAt(shapeAxes({ x, y, w, h: hh, rot }), fu, fv);
+        x += p0[0] - p1[0]; y += p0[1] - p1[1];
+      }
       const g = 20;                                 // grade de 5 cm quando nao grudou
-      Object.assign(t, { x: gs.some(q => q[0] === 'x') ? rnd(x) : rnd(x, g), y: gs.some(q => q[0] === 'y') ? rnd(y) : rnd(y, g),
+      Object.assign(t, { x: gs.some(q => q[0] === 'x') ? rnd(x) : rnd(x, rot && c ? 1000 : g), y: gs.some(q => q[0] === 'y') ? rnd(y) : rnd(y, rot && c ? 1000 : g),
                          w: rnd(Math.max(0.05, w), 100), h: rnd(Math.max(0.05, hh), 100) });
-      t.pw = Math.max(1, Math.round(t.w * dens[0])); t.ph = Math.max(1, Math.round(t.h * dens[1]));
+      if (!isBlock(t)){ t.pw = Math.max(1, Math.round(t.w * dens[0])); t.ph = Math.max(1, Math.round(t.h * dens[1])); }   // bloco do telao: o tamanho em px e' do pixel map
       drawGuides(el, gs, x => v.ox + x * v.u, y => v.oy + y * v.u);
       renderStage(); renderStageList(); renderCanvas(); sendScreensLive();
     },
-    end: () => { drawGuides(el, [], null, null); clearTimeout(scrLiveT); scrLiveT = null; sendScreens(true); renderStage(true); renderStageList(); } });
+    end: () => { drawGuides(el, [], null, null); scrDragEnd(); } });
 }
+function scrDragEnd(){ activeDrag = ''; clearTimeout(scrLiveT); scrLiveT = null; sendScreens(true); renderStage(true); renderStageList(); renderCanvas(); }
+function capDrag(e, d, move){   // arrasto simples com captura (giro, vertice)
+  if (e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation(); d.setPointerCapture(e.pointerId); activeDrag = 'rect';
+  d.onpointermove = move;
+  d.onpointerup = d.onpointercancel = () => { d.onpointermove = d.onpointerup = d.onpointercancel = null; scrDragEnd(); };
+}
+const normRot = a => { const r = Math.round(((a + 180) % 360 + 360) % 360 - 180); return r === -180 ? 180 : r; };
+function setRot(t, a){ a = normRot(a); if (a) t.rot = a; else delete t.rot; }
+function rotStart(e, d, i){
+  const t = lastScreens[i], b = d.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;   // centro = o do giro
+  capDrag(e, d, ev => {
+    let a = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI + 90;
+    a = ev.shiftKey ? Math.round(a / 15) * 15 : a;
+    if (!ev.altKey) for (const k of [-180, -90, 0, 90, 180, 270]) if (Math.abs(a - k) < 4) a = k;
+    setRot(t, a);
+    renderStage(); renderStageList(); renderCanvas(); sendScreensLive();
+  });
+}
+function vxStart(e, d, i, j){
+  const t = lastScreens[i], v = stgView, a = (t.rot || 0) * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+  const p0 = t.poly[j].slice(), px = e.clientX, py = e.clientY;
+  capDrag(e, d, ev => {
+    const dx = (ev.clientX - px) / v.u, dy = (ev.clientY - py) / v.u;   // metros no palco -> eixo do painel
+    let u = p0[0] + (dx * cs + dy * sn) / t.w, w = p0[1] + (-dx * sn + dy * cs) / t.h;
+    if (!ev.altKey){   // ima: bordas/meio do painel e a mesma linha dos outros vertices
+      const su = 8 / (t.w * v.u), sv = 8 / (t.h * v.u), others = t.poly.filter((_, k) => k !== j);
+      const near = (x, ts, thr) => ts.reduce((b, q) => Math.abs(q - x) < thr && Math.abs(q - x) < Math.abs(b - x) ? q : b, x);
+      u = near(u, [0, 0.5, 1, ...others.map(q => q[0])], su); w = near(w, [0, 0.5, 1, ...others.map(q => q[1])], sv);
+    }
+    t.poly[j] = [rnd(Math.min(1, Math.max(0, u)), 1e4), rnd(Math.min(1, Math.max(0, w)), 1e4)];
+    renderStage(); renderCanvas(); sendScreensLive();
+  });
+}
+function stgPoint(e){   // ponteiro -> metros no palco
+  const b = $('#stg').getBoundingClientRect(), v = stgView;
+  return [(e.clientX - b.left - v.ox) / v.u, (e.clientY - b.top - v.oy) / v.u];
+}
+function scrDbl(e, i){   // 2 cliques: no vertice = tira (minimo 3); na tela com poligono = poe um na borda mais perto
+  const t = lastScreens[i], poly = polyOf(t); if (!poly || stgPen) return;
+  e.preventDefault(); e.stopPropagation();
+  if (e.target.classList.contains('vx')){
+    if (poly.length > 3){ poly.splice(+e.target.dataset.v, 1); sendScreens(true); renderStage(); renderCanvas(); }
+    else toast('a forma precisa de pelo menos 3 pontos', 'err');
+    return;
+  }
+  if (poly.length >= 32) return toast('máximo de 32 pontos por tela', 'err');
+  const [u, v] = shapeUV(t, ...stgPoint(e));
+  let best = 0, bd = Infinity;
+  poly.forEach((a, k) => {   // distancia (em metros) do clique a cada aresta
+    const b = poly[(k + 1) % poly.length], ax = a[0] * t.w, ay = a[1] * t.h, bx = b[0] * t.w - ax, by = b[1] * t.h - ay;
+    const px = u * t.w - ax, py = v * t.h - ay, q = Math.max(0, Math.min(1, (px * bx + py * by) / (bx * bx + by * by || 1)));
+    const dd = Math.hypot(px - q * bx, py - q * by); if (dd < bd){ bd = dd; best = k; }
+  });
+  poly.splice(best + 1, 0, [rnd(Math.min(1, Math.max(0, u)), 1e4), rnd(Math.min(1, Math.max(0, v)), 1e4)]);
+  sendScreens(true); renderStage(); renderCanvas();
+}
+// ---- LAPIS: desenha uma tela nova ponto a ponto no palco (clique = ponto, grade de 5 cm, Alt =
+// solto; clique no 1o ponto / 2 cliques / Enter = fecha; Backspace = desfaz; Esc = cancela). A tela
+// nova = o retangulo que envolve o desenho (pw x ph pela maior densidade do palco) + o poligono.
+function penToggle(on){
+  stgPen = on ? { pts: [], hover: null } : null;
+  $('#stg').classList.toggle('pen', !!stgPen); $('#stg-pen-btn').classList.toggle('on', !!stgPen);
+  $('#stg-pen-hint').hidden = !stgPen;
+  renderStage();
+}
+function penFinish(){
+  const pts = stgPen && stgPen.pts; if (!pts) return;
+  if (pts.length < 3){ toast('desenhe pelo menos 3 pontos', 'err'); return; }
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), x = rnd(Math.min(...xs)), y = rnd(Math.min(...ys));
+  const w = rnd(Math.max(...xs) - x, 100), hh = rnd(Math.max(...ys) - y, 100);
+  if (w < 0.05 || hh < 0.05){ toast('forma fina demais (mínimo 5 cm)', 'err'); return; }
+  const dens = lastScreens.length ? Math.max(...lastScreens.map(t => Math.max(t.pw / t.w, t.ph / t.h))) : 256;
+  const n = lastScreens.filter(t => t.name.startsWith('forma')).length + 1;
+  lastScreens.push({ name: 'forma ' + n, x, y, w, h: hh, pw: Math.max(1, Math.round(w * dens)), ph: Math.max(1, Math.round(hh * dens)),
+    poly: pts.slice(0, 32).map(([px, py]) => [rnd(Math.min(1, Math.max(0, (px - x) / w)), 1e4), rnd(Math.min(1, Math.max(0, (py - y) / hh)), 1e4)]) });
+  scrSel = lastScreens.length - 1; penToggle(false); stgView = null; sendScreens(true); renderStage(true); renderStageList(); renderCanvas();
+}
+function renderPen(){
+  const el = $('#stg'); let svg = el.querySelector('.penpath');
+  if (!stgPen){ if (svg) svg.remove(); return; }
+  if (!svg){ svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('class', 'penpath'); el.append(svg); }
+  const v = stgView, P = ([x, y]) => [v.ox + x * v.u, v.oy + y * v.u], pts = stgPen.pts.map(P);
+  svg.innerHTML = '';
+  const pl = document.createElementNS(SVGNS, 'polyline');
+  pl.setAttribute('points', [...pts, ...(stgPen.hover ? [P(stgPen.hover)] : [])].map(q => q.join(',')).join(' '));
+  svg.append(pl);
+  pts.forEach((q, k) => { const c = document.createElementNS(SVGNS, 'circle'); c.setAttribute('cx', q[0]); c.setAttribute('cy', q[1]); c.setAttribute('r', k ? 3.5 : 6); if (!k) c.setAttribute('class', 'first'); svg.append(c); });
+}
+const penSnap = (p, e) => e.altKey ? p : p.map(q => rnd(q, 20));
+$('#stg').addEventListener('pointerdown', e => {
+  if (!stgPen || e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  const p = penSnap(stgPoint(e), e), pts = stgPen.pts, v = stgView;
+  const at = q => Math.hypot((q[0] - p[0]) * v.u, (q[1] - p[1]) * v.u) < 10;
+  if (pts.length >= 3 && at(pts[0])) return penFinish();         // fechou no 1o ponto
+  if (pts.length && at(pts[pts.length - 1])) return;             // mesmo lugar (2o clique do duplo)
+  if (pts.length >= 32) return toast('máximo de 32 pontos', 'err');
+  pts.push(p); renderPen();
+}, true);
+$('#stg').addEventListener('pointermove', e => { if (stgPen){ stgPen.hover = penSnap(stgPoint(e), e); renderPen(); } });
+$('#stg').addEventListener('dblclick', e => { if (stgPen){ e.preventDefault(); e.stopPropagation(); penFinish(); } }, true);
+window.addEventListener('keydown', e => {   // captura: antes dos atalhos da mesa (Backspace = voltar); o 3x Esc segue contando
+  if (!stgPen || typingInField(e.target)) return;
+  if (e.key === 'Enter') penFinish();
+  else if (e.key === 'Backspace'){ stgPen.pts.pop(); renderPen(); }
+  else if (e.key === 'Escape') penToggle(false);
+  else return;
+  e.preventDefault(); e.stopPropagation();
+}, true);
+$('#stg-add').after(h('span', { class: 'grow' }),
+  h('span', { class: 'hint', id: 'stg-pen-hint', hidden: true, text: 'clique = ponto · 1º ponto / 2 cliques / Enter = fecha · ⌫ desfaz · Esc cancela' }),
+  h('button', { class: 'btn sm', id: 'stg-pen-btn', text: '✎ desenhar tela', title: 'desenhe a forma da tela ponto a ponto no palco', onclick: () => penToggle(!stgPen) }));
 function renderStageList(){
   const box = $('#stg-list'); if (box.contains(document.activeElement)) return;   // nao atropela quem digita
   box.innerHTML = '';
@@ -1364,92 +1574,100 @@ function renderStageList(){
       return inp; })());
     const nm = h('input', { class: 'inp sm nm', value: t.name, maxlength: 24 });
     nm.onchange = () => { t.name = nm.value.trim() || t.name; sendScreens(true); nm.blur(); renderStage(); renderStageList(); };
+    const rot = h('input', { type: 'number', class: 'inp sm num', step: 1, value: t.rot || 0, style: 'width:56px' });
+    rot.onchange = () => { const x = +rot.value; if (!isFinite(x)) return; setRot(t, x); sendScreens(true); rot.blur(); renderStage(true); renderStageList(); renderCanvas(); };
+    const cur = shapeName(t), shp = h('select', { class: 'inp sm', title: 'forma da parte acesa do painel (os vértices se editam arrastando no palco)' },
+      [...Object.keys(SHAPES), ...(cur === 'livre' ? ['livre'] : [])].map(k => h('option', { value: k, text: k, ...(k === cur ? { selected: true } : {}) })));
+    shp.onchange = () => { const p = SHAPES[shp.value]; if (p) t.poly = p.map(q => q.slice()); else delete t.poly; sendScreens(true); shp.blur(); renderStage(); renderStageList(); renderCanvas(); };
     box.append(h('div', { class: 'srow2' + (i === scrSel ? ' sel' : ''), onpointerdown: () => { if (scrSel !== i){ scrSel = i; renderStage(); } } },
       nm, num('x', 0.05, 'x'), num('y', 0.05, 'y'), num('w', 0.05, 'larg. m'), num('h', 0.05, 'alt. m'),
+      h('label', { title: 'giro do painel, em graus (horário, em volta do centro)' }, '↻', rot), shp,
       num('pw', 1, 'px', 1), '×', num('ph', 1, '', 1),
       h('span', { class: 'hint num', text: `${Math.round(t.pw / t.w)} px/m` }), h('span', { class: 'grow' }),
-      h('button', { class: 'btn sm', text: '⧉', title: 'duplicar (entra ao lado)', onclick: () => { const { ox, oy, ...c } = t; lastScreens.push({ ...c, name: t.name + ' b', x: rnd(t.x + t.w) }); scrSel = lastScreens.length - 1; sendScreens(true); renderStage(true); renderStageList(); } }),
+      h('button', { class: 'btn sm', text: '⧉', title: 'duplicar (entra ao lado)', onclick: () => { const { ox, oy, ...c } = t; lastScreens.push({ ...c, poly: c.poly && c.poly.map(q => q.slice()), name: t.name + ' b', x: rnd(t.x + t.w) }); scrSel = lastScreens.length - 1; sendScreens(true); renderStage(true); renderStageList(); } }),
       h('button', { class: 'x', text: '×', title: 'tirar esta tela', onclick: () => { lastScreens.splice(i, 1); scrSel = -1; sendScreens(true); renderStage(true); renderStageList(); renderCanvas(); } })));
   });
 }
 new ResizeObserver(() => { stgView = null; renderStage(); }).observe($('#stg'));
 
-// ---- PIXEL MAP (tuning.PIXEL_MAP = {on, w, h} + ox/oy em cada tela de SCREENS; native _pixel_map).
-// Conceito do Resolume (Advanced Output) / processadora de LED: o canvas e' o INPUT map (onde se
-// compoe, forma fisica); o raster e' o OUTPUT map — as telas reempacotadas numa imagem so', cada
-// uma em (ox, oy) no tamanho nativo (pw x ph). Tela sem ox/oy nao sai. Tamanho = o de SCREENS (px):
-// aqui so' se move. Ligado, a janela de saida E' o raster.
+// ---- PIXEL MAP / TELAO (tuning.PIXEL_MAP = {on, w, h}; native _stage). Um telao de verdade chega ao
+// computador como UMA resolucao (o EDID da processadora): quais gabinetes, onde cada um esta' no raster
+// e o espaco entre eles ficam na processadora — nada disso volta. Entao, ligado: o CANVAS E' o raster
+// w x h e sai como esta'; as telas viram BLOCOS dele (ox, oy, pw, ph em px = o pixel map, editado na
+// vista "Pixel map": grade ou desenhar, arrastar/redimensionar pra acertar). Fora dos blocos = preto.
+// x/y/w/h/rot em metros viram so' o PREVIEW fisico (vista Palco): cada bloco mostra a regiao dele da
+// saida; mexer ali nao muda o que sai.
 let lastPM = { on: 0, w: 1920, h: 1080 }, pmTouched = 0; pmReady = true;
 const inMap = t => t.ox != null && t.oy != null;
-function sendPM(){ pmTouched = now(); post('/pixelmap', lastPM).then(r => { if (r.pixel_map) lastPM = r.pixel_map; renderPmap(); }).catch(e => toast('pixel map: ' + e, 'err')); }
-for (const [w, hh] of [[1920, 1080], [3840, 2160]]) $('#pm-presets').append(h('button', { class: 'btn sm', text: `${w}×${hh}`,
-  onclick: () => { Object.assign(lastPM, { w, h: hh }); sendPM(); } }));
-$('#pm-presets').append(h('button', { class: 'btn sm', text: '= janela', title: 'raster do tamanho da janela de saída atual',
-  onclick: () => { const o = lastOutput; if (o && o.window_w){ Object.assign(lastPM, { w: o.window_w, h: o.window_h }); sendPM(); } } }));
+const isBlock = t => !!lastPM.on && inMap(t);
+const PM_DENS = 400;   // px por metro do preview de um bloco novo (o tamanho fisico de verdade e' do palco)
+function sendPM(){ pmTouched = now(); post('/pixelmap', lastPM).then(r => { if (r.pixel_map) lastPM = r.pixel_map; renderPmap(); renderStage(); renderCanvas(); }).catch(e => toast('pixel map: ' + e, 'err')); }
 $('#pm-on').onchange = () => { lastPM.on = $('#pm-on').checked ? 1 : 0; sendPM(); };
-for (const k of ['w', 'h']) $('#pm-' + k).onchange = e => { const v = Math.round(+e.target.value); if (v >= 16){ lastPM[k] = v; sendPM(); } e.target.blur(); };
 const pmHit = (a, b) => a.ox < b.ox + b.pw && b.ox < a.ox + a.pw && a.oy < b.oy + b.ph && b.oy < a.oy + a.ph;
-function pmFree(t){   // 1o canto livre (0,0 / a direita / embaixo das que ja estao) onde a tela cabe
-  const on = lastScreens.filter(o => o !== t && inMap(o));
-  const cand = [[0, 0], ...on.flatMap(o => [[o.ox + o.pw, o.oy], [o.ox, o.oy + o.ph], [0, o.oy + o.ph]])].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-  for (const [x, y] of cand){ const r = { ox: x, oy: y, pw: t.pw, ph: t.ph };
-    if (x + t.pw <= lastPM.w && y + t.ph <= lastPM.h && !on.some(o => pmHit(r, o))) return [x, y]; }
-  return [0, 0];
+function newBlock(ox, oy, pw, ph, name){   // bloco = tela com lugar no raster; o preview nasce no mesmo arranjo do raster
+  return { name, x: rnd(ox / PM_DENS), y: rnd(oy / PM_DENS), w: rnd(Math.max(0.05, pw / PM_DENS), 100), h: rnd(Math.max(0.05, ph / PM_DENS), 100), pw, ph, ox, oy };
 }
-function pmPack(list, RW, RH){   // ox/oy de TODAS as telas no raster RW x RH -> quantas ficaram de fora
-  // canto-inferior-esquerdo (1o canto livre, de cima pra baixo) em algumas ordens; fica a 1a que
-  // cabe inteira, senao a que deixa menos px de fora (essas vao pra baixo do raster = vermelhas)
-  const orders = [(a, b) => b.ph - a.ph || b.pw - a.pw, (a, b) => b.pw - a.pw || b.ph - a.ph,
-                  (a, b) => b.pw * b.ph - a.pw * a.ph, (a, b) => Math.max(b.pw, b.ph) - Math.max(a.pw, a.ph)];
-  let best = null;
-  for (const ord of orders){
-    const placed = [], pos = new Map(); let out = 0, bottom = 0;
-    for (const t of [...list].sort(ord)){
-      const cand = [[0, 0], ...placed.flatMap(o => [[o.ox + o.pw, o.oy], [o.ox, o.oy + o.ph], [0, o.oy + o.ph]])]
-        .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-      let at = cand.find(([x, y]) => x + t.pw <= RW && y + t.ph <= RH && !placed.some(o => pmHit({ ox: x, oy: y, pw: t.pw, ph: t.ph }, o)));
-      if (!at){ out += t.pw * t.ph; at = [0, Math.max(RH, bottom)]; }
-      const r = { ox: at[0], oy: at[1], pw: t.pw, ph: t.ph }; placed.push(r); pos.set(t, r);
-      bottom = Math.max(bottom, r.oy + r.ph);
-    }
-    if (!best || out < best.out) best = { out, pos };
-    if (!out) break;
-  }
-  for (const [t, r] of best.pos){ t.ox = r.ox; t.oy = r.oy; }
-  return list.filter(t => t.oy + t.ph > RH || t.ox + t.pw > RW);
-}
-$('#pm-pack').onclick = () => {
-  const out = pmPack(lastScreens, lastPM.w, lastPM.h);
-  if (out.length) toast(`não coube no raster: ${out.map(t => t.name).join(', ')}`, 'err');
-  sendScreens(true); renderPmap();
+$('#pm-grid').onclick = () => {
+  const c = Math.max(1, Math.min(16, Math.round(+$('#pm-cols').value || 1))), r = Math.max(1, Math.min(16, Math.round(+$('#pm-rows').value || 1)));
+  if (c * r > 16) return toast('no máximo 16 blocos', 'err');
+  const old = lastScreens.filter(inMap);
+  const go = () => {
+    const xs = Array.from({ length: c + 1 }, (_, i) => Math.round(i * lastPM.w / c)), ys = Array.from({ length: r + 1 }, (_, i) => Math.round(i * lastPM.h / r));
+    lastScreens = lastScreens.filter(t => !inMap(t));
+    for (let j = 0; j < r; j++) for (let i = 0; i < c; i++) lastScreens.push(newBlock(xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j], `bloco ${j * c + i + 1}`));
+    scrSel = -1; stgView = null; sendScreens(true); renderStage(true); renderStageList(); renderCanvas();
+  };
+  if (old.length) askConfirm(`Trocar os ${old.length} bloco(s) do raster por uma grade ${c}×${r}?`, go); else go();
 };
-// ---- UM EDITOR, DUAS VISTAS: Palco (metros, SCREENS x/y/w/h) x Telao (raster px, ox/oy). Mesmas
-// telas, mesma selecao; a chave so' troca o que aparece (data-v no painel).
+let pmDraw = false;
+$('#pm-draw').onclick = () => { pmDraw = !pmDraw; $('#pm-draw').classList.toggle('on', pmDraw); $('#pmap').classList.toggle('draw', pmDraw); };
+$('#pmap').addEventListener('pointerdown', e => {   // desenhar bloco: arrasto no raster (px, gruda nas bordas)
+  if (!pmDraw || e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  const el = $('#pmap'), v = el._v, b = el.getBoundingClientRect(); if (!v) return;
+  const toPx = ev => { const x = (ev.clientX - b.left - v.x0) / v.sc, y = (ev.clientY - b.top - v.y0) / v.sc;
+    const ts = [0, ...lastScreens.filter(inMap).flatMap(t => [t.ox, t.ox + t.pw]), lastPM.w], us = [0, ...lastScreens.filter(inMap).flatMap(t => [t.oy, t.oy + t.ph]), lastPM.h];
+    const near = (q, arr) => { if (ev.altKey) return q; let best = q, bd = 8 / v.sc; for (const a of arr) if (Math.abs(a - q) < bd){ bd = Math.abs(a - q); best = a; } return best; };
+    return [Math.round(Math.max(0, Math.min(lastPM.w, near(x, ts)))), Math.round(Math.max(0, Math.min(lastPM.h, near(y, us))))]; };
+  const p0 = toPx(e), box = h('div', { class: 'pm-new' }); el.append(box); el.setPointerCapture(e.pointerId);
+  let p1 = p0;
+  const draw = () => Object.assign(box.style, { left: v.x0 + Math.min(p0[0], p1[0]) * v.sc + 'px', top: v.y0 + Math.min(p0[1], p1[1]) * v.sc + 'px',
+    width: Math.abs(p1[0] - p0[0]) * v.sc + 'px', height: Math.abs(p1[1] - p0[1]) * v.sc + 'px' });
+  el.onpointermove = ev => { p1 = toPx(ev); draw(); };
+  el.onpointerup = el.onpointercancel = () => {
+    el.onpointermove = el.onpointerup = el.onpointercancel = null; box.remove();
+    const ox = Math.min(p0[0], p1[0]), oy = Math.min(p0[1], p1[1]), pw = Math.abs(p1[0] - p0[0]), ph = Math.abs(p1[1] - p0[1]);
+    if (pw < 8 || ph < 8) return;
+    if (lastScreens.length >= 16) return toast('no máximo 16 telas/blocos', 'err');
+    lastScreens.push(newBlock(ox, oy, pw, ph, `bloco ${lastScreens.filter(inMap).length + 1}`));
+    scrSel = lastScreens.length - 1; sendScreens(true); renderStage(true); renderStageList(); renderCanvas();
+  };
+}, true);
+// ---- VISTAS: Palco (metros = preview fisico) x Pixel map (raster px = o que sai). Mesmas telas, mesma selecao.
 let stgMode = LS.get('v2stgView', 'palco');
 function setStgView(v){
-  stgMode = v === 'telao' ? 'telao' : 'palco'; LS.set('v2stgView', stgMode);
+  stgMode = v === 'raster' ? 'raster' : 'palco'; LS.set('v2stgView', stgMode);
   $('#stage-p').dataset.view = stgMode;
   $$('#stg-view button').forEach(b => b.classList.toggle('on', b.dataset.s === stgMode));
   stgView = null; renderStage(true); renderStageList(); renderPmap();
 }
 $$('#stg-view button').forEach(b => b.onclick = () => setStgView(b.dataset.s));
-// ---- DETECTAR TELAO: o servidor le o xrandr na hora (liga a saida extra se veio desligada; inclui
-// o telao virtual do simulador, src/telao_sim.py) -> mapTelao: raster = resolucao dela, empacota,
-// liga o pixel map, saida em tela cheia nela (janela = raster, 1:1)
+// ---- RECONHECER O TELAO: o servidor le as saidas (xrandr + simulador) — so' a RESOLUCAO, como o EDID.
+// mapTelao: raster = ela, pixel map ligado, saida em tela cheia nela (janela = raster, 1:1); sem blocos
+// ainda = abre o Pixel map pra dividir.
+const ledSigOf = m => m ? `${m.name} ${m.w}x${m.h}` : '';
 async function mapTelao(m, why){
   Object.assign(lastPM, { on: 1, w: m.w, h: m.h }); sendPM();
-  const out = lastScreens.length ? pmPack(lastScreens, m.w, m.h) : [];
-  if (lastScreens.length) sendScreens(true);
   outTouched = now(); outFull = true;
   await post('/output', { monitor: m.name, fullscreen: true, w: m.w, h: m.h });
-  ledSig = `${m.name} ${m.w}x${m.h}`;
-  const st = $('#tl-status'); st.innerHTML = '';
+  ledSig = ledSigOf(m);
+  const n = lastScreens.filter(inMap).length, st = $('#tl-status'); st.innerHTML = '';
   st.append(h('b', { text: `✓ ${why || 'telão'} ${m.name}${m.virtual ? ' (simulador)' : ''} · ${m.w}×${m.h}` }),
-    ` — raster = saída, ${lastScreens.length - out.length}/${lastScreens.length} telas empacotadas, pixel map ligado, saída em tela cheia lá.` +
-    (out.length ? ` Não couberam: ${out.map(t => t.name).join(', ')}.` : '') +
-    (lastScreens.length ? '' : ' Sem telas no palco: cadastre na vista Palco.'));
-  toast(`${why || 'telão'}: ${m.name} ${m.w}×${m.h}` + (out.length ? ` · ${out.length} tela(s) não couberam` : ''), out.length ? 'err' : '');
-  setStgView('telao');
+    ' — o canvas é o raster do telão, pixel map ligado, saída em tela cheia lá. ' +
+    (n ? `${n} bloco(s) no raster.` : 'Divida o raster em blocos (Pixel map: grade ou ▭ desenhar).'));
+  toast(`${why || 'telão'}: ${m.name} ${m.w}×${m.h}`);
+  if (!n) setStgView('raster');
+  else { stgView = null; renderStage(true); renderStageList(); renderCanvas(); }
 }
 $('#tl-detect').onclick = async () => {
   const b = $('#tl-detect'), st = $('#tl-status'); b.disabled = true; st.textContent = 'procurando a saída do telão…';
@@ -1461,9 +1679,8 @@ $('#tl-detect').onclick = async () => {
     st.textContent = '⚠ ' + e; toast('telão: ' + e, 'err');
   } finally { b.disabled = false; }
 };
-// ---- RECONHECER TELAO sozinho: /outputs (xrandr --current + simulador) a cada 2 s. Telao novo =
-// oferece mapear (nao sequestra a saida); formato trocado NO telao onde a saida ja esta = remapeia
-// (igual a processadora trocando o EDID); sumiu = avisa.
+// ---- RECONHECER sozinho: /outputs a cada 2 s. Telao novo = oferece mapear (nao sequestra a saida);
+// formato trocado NO telao onde a saida ja esta = remapeia (como a processadora trocando o EDID); sumiu = avisa.
 let ledSig = null, ledBusy = false;
 function offerTelao(m){
   const st = $('#tl-status'); st.innerHTML = '';
@@ -1474,36 +1691,38 @@ async function pollOutputs(){
   if (document.hidden || ledBusy || !$('#tl-status')) return;
   ledBusy = true;
   try {
-    const d = await (await fetch('/outputs')).json(), m = d.led, sig = m ? `${m.name} ${m.w}x${m.h}` : '';
+    const d = await (await fetch('/outputs')).json(), m = d.led, sig = ledSigOf(m);
     const onIt = m && lastOutput && lastOutput.monitor === m.name, mapped = onIt && lastPM.on && lastPM.w === m.w && lastPM.h === m.h;
     if (sig === ledSig) return;
     const first = ledSig === null; ledSig = sig;
     if (!m){ if (!first){ $('#tl-status').textContent = '⚠ telão desconectado — a saída ficou sem destino'; toast('telão desconectado', 'err'); } return; }
     if (mapped) return;                                       // ja' esta' tudo certo nele
     if (onIt) await mapTelao(m, 'formato mudou →');           // mesmo telao, outra resolucao
-    else { offerTelao(m); if (!first) toast(`telão detectado: ${m.name} ${m.w}×${m.h}`); }
+    else { offerTelao(m); toast(`telão detectado: ${m.name} ${m.w}×${m.h} — Saída › ⚡ mapear agora`); }   // aviso em qualquer aba
   } catch {} finally { ledBusy = false; }
 }
 setInterval(pollOutputs, 2000);
 function pmIssues(){
-  const on = lastScreens.filter(inMap), bad = new Set(), msg = [];
-  on.forEach(t => { if (t.ox + t.pw > lastPM.w || t.oy + t.ph > lastPM.h){ bad.add(t); msg.push(`${t.name} passa do raster`); } });
-  on.forEach((a, i) => on.slice(i + 1).forEach(b => { if (pmHit(a, b)){ bad.add(a); bad.add(b); msg.push(`${a.name} × ${b.name} se sobrepõem`); } }));
-  const o = lastOutput;
-  if (lastPM.on && o && o.window_w && (o.window_w !== lastPM.w || o.window_h !== lastPM.h))
-    msg.push(`janela ${o.window_w}×${o.window_h} ≠ raster ${lastPM.w}×${lastPM.h}: sai escalado, não pixel a pixel`);
-  if (lastPM.on && !lastScreens.length) msg.push('sem telas no palco: o pixel map não vale (a janela mostra o canvas)');
+  const on = lastScreens.filter(inMap), bad = new Set(), msg = [], o = lastOutput;
+  if (lastPM.on){
+    on.forEach(t => { if (t.ox + t.pw > lastPM.w || t.oy + t.ph > lastPM.h){ bad.add(t); msg.push(`${t.name} passa do raster`); } });
+    on.forEach((a, i) => on.slice(i + 1).forEach(b => { if (pmHit(a, b)){ bad.add(a); bad.add(b); msg.push(`${a.name} × ${b.name} se sobrepõem no raster`); } }));
+    if (!on.length) msg.push('sem blocos no raster: a saída fica preta — divida o raster (Pixel map)');
+    const out = lastScreens.filter(t => !inMap(t));
+    if (out.length) msg.push(`fora do raster (não saem): ${out.map(t => t.name).join(', ')}`);
+    if (o && o.window_w && (o.window_w !== lastPM.w || o.window_h !== lastPM.h))
+      msg.push(`janela ${o.window_w}×${o.window_h} ≠ raster ${lastPM.w}×${lastPM.h}: sai escalado, não pixel a pixel`);
+  }
   return { bad, msg };
 }
 function renderPmap(){
-  const el = $('#pmap'); if (!el || !el.clientWidth) return;
+  if (!$('#pm-on')) return;
   const { w: RW, h: RH } = lastPM, on = lastScreens.filter(inMap), { bad, msg } = pmIssues();
-  if (document.activeElement !== $('#pm-w')) $('#pm-w').value = RW;
-  if (document.activeElement !== $('#pm-h')) $('#pm-h').value = RH;
   $('#pm-on').checked = !!lastPM.on;
-  const used = on.reduce((a, t) => a + t.pw * t.ph, 0);
-  $('#pm-info').textContent = `· ${on.length}/${lastScreens.length} telas · ${(used / 1e6).toFixed(2)} de ${(RW * RH / 1e6).toFixed(2)} Mpx` + (lastPM.on ? '' : ' · desligado (janela = palco)');
+  $('#pm-info').textContent = lastPM.on ? `raster ${RW}×${RH} · ${on.length} bloco(s)` : '(canvas = palco)';
+  $('#pm-hint').textContent = lastPM.on ? '' : 'pixel map desligado: ligue (ou ⚡ detectar telão) pra o raster valer';
   $('#pm-warn').innerHTML = ''; msg.forEach(m => $('#pm-warn').append(h('div', {}, h('b', { text: '⚠ ' }), m)));
+  const el = $('#pmap'); if (!el || !el.clientWidth) return;
   $('#pm-empty').hidden = !!on.length;
   const W = el.clientWidth, H = el.clientHeight, sc = Math.min((W - 24) / RW, (H - 24) / RH), x0 = (W - RW * sc) / 2, y0 = (H - RH * sc) / 2;
   el._v = { sc, x0, y0 };
@@ -1513,38 +1732,60 @@ function renderPmap(){
   for (let i = lastScreens.length; i < els.length; i++) els[i].remove();
   lastScreens.forEach((t, i) => {
     let d = els[i];
-    if (!d){ d = h('div', { class: 'scr' }, h('b'), h('small')); d.onpointerdown = e => pmStart(e, d, i); el.append(d); }
+    if (!d){ d = h('div', { class: 'scr' }, h('b'), h('small'), ['nw', 'ne', 'sw', 'se'].map(c => h('i', { 'data-c': c }))); d.onpointerdown = e => pmStart(e, d, i); el.append(d); }
     d.hidden = !inMap(t); if (d.hidden) return;
     Object.assign(d.style, { left: x0 + t.ox * sc + 'px', top: y0 + t.oy * sc + 'px', width: t.pw * sc + 'px', height: t.ph * sc + 'px' });
     d.classList.toggle('sel', i === scrSel); d.classList.toggle('bad', bad.has(t));
-    d.children[0].textContent = t.name; d.children[1].textContent = `${t.ox},${t.oy} · ${t.pw}×${t.ph}`;
+    setPolyEl(d, t);
+    const le = $$(':scope > b, :scope > small', d);
+    le[0].textContent = t.name; le[1].textContent = `${t.ox},${t.oy} · ${t.pw}×${t.ph}`;
   });
   renderPmList();
 }
-function pmStart(e, d, i){
-  const t = lastScreens[i], el = $('#pmap'), v = el._v; if (!t || !v) return;
+function pmStart(e, d, i){   // mover/redimensionar o bloco no raster (px)
+  const t = lastScreens[i], el = $('#pmap'), v = el._v; if (!t || !v || pmDraw) return;
   if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); }
   const others = lastScreens.filter((o, j) => j !== i && inMap(o));
-  rectDrag(e, d, { r0: [t.ox, t.oy, t.pw, t.ph], ux: v.sc, uy: v.sc, min: 1,
+  rectDrag(e, d, { r0: [t.ox, t.oy, t.pw, t.ph], ux: v.sc, uy: v.sc, min: 8,
     tx: [0, lastPM.w, ...others.flatMap(o => [o.ox, o.ox + o.pw])], ty: [0, lastPM.h, ...others.flatMap(o => [o.oy, o.oy + o.ph])],
-    move: ([x, y], gs) => {
-      t.ox = Math.max(0, Math.round(x)); t.oy = Math.max(0, Math.round(y));
+    move: ([x, y, w, hh], gs) => {
+      Object.assign(t, { ox: Math.max(0, Math.round(x)), oy: Math.max(0, Math.round(y)), pw: Math.max(8, Math.round(w)), ph: Math.max(8, Math.round(hh)) });
       drawGuides(el, gs, x => v.x0 + x * v.sc, y => v.y0 + y * v.sc);
       renderPmap(); sendScreensLive();
     },
-    end: () => { drawGuides(el, [], null, null); clearTimeout(scrLiveT); scrLiveT = null; sendScreens(true); renderPmap(); } });
+    end: () => { drawGuides(el, [], null, null); clearTimeout(scrLiveT); scrLiveT = null; sendScreens(true); renderPmap(); renderStage(); renderStageList(); renderCanvas(); } });
 }
 function renderPmList(){
-  const box = $('#pm-list'); if (box.contains(document.activeElement)) return;   // nao atropela quem digita
+  const box = $('#pm-list'); if (!box || box.contains(document.activeElement)) return;   // nao atropela quem digita
   box.innerHTML = '';
   lastScreens.forEach((t, i) => {
-    const cb = h('input', { type: 'checkbox', title: 'sai no raster', ...(inMap(t) ? { checked: true } : {}) });
-    cb.onchange = () => { if (cb.checked){ [t.ox, t.oy] = pmFree(t); } else { delete t.ox; delete t.oy; } sendScreens(true); renderPmap(); };
-    const num = k => { const inp = h('input', { type: 'number', class: 'inp sm num', step: 1, min: 0, value: inMap(t) ? t[k] : '', ...(inMap(t) ? {} : { disabled: true }) });
-      inp.onchange = () => { const x = Math.round(+inp.value); if (!(x >= 0)) return; t[k] = x; sendScreens(true); inp.blur(); renderPmap(); }; return inp; };
-    box.append(h('div', { class: 'srow2' + (i === scrSel ? ' sel' : ''), onpointerdown: () => { if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); } } },
-      cb, h('b', { text: t.name }), h('label', {}, 'x', num('ox')), h('label', {}, 'y', num('oy')),
-      h('span', { class: 'hint num', text: `${t.pw}×${t.ph} px` + (inMap(t) ? ` · até ${t.ox + t.pw},${t.oy + t.ph}` : ' · fora do raster') })));
+    const num = (k, min) => { const inp = h('input', { type: 'number', class: 'inp sm num', step: 1, min, value: inMap(t) || k === 'pw' || k === 'ph' ? t[k] : '' });
+      inp.onchange = () => { const x = Math.round(+inp.value); if (!(x >= min)) return; t[k] = x; if (k === 'ox' || k === 'oy'){ t.ox = t.ox ?? 0; t.oy = t.oy ?? 0; } sendScreens(true); inp.blur(); renderPmap(); renderStage(); renderCanvas(); }; return inp; };
+    box.append(h('div', { class: 'srow2' + (i === scrSel ? ' sel' : ''), onpointerdown: () => { if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); renderPmap(); } } },
+      h('b', { text: t.name }), h('label', {}, 'x', num('ox', 0)), h('label', {}, 'y', num('oy', 0)), h('label', {}, 'larg. px', num('pw', 8)), h('label', {}, 'alt. px', num('ph', 8)),
+      h('span', { class: 'hint num', text: inMap(t) ? `até ${t.ox + t.pw},${t.oy + t.ph}` : 'fora do raster' }), h('span', { class: 'grow' }),
+      inMap(t) ? h('button', { class: 'btn sm', text: 'tirar do raster', onclick: () => { delete t.ox; delete t.oy; sendScreens(true); renderPmap(); renderStage(); renderCanvas(); } })
+               : h('button', { class: 'btn sm', text: 'pôr no raster', onclick: () => { t.ox = 0; t.oy = 0; sendScreens(true); renderPmap(); renderStage(); renderCanvas(); } }),
+      h('button', { class: 'x', text: '×', title: 'tirar este bloco', onclick: () => { lastScreens.splice(i, 1); scrSel = -1; sendScreens(true); renderStage(true); renderStageList(); renderCanvas(); } })));
+  });
+}
+// ---- PREVIEW DOS BLOCOS (vista Palco, com telao): a saida (/frame?which=out = o raster) recortada na
+// regiao de cada bloco, desenhada dentro da tela dele no palco (girada/forma como ela)
+addPreview($('#stg-src'), '/frame?which=out', 10, 'saida', paintBlocks);
+function paintBlocks(){
+  const src = $('#stg-src'), on = lastPM.on && src.width > 1;
+  $$('#stg .scr').forEach((d, i) => {
+    const t = lastScreens[i], blk = !!(t && on && inMap(t));
+    d.classList.toggle('blk', blk);
+    let cv = d.querySelector(':scope > canvas.pv');
+    if (!blk){ if (cv) cv.remove(); return; }
+    if (!cv){ cv = h('canvas', { class: 'pv' }); d.prepend(cv); }
+    const k = Math.min(src.width / lastPM.w, src.height / lastPM.h), bx = (src.width - lastPM.w * k) / 2, by = (src.height - lastPM.h * k) / 2;   // raster encaixado no frame
+    const cw = Math.max(1, Math.round(t.pw * k)), ch = Math.max(1, Math.round(t.ph * k));
+    if (cv.width !== cw || cv.height !== ch){ cv.width = cw; cv.height = ch; }
+    cv.getContext('2d').drawImage(src, bx + t.ox * k, by + t.oy * k, t.pw * k, t.ph * k, 0, 0, cw, ch);
+    const poly = polyOf(t);
+    cv.style.clipPath = poly ? `polygon(${poly.map(([u, v]) => `${u * 100}% ${v * 100}%`).join(',')})` : '';
   });
 }
 new ResizeObserver(() => renderPmap()).observe($('#pmap'));
@@ -1558,8 +1799,14 @@ setStgView(stgMode);
 // rect = [x, y, w, h] no canvas, 0..1, origem em cima (OVERLAYS[i].rect; native _rect_uv).
 let mesaView = LS.get('v2mesaView', 'mesa');
 const cvEls = {};
-function cvDims(){   // canvas em vigor: o contorno das telas, ou a janela
-  const st = stageOf(lastScreens), o = lastOutput || {};
+function canvasOf(){   // = native _stage: com telao (pixel map), o raster + os blocos dele; senao o palco fisico
+  if (!lastPM.on) return stageOf(lastScreens);
+  const W = lastPM.w, H = lastPM.h, bl = lastScreens.filter(inMap);
+  return { cw: W, ch: H, rects: bl.map(t => [t.ox / W, t.oy / H, t.pw / W, t.ph / H]),
+           polys: bl.map(t => (polyOf(t) || RECT_UV).map(([u, v]) => [(t.ox + u * t.pw) / W, (t.oy + v * t.ph) / H])), names: bl.map(t => t.name) };
+}
+function cvDims(){   // canvas em vigor: o raster do telao, o contorno das telas, ou a janela
+  const st = canvasOf(), o = lastOutput || {};
   return st ? [st.cw, st.ch] : [o.window_w || 16, o.window_h || 9];
 }
 function setMesaView(v){
@@ -1578,8 +1825,8 @@ function setRect(x, r){ r = r.map(r4); if (r[0] === 0 && r[1] === 0 && r[2] === 
 function cvHit(ev){   // ponto do ponteiro no canvas (0..1) + a tela embaixo dele
   const b = $('#cvs').getBoundingClientRect(), u = (ev.clientX - b.left) / b.width, v = (ev.clientY - b.top) / b.height;
   if (!(u >= 0 && u <= 1 && v >= 0 && v <= 1)) return null;
-  const st = stageOf(lastScreens), rs = st ? st.rects : [];
-  const si = rs.findIndex(r => u >= r[0] && u <= r[0] + r[2] && v >= r[1] && v <= r[1] + r[3]);
+  const st = canvasOf(), rs = st ? st.rects : [], ps = st ? st.polys : [];
+  const si = ps.findIndex(p => inPoly(p, u, v));   // a FORMA da tela; encher = o retangulo que a envolve
   return { u, v, si, scr: si >= 0 ? rs[si] : null };
 }
 const overTray = ev => { const b = $('#tray').getBoundingClientRect(); return ev.clientX >= b.left && ev.clientX <= b.right && ev.clientY >= b.top && ev.clientY <= b.bottom; };
@@ -1591,17 +1838,18 @@ function renderCanvas(){
   const bw = cw * s, bh = ch * s;
   Object.assign(box.style, { left: (W - bw) / 2 + 'px', top: (H - bh) / 2 + 'px', width: bw + 'px', height: bh + 'px' });
   box.title = `canvas ${cw}×${ch}`;
-  // telas: contorno por cima + escurece o que cai fora delas (na saida, fora = preto)
-  const st = stageOf(lastScreens), rs = st ? st.rects : [], sig = JSON.stringify([rs, lastScreens.map(t => t.name)]);
+  // telas: contorno (a forma, girada) por cima + escurece o que cai fora delas (na saida, fora = preto)
+  const st = canvasOf(), rs = st ? st.rects : [], ps = st ? st.polys : [], nm = st ? (st.names || lastScreens.map(t => t.name)) : [], sig = JSON.stringify([ps, nm]);
   if (box._scr !== sig){
-    box._scr = sig; $$('.cscr, .cvmask', box).forEach(x => x.remove());
-    if (rs.length){
-      const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'), path = document.createElementNS(NS, 'path');
-      svg.setAttribute('class', 'cvmask'); svg.setAttribute('viewBox', '0 0 1 1'); svg.setAttribute('preserveAspectRatio', 'none');
-      path.setAttribute('fill-rule', 'evenodd'); path.setAttribute('fill', 'rgba(0,0,0,.72)');
-      path.setAttribute('d', 'M0 0H1V1H0Z ' + rs.map(([x, y, w, hh]) => `M${x} ${y}h${w}v${hh}h${-w}Z`).join(' '));
-      svg.append(path); box.append(svg);
-      rs.forEach(([x, y, w, hh], i) => box.append(h('div', { class: 'cscr', 'data-i': i, style: `left:${x * 100}%;top:${y * 100}%;width:${w * 100}%;height:${hh * 100}%` }, h('span', { text: lastScreens[i].name }))));
+    box._scr = sig; $$('.cvlines, .cvlbl, .cvmask', box).forEach(x => x.remove());
+    if (ps.length){
+      const mk = (tag, a) => { const e = document.createElementNS(SVGNS, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+      const svgBox = cls => mk('svg', { class: cls, viewBox: '0 0 1 1', preserveAspectRatio: 'none' });
+      const mask = svgBox('cvmask'), lines = svgBox('cvlines');
+      mask.append(mk('path', { 'fill-rule': 'evenodd', fill: 'rgba(0,0,0,.72)', d: 'M0 0H1V1H0Z ' + ps.map(p => 'M' + p.map(q => q.join(' ')).join('L') + 'Z').join(' ') }));
+      ps.forEach((p, i) => lines.append(mk('polygon', { class: 'cscr', 'data-i': i, points: p.map(q => q.join(',')).join(' ') })));
+      box.append(mask, lines);
+      rs.forEach(([x, y, w, hh], i) => box.append(h('div', { class: 'cvlbl', style: `left:${x * 100}%;top:${y * 100}%;width:${w * 100}%;height:${hh * 100}%` }, h('span', { text: nm[i] }))));
     }
   }
   const on = mixStrips().filter(x => !x.off), keys = on.map(chKey);
@@ -1697,7 +1945,7 @@ new ResizeObserver(() => renderCanvas()).observe($('#cvarea'));
 function cvStart(e, key){
   const x = lastOverlays.find(z => chKey(z) === key); if (!x || e.button !== 0) return;
   if (key !== lastSelected) selectSource(key);
-  const box = $('#cvs'), bw = box.clientWidth, bh = box.clientHeight, st = stageOf(lastScreens), rs = st ? st.rects : [];
+  const box = $('#cvs'), bw = box.clientWidth, bh = box.clientHeight, st = canvasOf(), rs = st ? st.rects : [];
   const r0 = cvRect(x), had = !!x.rect;
   rectDrag(e, cvEls[key], { r0, ux: bw, uy: bh,
     tx: [0, 0.5, 1, ...rs.flatMap(r => [r[0], r[0] + r[2] / 2, r[0] + r[2]])], ty: [0, 0.5, 1, ...rs.flatMap(r => [r[1], r[1] + r[3] / 2, r[1] + r[3]])],

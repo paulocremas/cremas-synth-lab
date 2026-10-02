@@ -1546,8 +1546,10 @@ def set_output_fps(fps, tuning_path=None):
 
 def _norm_screens(items):
     """TELAS do palco fisico: [{name, x, y, w, h (metros, origem em cima a esquerda), pw, ph (pixels
-    do painel), ox, oy (opcional: canto da tela no raster do PIXEL_MAP, px)}]. O canvas da saida e'
-    o contorno delas (native_synth._stage). Ate 16."""
+    do painel), ox, oy (opcional: canto da tela no raster do PIXEL_MAP, px), rot (opcional: graus,
+    horario, em volta do centro), poly (opcional: [[u, v], ...] 0..1 no painel sem giro = a forma
+    acesa; ver dash_data.screen_axes)}]. O canvas da saida e' o contorno delas (native_synth._stage).
+    Ate 16. rot 0 / poly invalido = sem o campo."""
     out = []
     for i, t in enumerate(items or []):
         try:
@@ -1563,6 +1565,15 @@ def _norm_screens(items):
                 d['ox'], d['oy'] = (max(0, min(16384, int(t[k]))) for k in ('ox', 'oy'))
         except (TypeError, ValueError):
             pass
+        try:
+            rot = round((float(t.get('rot') or 0) + 180) % 360 - 180, 1)
+            if rot:
+                d['rot'] = rot
+        except (TypeError, ValueError):
+            pass
+        poly = dash_data.screen_poly(t)
+        if poly:
+            d['poly'] = [[round(u, 4), round(v, 4)] for u, v in poly]
         out.append(d)
     return out[:16]
 
@@ -1589,9 +1600,9 @@ def set_screens(items, save=True, tuning_path=None):
 
 
 def set_pixel_map(pm, tuning_path=None):
-    """PIXEL MAP da saida (dash v2 > Saida): {'on': 0|1, 'w', 'h'} = o raster que a processadora de
-    LED espera (a janela deve ter esse tamanho). Ligado, a janela vira o raster: cada tela com
-    ox/oy (SCREENS) sai recortada do canvas no tamanho nativo dela (native_synth._pixel_map).
+    """PIXEL MAP da saida (dash v2 > Saida): {'on': 0|1, 'w', 'h'} = o raster que o telao recebe (a
+    resolucao que a processadora anuncia; a janela deve ter esse tamanho). Ligado, o canvas E' esse
+    raster e as telas sao blocos dele (ox/oy/pw/ph; x/y/w/h = so' preview — native_synth._stage).
     Patcha tuning.PIXEL_MAP e grava a linha no tuning.py (acrescenta se nao houver)."""
     out = {'on': int(bool(pm.get('on', 0))),
            'w': max(16, min(16384, int(pm.get('w') or 1920))), 'h': max(16, min(16384, int(pm.get('h') or 1080)))}
@@ -1603,8 +1614,8 @@ def set_pixel_map(pm, tuning_path=None):
         src = open(path).read()
         src, n = re.subn(r'(?m)^PIXEL_MAP = \{.*\}$', lambda _: line, src)
         if n == 0:
-            src = src.rstrip('\n') + ('\n\n# pixel map da saida (dash v2 > Saida): a janela vira o raster w x h da'
-                                      ' processadora de LED; cada tela com ox/oy (SCREENS) vai la no tamanho nativo\n'
+            src = src.rstrip('\n') + ('\n\n# pixel map da saida (dash v2 > Saida): o canvas vira o raster w x h do'
+                                      ' telao; cada tela com ox/oy (SCREENS) e\' um bloco dele\n'
                                       + line + '\n')
         _write_atomic(path, src)
     return out
@@ -2901,11 +2912,16 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     t = set_screens([{'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': -3},
                      {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': None}], save=False)
     assert (t[0]['ox'], t[0]['oy']) == (5, 0) and 'ox' not in t[1], t   # ox/oy: os 2 ou nenhum
+    t = set_screens([{'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'rot': 270, 'poly': [[0, 0], [1, 0], [0.33333, 2]]},
+                     {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'rot': 0, 'poly': [[0, 0]]}], save=False)
+    assert t[0]['rot'] == -90.0 and t[0]['poly'] == [[0, 0], [1, 0], [0.3333, 1]], t   # forma livre
+    assert 'rot' not in t[1] and 'poly' not in t[1], t
     assert set_pixel_map({'on': True, 'w': 3840, 'h': '2160'}, tuning_path=p2) == {'on': 1, 'w': 3840, 'h': 2160}
     set_pixel_map({'on': 0, 'w': 1920, 'h': 1080}, tuning_path=p2)
     ns = {}; exec(open(p2).read(), ns); assert ns['PIXEL_MAP'] == {'on': 0, 'w': 1920, 'h': 1080}
     assert open(p2).read().count('PIXEL_MAP =') == 1 and _tuning.PIXEL_MAP['on'] == 0
     # detectar telao: liga a saida conectada-desligada a direita da principal; so' a principal = erro
+    vo0, dash_data.VIRTUAL_OUTPUTS = dash_data.VIRTUAL_OUTPUTS, os.path.join(os.path.dirname(p2), 'sem-simulador.json')   # simulador aberto nao conta
     xr = {'q': 'HDMI-0 connected primary 1366x768+0+0 (x) 1mm x 1mm\n   1366x768 60.00*+\n'
                 'HDMI-1 connected (x)\n   3840x2160 30.00 +\n'}
     xcalls, st0 = [], _state
@@ -2926,6 +2942,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     except LookupError:
         pass
     globals()['_state'] = st0
+    dash_data.VIRTUAL_OUTPUTS = vo0
     # objeto no canvas: rect normalizado; canvas inteiro = sem campo
     r = _norm_overlays([{'file': 'a.png', 'rect': [0.1, 0.2, 0.5, 0.5]}, {'file': 'b.png', 'rect': [0, 0, 1, 1]},
                         {'file': 'c.png', 'rect': [9, 0, 0, 1]}, {'file': 'd.png', 'rect': 'x'}])

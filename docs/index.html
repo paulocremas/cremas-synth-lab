@@ -801,14 +801,21 @@ ser a dela e a <a href="#vis-img">aba imagem</a> analisa ela).</p>
 <p><b>Telas e canvas</b> (dash v2): as <b>telas do palco</b> (<code>SCREENS</code>, metros + pixels,
 aba Saída) formam o <b>canvas</b> — o retângulo que as envolve (<code>_stage</code>), encaixado na
 janela com barras. No Palco (vista Canvas) cada fonte no ar é um objeto: <code>rect</code> no item
-do <code>OVERLAYS</code> (posição/tamanho no canvas); fora das telas a saída fica preta.</p>
-<p><b>Pixel map / telão</b>: a mesma lista de telas tem duas vistas — <b>Palco</b> (metros) e
-<b>Telão</b> (o <i>raster</i> em px que vai pra processadora de LED, <code>PIXEL_MAP</code> +
-<code>ox/oy</code> por tela). Ligado, o último passe (<code>MAP_SRC</code>) recorta cada tela do
-canvas e cola no raster, que é a janela de saída. <b>⚡ detectar telão</b> lê as saídas de vídeo
+do <code>OVERLAYS</code> (posição/tamanho no canvas); fora das telas a saída fica preta. <b>Forma
+livre</b>: cada tela pode girar (<code>rot</code>, graus, em volta do centro) e ter um polígono
+(<code>poly</code>, pontos 0..1 no painel sem giro) que é a parte acesa — formas prontas, vértices
+arrastáveis ou ✎ desenhar tela à mão. O canvas envolve o contorno já girado; o shader da mistura testa a
+forma exata (<code>inShape</code>, polígonos numa textura pequena).</p>
+<p><b>Pixel map / telão</b>: um telão de LED chega ao computador como <b>uma resolução só</b>
+(o EDID da processadora) — quais gabinetes, onde cada um está e o espaço entre eles ficam na processadora.
+Com o pixel map ligado (<code>PIXEL_MAP</code>), o canvas <b>é</b> esse raster e sai como está; as telas
+viram <b>blocos</b> dele (<code>ox/oy/pw/ph</code> em px, vista <b>Pixel map</b>: grade, desenhar, arrastar).
+Fora dos blocos sai preto. A posição em metros (vista Palco) passa a ser só o <b>preview</b> físico: cada
+bloco mostra a parte dele da saída. <b>⚡ detectar telão</b> lê as saídas de vídeo
 na hora, usa a resolução da extra como raster e abre a saída nela; o dash consulta a cada 2&nbsp;s
-e reconhece telão novo ou formato trocado. Sem hardware, <code>src/telao_sim.py</code> finge um
-telão (<code>SIM-1</code>) e remonta o palco a partir do que recebe.</p>
+e reconhece telão novo ou formato trocado. Sem hardware, <code>src/telao_sim.py</code> finge a
+processadora: lá se <b>monta</b> o telão (telas, giro, forma, lápis), ele anuncia <code>SIM-1</code> só com a resolução (como um telão real)
+esse mapa e remonta o palco recortando o que recebe pelo mapa dele.</p>
 <p><b>Efeitos de X</b>: a pilha de shaders <b>dessa</b> fonte (<code>BINDINGS[fonte].shaders</code>),
 cada um com camada + opacidade + modo de mistura (normal / soma / tela / multiplicar / clarear).
 Cada fonte tem a sua, lembrada mesmo desmarcada; sem shader, entra crua. Clique no nome do shader =
@@ -839,7 +846,7 @@ recompila se o <code>mtime</code> mudou) desenha com os <a href="#uniforms">unif
 áudio, <code>u_dominant</code>, <code>u_resolution</code>, <code>u_time</code> e os
 <a href="#u_fx"><code>u_fx_*</code></a> daquele par fonte/shader — e mistura por cima (opacidade +
 modo, <code>LAYER_BLEND_SRC</code>); o resultado entra na saída no <code>rect</code> dela no canvas,
-recortado nas telas (<code>u_rect</code>/<code>u_scr</code>), com a opacidade da fonte (saída começa
+recortado nas telas (<code>u_rect</code> + <code>u_sa</code>/<code>u_sb</code>/<code>u_poly</code>), com a opacidade da fonte (saída começa
 preta);</li>
 <li>saída → tela: cópia, ou, logo depois de uma troca de set, o passe de <b>transição</b> (o
 <code>.glsl</code> mistura a última imagem do set que saiu com a do novo);</li>
