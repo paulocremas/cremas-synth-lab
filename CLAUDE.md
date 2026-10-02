@@ -13,6 +13,10 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - **App `prisma`**: `dist/prisma/prisma` roda uma CÓPIA em `~/.local/share/prisma/` (dados reais: `src/tuning.py`,
   shaders, mídia). Mudou código → copiar `src/*.py`, `dash*.html` (e shader interno, ex. `calibrar.frag`)
   pra `dist/prisma/` **e** `~/.local/share/prisma/`.
+- **Linux + Windows**: o que toca o sistema passa por `src/plat.py` (nunca `xrandr`/`parec`/`select`/`/dev/video` direto).
+  Instaladores: tag `vX.Y.Z` → CI (`.github/workflows/release.yml`) gera `.deb` + `.exe` e publica a Release; o
+  launcher (`packaging/updater.py`) compara `VERSION` com a última Release ao abrir. Windows sem máquina pra testar:
+  só CI (self-checks + smoke). `telao_sim.py` é só Linux (X11).
 - Dash = Brave `--app --kiosk` próprio (`_open_dash_window`; `PRISMA_NO_BROWSER=1` nos testes). 3× Esc
   (saída ou dash → `POST /quit`) fecha tudo.
 - Hot-reload por mtime: `.frag`, `transitions/*.glsl`, `tuning.py`, `dash_server.py`, `dash_data.py`,
@@ -34,6 +38,17 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - Canvas = contorno das telas `SCREENS` (m + px, global; `_stage` = `stageOf` no dash), encaixado com barras
   (`_canvas_box`). Fonte no canvas = `rect` 0..1 (origem em cima) no item do `OVERLAYS` → `_rect_uv` →
   `u_rect`/`u_clip`/`u_scr`, só no blend da fonte na saída. `fit` mira `FIT_W:FIT_H` (canvas).
+- Pixel map (`PIXEL_MAP = {on, w, h}` + `ox/oy` por tela em `SCREENS`): ligado, a mistura vira o canvas
+  inteiro (`CMP_W/H`, `_comp_size`, sem barras) e o último passe (`MAP_SRC`) recorta cada tela e cola no
+  raster = a janela. Transição/calibração caem em textura (`final`/`pre`) antes do recorte.
+- Telas do palco = UM editor, vistas Palco (m) × Telão (px, `ox/oy`) — `stgMode`/`#stage-p[data-view]`. ⚡ detectar
+  telão: `/detect-output` (relê `xrandr` — o native só lista monitores ao abrir; liga saída conectada-desligada)
+  → raster = resolução dela, `pmPack`, pixel map on, saída tela cheia nela.
+- Telão VIRTUAL: `src/telao_sim.py` aberto anuncia `SIM-1` (formato escolhido) em `dash_data.VIRTUAL_OUTPUTS`
+  ($XDG_RUNTIME_DIR, pid vivo) → `get_monitors`/`/outputs`/`/detect-output` veem junto com o xrandr (real > virtual).
+  Saída nele = janela do tamanho do formato fora da tela (Muffin deixa tira de 75 px; sem `_wm_fullscreen`), capturada
+  pelo id (WM_CLASS `prisma.prisma`; o dash também diz "Saída" no título). Dash consulta `/outputs` a cada 2 s:
+  novo = "mapear agora", formato trocado com a saída nele = remapeia, sumiu = avisa. + `Teste.frag`.
 - Prévias v2: `/frame?which=out|sel|comp|src|fx` (`_preview_frame`; `out_want`/`fx_want` = só enquanto pedidas).
 - Dash v2: decisões no comentário do topo do `dash2.html`. Faixas na ordem do ESPECTRO (`specOrder`/
   `_clamp_ranges`; v1 ainda por índice). localStorage `mixKeys`/`fxPick` compartilhado com a v1.

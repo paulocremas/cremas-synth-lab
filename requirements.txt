@@ -1,0 +1,6 @@
+# runtime do PRISMA (o app empacotado congela estes; ver packaging/)
+numpy
+pygame
+PyOpenGL
+opencv-python-headless
+PyAudioWPatch; sys_platform == "win32"   # audio do sistema no Windows (loopback WASAPI)
