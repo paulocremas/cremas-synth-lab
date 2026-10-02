@@ -1651,7 +1651,7 @@ def detect_led_output(run=subprocess.run):
     if not o:
         raise LookupError('nenhuma saída de vídeo além da principal — ligue o cabo da processadora/telão, '
                           'um plug HDMI dummy, ou abra o simulador (src/telao_sim.py)')
-    if not o['active'] and not plat.IS_WIN:      # Windows so' lista saida ligada
+    if not o['active']:                           # (Windows so' lista saida ligada: nunca cai aqui)
         anchor = next((x for x in outs if x['primary']), None) or next((x for x in outs if x['active']), None)
         run(['xrandr', '--output', o['name'], '--auto'] + (['--right-of', anchor['name']] if anchor else []),
             capture_output=True, text=True, timeout=10)

@@ -465,6 +465,6 @@ if __name__ == '__main__':  # self-check das partes puras (roda em qualquer SO)
     assert parse_dshow_cams(txt) == ['Integrated Camera', 'OBS Virtual Camera']
     assert cam_input_args('/dev/video0', 640, 480)[:2] == ['-f', 'v4l2'] or IS_WIN
     assert screen_input_args({'x': 10, 'y': 0, 'w': 100, 'h': 50})[-1].endswith('+10,0') or IS_WIN
-    if not IS_WIN:
+    if not IS_WIN and os.environ.get('DISPLAY') and shutil.which('xrandr'):   # CI sem X: pula
         assert 'connected' in outputs_text()
     print('plat self-check ok')

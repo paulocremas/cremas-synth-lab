@@ -4,6 +4,7 @@ Estudo pessoal de síntese de sinal de baixo nível em dois domínios que compar
 vocabulário (oscilador, frequência, fase, ruído, filtro, feedback): **GLSL puro** (síntese de
 imagem, na GPU) e **SuperCollider** (síntese de áudio).
 
+- **[Como instalar o PRISMA! (Linux e Windows)](INSTALAR.md)**
 - **[Fluxo técnico navegável](https://paulocremas.github.io/cremas-synth-lab/)** — diagrama clicável (cada bloco pula pra explicação)
 - Plano de estudo e estado do ambiente: [CLAUDE.md](CLAUDE.md)
 - Índice das fontes (Book of Shaders + tutoriais Fieldsteel): [MAPA.md](MAPA.md)
