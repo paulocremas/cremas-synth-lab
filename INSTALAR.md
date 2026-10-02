@@ -63,6 +63,13 @@ apagar também: `rm -r ~/.local/share/prisma ~/.config/prisma`.
 
 Na página de versões, baixe o arquivo que termina em **`-setup.exe`** (ex.: `PRISMA-0.1.0-setup.exe`).
 
+> **Sem instalar (portátil):** baixe o **`-windows-portatil.zip`**, clique com o botão direito >
+> **Extrair tudo**, abra a pasta **PRISMA** e dê dois cliques em **`prisma.exe`** (o aviso do
+> SmartScreen do passo 2 vale aqui também). Roda de qualquer lugar, até de um pendrive: sets,
+> mídias e ajustes ficam na pasta `dados` ali dentro. Pra remover, apague a pasta. Quando sair
+> versão nova, ele avisa e abre a página pra baixar o zip novo — copie a pasta `dados` da versão
+> antiga pra nova pra manter seus sets.
+
 ### 2. Instalar
 
 1. Dê dois cliques no arquivo baixado.

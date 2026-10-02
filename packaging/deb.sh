@@ -10,6 +10,7 @@ DIST=${DIST:-dist}; export DIST
 packaging/build.sh
 VER=$(cat "$DIST/prisma/VERSION")            # tag (v0.2.0) no CI; build local = git describe
 VER=${VER#v}; [[ "$VER" =~ ^[0-9] ]] || VER="0.0.0+$VER"   # versao do .deb tem que comecar com digito
+VER=${VER//-/\~}                         # 0.1.0-beta.1 -> 0.1.0~beta.1 (dpkg: ~ vem ANTES da final)
 PKG=build/deb
 rm -rf "$PKG"
 mkdir -p "$PKG/DEBIAN" "$PKG/opt" "$PKG/usr/bin" "$PKG/usr/share/applications" "$PKG/usr/share/pixmaps"

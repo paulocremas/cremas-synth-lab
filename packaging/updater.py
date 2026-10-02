@@ -26,9 +26,10 @@ IS_WIN = sys.platform == 'win32'
 
 
 def parse_ver(s):
-    """'v0.3.1' / '0.3' -> (0, 3, 1) / (0, 3, 0); outra coisa (ex. hash de dev) -> None."""
-    m = re.fullmatch(r'v?(\d+)(?:\.(\d+))?(?:\.(\d+))?', (s or '').strip())
-    return tuple(int(g or 0) for g in m.groups()) if m else None
+    """'v0.3.1' / '0.3' -> (0, 3, 1, 0) / (0, 3, 0, 0); pre-lancamento 'v0.3.1-beta.1' -> (0, 3, 1, -1)
+    (vem ANTES da v0.3.1 final); outra coisa (ex. hash de dev) -> None."""
+    m = re.fullmatch(r'v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(-[0-9A-Za-z.]+)?', (s or '').strip())
+    return (*(int(g or 0) for g in m.groups()[:3]), -1 if m.group(4) else 0) if m else None
 
 
 def is_newer(latest, current):
@@ -36,9 +37,16 @@ def is_newer(latest, current):
     return bool(a and b and a > b)
 
 
+def is_portable(here):
+    """Zip portatil do Windows: `portable.txt` ao lado do binario (dados ficam na pasta)."""
+    return os.path.exists(os.path.join(here, 'portable.txt'))
+
+
 def install_kind(exe):
     """Como esta copia foi instalada -> qual asset da Release serve: 'exe' (Windows), 'deb'
-    (.deb em /opt/prisma) | None (pasta solta: so' da' pra abrir a pagina da Release)."""
+    (.deb em /opt/prisma) | None (pasta solta ou zip portatil: so' abre a pagina da Release)."""
+    if is_portable(os.path.dirname(os.path.realpath(exe))):
+        return None
     if IS_WIN:
         return 'exe'
     return 'deb' if os.path.realpath(exe).startswith('/opt/prisma/') else None
@@ -192,7 +200,8 @@ def maybe_update(here, exe):
 
 
 if __name__ == '__main__':  # self-check (roda: python packaging/updater.py)
-    assert parse_ver('v0.3.1') == (0, 3, 1) and parse_ver('1.2') == (1, 2, 0) and parse_ver('abc1234') is None
+    assert parse_ver('v0.3.1') == (0, 3, 1, 0) and parse_ver('1.2') == (1, 2, 0, 0) and parse_ver('abc1234') is None
+    assert is_newer('v0.1.0', 'v0.1.0-beta.1') and not is_newer('v0.1.0-beta.1', 'v0.1.0')   # beta < final
     assert is_newer('v0.10.0', 'v0.9.9') and not is_newer('v0.3.0', 'v0.3.0') and not is_newer('v0.2', 'v0.3')
     assert not is_newer('v1.0', 'abc1234')                  # dev nunca "atrasado"
     a = [{'name': 'prisma_0.3.0_amd64.deb'}, {'name': 'PRISMA-0.3.0-setup.exe'}]

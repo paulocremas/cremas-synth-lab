@@ -1,5 +1,6 @@
 # Instaladores do PRISMA! — Linux (.deb) e Windows (.exe, Inno Setup).
-#   tag v*  (git tag v0.2.0 && git push origin v0.2.0) -> testa, gera os dois e publica a Release;
+#   tag v*  (git tag v0.2.0 && git push origin v0.2.0) -> testa, gera .deb + .exe + zip portatil e publica a
+#           Release (tag com '-', ex. v0.1.0-beta.1 = pre-lancamento);
 #           o app instalado compara a versao dele com a ultima Release ao abrir (packaging/updater.py)
 #   push numa branch mexendo no empacotamento / manual  -> so' gera, como artefatos (sem Release)
 name: release
@@ -85,8 +86,20 @@ jobs:
           V=$(cat dist/prisma/VERSION); V=${V#v}; [[ "$V" =~ ^[0-9] ]] || V="0.0.0"
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" //DAppVersion="$V" //DSrcDir="$(cygpath -w "$PWD/dist/prisma")" \
             //DOutDir="$(cygpath -w "$PWD/dist")" "$(cygpath -w packaging/prisma.iss)"
+      - name: zip portatil (sem instalar; dados ficam dentro da pasta)
+        run: |
+          V=$(cat dist/prisma/VERSION); V=${V#v}
+          mkdir -p dist/portatil && cp -r dist/prisma dist/portatil/PRISMA
+          printf '%s\r\n' 'PRISMA! portatil - abra o prisma.exe.' \
+            'Este arquivo faz o PRISMA guardar sets, midias e ajustes na pasta "dados" aqui do lado' \
+            '(nada vai pro computador). Apague a pasta inteira pra remover tudo.' > dist/portatil/PRISMA/portable.txt
+          (cd dist/portatil && 7z a -tzip -bso0 "../PRISMA-$V-windows-portatil.zip" PRISMA)
       - uses: actions/upload-artifact@v4
-        with: { name: windows, path: 'dist/*-setup.exe' }
+        with:
+          name: windows
+          path: |
+            dist/*-setup.exe
+            dist/*-windows-portatil.zip
 
   release:
     if: github.ref_type == 'tag'
@@ -99,3 +112,4 @@ jobs:
         with:
           files: out/*
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}   # v0.1.0-beta.1: nao vira a "ultima" (o updater ignora)

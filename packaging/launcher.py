@@ -10,6 +10,9 @@ cada build, /opt/prisma (.deb) e Program Files so' admin grava. A cada abertura:
 sobrescrito com o da versao do binario; dados do usuario (DATA: tuning, shaders, transicoes,
 midia) so sao copiados se ainda nao existirem.
 
+PORTATIL (zip do Windows): `portable.txt` ao lado do binario -> dados em <pasta>/dados (apagou a
+pasta, sumiu tudo; nada no %LOCALAPPDATA%).
+
 Antes de abrir: checagem de atualizacao (packaging/updater.py — offline/mesma versao = segue).
 """
 import glob
@@ -56,16 +59,18 @@ def _user_copy(bundle, home):
     os.makedirs(os.path.join(home, 'media'), exist_ok=True)
 
 
-def _data_dir():   # = plat.data_dir (o plat.py ainda nao esta no path aqui)
+def _data_dir(here):   # = plat.data_dir (o plat.py ainda nao esta no path aqui)
     if os.environ.get('PRISMA_HOME'):
         return os.environ['PRISMA_HOME']
+    if updater.is_portable(here):   # zip portatil: dados dentro da propria pasta
+        return os.path.join(here, 'dados')
     if IS_WIN:
         return os.path.join(os.environ.get('LOCALAPPDATA') or os.path.expanduser('~'), 'prisma')
     return os.path.join(os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share'), 'prisma')
 
 
 here = os.path.dirname(os.path.realpath(sys.executable))
-root = _data_dir()
+root = _data_dir(here)
 os.makedirs(root, exist_ok=True)
 if IS_WIN:
     # --windowed: sem console -> o que o app imprime vai pro log; o ffmpeg vem junto no instalador
