@@ -1,11 +1,11 @@
 #!/bin/bash
-# Roda native_synth.py e reinicia sozinho toda vez que o arquivo for salvo.
+# Roda src/native_synth.py e reinicia sozinho toda vez que o arquivo for salvo.
 # Uso: ./watch_synth.sh [mesmos argumentos do native_synth.py]
 # ponytail: poll de mtime a cada 1s (sem inotify-tools instalado) — se quiser reagir
 # na hora em vez de ate 1s de atraso, "sudo apt install inotify-tools" e trocar o
-# "sleep 1" por um "inotifywait -e modify native_synth.py".
+# "sleep 1" por um "inotifywait -e modify src/native_synth.py".
 cd "$(dirname "$0")"
-FILE=native_synth.py
+FILE=src/native_synth.py
 last=$(stat -c %Y "$FILE")
 
 while true; do

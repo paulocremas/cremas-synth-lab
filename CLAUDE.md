@@ -1,65 +1,100 @@
 # synth — GLSL puro & SuperCollider, da base
 
 ## Objetivo
-Aprender síntese de sinal de baixo nível em dois domínios com o mesmo vocabulário
-(oscilador, frequência, fase, ruído, filtro, feedback):
+Aprender síntese de sinal de baixo nível com o mesmo vocabulário em dois domínios:
+**SuperCollider** (áudio: amplitude × tempo) e **GLSL puro** (imagem: cor × pixel, por frame).
+Cada ferramenta isolada, depois comparar, só então compor.
 
-- **SuperCollider** (`sclang`/`scsynth`) — síntese de áudio; sinal = onda sonora (amplitude × tempo).
-- **GLSL puro** — síntese de imagem na GPU; sinal = onda de cor/luz (valor × posição de pixel, por frame).
+## Ambiente (2026-10-02)
+- SuperCollider 3.13.0 cru. GLSL: VS Code `circledev.glsl-canvas` + `slevesque.shader`; `shaders/check.frag` = smoke-test.
+- `src/native_synth.py` (PyOpenGL): fontes (câmera/tela/mídia via `ffmpeg`) + áudio (FFT) → pilha de shaders por
+  fonte → janela de saída. `dash_server.py` (HTTP+SSE stdlib), `dash_data.py` (puras), `dash.html` (v1, `/`),
+  `dash2.html` (v2 ao vivo, `/v2`). Arquivos/fluxos: [README.md](README.md); instalar: [INSTALAR.md](INSTALAR.md).
+- **Linux + Windows**: tudo que toca o sistema passa por `src/plat.py` — nunca `xrandr`/`parec`/`select`/`/dev/video`
+  direto. Windows só testado no CI (sem GPU: o smoke para no 1º OpenGL); 1º teste real pendente.
+- **App `prisma`** (PyInstaller, `packaging/launcher.py`) roda uma CÓPIA na pasta de dados (`~/.local/share/prisma/` |
+  `%LOCALAPPDATA%\prisma` | `<pasta>/dados` com `portable.txt`), recopiando `src/*.py` (menos `tuning.py`) e
+  `dash*.html` a cada abertura. Quer código novo no app já → copiar pra `dist/prisma/` **e** a pasta de dados
+  (`packaging/build.sh` atualiza o launcher velho do `dist/`).
+- **Release**: tag `vX.Y.Z` → `.github/workflows/release.yml` (`.deb`, `.exe` `packaging/prisma.iss`, zip portátil);
+  tag com `-` = pré. `packaging/updater.py` compara `VERSION` com a última Release. Publicado: `v0.1.0-beta.1`, na
+  branch `dashboard-channels-output` (ainda não no `master`).
+- Dash = Chromium `--app --kiosk` próprio (`_open_dash_window`; Edge no Windows; `PRISMA_NO_BROWSER=1` nos testes).
+  3× Esc (saída ou dash → `POST /quit`) fecha tudo.
+- Hot-reload por mtime: `.frag`, `transitions/*.glsl`, `tuning.py`, `dash_server.py`, `dash_data.py`,
+  `dash*.html`. **`native_synth.py` e `telao_sim.py` só reabrindo** (dash novo + native velho não combinam).
 
-Entender cada ferramenta isolada primeiro, comparar onde o vocabulário se repete, só depois compor
-(visual reagindo a áudio, ou os dois lado a lado).
+## Armadilhas / convenções
+- Setter do `dash_server` grava o `tuning.py` (`_write_atomic`) **e** patcha o módulo `tuning` na hora — o
+  reload por mtime do native roda no loop de áudio, que pode parar; sem patch o dash "volta pro lugar".
+- `None` nunca vai pro `tuning.py` (`_scene_with` tira o campo); flags = `1`, não `True` (`json.dumps`).
+- Sync entre abas = guard por TEMPO (`TOUCH_MS`), não foco. Campo "travado" → olhar isso.
+- Set ativo **é** o estado vivo e auto-salva (`save_active_scene`); troca = `request_scene` → aplicada no fim
+  do frame GL (`apply_scene`, `_applying`) + transição.
+- `/select` não mexe na saída: fonte viva tem ffmpeg próprio em `_ovl`; v4l2 é exclusivo → `_feed` copia de lá.
+- Canal `file#N` = mesma fonte 2× (`_chkey`/`_base_key`); pilha por canal em `BINDINGS`, pela POSIÇÃO.
+  Fora do `pool` some da mesa/saída mas fica lembrado.
+- 60 fps (`OUTPUT_FPS`): `src_tex`/`comp_last` só refazem se o frame é OUTRO objeto (`is`, guardando o frame).
+- Passes: mistura → `SCENE_GRADE` → transição (`from` antes da calibração) → `OUTPUT_GRADE` (`master` →
+  `u_dim`); os dois grades usam `calibrar.frag`.
+- Canvas (`_stage` no native = `stageOf`/`canvasOf` no dash), encaixado com barras (`_canvas_box`): o contorno das
+  telas `SCREENS`, ou o raster do telão. Fonte no canvas = `rect` 0..1 (origem em cima) em `OVERLAYS` → `_rect_uv`.
+- Tela com forma livre: `rot` (centro) + `poly` (0..1 no painel SEM giro); geometria única em
+  `dash_data.screen_axes` (= `shapeAxes` no dash). Shader: `inShape` (`POLY_GLSL`, textura `u_poly` 32×16, unidade 8).
+- **Telão** = `PIXEL_MAP = {on, w, h}`. O computador vê o telão como UMA resolução (EDID); blocos e espaço entre eles
+  ficam na processadora. Ligado: canvas É o raster e sai como está; tela com `ox/oy/pw/ph` = BLOCO (vista Pixel
+  map). x/y/w/h/rot em metros = só PREVIEW (`isBlock`: redimensionar no palco não mexe em pw/ph; `paintBlocks`).
+  Reconhecer: `/detect-output` (relê o xrandr — o native só lista monitores ao abrir) / `pollOutputs` → `mapTelao`.
+- `src/telao_sim.py` (só Linux) = processadora de mentira: monta o telão (salvo em `~/.config/prisma/telao_sim.json`)
+  e anuncia SÓ nome + resolução em `dash_data.VIRTUAL_OUTPUTS`; recorta pelo mapa DELE. Captura a saída pelo id
+  (WM_CLASS `prisma.prisma`; o título do dash também tem "Saída"); janela fora da tela, sem `_wm_fullscreen`.
+- O app empacotado só leva o que o `if False:` do `launcher.py` importa: import novo em `src/` → listar lá
+  (`packaging/check_imports.py` no CI acusa).
+- Prévias v2: `/frame?which=out|sel|comp|src|fx` (`_preview_frame`; `out_want`/`fx_want` = só enquanto pedidas).
+- Dash v2: decisões no comentário do topo do `dash2.html`. Faixas na ordem do ESPECTRO (`specOrder`/
+  `_clamp_ranges`; v1 ainda por índice). localStorage `mixKeys`/`fxPick` compartilhado com a v1.
+- Elemento recriado a cada SSE perde clique/pointer capture — atualizar no lugar.
+- Classe no `body` não pode colidir com classe de componente (blackout = `body.blackout`, não `.blk`).
 
-## Estado do ambiente (2026-08-29)
-- **SuperCollider** 3.13.0 (`sclang` + `scsynth`), sem SuperDirt/Tidal — synth cru.
-- **GLSL**: VS Code `circledev.glsl-canvas` (preview WebGL, uniforms `u_time`/`u_resolution`/`u_mouse`,
-  modelo Shadertoy) + `slevesque.shader`. `check.frag` = smoke-test do pipeline.
-- **`native_synth.py`** (Python + PyOpenGL, sem navegador): captura webcam/tela (`ffmpeg`) + áudio do
-  sistema (`parec`/PulseAudio), faz FFT do áudio (bass/mid/treble + 8 faixas Sub-bass…Air + kick) e
-  alimenta `image.frag` via uniforms em tempo real. `tuning.py` = constantes de calibração com
-  hot-reload por mtime (edita, salva, aplica na hora). Também roda análise de imagem do frame de
-  entrada (brilho, cor dominante, saturação, nitidez, bordas, movimento…) num dashboard
-  `gnome-terminal` à parte.
-- Arquivos e os dois fluxos (técnico / macro): [README.md](README.md).
-- **Fluxo técnico navegável**: <https://paulocremas.github.io/cremas-synth-lab/> — fonte `docs/index.html`.
-  Ao editar esse arquivo, respeitar os sistemas já montados (cada um tem comentário no próprio HTML):
-  glossário `GLOSS` fonte-da-verdade + `linkify` automático; cores por região + linhagem de dado;
-  possibilidades em `<details>` retraído; eixo status (`.maybe` cinza) separado da cor de região.
+## Testes
+`.venv/bin/python src/dash_server.py` e `.venv/bin/python src/native_synth.py --selfcheck` (+ `src/plat.py`,
+`src/dash_data.py`, `src/telao_sim.py --selfcheck`, `packaging/updater.py`, `packaging/check_imports.py` — o CI roda
+todos). Build local fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning.py`
+temporário (`tuning_path`). Rodar o native do repo migra/auto-salva o `src/tuning.py` do repo; porta 8765 pode
+estar com o prisma aberto; simulador aberto = telão virtual anunciado (teste que lê saídas isola o
+`VIRTUAL_OUTPUTS`). Arrastar/clicar no dash do app aberto GRAVA no `tuning.py` vivo — backup antes.
 
-## Vocabulário compartilhado (onda / sinal)
+## Docs
+- Fluxo técnico: <https://paulocremas.github.io/cremas-synth-lab/> (`docs/index.html`) — respeitar
+  glossário `GLOSS` + `linkify`, cores por região + linhagem, `<details>` retraído, `.maybe` separado da cor.
+- [MAPA.md](MAPA.md) = índice dos currículos. [BACKLOG.md](BACKLOG.md) = combinado e ainda não feito.
+
+## Vocabulário (onda / sinal)
 
 | Conceito | SuperCollider | GLSL |
 |---|---|---|
 | Oscilador | `SinOsc`, `Saw`, `Pulse` | `sin()`/`fract()` numa shaping function |
-| Frequência | `.freq` do UGen | quantas repetições do padrão cabem na tela |
-| Fase | `.phase` | offset dentro do `sin()`/`fract()` |
-| Amplitude | `.mul`, envelope (`EnvGen`) | brilho/intensidade da cor |
-| Ruído | `LFNoise`, `WhiteNoise` | `random()`, Perlin `noise()` |
-| Filtro | `LPF`/`HPF`/`RLPF` | blur, kernel convolution |
-| Feedback | `LocalIn`/`LocalOut`, delay | pingpong buffer, reaction-diffusion |
-| Taxa de amostragem | sample rate (44.1kHz, no tempo) | resolução/frame rate (no espaço) |
+| Frequência | `.freq` | repetições do padrão na tela |
+| Fase | `.phase` | offset no `sin()`/`fract()` |
+| Amplitude | `.mul`, `EnvGen` | brilho da cor |
+| Ruído | `LFNoise`, `WhiteNoise` | `random()`, `noise()` |
+| Filtro | `LPF`/`HPF`/`RLPF` | blur, convolução |
+| Feedback | `LocalIn`/`LocalOut` | pingpong buffer |
+| Amostragem | sample rate (tempo) | resolução/fps (espaço) |
 
 ## Plano de estudo
+[Book of Shaders](https://thebookofshaders.com/) · [Fieldsteel](https://github.com/elifieldsteel/SuperCollider-Tutorials).
 
-Currículos-fonte: [The Book of Shaders](https://thebookofshaders.com/) ·
-[tutoriais Fieldsteel](https://github.com/elifieldsteel/SuperCollider-Tutorials).
-Índice comentado de cada capítulo/tutorial (o que ensina de fato): [MAPA.md](MAPA.md).
-
-| Fase | SuperCollider | GLSL (Book of Shaders) |
+| Fase | SuperCollider | GLSL |
 |---|---|---|
-| 0 · navegação da ferramenta | tutoriais 1–5 | cap. 00–08 |
-| 1 · oscilador / frequência / fase | `SinOsc` básico | cap. 05 (shaping functions) |
-| 1 · ruído | `LFNoise` / `WhiteNoise` | cap. 10–11 (random, noise) |
-| 1 · padrões / repetição | tutorial 10 (Pbind/Pseq/Prand) | cap. 09 (`fract()`/módulo) |
-| 1 · filtro | `LPF` / `HPF` / `RLPF` | cap. 17–18 (kernel convolution, filters) |
-| 1 · feedback | tutorial 20 (`LocalIn`/`LocalOut`, live input) | — fora do livro; ver Fase 3 |
-| 2 · avançado (isolado) | 21–23, 25–26 (FM, wavetable, granular) | cap. 13–14 (fBm, fractals) |
-| 3 · fusão | RMS/amplitude → OSC → uniform | uniform de áudio movendo o shader |
+| 0 · navegação | tut. 1–5 | cap. 00–08 |
+| 1 · oscilador/fase | `SinOsc` | cap. 05 |
+| 1 · ruído | `LFNoise`/`WhiteNoise` | cap. 10–11 |
+| 1 · padrões | tut. 10 (Pbind) | cap. 09 |
+| 1 · filtro | `LPF`/`HPF`/`RLPF` | cap. 17–18 |
+| 1 · feedback | tut. 20 | fora do livro |
+| 2 · avançado | 21–23, 25–26 | cap. 13–14 |
+| 3 · fusão | RMS → OSC → uniform | uniform de áudio no shader |
 
-**Fase 3 já implementada fora de ordem** em `native_synth.py` (com `parec`/numpy no lugar de
-SC→OSC). O caminho SC→OSC→shader continua de pé como comparação de abordagem.
-
-## Primeiro exercício (Fase 1, oscilador)
-- SC — ouvir uma frequência: `{SinOsc.ar(440, 0, 0.2)}.play;`
-- GLSL — ver uma frequência (em `check.frag`): `gl_FragColor = vec4(vec3(sin(u_time * 4.0) * 0.5 + 0.5), 1.0);`
-- Comparar o que "frequência" significa em cada um: ciclos por segundo no ouvido vs. na tela.
+Fase 3 já existe no native (`parec`/numpy no lugar de SC→OSC). 1º exercício: `{SinOsc.ar(440, 0, 0.2)}.play;`
+vs. `gl_FragColor = vec4(vec3(sin(u_time * 4.0) * 0.5 + 0.5), 1.0);` no `check.frag`.

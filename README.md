@@ -4,6 +4,7 @@ Estudo pessoal de síntese de sinal de baixo nível em dois domínios que compar
 vocabulário (oscilador, frequência, fase, ruído, filtro, feedback): **GLSL puro** (síntese de
 imagem, na GPU) e **SuperCollider** (síntese de áudio).
 
+- **[Como instalar o PRISMA! (Linux e Windows)](INSTALAR.md)**
 - **[Fluxo técnico navegável](https://paulocremas.github.io/cremas-synth-lab/)** — diagrama clicável (cada bloco pula pra explicação)
 - Plano de estudo e estado do ambiente: [CLAUDE.md](CLAUDE.md)
 - Índice das fontes (Book of Shaders + tutoriais Fieldsteel): [MAPA.md](MAPA.md)
@@ -17,26 +18,58 @@ Este README documenta os dois fluxos do lado prático:
 
 ## 1. Fluxo técnico — `native_synth.py`
 
-`native_synth.py` captura vídeo + áudio, deriva números do áudio, e alimenta um shader GLSL em
-tempo real — tudo nativo, sem navegador.
+`native_synth.py` captura imagem (câmeras, telas, mídias) + áudio, deriva números do áudio e
+passa cada fonte de imagem pela sua pilha de shaders GLSL em tempo real — tudo nativo. A janela OpenGL é a única saída de imagem; um **dashboard HTML**
+(servido pelo próprio processo) mostra os medidores e regula tudo ao vivo.
 
 Diagrama clicável + descrição de cada bloco (em ordem de execução) + tabela de uniforms:
 **[fluxo técnico navegável](https://paulocremas.github.io/cremas-synth-lab/)**.
+
+### Layout
+
+```
+src/          native_synth.py · dash_server.py · dash_data.py · plat.py · tuning.py · telao_sim.py   (código Python)
+shaders/      image.frag (base) · calibrar.frag (último passe da saída) · check.frag (fora do pipeline) · presets/default/*.frag
+media/        default/*  (imagens/vídeos da biblioteca; gitignored)
+transitions/  *.glsl  (transições entre sets, estilo gl-transitions)
+(raiz)        dash.html (v1) · dash2.html (v2, ao vivo) · favicon.png · watch_synth.sh · docs/ · *.md
+```
+
+**Sets** não são pastas: são cenas guardadas no `tuning.py` (`SCENES`). Cada set diz quais
+fontes/mídias entram na saída, a pilha de shaders de cada uma (opacidade, modo de mistura, forças
+dos efeitos), o que o set oferece, a tecla e a transição de entrada. Os arquivos (mídia, `.frag`,
+`.glsl`) formam uma biblioteca única, compartilhada pelos sets.
+
+`native_synth.py` acha os `.frag` em `../shaders/`, a mídia em `../media/` e a `dash.html` na
+raiz por caminho relativo ao próprio arquivo — rodar de qualquer cwd funciona (`./watch_synth.sh`
+ou `.venv/bin/python src/native_synth.py`). O app empacotado (`prisma`) roda uma **cópia** em
+`~/.local/share/prisma/` — ver `packaging/` abaixo.
 
 ### Arquivos no caminho
 
 | Arquivo | Papel |
 |---|---|
-| `native_synth.py` | orquestra tudo: threads de captura, FFT de áudio, upload de uniforms, hot-reload, loop de render 30 fps |
-| `image.frag` | o shader — "o synth". Recebe a imagem como textura + os uniforms de áudio, devolve a imagem sintetizada. Hot-reload por mtime |
-| `tuning.py` | constantes de calibração (cortes de Hz, escalas por banda, parâmetros do kick, suavização). Hot-reload por mtime, sem reiniciar |
-| `watch_synth.sh` | wrapper de dev: reinicia o `native_synth.py` quando o próprio `.py` muda (poll de mtime a cada 1 s) |
-| `webcam.html` | mesma ideia no navegador (WebGL); lê o mesmo `image.frag`, conjunto reduzido de uniforms (`u_resolution`, `u_time`, `u_texture_0`, `u_amp`) |
-| `check.frag` | smoke-test isolado (oscilador da Fase 1). Fora do pipeline |
+| `src/native_synth.py` | orquestra tudo: threads de captura (reiniciáveis ao vivo), FFT de áudio, uniforms, hot-reload, loop de render (`tuning.OUTPUT_FPS`, padrão 60), `dash_server.start()`. **A saída é só o que está marcado** (`OVERLAYS`): cada fonte marcada (câmera, tela ou mídia) sobe como textura, passa pela SUA pilha de shaders (`BINDINGS`: opacidade + modo de mistura + forças `u_fx_*` por shader) num FBO, e entra na saída com a opacidade dela. Tecla de set (campo `key` de `SCENES`) troca de set na janela OpenGL; a troca roda a transição de `transitions/` sobre a imagem final. Troca rápida de mídia: imagem parada vem do `_still_cache`, vídeo com `tuning.VIDEO_POOL` fica num `ffmpeg -re` sempre vivo (`_pool_reader`) |
+| `shaders/image.frag` / `shaders/presets/default/*.frag` | os shaders — "o synth". Recebem a imagem de UMA fonte como textura (`u_texture_0`) + os uniforms de áudio, devolvem a imagem sintetizada. Cabeçalho `// fx: nome1, nome2, …` declara os potenciômetros de efeito (`u_fx_<nome>`, 0..1). Um arquivo serve a quantas fontes/sets quiser: o código é compartilhado, a configuração é por fonte. Hot-reload por mtime |
+| `transitions/*.glsl` | transições **entre sets** (estilo gl-transitions): uma `vec4 transition(vec2 uv)` com `getFromColor`/`getToColor`/`progress`, cabeçalho `// ms: N` = duração. Na troca de set, o último passe mistura a imagem final do set que sai com a do que entra. Cada set escolhe a sua; `(padrão)` = `tuning.TRANSITION_DEFAULT`. Hot-reload por mtime |
+| `media/` | `default/*` — imagens/vídeos da biblioteca. Gitignored. `tuning.MEDIA[i]` = `{name, file, kind, fit, bounce?}` (`fit`: `fill` = estica, `fit` = encaixa com margens; `bounce` = rebate) |
+| `src/tuning.py` | constantes de calibração (ranges de Hz das 8 faixas + `HZ_OVERLAP` + `BANDS_ENABLED`, escalas, kick, suavização, `CHANNELS`) e o estado da aba Visuals: `SCENES` + `SCENE` (sets e o ativo), `OVERLAYS` (fontes marcadas), `BINDINGS` (pilha de shaders + forças por fonte), `MEDIA`, `SOURCE_FIT`, `VIDEO_POOL`, `TRANSITION_DEFAULT`. Hot-reload por mtime. Escrito ao vivo pelo dashboard (que também patcha o módulo na hora, pra valer no próximo frame). `SHADER`/`SHADER_LAYERS`/`FX`/`*_SET`/`*_KEYS` sobraram de versões antigas, sem uso |
+| `src/dash_server.py` | servidor HTTP + SSE (stdlib, sem dep). Endpoints: `/events` (stream do `state`), `/knobs` `/knob`, `/inputs` `/input` (fonte de áudio), `/bands` `/tweaks`, `/channels`; aba Visuals · Sets: `/scenes` `/scene` `/scene-new` `/scene-rename` `/scene-del` `/scene-key` `/scene-transition`, `/overlays`, `/bindings`, `/select`, `/pool`, `/source-fit`; Biblioteca: `/shaders` `/new-shader` `/rename-shader` `/delete-shader`, `/media` `/media-add` `/media-del`, `/transitions` `/transition-default` `/new-transition` `/rename-transition` `/delete-transition`; `/output`, `/output-fps`, `/output-grade`, `/out-analysis`, `/screens` (telas do palco = canvas), `/pixelmap`, `/detect-output` (botão ⚡ detectar telão: relê o `xrandr` + telão virtual, liga a saída extra), `/outputs` (consulta periódica: reconhecer telão novo/formato trocado), `/frame` (prévias do dash v2: saída, fonte crua, fonte com efeitos), `/v2`, `/favicon.png`. Migrações one-shot no start (`_migrate_default_to_folder`, `_migrate_to_scenes`). Hot-reload por mtime. Self-check: `.venv/bin/python src/dash_server.py` |
+| `src/plat.py` | camada **Linux × Windows**: monitores (xrandr \| EnumDisplayMonitors, DPI-aware), args do ffmpeg pra tela (x11grab \| gdigrab) e câmera (v4l2 \| dshow), áudio do sistema (parec \| loopback WASAPI via PyAudioWPatch, num objeto com cara de `Popen`), "tem dado no pipe?" (select \| PeekNamedPipe), navegador do dash, pastas. Self-check: `python src/plat.py` |
+| `src/dash_data.py` | funções puras que montam os dicts de números do dashboard (`audio_dash_data`; `band_magnitudes`; cores das faixas) + `parse_fx_manifest` (nomes do `// fx:` de um shader). Hot-reload por mtime |
+| `src/telao_sim.py` | **telão virtual** = a processadora de LED de mentira (fora do pipeline). Nele se **monta** o telão (vista palco: + coluna/faixa/16:9/painel, ✎ desenhar, arrastar, cantos, giro, vértices, forma; salvo em `~/.config/prisma/telao_sim.json`; raster reempacotado sozinho, `dash_data.pack_raster`; `Tab` = o mapa em px). Como um telão real, anuncia **só** a saída `SIM-1` e a resolução (8 presets ou próprio; `D` pluga/despluga) em `dash_data.VIRTUAL_OUTPUTS` — os blocos ficam nele. Captura a janela de saída (WM_CLASS `prisma.prisma`, pelo id), mostra a ENTRADA (sinal 1:1?) e remonta o palco recortando pelo mapa DELE (o pixel map do prisma diferente = imagem errada). `--prisma` = abre o prisma do repo junto. Com `shaders/presets/default/Teste.frag`: linha com degrau = mapeamento errado. Self-check: `--selfcheck` |
+| `dash.html` | o dashboard (JS puro, sem CDN), uma aba só ("PRISMA!") com tabs "Source Audio" / "Source Image" / "Visuals" / "Output Image" / "Output Lights" (as duas últimas ainda placeholder); shift+click numa tab abre ela em janela própria (`?panel=…`), sincronizadas ao vivo. Visuals tem duas sub-abas: **Sets** (lista de sets com tecla + transição; e o set ativo: Imagem — Fontes e Mídias com camada/opacidade/preencher/rebate, clique = selecionar —, Efeitos da fonte selecionada, Força dos efeitos, `×` / `+ adicionar ao set…`) e **Biblioteca** (mídia, `.frag`, transições). Barra "saída" no topo (monitor/dimensão/tela cheia, ao vivo). Live-reload por `html_mtime` |
+| `dash2.html` | dash v2 pra usar **ao vivo** (`/v2`): abas Palco (scenes + mesa ou vista **Canvas** — cada fonte no ar é um objeto arrastável com prévia pós-efeitos, bandeja das fora do ar — + monitor da saída + inspetor), Áudio (espectro com as 8 faixas arrastáveis e grudadas + colunas por faixa), Imagem (entrada crua × saída, mapas 3×3 sobre a prévia), Saída (janela, fps, **telas do palco** — um editor, vistas Palco (m; com telão = só preview, cada bloco mostra a parte dele da saída) × Pixel map (o raster do telão dividido em blocos: grade, desenhar, arrastar em px), forma livre (giro + polígono: formas prontas, vértices, ✎ desenhar) + ⚡ detectar telão —, calibração), Biblioteca. Modo Palco × Editar, knobs de arrasto relativo, MIDI learn com soft takeover, MASTER/BLACKOUT, saúde (chips no topo com detalhe no clique + moldura colorida), 60 fps. Decisões de design no comentário do topo |
+| `favicon.png` | ícone do dashboard (mesmo de paulocremas.github.io) |
+| `watch_synth.sh` | wrapper de dev: reinicia o `src/native_synth.py` quando o próprio `.py` muda (poll de mtime a cada 1 s). Os módulos `dash_*` fazem hot-reload sozinhos, sem restart |
+| `packaging/` | instaladores **Linux e Windows**, gerados pelo CI (`.github/workflows/release.yml`): criar uma tag `vX.Y.Z` (`git tag v0.2.0 && git push origin v0.2.0`) testa, gera `prisma_X.Y.Z_amd64.deb` + `PRISMA-X.Y.Z-setup.exe` + `PRISMA-X.Y.Z-windows-portatil.zip` e publica a **Release** (tag com `-`, ex. `v0.1.0-beta.1`, = pré-lançamento; o zip tem `portable.txt` → dados em `<pasta>/dados`); rodar o workflow à mão só gera os artefatos. `build.sh` = binário PyInstaller (`dist/prisma/`, congela Python + numpy + pygame + PyOpenGL + cv2; no Windows + PyAudioWPatch e o ffmpeg ao lado) + arquivo `VERSION` (a tag; build local = `git describe`); `DIST=pasta` gera fora do `dist/`. `deb.sh` = `.deb` (`/opt/prisma`, comando `prisma`, atalho, dependências pelo apt). `prisma.iss` = instalador Inno Setup (por usuário, sem admin, `%LOCALAPPDATA%\Programs\PRISMA`). `launcher.py` = entrada do binário: checa atualização (`updater.py`: consulta a última Release com prazo de 2 s — offline/mesma versão segue; atrasada pergunta e baixa/roda o instalador; `PRISMA_NO_UPDATE=1` desliga) e roda o app da pasta de dados (`~/.local/share/prisma` \| `%LOCALAPPDATA%\prisma`), copiando o **código** (`src/*.py` menos `tuning.py`, `dash*.html`) por cima a cada abertura; `tuning.py`/shaders/transições/mídia/modelos do usuário nunca são sobrescritos. `check_imports.py` (CI) = falha se `src/*.py` importa algo que o `if False:` do launcher não lista (o binário não levaria). `install.sh` = atalho local sem `.deb`, apontando pro `dist/` |
+| `webcam.html` | mesma ideia no navegador (WebGL); lê o mesmo `shaders/image.frag`, conjunto reduzido de uniforms (`u_resolution`, `u_time`, `u_texture_0`, `u_amp`) |
+| `shaders/check.frag` | smoke-test isolado (oscilador da Fase 1). Fora do pipeline — não aparece na galeria |
 
-Binários externos (não versionados): `ffmpeg` (webcam/tela), `import`/ImageMagick (uma janela),
-`parec`/`pactl` (áudio PulseAudio), `xrandr`/`wmctrl`/`xwininfo`/`v4l2-ctl` (geometria e fontes),
-`gnome-terminal` (janela da Visualização de imagem).
+Binários externos (não versionados; no Windows o ffmpeg vem no instalador e o resto não se aplica): `ffmpeg` (webcam/tela), `import`/ImageMagick (uma janela),
+`parec`/`pactl` (áudio PulseAudio), `xrandr`/`wmctrl`/`xwininfo`/`v4l2-ctl` (geometria e fontes).
+O dashboard abre em janela própria (Brave/Chrome `--app --kiosk`, perfil separado) que fecha junto
+com o app; sem navegador Chromium, cai no navegador padrão via `webbrowser` (aí a aba fica aberta).
 
 ---
 
@@ -50,7 +83,7 @@ flowchart TD
     OBS["cena no OBS<br/>(a entrada de imagem)"] --> NOTE["note (laptop)"]
     AUDIO["entrada de áudio"] --> NOTE
     NOTE --> APP["Motor de síntese (native_synth.py)"]
-    APP --> SYN["síntese de imagem<br/>image.frag · GLSL"]
+    APP --> SYN["síntese de imagem<br/>shaders .frag · GLSL"]
     SYN --> OUT["OUTPUT · imagem sintetizada"]
     OUT --> LIGHTS["luzes de palco<br/>programadas a partir do output"]
 
@@ -61,7 +94,11 @@ flowchart TD
 **Estado atual:**
 
 - **OBS** monta a cena que entra no Motor como **imagem** (via câmera virtual); em paralelo entra a **entrada de áudio**
-- **Motor de síntese** (`native_synth.py`) roda o `image.frag`, que sintetiza a imagem reagindo ao áudio → **OUTPUT**
+- **Motor de síntese** (`native_synth.py`) passa cada fonte marcada pelos seus shaders, que sintetizam a imagem reagindo ao áudio → **OUTPUT**
+- **OUTPUT** = janela OpenGL. Monitor / dimensão / tela cheia mudam ao vivo pela barra "saída"
+  no topo do dashboard (sem reiniciar o processo — `--fullscreen`/`--monitor <nome>` continuam
+  valendo como valor inicial, na linha de comando); a tab "Source Image" mostra resolução do
+  render, tamanho/posição da janela, fps e a lista de monitores disponíveis
 
 **A fazer:**
 
