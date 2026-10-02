@@ -16,7 +16,6 @@ import json
 import os
 import re
 import shutil
-import signal
 import subprocess
 import threading
 import time
@@ -25,6 +24,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import dash_data  # parse_fx_manifest (mesma pasta src/)
+import plat       # Linux x Windows (saidas, navegador, sair)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))          # src/
 _ROOT = os.path.dirname(_HERE)                              # raiz do repo
@@ -677,7 +677,7 @@ def delete_media(name, setname=None, tuning_path=None, media_dir=None):
     fn = _cfg.get('on_set_input')
     if fn and (_state.get('video') or {}).get('mode') == 'media' \
             and (_state.get('video') or {}).get('name') == name:
-        fn('video', 'webcam:/dev/video0')
+        fn('video', 'webcam:')   # camera padrao do sistema (plat.default_cam)
     return name
 
 
@@ -1546,7 +1546,8 @@ def set_output_fps(fps, tuning_path=None):
 
 def _norm_screens(items):
     """TELAS do palco fisico: [{name, x, y, w, h (metros, origem em cima a esquerda), pw, ph (pixels
-    do painel)}]. O canvas da saida e' o contorno delas (native_synth._stage). Ate 16."""
+    do painel), ox, oy (opcional: canto da tela no raster do PIXEL_MAP, px)}]. O canvas da saida e'
+    o contorno delas (native_synth._stage). Ate 16."""
     out = []
     for i, t in enumerate(items or []):
         try:
@@ -1556,7 +1557,13 @@ def _norm_screens(items):
         except (KeyError, TypeError, ValueError, AttributeError):
             continue
         name = str(t.get('name') or f'tela {i + 1}')[:24]
-        out.append({'name': name, 'x': x, 'y': y, 'w': w, 'h': h, 'pw': pw, 'ph': ph})
+        d = {'name': name, 'x': x, 'y': y, 'w': w, 'h': h, 'pw': pw, 'ph': ph}
+        try:
+            if t.get('ox') is not None and t.get('oy') is not None:   # fora do raster = sem campo
+                d['ox'], d['oy'] = (max(0, min(16384, int(t[k]))) for k in ('ox', 'oy'))
+        except (TypeError, ValueError):
+            pass
+        out.append(d)
     return out[:16]
 
 
@@ -1580,6 +1587,80 @@ def set_screens(items, save=True, tuning_path=None):
             _write_atomic(path, src)
     return clean
 
+
+def set_pixel_map(pm, tuning_path=None):
+    """PIXEL MAP da saida (dash v2 > Saida): {'on': 0|1, 'w', 'h'} = o raster que a processadora de
+    LED espera (a janela deve ter esse tamanho). Ligado, a janela vira o raster: cada tela com
+    ox/oy (SCREENS) sai recortada do canvas no tamanho nativo dela (native_synth._pixel_map).
+    Patcha tuning.PIXEL_MAP e grava a linha no tuning.py (acrescenta se nao houver)."""
+    out = {'on': int(bool(pm.get('on', 0))),
+           'w': max(16, min(16384, int(pm.get('w') or 1920))), 'h': max(16, min(16384, int(pm.get('h') or 1080)))}
+    if _tuning is not None:
+        _tuning.PIXEL_MAP = out
+    line = 'PIXEL_MAP = ' + json.dumps(out)
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(r'(?m)^PIXEL_MAP = \{.*\}$', lambda _: line, src)
+        if n == 0:
+            src = src.rstrip('\n') + ('\n\n# pixel map da saida (dash v2 > Saida): a janela vira o raster w x h da'
+                                      ' processadora de LED; cada tela com ox/oy (SCREENS) vai la no tamanho nativo\n'
+                                      + line + '\n')
+        _write_atomic(path, src)
+    return out
+
+
+def _outputs_now(run=subprocess.run, probe=False):
+    """Saidas conectadas agora: xrandr (probe=True = --query, sonda EDID/hotplug; False = --current,
+    barato pra consulta periodica) + o telao virtual do simulador (dash_data.virtual_outputs)."""
+    txt = plat.outputs_text(probe) if run is subprocess.run else \
+        run(['xrandr', '--query' if probe else '--current'], capture_output=True, text=True, timeout=5).stdout
+    return dash_data.parse_xrandr(txt) + dash_data.virtual_outputs(dash_data.xrandr_screen_w(txt))
+
+
+def _mon(o):
+    return {'name': o['name'], 'w': o['w'], 'h': o['h'], 'x': o['x'], 'y': o['y'],
+            'virtual': bool(o.get('virtual')), 'label': o.get('label') or ''}
+
+
+def _publish_monitors(outs):
+    mons = [{k: x.get(k, False) for k in ('name', 'w', 'h', 'x', 'y', 'primary', 'virtual')} for x in outs if x['active']]
+    if isinstance(_state, dict) and isinstance(_state.get('output'), dict):
+        _state['output']['monitors'] = mons      # a barra "saida" (v1/v2) passa a listar
+    return mons
+
+
+def list_outputs(run=subprocess.run):
+    """GET /outputs (o dash consulta a cada ~2 s pra RECONHECER telao novo / formato trocado):
+    {'outputs': [...], 'led': a que seria o telao | None}. Atualiza state.output.monitors."""
+    outs = _outputs_now(run)
+    led = dash_data.pick_led_output(outs)
+    return {'outputs': _publish_monitors(outs),
+            'led': _mon(led) if led and led['active'] else None}
+
+
+def detect_led_output(run=subprocess.run):
+    """Botao "detectar telao" (dash v2 > Saida > Telas do palco): le o xrandr NA HORA (o native so'
+    lista os monitores ao abrir — telao/processadora/dummy plugado depois nao aparece) + o telao
+    virtual do simulador, escolhe a saida (dash_data.pick_led_output: real > virtual) e, se ela
+    esta conectada mas desligada, liga com `xrandr --auto` a direita da principal. Atualiza
+    state.output.monitors. -> {'monitor': {name, w, h, x, y, virtual}, 'monitors': [...]};
+    LookupError = nao achou/nao ligou. Quem ajusta raster/telas/saida e' o dash."""
+    outs = _outputs_now(run, probe=True)
+    o = dash_data.pick_led_output(outs)
+    if not o:
+        raise LookupError('nenhuma saída de vídeo além da principal — ligue o cabo da processadora/telão, '
+                          'um plug HDMI dummy, ou abra o simulador (src/telao_sim.py)')
+    if not o['active'] and not plat.IS_WIN:      # Windows so' lista saida ligada
+        anchor = next((x for x in outs if x['primary']), None) or next((x for x in outs if x['active']), None)
+        run(['xrandr', '--output', o['name'], '--auto'] + (['--right-of', anchor['name']] if anchor else []),
+            capture_output=True, text=True, timeout=10)
+        o = next((x for x in _outputs_now(run, probe=True) if x['name'] == o['name']), None)
+        if not o or not o['active']:
+            raise LookupError(f"{(o or {}).get('name', 'saída')} conectada mas não ligou (xrandr --auto falhou)")
+        outs = _outputs_now(run)
+    return {'monitor': _mon(o),
+            'monitors': _publish_monitors(outs)}
 
 def set_out_analysis(enabled, tuning_path=None):
     """Reescreve OUT_ANALYSIS_ENABLED em tuning.py — checkbox "calcular" na tab Output Image
@@ -1732,6 +1813,7 @@ def _payload():
         'health': _state.get('health', {}),   # audio_age (s sem chunk) + stale (fontes paradas) — saude v2
         'output_fps': int(getattr(_tuning, 'OUTPUT_FPS', 60) or 60),   # escolhido no dash v2 (Saida)
         'screens': list(getattr(_tuning, 'SCREENS', None) or []),   # telas do palco (dash v2, Saida)
+        'pixel_map': getattr(_tuning, 'PIXEL_MAP', None) or {'on': 0, 'w': 1920, 'h': 1080},
         'bands_hz': {'overlap': int(getattr(_tuning, 'HZ_OVERLAP', 0)),
                      'enabled': int(getattr(_tuning, 'BANDS_ENABLED', 1)),
                      'ranges': [list(x) for x in getattr(_tuning, 'FREQ_BAND_HZ', [])],
@@ -1823,6 +1905,11 @@ class _Handler(BaseHTTPRequestHandler):
                 self.send_header('X-H', str(h))
                 self.end_headers()
                 self.wfile.write(data)
+        elif path == '/outputs':   # consulta periodica do dash v2 (reconhecer telao novo/formato trocado)
+            try:
+                self._send(200, 'application/json', json.dumps(list_outputs()).encode())
+            except (OSError, subprocess.SubprocessError) as e:
+                self._send(500, 'text/plain', str(e).encode())
         elif path == '/inputs':
             fn = _cfg.get('on_inputs')
             self._send(200, 'application/json', json.dumps(fn() if fn else {}).encode())
@@ -2084,6 +2171,19 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError, AttributeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
+        if path == '/pixelmap':  # {on, w, h}
+            try:
+                out = set_pixel_map(json.loads(raw.decode()))
+                self._send(200, 'application/json', json.dumps({'pixel_map': out}).encode())
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/detect-output':  # -> {monitor, monitors} | 404 {error}
+            try:
+                self._send(200, 'application/json', json.dumps(detect_led_output()).encode())
+            except (LookupError, OSError, subprocess.SubprocessError) as e:
+                self._send(404, 'application/json', json.dumps({'error': str(e)}).encode())
+            return
         if path == '/output-fps':  # {fps: 24|30|50|60}
             try:
                 out = set_output_fps(json.loads(raw.decode())['fps'])
@@ -2102,7 +2202,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path == '/quit':   # 3x Esc no dash = Alt+F4 em tudo: SIGTERM no proprio processo -> o
             # handle_sigterm do native zera running (sai pelo fluxo normal) e o atexit fecha o Brave
             self._send(200, 'application/json', b'{"ok":true}')
-            threading.Timer(0.1, os.kill, (os.getpid(), signal.SIGTERM)).start()
+            threading.Timer(0.1, plat.quit_self).start()
             return
         if path == '/output':
             fn = _cfg.get('on_set_output')
@@ -2359,9 +2459,9 @@ def _open_dash_window(url):
     PRISMA_NO_BROWSER=1 = nao abre nada (testes do app inteiro)."""
     if os.environ.get('PRISMA_NO_BROWSER'):
         return
-    exe = next((shutil.which(b) for b in _APP_BROWSERS if shutil.which(b)), None)
+    exe = plat.app_browser(_APP_BROWSERS)
     if exe:
-        prof = os.path.join(os.path.expanduser('~'), '.config', 'prisma', 'dash-browser')
+        prof = os.path.join(plat.config_dir(), 'dash-browser')
         try:
             os.makedirs(prof, exist_ok=True)
             _no_translate(prof)
@@ -2377,12 +2477,10 @@ def _open_dash_window(url):
             pass
         else:
             def _close():
-                try:
-                    os.killpg(p.pid, signal.SIGTERM)
-                except OSError:
-                    pass
+                plat.kill_tree(p)
             atexit.register(_close)
-            threading.Thread(target=_raise_output_over_dash, daemon=True).start()
+            if not plat.IS_WIN:   # wmctrl
+                threading.Thread(target=_raise_output_over_dash, daemon=True).start()
             return
     try:  # uma aba so; audio/image trocam por tab no header (botoes de popup continuam disponiveis)
         webbrowser.open(url, new=2)
@@ -2800,6 +2898,34 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     set_screens(t[:1], save=False, tuning_path=p2); assert len(_tuning.SCREENS) == 1
     set_screens([], tuning_path=p2)
     ns = {}; exec(open(p2).read(), ns); assert ns['SCREENS'] == [] and open(p2).read().count('SCREENS =') == 1
+    t = set_screens([{'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': -3},
+                     {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': None}], save=False)
+    assert (t[0]['ox'], t[0]['oy']) == (5, 0) and 'ox' not in t[1], t   # ox/oy: os 2 ou nenhum
+    assert set_pixel_map({'on': True, 'w': 3840, 'h': '2160'}, tuning_path=p2) == {'on': 1, 'w': 3840, 'h': 2160}
+    set_pixel_map({'on': 0, 'w': 1920, 'h': 1080}, tuning_path=p2)
+    ns = {}; exec(open(p2).read(), ns); assert ns['PIXEL_MAP'] == {'on': 0, 'w': 1920, 'h': 1080}
+    assert open(p2).read().count('PIXEL_MAP =') == 1 and _tuning.PIXEL_MAP['on'] == 0
+    # detectar telao: liga a saida conectada-desligada a direita da principal; so' a principal = erro
+    xr = {'q': 'HDMI-0 connected primary 1366x768+0+0 (x) 1mm x 1mm\n   1366x768 60.00*+\n'
+                'HDMI-1 connected (x)\n   3840x2160 30.00 +\n'}
+    xcalls, st0 = [], _state
+    def fake(cmd, **kw):
+        xcalls.append(cmd)
+        if '--auto' in cmd:
+            xr['q'] = xr['q'].replace('HDMI-1 connected (x)', 'HDMI-1 connected 3840x2160+1366+0 (x)')
+        return subprocess.CompletedProcess(cmd, 0, xr['q'], '')
+    globals()['_state'] = {'output': {'monitors': []}}
+    r = detect_led_output(run=fake)
+    assert r['monitor'] == {'name': 'HDMI-1', 'w': 3840, 'h': 2160, 'x': 1366, 'y': 0, 'virtual': False, 'label': ''}, r
+    assert list_outputs(run=fake)['led']['name'] == 'HDMI-1'
+    assert ['xrandr', '--output', 'HDMI-1', '--auto', '--right-of', 'HDMI-0'] in xcalls, xcalls
+    assert [m['name'] for m in _state['output']['monitors']] == ['HDMI-0', 'HDMI-1']
+    xr['q'] = 'HDMI-0 connected primary 1366x768+0+0 (x)\n   1366x768 60.00*+\n'
+    try:
+        detect_led_output(run=fake); assert False, 'achou telao com uma tela so'
+    except LookupError:
+        pass
+    globals()['_state'] = st0
     # objeto no canvas: rect normalizado; canvas inteiro = sem campo
     r = _norm_overlays([{'file': 'a.png', 'rect': [0.1, 0.2, 0.5, 0.5]}, {'file': 'b.png', 'rect': [0, 0, 1, 1]},
                         {'file': 'c.png', 'rect': [9, 0, 0, 1]}, {'file': 'd.png', 'rect': 'x'}])

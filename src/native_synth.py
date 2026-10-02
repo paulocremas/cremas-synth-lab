@@ -10,11 +10,9 @@ Uso: .venv/bin/python src/native_synth.py [--screen [--source NOME]] [--fullscre
 import argparse
 import collections
 import colorsys
-import glob
 import importlib
 import os
 import re
-import select
 import signal
 import subprocess
 import sys
@@ -31,6 +29,9 @@ from OpenGL.GL import *
 import tuning
 import dash_server
 import dash_data
+import plat   # Linux x Windows: monitores, captura, audio, pipes (ver plat.py)
+
+plat.init_process()   # Windows: DPI-aware (pixel fisico; senao o pixel map nao e' 1:1)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))          # src/
 _ROOT = os.path.dirname(_HERE)                              # raiz do repo
@@ -56,6 +57,9 @@ WIN_W, WIN_H = WIDTH, HEIGHT  # resolucao da janela; recalculada no --fullscreen
 # encaixado na janela com barras. FIT_W:FIT_H = o aspecto que o 'fit' das fontes mira (o do canvas;
 # sem telas, o da janela) — recalculado a cada frame no main
 FIT_W, FIT_H = WIN_W, WIN_H
+# MISTURA (texturas das camadas, u_resolution dos shaders da pilha): = a janela; no PIXEL MAP
+# (_pixel_map) = o canvas inteiro sem barras (_comp_size), recortado por tela no ultimo passe
+CMP_W, CMP_H = WIN_W, WIN_H
 FRAME_SIZE = WIDTH * HEIGHT * 3  # rgb24
 SIM_W, SIM_H = WIDTH // 4, HEIGHT // 4  # grade da simulacao de fumaca — Jacobi nao precisa de
 # resolucao de tela, so de mais iteracoes; recalculada junto com WIDTH/HEIGHT em main()
@@ -385,26 +389,23 @@ running = True
 
 
 def get_screen_size():
-    out = subprocess.check_output(['xrandr', '--current']).decode()
-    w, h = re.search(r'current (\d+) x (\d+)', out).groups()
-    return int(w), int(h)
+    return plat.screen_size()
 
 
-def get_monitors():
-    """Nome, w, h, x, y, primario de cada saida conectada (ordem do xrandr)."""
-    out = subprocess.check_output(['xrandr', '--current']).decode()
-    monitors = []
-    for line in out.splitlines():
-        m = re.match(r'(\S+) connected (primary )?(\d+)x(\d+)\+(\d+)\+(\d+)', line)
-        if m:
-            name, primary, w, h, x, y = m.groups()
-            monitors.append({'name': name, 'w': int(w), 'h': int(h), 'x': int(x), 'y': int(y),
-                              'primary': bool(primary)})
+def get_monitors(virtual=True):
+    """Nome, w, h, x, y, primario de cada saida conectada (ordem do xrandr) + o telao VIRTUAL do
+    simulador (src/telao_sim.py aberto; virtual=True, a direita da tela — dash_data.virtual_outputs).
+    virtual=False = so' as reais (captura de tela)."""
+    monitors = plat.monitors()
+    if virtual:
+        right = max((m['x'] + m['w'] for m in monitors), default=0)   # o telao virtual comeca a direita
+        monitors += [{k: v[k] for k in ('name', 'w', 'h', 'x', 'y', 'primary', 'virtual')}
+                     for v in dash_data.virtual_outputs(right)]
     return monitors
 
 
-def pick_monitor(name=None):
-    monitors = get_monitors()
+def pick_monitor(name=None, virtual=False):
+    monitors = get_monitors(virtual)
     if not monitors:
         return None
     if name:
@@ -431,7 +432,10 @@ def resolve_output(cfg):
     elif mon:
         pos = (mon['x'], mon['y'])
         flags |= pygame.NOFRAME  # sem WM decorando: a posicao (via env var) precisa bater certinho
-        if cfg.get('fullscreen'):
+        if cfg.get('fullscreen') and mon.get('virtual'):   # telao do simulador: so' o tamanho (o WM
+            win_w, win_h = mon['w'], mon['h']             # puxa uma tira pra tela; o resto fica fora)
+            label = f"telão virtual {mon['name']}"
+        elif cfg.get('fullscreen'):
             win_w, win_h = mon['w'], mon['h']
             label = f"fullscreen {mon['name']}"
         else:
@@ -483,7 +487,7 @@ def open_window(cfg):
         pass
     pygame.display.set_mode((win_w, win_h), flags)
     pygame.display.set_caption('PRISMA! · saída')
-    if cfg.get('fullscreen'):
+    if cfg.get('fullscreen') and not label.startswith('telão virtual'):   # WM encolheria pro monitor real
         _wm_fullscreen()
     glViewport(0, 0, win_w, win_h)
 
@@ -761,6 +765,55 @@ def _stage(screens, win_w, win_h):
             [((t[0] - x0) / W, (t[1] - y0) / H, t[2] / W, t[3] / H) for t in scr])
 
 
+def _pixel_map(pm, screens):
+    """PIXEL MAP (tuning.PIXEL_MAP = {on, w, h} + ox/oy em cada tela de SCREENS): a janela deixa
+    de mostrar o canvas na forma fisica e vira o RASTER w x h que a processadora de LED espera,
+    com cada tela recortada do canvas e colada em (ox, oy) no tamanho nativo dela (pw x ph).
+    -> None (desligado / sem tela no mapa) ou (w, h, slices); slice = (i, ox, oy, pw, ph), i =
+    indice da tela em _stage (mesma filtragem). Tela sem ox/oy nao entra no raster."""
+    if not isinstance(pm, dict) or not pm.get('on'):
+        return None
+    try:
+        rw, rh = int(pm['w']), int(pm['h'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if rw < 16 or rh < 16:
+        return None
+    out, i = [], 0
+    for t in screens or []:
+        try:
+            if not (float(t['w']) > 0 and float(t['h']) > 0):
+                continue
+            float(t['x']), float(t['y'])
+            pw, ph = int(t.get('pw') or 0), int(t.get('ph') or 0)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        if i >= MAX_SCREENS:
+            break
+        if t.get('ox') is not None and t.get('oy') is not None and pw > 0 and ph > 0:
+            try:
+                out.append((i, int(t['ox']), int(t['oy']), pw, ph))
+            except (TypeError, ValueError):
+                pass
+        i += 1
+    return (rw, rh, out) if out else None
+
+
+def _comp_size(cw, ch, budget):
+    """Resolucao da MISTURA no pixel map: o canvas (cw x ch, ja na maior densidade das telas),
+    reduzido na proporcao ate caber em `budget` pixels (os passes de shader rodam nela inteira)."""
+    k = min(1.0, (budget / float(max(1, cw * ch))) ** 0.5)
+    return max(16, int(cw * k)), max(16, int(ch * k))
+
+
+def _map_slices(pmap, rects, box):
+    """(src, dst) por fatia do pixel map, em uv com origem EMBAIXO: src = a tela no canvas (a
+    mistura inteira, sem barras), dst = o lugar dela no raster, encaixado na janela em `box`."""
+    rw, rh, sl = pmap
+    return [(_rect_uv(rects[i], FULL_UV), _rect_uv((ox / rw, oy / rh, pw / rw, ph / rh), box))
+            for i, ox, oy, pw, ph in sl if i < len(rects)]
+
+
 def _canvas_box(win_w, win_h, cw, ch):
     """Onde o canvas cw x ch cai na janela, ENCAIXADO (barras pretas no que sobra), em uv da
     janela com origem EMBAIXO (gl_FragCoord / u_res): (x, y, w, h)."""
@@ -807,9 +860,7 @@ def _spawn_ffmpeg(v):
     morta' a gente detecta por poll/timeout, e o teardown do pool cospe broken-pipe a toa."""
     if v['mode'] == 'screen':
         r = v['region']
-        display = os.environ.get('DISPLAY', ':0') + f"+{r['x']},{r['y']}"
-        cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-f', 'x11grab',
-               '-framerate', '30', '-video_size', f"{r['w']}x{r['h']}", '-i', display,
+        cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, *plat.screen_input_args(r),
                '-vf', _fit_vf(v.get('fit', 'fill'), r['w'], r['h']), '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
     elif v['mode'] == 'media':
         vf = _fit_vf(v.get('fit', 'fill'), *(_probe_dims(v['path']) or (0, 0)))
@@ -817,6 +868,13 @@ def _spawn_ffmpeg(v):
             src = _bounce_source(v['path']) if v.get('bounce') else v['path']
             cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-stream_loop', '-1', '-re',
                    '-i', src, '-map', '0:v:0', '-vf', vf, '-r', '30', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
+            if v.get('audio') and plat.IS_WIN:   # sem pass_fds no Windows: 2o ffmpeg so' pro audio
+                p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                p.audio_proc = subprocess.Popen(
+                    ['ffmpeg', '-loglevel', 'error', '-stream_loop', '-1', '-re', '-i', src, '-map', '0:a:0',
+                     '-ac', '1', '-ar', '44100', '-f', 's16le', '-'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                p.audio = p.audio_proc.stdout
+                return p
             if v.get('audio'):  # fonte de audio (🔊 na mesa): 2a saida, PCM no pipe p.audio
                 rfd, wfd = os.pipe()
                 cmd += ['-map', '0:a:0', '-ac', '1', '-ar', '44100', '-f', 's16le', f'pipe:{wfd}']
@@ -836,11 +894,8 @@ def _spawn_ffmpeg(v):
             cmd = ['ffmpeg', '-loglevel', 'error', '-loop', '1', '-framerate', '30',
                    '-i', v['path'], '-vf', vf, '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
     else:
-        cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-f', 'v4l2', '-framerate', '30']
-        if v['device'] == '/dev/video0':  # so a webcam de verdade precisa forcar o formato
-            cmd += ['-input_format', 'yuyv422']
-        cmd += ['-video_size', f'{WIDTH}x{HEIGHT}', '-i', v['device'],   # pede WIDTHxHEIGHT -> e' o aspecto dela
-                '-vf', _fit_vf(v.get('fit', 'fill'), WIDTH, HEIGHT), '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
+        cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, *plat.cam_input_args(v['device'], WIDTH, HEIGHT),
+               '-vf', _fit_vf(v.get('fit', 'fill'), WIDTH, HEIGHT), '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
 
@@ -853,6 +908,9 @@ def _kill(proc):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+    ap = getattr(proc, 'audio_proc', None)   # Windows: o ffmpeg separado do audio
+    if ap:
+        ap.kill()
     a = getattr(proc, 'audio', None)   # pipe de audio do video-fonte-de-audio
     if a:
         try:
@@ -942,7 +1000,7 @@ def _pool_reader(e):
     while e['run'] and running:
         p = e['proc']
         try:
-            ready = select.select([p.stdout], [], [], 0.2)[0]
+            ready = plat.readable(p.stdout, 0.2)
         except (ValueError, OSError):
             break
         if not ready:
@@ -1197,7 +1255,7 @@ def _await_first(proc, timeout=2.0):
     """Espera o 1o frame completo de `proc` (ate timeout s). np.uint8[FRAME_SIZE] ou None."""
     end = time.monotonic() + timeout
     while running and time.monotonic() < end:
-        if select.select([proc.stdout], [], [], 0.1)[0]:
+        if plat.readable(proc.stdout, 0.1):
             f = read_exact(proc.stdout, FRAME_SIZE)
             return np.frombuffer(f, dtype=np.uint8) if f is not None else None
         if proc.poll() is not None:
@@ -1205,7 +1263,8 @@ def _await_first(proc, timeout=2.0):
     return None
 
 
-def video_thread(mode, region=None, device='/dev/video0'):
+def video_thread(mode, region=None, device=None):
+    device = device or plat.default_cam()
     state['video'] = {'mode': mode, 'device': device, 'region': region}  # fonte da verdade
     state['video_label'] = _video_label(state['video'])
     state['video_id'] = _video_id(state['video'])
@@ -1314,7 +1373,7 @@ def video_thread(mode, region=None, device='/dev/video0'):
                         proc = None
                     time.sleep(0.02)
                 elif proc is not None:                        # pool ainda frio: mostra a ponte ao vivo
-                    if select.select([proc.stdout], [], [], 0.05)[0]:
+                    if plat.readable(proc.stdout, 0.05):
                         f = read_exact(proc.stdout, FRAME_SIZE)
                         if f is not None:
                             state['frame'] = np.frombuffer(f, dtype=np.uint8)
@@ -1334,7 +1393,7 @@ def video_thread(mode, region=None, device='/dev/video0'):
 
             # select com timeout curto: re-checa a troca de fonte a cada 50ms e nao trava se o
             # ffmpeg atual parar de produzir frame (fonte ruim, ex. /dev/video1 que nao e camera).
-            if not select.select([proc.stdout], [], [], 0.05)[0]:
+            if not plat.readable(proc.stdout, 0.05):
                 if proc.poll() is not None:                   # ffmpeg saiu — respawna a mesma fonte
                     time.sleep(0.3)
                     proc = _spawn_ffmpeg(cur)
@@ -1722,13 +1781,17 @@ def image_dash_data(arr, hue, sat, val, gx, gy, frame, w, h, dominant, peaks, pr
 def pick_audio_source(name=None):
     if name:
         return name
-    sink = subprocess.check_output(['pactl', 'get-default-sink']).decode().strip()
-    return sink + '.monitor'
+    return plat.default_audio()
 
 
 # --- troca de entrada pelo dashboard: enumerar + aplicar (dash_server chama via callbacks) ---
 
 def _list_audio_sources():
+    if plat.IS_WIN:
+        try:
+            return plat.list_audio()
+        except (FileNotFoundError, OSError):
+            return []
     try:
         out = subprocess.check_output(['pactl', 'list', 'short', 'sources'], text=True)
     except (FileNotFoundError, subprocess.CalledProcessError):
@@ -1745,10 +1808,9 @@ def _list_audio_sources():
 
 
 def _list_video_inputs():
-    res = [{'kind': 'webcam', 'id': f'webcam:{d}', 'name': d}
-           for d in sorted(glob.glob('/dev/video*'))]
+    res = [{'kind': 'webcam', 'id': f'webcam:{d}', 'name': d} for d in plat.list_cams()]
     try:
-        for m in get_monitors():
+        for m in get_monitors(virtual=False):
             res.append({'kind': 'screen', 'id': f"screen:{m['name']}",
                         'name': f"tela {m['name']} {m['w']}x{m['h']}" + (' *' if m['primary'] else '')})
     except Exception:
@@ -1835,8 +1897,8 @@ def _video_from_id(ident):
     WIDTH x HEIGHT atuais (nao muda a resolucao de saida ao vivo)."""
     kind, _, rest = ident.partition(':')
     if kind == 'webcam':
-        return {'mode': 'webcam', 'device': rest or '/dev/video0', 'region': None,
-                'fit': _live_fit('webcam:' + (rest or '/dev/video0'))}
+        dev = rest or plat.default_cam()
+        return {'mode': 'webcam', 'device': dev, 'region': None, 'fit': _live_fit('webcam:' + dev)}
     if kind == 'media':
         media = getattr(tuning, 'MEDIA', [])
         if rest:
@@ -1847,7 +1909,7 @@ def _video_from_id(ident):
                 or (media[0] if media else None)
         if m:
             return _media_v(m)
-        return {'mode': 'webcam', 'device': '/dev/video0', 'region': None}  # sem midia -> webcam
+        return {'mode': 'webcam', 'device': plat.default_cam(), 'region': None}  # sem midia -> webcam
     try:
         m = pick_monitor(rest or None)
     except SystemExit:
@@ -1889,16 +1951,7 @@ def set_input(kind, ident):
 
 
 def _spawn_parec(device):
-    # stderr num ARQUIVO, nao num pipe: ninguem le o pipe enquanto o parec vive, e se ele enche
-    # (64 KB de avisos) o parec trava pra sempre sem morrer — o audio "sumia" do nada.
-    errf = tempfile.TemporaryFile()
-    p = subprocess.Popen(
-        ['parec', '--device=' + device, '--format=s16le', '--rate=44100',
-         '--channels=1', '--latency-msec=50'],
-        stdout=subprocess.PIPE, stderr=errf,
-    )
-    p.errf = errf
-    return p
+    return plat.spawn_audio(device)   # parec (Linux) | loopback WASAPI (Windows) — ver plat.py
 
 
 def _parec_err(p):
@@ -1914,12 +1967,7 @@ PAREC_STALL_S = 2.0   # parec vivo mas sem mandar nada por isso = travado -> rei
 
 def _spawn_pacat():
     """toca o audio do video-fonte-de-audio (o mesmo trecho ja alinhado que a analise ve)."""
-    try:
-        return subprocess.Popen(['pacat', '--playback', '--format=s16le', '--rate=44100',
-                                 '--channels=1', '--latency-msec=60', '--client-name=prisma'],
-                                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    except FileNotFoundError:
-        return None
+    return plat.spawn_player()
 
 
 def audio_thread(device):
@@ -1927,7 +1975,7 @@ def audio_thread(device):
     try:
         proc = _spawn_parec(device)
     except FileNotFoundError:
-        print('sem audio: "parec" nao encontrado (pacote pulseaudio-utils)')
+        print('sem audio: ' + ('PyAudioWPatch nao instalado' if plat.IS_WIN else '"parec" nao encontrado (pacote pulseaudio-utils)'))
         return
     cur_src = device
     stall_t = 0.0                    # desde quando o parec nao manda nada (vigia, ver PAREC_STALL_S)
@@ -2077,7 +2125,7 @@ def audio_thread(device):
                 # VIGIA: le so' quando ha dado (select). Sem nada por PAREC_STALL_S = travado:
                 # reinicia. Enquanto espera, o loop volta pro topo (reload do tuning.py segue vivo)
                 # e os medidores caem pra zero em vez de congelar no ultimo valor.
-                if not select.select([proc.stdout], [], [], 0.25)[0]:
+                if not plat.readable(proc.stdout, 0.25):
                     stall_t = stall_t or time.monotonic()
                     if time.monotonic() - stall_t >= PAREC_STALL_S:
                         print(f'audio: sem dados ha {PAREC_STALL_S:.0f}s — reiniciando o parec ({cur_src})')
@@ -2266,6 +2314,55 @@ def dominant_color_thread():
         time.sleep(0.1)
 
 
+# OLHOS: deteccao de rosto (YuNet, cv2.FaceDetectorYN) numa thread, como a cor dominante. So'
+# roda pras fontes cujo shader pede u_eyes (o loop GL poe eyes_want[chave] = (instante, frame)).
+# Resultado por chave em state['eyes'] = (lx, ly, rx, ry, on): olhos em uv 0..1 da FONTE com
+# origem EM CIMA (o mesmo `st` dos presets), on = 0..1 (some devagar quando perde o rosto).
+# Sem cv2 (ex. app empacotado sem ele) ou sem o modelo = on fica 0 e o shader nao desenha.
+EYES_MODEL = os.path.join(_ROOT, 'models', 'face_detection_yunet_2023mar.onnx')
+EYES_DET_W = 320        # largura em que a deteccao roda (frame reduzido; mais = mais lento)
+EYES_SMOOTH = 0.5       # 0..1, quanto a posicao nova pesa por deteccao (menos = mais liso, mais atraso)
+eyes_want = {}
+
+
+def eyes_thread():
+    try:
+        import cv2
+        det = cv2.FaceDetectorYN.create(EYES_MODEL, '', (EYES_DET_W, EYES_DET_W), 0.6)
+    except Exception as e:
+        print('olhos: deteccao desligada ->', e)
+        return
+    while running:
+        now = time.time()
+        want = {k: f for k, (t, f) in list(eyes_want.items()) if now - t < 1.0}
+        if not want:
+            time.sleep(0.2)
+            continue
+        eyes = dict(state.get('eyes') or {})
+        for k, f in want.items():
+            prev = eyes.get(k)
+            hit = None
+            if len(f) == FRAME_SIZE:
+                dh = max(1, round(HEIGHT * EYES_DET_W / WIDTH))
+                img = cv2.resize(f.reshape(HEIGHT, WIDTH, 3), (EYES_DET_W, dh))
+                det.setInputSize((EYES_DET_W, dh))
+                _n, faces = det.detect(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                if faces is not None and len(faces):
+                    fc = max(faces, key=lambda r: r[2] * r[3])   # maior rosto
+                    # landmarks YuNet: [4:6] olho direito (da pessoa = esquerda da imagem), [6:8] esquerdo
+                    ax, ay, bx, by = fc[4] / EYES_DET_W, fc[5] / dh, fc[6] / EYES_DET_W, fc[7] / dh
+                    hit = (ax, ay, bx, by) if ax <= bx else (bx, by, ax, ay)   # l = o da esquerda da imagem
+            if hit:
+                if prev and prev[4] > 0:
+                    s = EYES_SMOOTH
+                    hit = tuple(p + (h - p) * s for p, h in zip(prev[:4], hit))
+                eyes[k] = (*hit, 1.0)
+            elif prev:
+                eyes[k] = (*prev[:4], max(0.0, prev[4] - 0.15))   # perdeu: some em ~0.5s
+        state['eyes'] = eyes
+        time.sleep(0.03)
+
+
 def compile_shader(src, kind):
     s = glCreateShader(kind)
     glShaderSource(s, src)
@@ -2417,11 +2514,52 @@ def build_layer_blend_program():
     return p, u
 
 
+# PIXEL MAP (_pixel_map): ultimo passe, da mistura (u_tex, canvas inteiro, u_tres px) pra janela
+# = o raster. Cada fatia: onde cai no raster (u_dst, uv da janela) <- de onde vem no canvas (u_src).
+# O resto do raster sai preto. A amostra fica meio texel pra dentro da tela (linear sem sangrar a
+# vizinha); raster na janela em 1:1 = pixel certo.
+MAP_SRC = """
+#ifdef GL_ES
+precision mediump float;
+#endif
+uniform vec2 u_res;
+uniform vec2 u_tres;
+uniform sampler2D u_tex;
+uniform int u_n;
+uniform vec4 u_dst[16];
+uniform vec4 u_src[16];
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_res;
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < 16; i++) {
+        if (i >= u_n) break;
+        vec4 d = u_dst[i];
+        vec2 l = (uv - d.xy) / d.zw;
+        if (all(greaterThanEqual(l, vec2(0.0))) && all(lessThan(l, vec2(1.0)))) {
+            vec4 s = u_src[i];
+            vec2 h = 0.5 / u_tres;
+            c = texture2D(u_tex, clamp(s.xy + l * s.zw, s.xy + h, s.xy + s.zw - h)).rgb;
+        }
+    }
+    gl_FragColor = vec4(c, 1.0);
+}
+"""
+
+
+def build_map_program():
+    p = build_program(MAP_SRC)
+    _use_basic(p)
+    u = _locs(p, 'u_res', 'u_tres', 'u_tex', 'u_n', 'u_dst', 'u_src')
+    glUniform1i(u['u_tex'], LAYER_BLEND_UNIT_BASE)
+    return p, u
+
+
 def make_layer_targets(w, h):
-    """1 FBO + 6 texturas do tamanho da janela: out[0]/out[1] (a saida acumulada, ping-pong),
-    src[0]/src[1] (o resultado da fonte da vez, ping-pong), layer (o shader da vez) e from (a
-    imagem final do set que SAI, pra transicao de set). Recriado quando a janela muda (main)."""
-    texs = glGenTextures(7)
+    """1 FBO + 8 texturas do tamanho da MISTURA (a janela; no pixel map, o canvas): out[0]/out[1]
+    (a saida acumulada, ping-pong), src[0]/src[1] (o resultado da fonte da vez, ping-pong), layer
+    (o shader da vez), from (a imagem final do set que SAI, pra transicao de set) e pre (a imagem
+    calibrada que o pixel map recorta). Recriado quando o tamanho muda (main)."""
+    texs = glGenTextures(8)
     for t in texs:
         glBindTexture(GL_TEXTURE_2D, t)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
@@ -2431,7 +2569,8 @@ def make_layer_targets(w, h):
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
     return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
             'src': [texs[2], texs[3]], 'layer': texs[4], 'from': texs[5],
-            'mask': texs[6]}   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
+            'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
+            'pre': texs[7]}
 
 
 def build_fumaca_program():
@@ -2446,7 +2585,7 @@ def build_fumaca_program():
 
 
 def main():
-    global running, WIDTH, HEIGHT, WIN_W, WIN_H, FIT_W, FIT_H, FRAME_SIZE, SIM_W, SIM_H
+    global running, WIDTH, HEIGHT, WIN_W, WIN_H, FIT_W, FIT_H, CMP_W, CMP_H, FRAME_SIZE, SIM_W, SIM_H
 
     def handle_sigterm(signum, frame):
         # SIGTERM (ex. o watch_synth.sh reiniciando o processo) nao roda blocos "finally"
@@ -2476,12 +2615,14 @@ def main():
     parser.add_argument('--audio', metavar='SOURCE',
                          help='source de audio do PulseAudio/PipeWire (ver "pactl list short sources"). '
                               'Default = monitor da saida padrao (o som geral do sistema)')
-    parser.add_argument('--device', metavar='PATH', default='/dev/video0',
+    parser.add_argument('--device', metavar='PATH', default=None,
                          help='no modo webcam (sem --screen), qual device v4l2 usar. Default /dev/video0. '
                               'Use uma camera virtual (ex. v4l2loopback + OBS Virtual Camera) pra capturar '
                               'uma janela em fps cheio em vez de --window')
     args = parser.parse_args()
     mode = 'screen' if args.screen else 'webcam'
+    if plat.IS_WIN and (args.region or args.window is not None):
+        raise SystemExit('--region/--window ainda so no Linux; use --source NOME (DISPLAY1...) ou a mesa do dash')
 
     screen_size = get_screen_size() if args.fullscreen else None
 
@@ -2509,7 +2650,7 @@ def main():
             WIDTH, HEIGHT = fit(capture_region['w'], capture_region['h'])
             print(f"fonte: {capture_region['name']} "
                   f"({capture_region['w']}x{capture_region['h']}+{capture_region['x']}+{capture_region['y']})")
-    elif args.device != '/dev/video0':
+    elif args.device and args.device != '/dev/video0' and not plat.IS_WIN:
         # camera virtual (v4l2loopback/OBS) pode estar numa resolucao diferente do default —
         # pergunta pro device em vez de chutar 640x480
         out = subprocess.check_output(['v4l2-ctl', '--device=' + args.device, '--get-fmt-video']).decode()
@@ -2524,7 +2665,7 @@ def main():
     # set_output()/o dash usam pra pedir uma troca ao vivo (ver resolve_output/open_window)
     out_cfg = {'monitor': '', 'fullscreen': False, 'w': WIDTH, 'h': HEIGHT}
     if args.monitor is not None:
-        mon = pick_monitor(args.monitor if args.monitor != '' else None)
+        mon = pick_monitor(args.monitor if args.monitor != '' else None, virtual=True)
         out_cfg = {'monitor': mon['name'], 'fullscreen': True, 'w': mon['w'], 'h': mon['h']}
     elif args.fullscreen:
         out_cfg = {'monitor': '', 'fullscreen': True, 'w': 0, 'h': 0}
@@ -2572,6 +2713,8 @@ def main():
         uniforms['treble'] = glGetUniformLocation(prog, 'u_treble')
         uniforms['kick'] = glGetUniformLocation(prog, 'u_kick')
         uniforms['dominant'] = glGetUniformLocation(prog, 'u_dominant')
+        uniforms['eyes'] = glGetUniformLocation(prog, 'u_eyes')        # olhos da fonte (eyes_thread)
+        uniforms['eyes_on'] = glGetUniformLocation(prog, 'u_eyes_on')
         uniforms['tex_smoke'] = glGetUniformLocation(prog, 'u_texture_smoke')  # densidade da sim de fluido (EFEITO 7 silhueta)
         uniforms['tex_fumaca'] = glGetUniformLocation(prog, 'u_texture_fumaca')  # fumaca procedural (EFEITO 6)
         for name in FREQ_BAND_UNIFORM.values():
@@ -2626,11 +2769,16 @@ def main():
         return prog_cache[lp]
 
     blend_prog, blend_u = build_layer_blend_program()
+    map_prog, map_u = build_map_program()
     ltargets = [None]   # make_layer_targets(...) sob demanda (camada ativa ou transicao de set)
 
     def layer_targets():
-        if not ltargets[0] or ltargets[0]['size'] != (WIN_W, WIN_H):
-            ltargets[0] = make_layer_targets(WIN_W, WIN_H)
+        if not ltargets[0] or ltargets[0]['size'] != (CMP_W, CMP_H):
+            if ltargets[0]:
+                glDeleteFramebuffers(1, [ltargets[0]['fbo']])
+                glDeleteTextures([t for k in ('out', 'src') for t in ltargets[0][k]] +
+                                 [ltargets[0][k] for k in ('layer', 'from', 'mask', 'pre')])
+            ltargets[0] = make_layer_targets(CMP_W, CMP_H)
         return ltargets[0]
 
     # troca de SET (dash_server.request_scene / tecla -> state['scene_pending']): aplicada no FIM
@@ -2695,6 +2843,7 @@ def main():
     for slot in range(MAX_CHANNELS):
         threading.Thread(target=channel_thread, args=(slot,), daemon=True).start()
     threading.Thread(target=dominant_color_thread, daemon=True).start()
+    threading.Thread(target=eyes_thread, daemon=True).start()
     dash_server.start(state, tuning, TUNING_PATH, lambda: running,
                       audio_source=audio_src, video_mode='screen' if args.screen else 'webcam',
                       on_inputs=list_inputs, on_set_input=set_input, on_set_output=set_output,
@@ -2773,6 +2922,7 @@ def main():
             trans_cache.clear()          # contexto GL novo -> programas de transicao invalidos
             layer_bad.clear()            # camadas de shader recompilam no proximo frame
             blend_prog, blend_u = build_layer_blend_program()
+            map_prog, map_u = build_map_program()
             ltargets[0] = None           # FBO/texturas das camadas eram do contexto velho
             src_tex.clear()              # texturas por fonte idem (sem glDelete: o contexto ja foi)
             out_pv['wh'] = None          # FBO da previa da saida idem
@@ -2784,6 +2934,10 @@ def main():
 
         FIT_W, FIT_H, scr_rects = _stage(getattr(tuning, 'SCREENS', None), WIN_W, WIN_H)   # o 'fit' mira o canvas
         state['output']['canvas'] = [FIT_W, FIT_H]
+        pmap = _pixel_map(getattr(tuning, 'PIXEL_MAP', None), getattr(tuning, 'SCREENS', None)) if scr_rects else None
+        CMP_W, CMP_H = _comp_size(FIT_W, FIT_H, max(WIN_W * WIN_H, pmap[0] * pmap[1])) if pmap else (WIN_W, WIN_H)
+        state['output']['comp'] = [CMP_W, CMP_H]
+        state['output']['map'] = [pmap[0], pmap[1], len(pmap[2])] if pmap else None
         src_frames = _source_frames()             # fontes MARCADAS com frame pronto (a saida)
         # mistura na CPU (so' pra fumaca / analise / cor dominante): refeita so' se alguma fonte
         # trouxe frame novo (ou mudou opacidade/alpha/ordem). Igual = mesma tex/tex_prev de antes,
@@ -2913,7 +3067,7 @@ def main():
         glDrawArrays(GL_TRIANGLES, 0, 3)
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0)
-        glViewport(0, 0, WIN_W, WIN_H)
+        glViewport(0, 0, CMP_W, CMP_H)             # a mistura; o que desenha na janela volta pra WIN_W x WIN_H
         glActiveTexture(GL_TEXTURE3)
         glBindTexture(GL_TEXTURE_2D, dw)         # silhueta (sim de fluido) deste frame -> u_texture_smoke
         glActiveTexture(GL_TEXTURE4)
@@ -2926,7 +3080,7 @@ def main():
         now_t = time.perf_counter() - t0
 
         def set_uniforms(fx):
-            glUniform2f(uniforms['res'], WIN_W, WIN_H)
+            glUniform2f(uniforms['res'], CMP_W, CMP_H)
             glUniform1f(uniforms['time'], now_t)
             glUniform1f(uniforms['amp'], state['amp'])
             glUniform1f(uniforms['bass'], state['bass'])
@@ -2954,7 +3108,7 @@ def main():
         def blend_into(dst, base, layer, a, mode, flip=0, mask=0, rect=FULL_UV, clip=FULL_UV, scr=()):
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0)
             _use_basic(blend_prog)
-            glUniform2f(blend_u['u_res'], WIN_W, WIN_H)
+            glUniform2f(blend_u['u_res'], CMP_W, CMP_H)
             glUniform4f(blend_u['u_rect'], *rect)
             glUniform4f(blend_u['u_clip'], *clip)
             glUniform1i(blend_u['u_nscr'], len(scr))
@@ -2978,7 +3132,7 @@ def main():
         sh_avail = (state.get('pool') or {}).get('shaders')   # disponiveis no set (None = todos)
         src_blend = {_chkey(o): o.get('blend') for o in state.get('overlays') or []}
         src_rect = {_chkey(o): o.get('rect') for o in state.get('overlays') or []}
-        cbox = _canvas_box(WIN_W, WIN_H, FIT_W, FIT_H)   # canvas encaixado na janela (barras fora)
+        cbox = FULL_UV if pmap else _canvas_box(WIN_W, WIN_H, FIT_W, FIT_H)   # canvas encaixado na janela (barras fora)
         scr_uv = [_rect_uv(r, cbox) for r in scr_rects]   # telas na janela: fora delas fica preto
         for k in [k for k in src_tex if k not in {x[0] for x in src_frames}]:
             glDeleteTextures([src_tex.pop(k)[0]])       # canal saiu da saida: libera a textura
@@ -3013,6 +3167,11 @@ def main():
                 use_program(h[1], h[3])
                 set_uniforms(o['fx'] if isinstance(o.get('fx'), dict)   # forcas da ENTRADA (mesmo .frag pode vir 2x)
                              else (b.get('fx') or {}).get(o['file']) or {})
+                if uniforms['eyes'] >= 0:                   # shader usa olhos -> pede deteccao dessa fonte
+                    eyes_want[key] = (time.time(), frame)
+                    ey = (state.get('eyes') or {}).get(key) or (0.0, 0.0, 0.0, 0.0, 0.0)
+                    glUniform4f(uniforms['eyes'], *ey[:4])
+                    glUniform1f(uniforms['eyes_on'], ey[4])
                 glActiveTexture(GL_TEXTURE0)
                 glBindTexture(GL_TEXTURE_2D, ftex)
                 glClear(GL_COLOR_BUFFER_BIT)
@@ -3024,8 +3183,8 @@ def main():
             if time.time() - fx_want.get(key, 0) < 1.5 and time.perf_counter() - fx_pv['t'].get(key, 0) >= 1.0 / FX_PV_HZ:
                 fx_pv['t'][key] = time.perf_counter()
                 try:
-                    pw = min(FX_PV_W, WIN_W)
-                    ph = max(2, int(round(pw * WIN_H / max(1, WIN_W))))
+                    pw = min(FX_PV_W, CMP_W)
+                    ph = max(2, int(round(pw * CMP_H / max(1, CMP_W))))
                     if fx_pv['wh'] != (pw, ph):
                         if fx_pv['fbo'] is None:
                             fx_pv['fbo'], fx_pv['tex'] = glGenFramebuffers(1), glGenTextures(1)
@@ -3037,7 +3196,7 @@ def main():
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
                     glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['src'][si], 0)
                     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fx_pv['fbo'])
-                    glBlitFramebuffer(0, 0, WIN_W, WIN_H, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
+                    glBlitFramebuffer(0, 0, CMP_W, CMP_H, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, fx_pv['fbo'])
                     glPixelStorei(GL_PACK_ALIGNMENT, 1)
                     buf = glReadPixels(0, 0, pw, ph, GL_RGB, GL_UNSIGNED_BYTE)
@@ -3092,15 +3251,19 @@ def main():
         if gh and not (g_test or g_dim > 1e-4 or any(abs(float(gfx.get(n, d)) - d) > 1e-4
                                                      for n, d in gh[3].items())):
             gh = None
+        # PIXEL MAP: transicao e calibracao ficam em textura (tamanho da mistura) e o passe do mapa
+        # (MAP_SRC) recorta cada tela e cola no raster = a janela. `final` = a imagem ANTES da
+        # calibracao (vira o 'from' da proxima transicao).
         final = lt['out'][oi]
-        if gh and scene_tr:
+        if scene_tr and (gh or pmap):
+            glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
             final = lt['layer']
-        else:
+        elif not pmap:
             glBindFramebuffer(GL_FRAMEBUFFER, 0)
         if scene_tr:                                    # transicao de set: from -> saida nova
             use_trans_program(scene_tr['prog'])
-            glUniform2f(tuni['res'], WIN_W, WIN_H)
+            glUniform2f(tuni['res'], CMP_W, CMP_H)
             glUniform1f(tuni['progress'], min(1.0, (time.perf_counter() - scene_tr['t0'])
                                               / max(0.001, scene_tr['ms'] / 1000.0)))
             glUniform1i(tuni['from'], LAYER_BLEND_UNIT_BASE)
@@ -3111,7 +3274,7 @@ def main():
             glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
             glClear(GL_COLOR_BUFFER_BIT)
             glDrawArrays(GL_TRIANGLES, 0, 3)
-        elif not gh:                                    # copia (modo 0, a=1) a saida pra tela
+        elif not (gh or pmap):                          # copia (modo 0, a=1) a saida pra tela
             glClear(GL_COLOR_BUFFER_BIT)
             _use_basic(blend_prog)
             glUniform2f(blend_u['u_res'], WIN_W, WIN_H)
@@ -3127,14 +3290,37 @@ def main():
             glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_LAYER)
             glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
             glDrawArrays(GL_TRIANGLES, 0, 3)
-        if gh:                                          # final -> calibrar.frag -> tela
-            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+        mimg = final                                    # o que o pixel map recorta
+        if gh:                                          # final -> calibrar.frag -> tela (pixel map: -> pre)
+            if pmap:
+                glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['pre'], 0)
+                mimg = lt['pre']
+            else:
+                glBindFramebuffer(GL_FRAMEBUFFER, 0)
             use_program(gh[1], gh[3])
             set_uniforms(gfx)
             glUniform1i(glGetUniformLocation(gh[1], 'u_test'), int(g_test))
             glUniform1f(glGetUniformLocation(gh[1], 'u_dim'), g_dim)
             glActiveTexture(GL_TEXTURE0)
             glBindTexture(GL_TEXTURE_2D, final)
+            glClear(GL_COLOR_BUFFER_BIT)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+        if pmap:                                        # mistura -> fatias no raster -> tela
+            sl = _map_slices(pmap, scr_rects, _canvas_box(WIN_W, WIN_H, pmap[0], pmap[1]))
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            glViewport(0, 0, WIN_W, WIN_H)
+            _use_basic(map_prog)
+            glUniform2f(map_u['u_res'], WIN_W, WIN_H)
+            glUniform2f(map_u['u_tres'], CMP_W, CMP_H)
+            glUniform1i(map_u['u_n'], len(sl))
+            if sl:
+                glUniform4fv(map_u['u_src'], len(sl), np.array([a for a, _ in sl], np.float32).ravel())
+                glUniform4fv(map_u['u_dst'], len(sl), np.array([b for _, b in sl], np.float32).ravel())
+            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
+            glBindTexture(GL_TEXTURE_2D, mimg)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)   # mistura != tela: suaviza
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
             glClear(GL_COLOR_BUFFER_BIT)
             glDrawArrays(GL_TRIANGLES, 0, 3)
         glActiveTexture(GL_TEXTURE0)
@@ -3198,12 +3384,12 @@ def main():
         if pend:
             if pend.get('transition'):                  # guarda a imagem final que SAI
                 lt = layer_targets()
-                if gh:                                  # calibrada: guarda a de ANTES da calibracao
-                    glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # (senao a transicao calibra 2x)
+                if gh or pmap:                          # calibrada: guarda a de ANTES da calibracao
+                    glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # (senao a transicao calibra 2x;
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, final, 0)
-                glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
+                glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)   # pixel map: a tela e' o raster)
                 glBindTexture(GL_TEXTURE_2D, lt['from'])
-                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, WIN_W, WIN_H)
+                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, CMP_W, CMP_H)
                 glActiveTexture(GL_TEXTURE0)
                 glBindFramebuffer(GL_FRAMEBUFFER, 0)
             try:
@@ -3258,6 +3444,15 @@ def _selfcheck():
     assert (cw, ch) == (1024, 1280) and len(rs) == 3, (cw, ch, rs)
     assert ok(rs[1], (0.75, 0.2, 0.25, 0.8)) and ok(rs[2], (0, 0, 1, 0.2))
     assert _stage([], 800, 600) == (800, 600, [])
+    # pixel map: so' telas com ox/oy entram; indice = o de _stage (a 'ruim' nao conta)
+    arco2 = [{'x': 'ruim'}] + [dict(t, ox=0, oy=0) for t in arco[:1]] + [arco[1], dict(arco[2], ox=256, oy=0)]
+    assert _pixel_map({'on': 0, 'w': 1920, 'h': 1080}, arco2) is None
+    assert _pixel_map({'on': 1, 'w': 1920, 'h': 1080}, arco[:3]) is None   # nenhuma no raster
+    pm = _pixel_map({'on': 1, 'w': 1920, 'h': 1080}, arco2)
+    assert pm == (1920, 1080, [(0, 0, 0, 256, 1024), (2, 256, 0, 1024, 256)]), pm
+    sl = _map_slices(pm, _stage(arco2, 800, 600)[2], FULL_UV)
+    assert ok(sl[1][0], (0, 0.8, 1, 0.2)) and ok(sl[1][1], (256 / 1920, 1 - 256 / 1080, 1024 / 1920, 256 / 1080)), sl
+    assert _comp_size(4000, 2000, 2_000_000) == (2000, 1000) and _comp_size(100, 50, 10 ** 6) == (100, 50)
     assert ok(_rect_uv([0.5, 0, 0.5, 0.5], FULL_UV), (0.5, 0.5, 0.5, 0.5))   # canto de CIMA a direita
     p = os.path.join(tempfile.mkdtemp(), 't.png')
     subprocess.run(['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=320x240',

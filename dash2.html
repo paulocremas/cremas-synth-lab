@@ -474,10 +474,20 @@
   .stg .scr i[data-c=ne] { right: 0; top: 0; cursor: nesw-resize; } .stg .scr i[data-c=sw] { left: 0; bottom: 0; cursor: nesw-resize; }
   .stg .guide, .cvs .guide { position: absolute; background: var(--midi); pointer-events: none; z-index: 200; }
   .stg .ruler { position: absolute; font: 10px var(--mono); color: var(--tx3); pointer-events: none; }
-  #stg-list .srow2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 6px; border-radius: var(--r2); font-size: 12px; color: var(--tx2); }
-  #stg-list .srow2.sel { background: var(--sel-d); }
-  #stg-list .srow2 input { width: 64px; } #stg-list .srow2 input.nm { width: 120px; }
-  #stg-list .srow2 label { display: inline-flex; gap: 4px; align-items: center; }
+  /* pixel map (aba Saida): o raster da processadora, telas no tamanho nativo */
+  .pmap .pm-raster { position: absolute; border: 1px dashed var(--tx3); background: #0d0f12; pointer-events: none; }
+  .pmap .pm-raster span { position: absolute; right: 4px; bottom: 2px; font: 10px var(--mono); color: var(--tx3); }
+  .pmap .scr.bad { border-color: var(--bad); background: rgba(255,91,97,.18); }
+  #pm-warn { margin: -4px 0 6px; } #pm-warn b { color: var(--warn); font-weight: 600; }
+  .stgbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 2px 0 6px; }
+  #stage-p[data-view=palco] [data-v=telao], #stage-p[data-view=telao] [data-v=palco] { display: none !important; }
+  #tl-status:empty { display: none; } #tl-status { margin: -4px 0 6px; } #tl-status b { color: var(--live); font-weight: 600; }
+  #pm-list .srow2, #stg-list .srow2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 6px; border-radius: var(--r2); font-size: 12px; color: var(--tx2); }
+  #stg-list .srow2.sel, #pm-list .srow2.sel { background: var(--sel-d); }
+  #stg-list .srow2 input, #pm-list .srow2 input { width: 64px; } #stg-list .srow2 input.nm { width: 120px; }
+  #stg-list .srow2 label, #pm-list .srow2 label { display: inline-flex; gap: 4px; align-items: center; }
+  #pm-list .srow2 b { min-width: 120px; font-weight: 600; color: var(--tx); }
+  #pm-list .srow2 input[type=checkbox] { width: auto; }
   /* inspetor */
   .insp-top { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 10px; }
   .insp-top .pv { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r2); overflow: hidden; background: #07080a; }
@@ -664,11 +674,25 @@
         <div class="mon"><canvas id="mon-out2"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div></div>
     </div>
     <div class="panel" id="stage-p">
-      <div class="ph"><b>Telas do palco</b><span class="hint" id="stg-info"></span><span class="grow"></span>
-        <span class="hint">adicionar:</span><span id="stg-add" style="display:contents"></span></div>
-      <div class="hint">Monte o palco físico em metros: arraste as telas, cantos = tamanho (Shift = proporção), elas grudam nas bordas umas das outras (Alt = sem ímã). O contorno delas é o <b>canvas</b> — no Palco (✥ posicionar) as imagens vão por cima; fora das telas sai preto. Sem telas, o canvas é a janela.</div>
-      <div class="stg" id="stg"><div class="stg-empty" id="stg-empty">sem telas — o canvas é a janela de saída inteira</div></div>
-      <div id="stg-list"></div>
+      <div class="ph"><b>Telas do palco</b>
+        <span class="seg" id="stg-view"><button data-s="palco" title="o palco físico, em metros: onde as telas estão">Palco · m</button><button data-s="telao" title="o raster que vai pra processadora de LED, em px: onde cada tela sai na imagem">Telão · px</button></span>
+        <span class="hint" id="stg-info"></span><span class="grow"></span>
+        <button class="btn sm" id="tl-detect" title="lê a saída de vídeo extra (processadora/telão), usa a resolução dela como raster, empacota as telas, liga o pixel map e abre a saída nela em tela cheia">⚡ detectar telão</button></div>
+      <div class="stgbar" data-v="palco"><span class="hint">adicionar:</span><span id="stg-add" style="display:contents"></span></div>
+      <div class="stgbar" data-v="telao">
+        <label class="chk" title="ligado: a janela de saída vira o raster (desligado: mostra o palco)"><input type="checkbox" id="pm-on"> pixel map</label>
+        <label class="hint">raster <input type="number" class="inp sm num" id="pm-w" min="16" max="16384" step="1" style="width:70px">×<input type="number" class="inp sm num" id="pm-h" min="16" max="16384" step="1" style="width:70px"></label>
+        <span id="pm-presets" style="display:contents"></span>
+        <button class="btn sm" id="pm-pack" title="coloca TODAS as telas no raster, o mais compacto que couber">empacotar</button>
+        <span class="hint" id="pm-info"></span></div>
+      <div class="hint" data-v="palco">Monte o palco físico em metros: arraste as telas, cantos = tamanho (Shift = proporção), elas grudam nas bordas umas das outras (Alt = sem ímã). O contorno delas é o <b>canvas</b> — no Palco (✥ posicionar) as imagens vão por cima; fora das telas sai preto. Sem telas, o canvas é a janela.</div>
+      <div class="hint" data-v="telao">As mesmas telas, agora no <b>raster</b> que a processadora de LED recebe: cada uma recortada do canvas e colada no tamanho nativo dela (px). Arraste pra posicionar (gruda nas bordas; Alt = sem ímã) e passe as mesmas posições pra processadora. Pixel a pixel só com a janela = raster — o <b>⚡ detectar telão</b> acerta tudo de uma vez.</div>
+      <div class="stg" id="stg" data-v="palco"><div class="stg-empty" id="stg-empty">sem telas — o canvas é a janela de saída inteira</div></div>
+      <div class="stg pmap" id="pmap" data-v="telao"><div class="pm-raster" id="pm-raster"><span></span></div><div class="stg-empty" id="pm-empty">nenhuma tela no raster — marque na lista ou “empacotar”</div></div>
+      <div class="hint" id="tl-status"></div>
+      <div class="hint" id="pm-warn"></div>
+      <div id="stg-list" data-v="palco"></div>
+      <div id="pm-list" data-v="telao"></div>
     </div>
     <div class="panel">
       <div class="ph"><b>Calibração do telão</b><span class="hint">último passe, na saída inteira · centro = neutro · duplo-clique zera</span><span class="grow"></span>
@@ -1184,13 +1208,16 @@ function renderOutput(o){
   }
   const fb2 = $('#fps-big'); fb2.innerHTML = ''; fb2.append((o.fps || 0).toFixed(0), h('small', { text: ` / ${o.fps_target} fps` }));
   const shBad = o.shader_status && o.shader_status !== 'ok';
-  const isig = JSON.stringify([o.content_w, o.content_h, o.window_w, o.window_h, o.mode, o.pos, o.shader, o.shader_status, o.monitors]);
+  const isig = JSON.stringify([o.content_w, o.content_h, o.window_w, o.window_h, o.mode, o.pos, o.shader, o.shader_status, o.monitors, o.comp, o.map]);
   if (isig === renderOutput._sig) return;
   renderOutput._sig = isig;
+  renderPmap();   // aviso janela != raster
   $('#outinfo').innerHTML = '';
   $('#outinfo').append(
     h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'render' }), h('b', { text: `${o.content_w}×${o.content_h}` }), ' px'),
     h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'janela' }), h('b', { text: `${o.window_w}×${o.window_h}` }), ` · ${o.mode} · pos ${o.pos ? o.pos.join(',') : '0,0'}`),
+    o.comp && h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'mistura' }), h('b', { text: `${o.comp[0]}×${o.comp[1]}` }),
+      o.map ? ` px · pixel map ${o.map[0]}×${o.map[1]} (${o.map[2]} telas)` : ' px · janela = palco'),
     h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'shader' }), `${o.shader} · `, h('b', { text: o.shader_status || 'ok', style: `color:${shBad ? 'var(--bad)' : 'var(--live)'}` })),
     ...(o.monitors || []).map(m => h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'monitor' }), `${m.name}  ${m.w}×${m.h}  +${m.x}+${m.y}` + (m.primary ? '  (principal)' : ''))));
 }
@@ -1261,7 +1288,7 @@ function drawGuides(box, gs, toX, toY){
 // (pw, ph). O CANVAS da saida e' o contorno delas (native _stage: resolucao pela maior densidade);
 // fora das telas sai preto. Redimensionar em metros mantem a densidade (px/m) da tela.
 const SCR_ADD = [['coluna', 1, 4, 256, 1024], ['faixa', 4, 1, 1024, 256], ['tela 16:9', 3.2, 1.8, 1920, 1080], ['painel', 0.5, 0.5, 128, 128]];
-let lastScreens = [], scrTouched = 0, scrSel = -1, stgView = null;
+let lastScreens = [], scrTouched = 0, scrSel = -1, stgView = null, pmReady = false;   // pmReady: o pixel map (abaixo) ja' existe
 const rnd = (v, n = 1000) => Math.round(v * n) / n;
 function stageOf(scr){   // = native _stage
   if (!scr.length) return null;
@@ -1309,6 +1336,7 @@ function renderStage(full){
     d.classList.toggle('sel', i === scrSel);
     d.children[0].textContent = t.name; d.children[1].textContent = `${t.w}×${t.h} m`; d.children[2].textContent = `${t.pw}×${t.ph} px`;
   });
+  if (pmReady) renderPmap();
 }
 function scrStart(e, d, i){
   const t = lastScreens[i], el = $('#stg'), v = stgView; if (!t || !v) return;
@@ -1340,11 +1368,187 @@ function renderStageList(){
       nm, num('x', 0.05, 'x'), num('y', 0.05, 'y'), num('w', 0.05, 'larg. m'), num('h', 0.05, 'alt. m'),
       num('pw', 1, 'px', 1), '×', num('ph', 1, '', 1),
       h('span', { class: 'hint num', text: `${Math.round(t.pw / t.w)} px/m` }), h('span', { class: 'grow' }),
-      h('button', { class: 'btn sm', text: '⧉', title: 'duplicar (entra ao lado)', onclick: () => { lastScreens.push({ ...t, name: t.name + ' b', x: rnd(t.x + t.w) }); scrSel = lastScreens.length - 1; sendScreens(true); renderStage(true); renderStageList(); } }),
+      h('button', { class: 'btn sm', text: '⧉', title: 'duplicar (entra ao lado)', onclick: () => { const { ox, oy, ...c } = t; lastScreens.push({ ...c, name: t.name + ' b', x: rnd(t.x + t.w) }); scrSel = lastScreens.length - 1; sendScreens(true); renderStage(true); renderStageList(); } }),
       h('button', { class: 'x', text: '×', title: 'tirar esta tela', onclick: () => { lastScreens.splice(i, 1); scrSel = -1; sendScreens(true); renderStage(true); renderStageList(); renderCanvas(); } })));
   });
 }
 new ResizeObserver(() => { stgView = null; renderStage(); }).observe($('#stg'));
+
+// ---- PIXEL MAP (tuning.PIXEL_MAP = {on, w, h} + ox/oy em cada tela de SCREENS; native _pixel_map).
+// Conceito do Resolume (Advanced Output) / processadora de LED: o canvas e' o INPUT map (onde se
+// compoe, forma fisica); o raster e' o OUTPUT map — as telas reempacotadas numa imagem so', cada
+// uma em (ox, oy) no tamanho nativo (pw x ph). Tela sem ox/oy nao sai. Tamanho = o de SCREENS (px):
+// aqui so' se move. Ligado, a janela de saida E' o raster.
+let lastPM = { on: 0, w: 1920, h: 1080 }, pmTouched = 0; pmReady = true;
+const inMap = t => t.ox != null && t.oy != null;
+function sendPM(){ pmTouched = now(); post('/pixelmap', lastPM).then(r => { if (r.pixel_map) lastPM = r.pixel_map; renderPmap(); }).catch(e => toast('pixel map: ' + e, 'err')); }
+for (const [w, hh] of [[1920, 1080], [3840, 2160]]) $('#pm-presets').append(h('button', { class: 'btn sm', text: `${w}×${hh}`,
+  onclick: () => { Object.assign(lastPM, { w, h: hh }); sendPM(); } }));
+$('#pm-presets').append(h('button', { class: 'btn sm', text: '= janela', title: 'raster do tamanho da janela de saída atual',
+  onclick: () => { const o = lastOutput; if (o && o.window_w){ Object.assign(lastPM, { w: o.window_w, h: o.window_h }); sendPM(); } } }));
+$('#pm-on').onchange = () => { lastPM.on = $('#pm-on').checked ? 1 : 0; sendPM(); };
+for (const k of ['w', 'h']) $('#pm-' + k).onchange = e => { const v = Math.round(+e.target.value); if (v >= 16){ lastPM[k] = v; sendPM(); } e.target.blur(); };
+const pmHit = (a, b) => a.ox < b.ox + b.pw && b.ox < a.ox + a.pw && a.oy < b.oy + b.ph && b.oy < a.oy + a.ph;
+function pmFree(t){   // 1o canto livre (0,0 / a direita / embaixo das que ja estao) onde a tela cabe
+  const on = lastScreens.filter(o => o !== t && inMap(o));
+  const cand = [[0, 0], ...on.flatMap(o => [[o.ox + o.pw, o.oy], [o.ox, o.oy + o.ph], [0, o.oy + o.ph]])].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  for (const [x, y] of cand){ const r = { ox: x, oy: y, pw: t.pw, ph: t.ph };
+    if (x + t.pw <= lastPM.w && y + t.ph <= lastPM.h && !on.some(o => pmHit(r, o))) return [x, y]; }
+  return [0, 0];
+}
+function pmPack(list, RW, RH){   // ox/oy de TODAS as telas no raster RW x RH -> quantas ficaram de fora
+  // canto-inferior-esquerdo (1o canto livre, de cima pra baixo) em algumas ordens; fica a 1a que
+  // cabe inteira, senao a que deixa menos px de fora (essas vao pra baixo do raster = vermelhas)
+  const orders = [(a, b) => b.ph - a.ph || b.pw - a.pw, (a, b) => b.pw - a.pw || b.ph - a.ph,
+                  (a, b) => b.pw * b.ph - a.pw * a.ph, (a, b) => Math.max(b.pw, b.ph) - Math.max(a.pw, a.ph)];
+  let best = null;
+  for (const ord of orders){
+    const placed = [], pos = new Map(); let out = 0, bottom = 0;
+    for (const t of [...list].sort(ord)){
+      const cand = [[0, 0], ...placed.flatMap(o => [[o.ox + o.pw, o.oy], [o.ox, o.oy + o.ph], [0, o.oy + o.ph]])]
+        .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+      let at = cand.find(([x, y]) => x + t.pw <= RW && y + t.ph <= RH && !placed.some(o => pmHit({ ox: x, oy: y, pw: t.pw, ph: t.ph }, o)));
+      if (!at){ out += t.pw * t.ph; at = [0, Math.max(RH, bottom)]; }
+      const r = { ox: at[0], oy: at[1], pw: t.pw, ph: t.ph }; placed.push(r); pos.set(t, r);
+      bottom = Math.max(bottom, r.oy + r.ph);
+    }
+    if (!best || out < best.out) best = { out, pos };
+    if (!out) break;
+  }
+  for (const [t, r] of best.pos){ t.ox = r.ox; t.oy = r.oy; }
+  return list.filter(t => t.oy + t.ph > RH || t.ox + t.pw > RW);
+}
+$('#pm-pack').onclick = () => {
+  const out = pmPack(lastScreens, lastPM.w, lastPM.h);
+  if (out.length) toast(`não coube no raster: ${out.map(t => t.name).join(', ')}`, 'err');
+  sendScreens(true); renderPmap();
+};
+// ---- UM EDITOR, DUAS VISTAS: Palco (metros, SCREENS x/y/w/h) x Telao (raster px, ox/oy). Mesmas
+// telas, mesma selecao; a chave so' troca o que aparece (data-v no painel).
+let stgMode = LS.get('v2stgView', 'palco');
+function setStgView(v){
+  stgMode = v === 'telao' ? 'telao' : 'palco'; LS.set('v2stgView', stgMode);
+  $('#stage-p').dataset.view = stgMode;
+  $$('#stg-view button').forEach(b => b.classList.toggle('on', b.dataset.s === stgMode));
+  stgView = null; renderStage(true); renderStageList(); renderPmap();
+}
+$$('#stg-view button').forEach(b => b.onclick = () => setStgView(b.dataset.s));
+// ---- DETECTAR TELAO: o servidor le o xrandr na hora (liga a saida extra se veio desligada; inclui
+// o telao virtual do simulador, src/telao_sim.py) -> mapTelao: raster = resolucao dela, empacota,
+// liga o pixel map, saida em tela cheia nela (janela = raster, 1:1)
+async function mapTelao(m, why){
+  Object.assign(lastPM, { on: 1, w: m.w, h: m.h }); sendPM();
+  const out = lastScreens.length ? pmPack(lastScreens, m.w, m.h) : [];
+  if (lastScreens.length) sendScreens(true);
+  outTouched = now(); outFull = true;
+  await post('/output', { monitor: m.name, fullscreen: true, w: m.w, h: m.h });
+  ledSig = `${m.name} ${m.w}x${m.h}`;
+  const st = $('#tl-status'); st.innerHTML = '';
+  st.append(h('b', { text: `✓ ${why || 'telão'} ${m.name}${m.virtual ? ' (simulador)' : ''} · ${m.w}×${m.h}` }),
+    ` — raster = saída, ${lastScreens.length - out.length}/${lastScreens.length} telas empacotadas, pixel map ligado, saída em tela cheia lá.` +
+    (out.length ? ` Não couberam: ${out.map(t => t.name).join(', ')}.` : '') +
+    (lastScreens.length ? '' : ' Sem telas no palco: cadastre na vista Palco.'));
+  toast(`${why || 'telão'}: ${m.name} ${m.w}×${m.h}` + (out.length ? ` · ${out.length} tela(s) não couberam` : ''), out.length ? 'err' : '');
+  setStgView('telao');
+}
+$('#tl-detect').onclick = async () => {
+  const b = $('#tl-detect'), st = $('#tl-status'); b.disabled = true; st.textContent = 'procurando a saída do telão…';
+  try {
+    const r = await fetch('/detect-output', { method: 'POST' }), d = await r.json().catch(() => ({}));
+    if (!r.ok) throw d.error || ('HTTP ' + r.status);
+    await mapTelao(d.monitor, 'telão em');
+  } catch (e){
+    st.textContent = '⚠ ' + e; toast('telão: ' + e, 'err');
+  } finally { b.disabled = false; }
+};
+// ---- RECONHECER TELAO sozinho: /outputs (xrandr --current + simulador) a cada 2 s. Telao novo =
+// oferece mapear (nao sequestra a saida); formato trocado NO telao onde a saida ja esta = remapeia
+// (igual a processadora trocando o EDID); sumiu = avisa.
+let ledSig = null, ledBusy = false;
+function offerTelao(m){
+  const st = $('#tl-status'); st.innerHTML = '';
+  st.append(h('b', { text: `● telão detectado: ${m.name}${m.virtual ? ' (simulador)' : ''} · ${m.w}×${m.h}` }), ' — ',
+    h('button', { class: 'btn sm', text: '⚡ mapear agora', onclick: () => mapTelao(m, 'telão em').catch(e => toast('telão: ' + e, 'err')) }));
+}
+async function pollOutputs(){
+  if (document.hidden || ledBusy || !$('#tl-status')) return;
+  ledBusy = true;
+  try {
+    const d = await (await fetch('/outputs')).json(), m = d.led, sig = m ? `${m.name} ${m.w}x${m.h}` : '';
+    const onIt = m && lastOutput && lastOutput.monitor === m.name, mapped = onIt && lastPM.on && lastPM.w === m.w && lastPM.h === m.h;
+    if (sig === ledSig) return;
+    const first = ledSig === null; ledSig = sig;
+    if (!m){ if (!first){ $('#tl-status').textContent = '⚠ telão desconectado — a saída ficou sem destino'; toast('telão desconectado', 'err'); } return; }
+    if (mapped) return;                                       // ja' esta' tudo certo nele
+    if (onIt) await mapTelao(m, 'formato mudou →');           // mesmo telao, outra resolucao
+    else { offerTelao(m); if (!first) toast(`telão detectado: ${m.name} ${m.w}×${m.h}`); }
+  } catch {} finally { ledBusy = false; }
+}
+setInterval(pollOutputs, 2000);
+function pmIssues(){
+  const on = lastScreens.filter(inMap), bad = new Set(), msg = [];
+  on.forEach(t => { if (t.ox + t.pw > lastPM.w || t.oy + t.ph > lastPM.h){ bad.add(t); msg.push(`${t.name} passa do raster`); } });
+  on.forEach((a, i) => on.slice(i + 1).forEach(b => { if (pmHit(a, b)){ bad.add(a); bad.add(b); msg.push(`${a.name} × ${b.name} se sobrepõem`); } }));
+  const o = lastOutput;
+  if (lastPM.on && o && o.window_w && (o.window_w !== lastPM.w || o.window_h !== lastPM.h))
+    msg.push(`janela ${o.window_w}×${o.window_h} ≠ raster ${lastPM.w}×${lastPM.h}: sai escalado, não pixel a pixel`);
+  if (lastPM.on && !lastScreens.length) msg.push('sem telas no palco: o pixel map não vale (a janela mostra o canvas)');
+  return { bad, msg };
+}
+function renderPmap(){
+  const el = $('#pmap'); if (!el || !el.clientWidth) return;
+  const { w: RW, h: RH } = lastPM, on = lastScreens.filter(inMap), { bad, msg } = pmIssues();
+  if (document.activeElement !== $('#pm-w')) $('#pm-w').value = RW;
+  if (document.activeElement !== $('#pm-h')) $('#pm-h').value = RH;
+  $('#pm-on').checked = !!lastPM.on;
+  const used = on.reduce((a, t) => a + t.pw * t.ph, 0);
+  $('#pm-info').textContent = `· ${on.length}/${lastScreens.length} telas · ${(used / 1e6).toFixed(2)} de ${(RW * RH / 1e6).toFixed(2)} Mpx` + (lastPM.on ? '' : ' · desligado (janela = palco)');
+  $('#pm-warn').innerHTML = ''; msg.forEach(m => $('#pm-warn').append(h('div', {}, h('b', { text: '⚠ ' }), m)));
+  $('#pm-empty').hidden = !!on.length;
+  const W = el.clientWidth, H = el.clientHeight, sc = Math.min((W - 24) / RW, (H - 24) / RH), x0 = (W - RW * sc) / 2, y0 = (H - RH * sc) / 2;
+  el._v = { sc, x0, y0 };
+  Object.assign($('#pm-raster').style, { left: x0 + 'px', top: y0 + 'px', width: RW * sc + 'px', height: RH * sc + 'px' });
+  $('#pm-raster span').textContent = `${RW}×${RH}`;
+  const els = $$('.scr', el);   // uma por tela de SCREENS (fora do raster = escondida), atualizada no lugar
+  for (let i = lastScreens.length; i < els.length; i++) els[i].remove();
+  lastScreens.forEach((t, i) => {
+    let d = els[i];
+    if (!d){ d = h('div', { class: 'scr' }, h('b'), h('small')); d.onpointerdown = e => pmStart(e, d, i); el.append(d); }
+    d.hidden = !inMap(t); if (d.hidden) return;
+    Object.assign(d.style, { left: x0 + t.ox * sc + 'px', top: y0 + t.oy * sc + 'px', width: t.pw * sc + 'px', height: t.ph * sc + 'px' });
+    d.classList.toggle('sel', i === scrSel); d.classList.toggle('bad', bad.has(t));
+    d.children[0].textContent = t.name; d.children[1].textContent = `${t.ox},${t.oy} · ${t.pw}×${t.ph}`;
+  });
+  renderPmList();
+}
+function pmStart(e, d, i){
+  const t = lastScreens[i], el = $('#pmap'), v = el._v; if (!t || !v) return;
+  if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); }
+  const others = lastScreens.filter((o, j) => j !== i && inMap(o));
+  rectDrag(e, d, { r0: [t.ox, t.oy, t.pw, t.ph], ux: v.sc, uy: v.sc, min: 1,
+    tx: [0, lastPM.w, ...others.flatMap(o => [o.ox, o.ox + o.pw])], ty: [0, lastPM.h, ...others.flatMap(o => [o.oy, o.oy + o.ph])],
+    move: ([x, y], gs) => {
+      t.ox = Math.max(0, Math.round(x)); t.oy = Math.max(0, Math.round(y));
+      drawGuides(el, gs, x => v.x0 + x * v.sc, y => v.y0 + y * v.sc);
+      renderPmap(); sendScreensLive();
+    },
+    end: () => { drawGuides(el, [], null, null); clearTimeout(scrLiveT); scrLiveT = null; sendScreens(true); renderPmap(); } });
+}
+function renderPmList(){
+  const box = $('#pm-list'); if (box.contains(document.activeElement)) return;   // nao atropela quem digita
+  box.innerHTML = '';
+  lastScreens.forEach((t, i) => {
+    const cb = h('input', { type: 'checkbox', title: 'sai no raster', ...(inMap(t) ? { checked: true } : {}) });
+    cb.onchange = () => { if (cb.checked){ [t.ox, t.oy] = pmFree(t); } else { delete t.ox; delete t.oy; } sendScreens(true); renderPmap(); };
+    const num = k => { const inp = h('input', { type: 'number', class: 'inp sm num', step: 1, min: 0, value: inMap(t) ? t[k] : '', ...(inMap(t) ? {} : { disabled: true }) });
+      inp.onchange = () => { const x = Math.round(+inp.value); if (!(x >= 0)) return; t[k] = x; sendScreens(true); inp.blur(); renderPmap(); }; return inp; };
+    box.append(h('div', { class: 'srow2' + (i === scrSel ? ' sel' : ''), onpointerdown: () => { if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); } } },
+      cb, h('b', { text: t.name }), h('label', {}, 'x', num('ox')), h('label', {}, 'y', num('oy')),
+      h('span', { class: 'hint num', text: `${t.pw}×${t.ph} px` + (inMap(t) ? ` · até ${t.ox + t.pw},${t.oy + t.ph}` : ' · fora do raster') })));
+  });
+}
+new ResizeObserver(() => renderPmap()).observe($('#pmap'));
+setStgView(stgMode);
 
 // ---- CANVAS NO PALCO (vista "Canvas" do painel da mesa): cada fonte NO AR e' um objeto no canvas
 // das telas, com a previa DEPOIS da pilha de efeitos (/frame?which=fx, native fx_pv), esticada no
@@ -2917,6 +3121,7 @@ function process(stateOnly){
   if (d.scene_grade && now() - sgTouched > TOUCH_MS && !activeDrag.startsWith('sgrade:') && JSON.stringify(d.scene_grade) !== JSON.stringify(lastSGrade)){ lastSGrade = d.scene_grade; syncSGrade(); }
   if (d.output_fps && now() - fpsTouched > TOUCH_MS && d.output_fps !== outFps){ outFps = d.output_fps; renderFpsSeg(); }
   if (d.output && d.output.window_w) lastOutput = d.output;   // o canvas do Palco precisa da janela em qualquer aba
+  if (d.pixel_map && now() - pmTouched > TOUCH_MS && JSON.stringify(d.pixel_map) !== JSON.stringify(lastPM)){ lastPM = d.pixel_map; renderPmap(); }
   if (d.screens && now() - scrTouched > TOUCH_MS && activeDrag !== 'rect' && JSON.stringify(d.screens) !== JSON.stringify(lastScreens)){
     lastScreens = d.screens; if (scrSel >= lastScreens.length) scrSel = -1; stgView = null; renderStage(true); renderStageList(); renderCanvas(); }
   syncKnobs(d.knobs); syncDyn(d.band_tweaks);

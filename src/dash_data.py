@@ -4,7 +4,10 @@ Fonte unica de verdade do dash de audio: o audio_thread chama audio_dash_data() 
 o dict em state['audio_dash']; tanto o dash de terminal quanto o payload HTTP so renderizam
 esse mesmo dict. Sem import de native_synth (evita circular) — so numpy.
 """
+import json
+import os
 import re
+import tempfile
 
 import numpy as np
 
@@ -103,6 +106,92 @@ def audio_dash_data(bands_raw, amp_raw, amp_raw_level, amp_final, amp_smoothing,
     }
 
 
+def parse_xrandr(text):
+    """Saida de `xrandr --query` -> [{name, primary, active, w, h, x, y, pref}] das saidas CONECTADAS.
+    active = tem modo ligado agora (w/h/x/y = geometria atual; 0 se nao). pref = [w, h] do modo
+    preferido do EDID (o '+'), senao o 1o listado — e' o que `xrandr --auto` liga. Plug novo
+    (telao, processadora, dummy) costuma aparecer conectado mas DESLIGADO."""
+    outs, cur = [], None
+    for line in (text or '').splitlines():
+        m = re.match(r'(\S+) (connected|disconnected)( primary)?(?: (\d+)x(\d+)\+(-?\d+)\+(-?\d+))?', line)
+        if m:
+            cur = None
+            if m.group(2) == 'connected':
+                w, h, x, y = (int(v) if v else 0 for v in m.group(4, 5, 6, 7))
+                cur = {'name': m.group(1), 'primary': bool(m.group(3)), 'active': bool(m.group(4)),
+                       'w': w, 'h': h, 'x': x, 'y': y, 'pref': None}
+                outs.append(cur)
+            continue
+        mm = re.match(r'\s+(\d+)x(\d+)i?\s+(.*)$', line)
+        if cur is not None and mm:
+            wh = [int(mm.group(1)), int(mm.group(2))]
+            if '+' in mm.group(3):
+                cur['pref'] = wh
+            cur.setdefault('first', wh)
+    for o in outs:
+        first = o.pop('first', None)
+        o['pref'] = o['pref'] or first
+    return outs
+
+
+# TELAO VIRTUAL (src/telao_sim.py): enquanto aberto, o simulador anuncia saidas aqui —
+# {"outputs": [{"name": "SIM-1", "w", "h", "label"}], "pid": N}. Native (get_monitors) e dash
+# (detectar telao) leem junto com o xrandr; pid morto = arquivo velho, ignorado. A janela de saida
+# "vai pra" x = largura da tela X (fora da area visivel; o WM deixa uma tira) e o simulador a
+# captura pelo id (composite: pega a janela inteira mesmo fora da tela).
+VIRTUAL_OUTPUTS = os.path.join(os.environ.get('XDG_RUNTIME_DIR') or tempfile.gettempdir(), 'prisma-telao-virtual.json')
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def virtual_outputs(screen_w, path=None, alive=_pid_alive):
+    """Saidas do telao virtual no formato do parse_xrandr (+ virtual=True), a direita da tela X
+    (x = screen_w). [] sem simulador aberto."""
+    try:
+        with open(path or VIRTUAL_OUTPUTS) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(d, dict) or not alive(d.get('pid')):
+        return []
+    out = []
+    for o in d.get('outputs') or []:
+        try:
+            w, h = int(o['w']), int(o['h'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if w >= 16 and h >= 16:
+            out.append({'name': str(o.get('name') or 'SIM-1'), 'primary': False, 'active': True, 'virtual': True,
+                        'w': w, 'h': h, 'x': int(screen_w or 0), 'y': 0, 'pref': [w, h],
+                        'label': str(o.get('label') or '')})
+    return out
+
+
+def xrandr_screen_w(text):
+    """Largura atual da tela X ('Screen 0: ... current W x H') — onde o telao virtual comeca."""
+    m = re.search(r'current (\d+) x (\d+)', text or '')
+    return int(m.group(1)) if m else 0
+
+
+def pick_led_output(outs):
+    """Qual saida e' o telao: a 1a REAL que NAO e' a principal (sem principal marcada, a 1a depois
+    da que tem a tela em 0,0); sem nenhuma, o telao VIRTUAL (simulador). None se so' ha' a do
+    operador. Real ganha do virtual: simulador esquecido aberto nao rouba o show."""
+    real, virt = [o for o in outs if not o.get('virtual')], [o for o in outs if o.get('virtual')]
+    rest = [o for o in real if not o['primary']]
+    if len(rest) == len(real):
+        rest = [o for o in real if not (o['active'] and o['x'] == 0 and o['y'] == 0)] or real[1:]
+    if len(real) < 2:
+        rest = []
+    return (rest + virt)[0] if rest + virt else None
+
+
 if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert parse_fx_manifest('// fx: wave, grain ,vignette\nfoo bar') == ['wave', 'grain', 'vignette']
     assert parse_fx_manifest('//fx:wave') == ['wave']
@@ -126,4 +215,30 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     # cinza quando o Hz cai num buraco entre faixas (modo crossover)
     assert _band_rgb_for_hz(300, [(20, 200), (400, 600)] + [(0, 0)] * 6) == _GREY
     assert _band_rgb_for_hz(100, [(20, 200), (400, 600)] + [(0, 0)] * 6) == (30, 140, 255)
+    xr = ('Screen 0: minimum 8 x 8, current 3286 x 1080\n'
+          'HDMI-0 connected primary 1366x768+0+0 (normal left) 434mm x 236mm\n'
+          '   1366x768      59.79*+\n   1280x720      60.00\n'
+          'DP-0 disconnected (normal left inverted right x axis y axis)\n'
+          'HDMI-1 connected (normal left inverted right x axis y axis)\n'
+          '   3840x2160     30.00 +  60.00\n   1920x1080     60.00\n'
+          'DP-2 connected 1920x1080+1366+0 (normal left) 0mm x 0mm\n'
+          '   2560x1440     60.00\n   1920x1080     60.00*+\n')
+    o = parse_xrandr(xr)
+    assert [x['name'] for x in o] == ['HDMI-0', 'HDMI-1', 'DP-2'], o
+    assert o[0]['primary'] and o[0]['active'] and (o[0]['w'], o[0]['h']) == (1366, 768)
+    assert not o[1]['active'] and o[1]['pref'] == [3840, 2160], o[1]
+    assert o[2]['active'] and o[2]['x'] == 1366 and o[2]['pref'] == [1920, 1080], o[2]
+    assert pick_led_output(o)['name'] == 'HDMI-1' and pick_led_output(o[:1]) is None
+    np_ = [dict(x, primary=False) for x in o]
+    assert pick_led_output(np_)['name'] == 'HDMI-1'
+    v = [{'name': 'SIM-1', 'primary': False, 'active': True, 'virtual': True, 'w': 3840, 'h': 1080, 'x': 1366, 'y': 0}]
+    assert pick_led_output(o[:1] + v)['name'] == 'SIM-1'          # so' a principal + simulador
+    assert pick_led_output(o + v)['name'] == 'HDMI-1'             # real ganha
+    assert xrandr_screen_w(xr) == 3286
+    vp = os.path.join(tempfile.gettempdir(), 'prisma-vo-test.json')
+    json.dump({'pid': 1, 'outputs': [{'name': 'SIM-1', 'w': 3840, 'h': 2160, 'label': '4K'}, {'w': 'x'}]}, open(vp, 'w'))
+    vo = virtual_outputs(1366, vp, alive=lambda p: True)
+    assert len(vo) == 1 and vo[0]['x'] == 1366 and vo[0]['pref'] == [3840, 2160] and vo[0]['virtual'], vo
+    assert virtual_outputs(1366, vp, alive=lambda p: False) == []
+    os.remove(vp); assert virtual_outputs(1366, vp) == []
     print('dash_data self-check ok')
