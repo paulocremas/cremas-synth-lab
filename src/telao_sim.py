@@ -4,9 +4,10 @@ LEDs, giro, forma) e, como um telão de verdade, ele só anuncia UMA resolução
 blocos, o lugar de cada um no raster e o espaço entre eles ficam aqui dentro, como na processadora
 (NovaLCT, Tessera). Enquanto aberto (e "plugado"), anuncia a saída SIM-1 no formato escolhido
 (dash_data.VIRTUAL_OUTPUTS — o native e o dash leem junto com o xrandr). O dash v2 avisa "telão
-detectado"; "⚡ mapear agora" faz do raster o canvas do prisma e abre a saída "nela" (janela do tamanho
+detectado"; "⚡ mapear agora" liga o pixel map do prisma nesse raster e abre a saída "nela" (janela do tamanho
 do formato, fora da tela — o WM deixa uma tira à direita). Lá se divide o raster em blocos (pixel map)
-copiando o mapa daqui (Tab = raster, com x,y e tamanho em px de cada bloco).
+copiando o mapa daqui (Tab = raster, com x,y e tamanho em px de cada bloco), e no Palco do prisma as
+telas se arrumam como aqui (o conteúdo se monta lá, no palco; o raster é só a entrega).
 
 Como uma processadora: cada tela tem o seu lugar no RASTER (ox, oy; reempacotado sozinho a cada
 mudança, dash_data.pack_raster) e daqui se recorta a janela capturada por esse mapa, remontando o

@@ -168,11 +168,7 @@ CHANNELS = [
 # Selecionar (clicar / dropdown "Media" / tecla de MEDIA_KEYS) faz native_synth respawnar o
 # ffmpeg apontando pro arquivo. Gravado pelo dash (POST /media, /media-add, /media-del).
 MEDIA = [
-    {"name": "paulocremas-og-image", "file": "teste/paulocremas-og-image.png", "kind": "image", "fit": "fill", "transition": ""},
-    {"name": "2026-08-27_20-07", "file": "default/2026-08-27_20-07.png", "kind": "image", "fit": "fill", "transition": "dip_black.glsl"},
-    {"name": "2026-09-0309-42-09", "file": "default/2026-09-0309-42-09.mp4", "kind": "video", "fit": "fill", "transition": "wipe.glsl"},
-    {"name": "2026-09-0909-55-45", "file": "default/2026-09-0909-55-45.mp4", "kind": "video", "fit": "fill", "transition": "crossfade.glsl"},
-    {"name": "YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_1080p", "file": "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_1080p.mp4", "kind": "video", "fit": "fill", "transition": ""},
+    {"name": "2026-09-2601-34-33", "file": "default/2026-09-2601-34-33.mp4", "kind": "video", "fit": "fill", "transition": ""},
 ]
 
 # TRANSIÇÕES de mídia — galeria "Transições" na aba Visuals, espelho da galeria de shader mas
@@ -206,3 +202,89 @@ MEDIA_KEYS = {
 # MEDIA). Imagem parada nunca entra no pool (ja vem do _still_cache).
 VIDEO_POOL = 1
 VIDEO_POOL_MAX = 4
+
+# SETS (cenas) da aba Visuals: fonte + camadas + shader + camadas de shader + forca dos efeitos (dash, sub-aba Sets)
+SCENES = [
+    {"name": "default", "key": "", "transition": "", "selected": "default/2026-09-2601-34-33.mp4#2", "sources": [{"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "rect": [0.0, 0.0, 0.2553, 1.0]}, {"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "dup": 2, "rect": [0.4281, 0.0, 0.3043, 0.2467]}], "bindings": {"webcam:/dev/video0": {"shaders": [{"file": "presets/default/Silhueta.frag", "opacity": 1.0}], "fx": {}}, "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}}}},
+]
+SCENE = "default"
+
+# camadas de midia por cima da fonte (dash, aba Visuals)
+OVERLAYS = [
+    {"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "rect": [0.0, 0.0, 0.2553, 1.0]},
+    {"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "dup": 2, "rect": [0.4281, 0.0, 0.3043, 0.2467]},
+]
+
+# fonte/midia -> shaders dela (+ forca dos efeitos), dash aba Visuals > Sets
+BINDINGS = {
+    "webcam:/dev/video0": {"shaders": [{"file": "presets/default/Silhueta.frag", "opacity": 1.0}], "fx": {}},
+    "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}},
+}
+
+# imagem da CENA ativa (calibrar.frag na mistura, antes da transicao); copia do campo "grade" do set ativo
+SCENE_GRADE = {
+    "fx": {},
+    "on": 1
+}
+
+# pixel map da saida (dash v2 > Saida): a janela vira o raster w x h da processadora de LED; cada tela com ox/oy (SCREENS) vai la no tamanho nativo
+PIXEL_MAP = {"on": 1, "w": 3840, "h": 2160}
+
+# telas do palco fisico (dash v2 > Saida): metros (x, y, w, h; origem em cima a esquerda) + pixels (pw, ph). O canvas e' o contorno delas
+SCREENS = [
+    {"name": "coluna 1", "x": -0.1, "y": 1.75, "w": 1.39, "h": 0.81, "pw": 354, "ph": 208, "ox": 0, "oy": 0},
+]
+
+# telao do simulador (dash v2 > Saida): paineis no raster dele (ox/oy/pw/ph/poly, vem do telao) + o que cada um mostra (x/y/w/h/rot em cima do canvas, metros)
+TELAO = {
+    "name": "SIM-1",
+    "w": 3840,
+    "h": 2160,
+    "panels": [
+        {
+            "name": "coluna 1",
+            "x": 0.0,
+            "y": 1.791,
+            "w": 0.223,
+            "h": 0.419,
+            "pw": 558,
+            "ph": 1050,
+            "ox": 0,
+            "oy": 0
+        },
+        {
+            "name": "faixa 1",
+            "x": 0.223,
+            "y": 1.791,
+            "w": 0.555,
+            "h": 0.165,
+            "pw": 1390,
+            "ph": 415,
+            "ox": 1549,
+            "oy": 0
+        },
+        {
+            "name": "coluna 2",
+            "x": 0.439,
+            "y": 1.872,
+            "w": 0.102,
+            "h": 0.409,
+            "pw": 433,
+            "ph": 1016,
+            "ox": 1116,
+            "oy": 0,
+            "rot": 90.0
+        },
+        {
+            "name": "coluna 1 b",
+            "x": 0.777,
+            "y": 1.791,
+            "w": 0.223,
+            "h": 0.419,
+            "pw": 558,
+            "ph": 1050,
+            "ox": 558,
+            "oy": 0
+        }
+    ]
+}

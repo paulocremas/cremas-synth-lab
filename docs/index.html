@@ -808,10 +808,13 @@ arrastáveis ou ✎ desenhar tela à mão. O canvas envolve o contorno já girad
 forma exata (<code>inShape</code>, polígonos numa textura pequena).</p>
 <p><b>Pixel map / telão</b>: um telão de LED chega ao computador como <b>uma resolução só</b>
 (o EDID da processadora) — quais gabinetes, onde cada um está e o espaço entre eles ficam na processadora.
-Com o pixel map ligado (<code>PIXEL_MAP</code>), o canvas <b>é</b> esse raster e sai como está; as telas
-viram <b>blocos</b> dele (<code>ox/oy/pw/ph</code> em px, vista <b>Pixel map</b>: grade, desenhar, arrastar).
-Fora dos blocos sai preto. A posição em metros (vista Palco) passa a ser só o <b>preview</b> físico: cada
-bloco mostra a parte dele da saída. <b>⚡ detectar telão</b> lê as saídas de vídeo
+Como no Resolume (input map × output map) e no disguise (stage × feed), são <b>dois espaços</b>: o canvas
+continua sendo o <b>palco</b> (vista Palco, metros, com os vãos: o conteúdo se monta ali e o que cai no vão
+não aparece), e com o pixel map ligado (<code>PIXEL_MAP</code>) cada tela vira um <b>bloco</b> do raster
+(<code>ox/oy</code> em px, <code>pw/ph</code> = o painel nativo, <code>orot</code> = painel deitado na
+processadora; vista <b>Pixel map</b>: grade, desenhar, arrastar). A mistura passa a ser o canvas no tamanho
+dele e o último passe (<code>OUTPUT_MAP_SRC</code>) copia cada tela pro bloco dela; fora dos blocos sai preto.
+Mexer no palco muda o que sai; o raster continua o que a processadora espera. <b>⚡ detectar telão</b> lê as saídas de vídeo
 na hora, usa a resolução da extra como raster e abre a saída nela; o dash consulta a cada 2&nbsp;s
 e reconhece telão novo ou formato trocado. Sem hardware, <code>src/telao_sim.py</code> finge a
 processadora: lá se <b>monta</b> o telão (telas, giro, forma, lápis), ele anuncia <code>SIM-1</code> só com a resolução (como um telão real)

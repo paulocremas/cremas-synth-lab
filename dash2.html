@@ -485,13 +485,15 @@
   .stg .scr i.rot::after { content: ''; position: absolute; left: 5px; top: 12px; width: 1px; height: 10px; background: var(--sel); }
   .stg .scr:not(.sel) i.rot, .stg .scr:not(.sel) i.vx { display: none; }
   .stg.pen, .stg.pen .scr { cursor: crosshair; }
-  /* telao: preview do bloco (a regiao dele no raster de saida) dentro da tela no palco */
+  /* previa: a parte do canvas que cai em cada tela (girada/forma como ela) */
   .stg .scr canvas.pv { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  .stg .scr.blk { background: #000; }
-  .stg .scr.blk b, .stg .scr.blk small { position: relative; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .stg .scr.pvon { background: #000; }
+  .stg .scr.pvon b, .stg .scr.pvon small { position: relative; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   /* pixel map (raster do telao): os blocos em px, no tamanho que o telao recebe */
   .pmap .pm-raster { position: absolute; border: 1px dashed var(--tx3); background: #0d0f12; pointer-events: none; }
   .pmap .pm-raster span { position: absolute; right: 4px; bottom: 2px; font: 10px var(--mono); color: var(--tx3); }
+  .pmap .pm-raster canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .pmap .scr { background: rgba(94,176,255,.08); }
   .pmap .scr.bad { border-color: var(--bad); background: rgba(255,91,97,.18); }
   .pmap.draw, .pmap.draw .scr { cursor: crosshair; }
   .pmap .pm-new { position: absolute; border: 2px dashed var(--sel); background: rgba(255,157,82,.15); pointer-events: none; z-index: 210; }
@@ -700,9 +702,9 @@
     </div>
     <div class="panel" id="stage-p" data-view="palco">
       <div class="ph"><b>Telas do palco</b>
-        <span class="seg" id="stg-view"><button data-s="palco" title="as telas no palco físico, em metros — com telão é só o PREVIEW (mover aqui não muda a saída)">Palco</button><button data-s="raster" title="pixel map: os blocos no raster que o telão recebe, em px — isso é o que sai">Pixel map</button></span>
+        <span class="seg" id="stg-view"><button data-s="palco" title="as telas no palco físico, em metros, com o espaço entre elas — é o CANVAS: o conteúdo se monta aqui e cada tela mostra a parte dela">Palco</button><button data-s="raster" title="pixel map: onde cada tela entra no raster que o telão recebe, em px (como a processadora espera) — o conteúdo vem do Palco">Pixel map</button></span>
         <span class="hint" id="stg-info"></span><span class="grow"></span>
-        <label class="chk" title="ligado: o canvas é o raster do telão e sai como está (as telas viram blocos dele, em px); desligado: o canvas é o palco físico"><input type="checkbox" id="pm-on"> pixel map</label>
+        <label class="chk" title="ligado: cada tela sai no bloco dela do raster do telão, no tamanho nativo (px); desligado: o canvas sai encaixado na janela"><input type="checkbox" id="pm-on"> pixel map</label>
         <span class="hint" id="pm-info"></span>
         <button class="btn sm" id="tl-detect" title="lê a resolução que o telão anuncia (processadora ou o simulador): vira o raster, liga o pixel map e abre a saída nela em tela cheia">⚡ detectar telão</button></div>
       <div class="stgbar" data-v="palco" id="stg-addbar"><span class="hint">adicionar:</span><span id="stg-add" style="display:contents"></span></div>
@@ -712,10 +714,10 @@
         <button class="btn sm" id="pm-grid" title="troca os blocos do raster por uma grade de blocos iguais">dividir</button>
         <button class="btn sm" id="pm-draw" title="arraste no raster pra criar um bloco do tamanho exato">▭ desenhar bloco</button>
         <span class="grow"></span><span class="hint" id="pm-hint"></span></div>
-      <div class="hint" data-v="palco">Monte o palco físico em metros: arraste as telas, cantos = tamanho (Shift = proporção), elas grudam nas bordas umas das outras (Alt = sem ímã). O contorno delas é o <b>canvas</b>; fora das telas sai preto. Com <b>telão</b> (pixel map ligado) o canvas é o raster dele e as telas são os <b>blocos</b>: aqui é só o preview físico (posição, giro, espaço entre eles) — cada bloco mostra a parte dele da saída; o que sai é definido no Pixel map.</div>
-      <div class="hint" data-v="raster">O telão chega como <b>uma imagem só</b> (a resolução que ele anuncia — os blocos e o espaço entre eles ficam na processadora). Divida o raster nos blocos que a processadora usa: grade ou ▭ desenhar; arraste/redimensione em px pra acertar (gruda nas bordas; Alt = solto). Fora dos blocos sai preto.</div>
+      <div class="hint" data-v="palco">Monte o palco físico em metros: arraste as telas, cantos = tamanho (Shift = proporção), elas grudam nas bordas umas das outras (Alt = sem ímã). O contorno delas é o <b>canvas</b>: o conteúdo se monta aqui, com o espaço entre as telas (o que cai no vão não aparece, como no palco de verdade); cada tela mostra a parte dela. Com <b>telão</b> (pixel map ligado) cada tela sai no <b>bloco</b> dela do raster (vista Pixel map), no tamanho nativo do painel (px) — mexer aqui muda o que sai, o raster continua igual.</div>
+      <div class="hint" data-v="raster">O telão chega como <b>uma imagem só</b> (a resolução que ele anuncia — os blocos e o espaço entre eles ficam na processadora). Diga onde cada tela entra no raster, como a processadora espera (o técnico de LED passa esse mapa): grade ou ▭ desenhar; arraste/redimensione em px (gruda nas bordas; Alt = solto); ↻ = painel deitado na processadora. O conteúdo de cada bloco vem da tela dele no Palco. Fora dos blocos sai preto.</div>
       <div class="stg" id="stg" data-v="palco"><div class="stg-empty" id="stg-empty">sem telas — o canvas é a janela de saída inteira</div><canvas id="stg-src" style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none"></canvas></div>
-      <div class="stg pmap" id="pmap" data-v="raster"><div class="pm-raster" id="pm-raster"><span></span></div><div class="stg-empty" id="pm-empty">sem blocos — divida o raster (grade) ou ▭ desenhe</div></div>
+      <div class="stg pmap" id="pmap" data-v="raster"><div class="pm-raster" id="pm-raster"><canvas id="pm-out"></canvas><span></span></div><canvas id="pm-src" style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none"></canvas><div class="stg-empty" id="pm-empty">sem blocos — divida o raster (grade) ou ▭ desenhe</div></div>
       <div class="hint" id="tl-status"></div>
       <div class="hint" id="pm-warn"></div>
       <div id="stg-list" data-v="palco"></div>
@@ -1243,8 +1245,8 @@ function renderOutput(o){
   $('#outinfo').append(
     h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'render' }), h('b', { text: `${o.content_w}×${o.content_h}` }), ' px'),
     h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'janela' }), h('b', { text: `${o.window_w}×${o.window_h}` }), ` · ${o.mode} · pos ${o.pos ? o.pos.join(',') : '0,0'}`),
-    o.comp && h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'mistura' }), h('b', { text: `${o.comp[0]}×${o.comp[1]}` }),
-      o.map ? ` px · pixel map ${o.map[0]}×${o.map[1]} (${o.map[2]} telas)` : ' px · janela = palco'),
+    ...(o.comp ? [h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'mistura' }), h('b', { text: `${o.comp[0]}×${o.comp[1]}` }),
+      o.map ? ` px = o canvas do palco → pixel map ${o.map[0]}×${o.map[1]} (${o.map[2]} blocos)` : ' px = a janela (canvas encaixado)')] : []),
     h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'shader' }), `${o.shader} · `, h('b', { text: o.shader_status || 'ok', style: `color:${shBad ? 'var(--bad)' : 'var(--live)'}` })),
     ...(o.monitors || []).map(m => h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'monitor' }), `${m.name}  ${m.w}×${m.h}  +${m.x}+${m.y}` + (m.primary ? '  (principal)' : ''))));
 }
@@ -1390,8 +1392,10 @@ function renderStage(full){
   if (!stgView || (full && activeDrag !== 'rect')) stgView = stgFit();
   const v = stgView, st = stageOf(lastScreens);
   $('#stg-empty').hidden = !!lastScreens.length || !!stgPen;
-  $('#stg-info').textContent = lastPM.on ? `· telão ${lastPM.w}×${lastPM.h} · ${lastScreens.filter(isBlock).length} bloco(s) — no Palco é só preview`
-    : st ? `· canvas ${st.W.toFixed(2)}×${st.H.toFixed(2)} m · ${st.cw}×${st.ch} px` : '· sem telas (canvas = janela)';
+  const oc = (lastOutput || {}).canvas, nb = lastScreens.filter(isBlock).length;
+  $('#stg-info').textContent = !st ? '· sem telas (canvas = janela)'
+    : `· canvas ${st.W.toFixed(2)}×${st.H.toFixed(2)} m · ${st.cw}×${st.ch} px` + (nb ? ` · telão ${lastPM.w}×${lastPM.h}, ${nb} bloco(s)` : '')
+      + (nb && oc && oc[0] < st.cw - 1 ? ` · ⚠ canvas reduzido p/ ${oc[0]}×${oc[1]} (menos px que os painéis)` : '');
   const step = v.u >= 40 ? 1 : v.u >= 12 ? 5 : 10;   // grade de 1 m (ou 5/10 m se o palco for grande)
   el.style.backgroundImage = 'linear-gradient(to right, #1a1e23 1px, transparent 1px), linear-gradient(to bottom, #1a1e23 1px, transparent 1px)';
   el.style.backgroundSize = `${v.u * step}px ${v.u * step}px`;
@@ -1425,7 +1429,7 @@ function renderStage(full){
     lbl.forEach((x, k) => { if (le[k].textContent !== x) le[k].textContent = x; });
   });
   renderPen();
-  if (pmReady){ renderPmap(); paintBlocks(); }
+  if (pmReady){ renderPmap(); paintStage(); }
 }
 function scrStart(e, d, i){
   const t = lastScreens[i], el = $('#stg'), v = stgView; if (!t || !v || stgPen) return;   // lapis: o clique e' do #stg
@@ -1590,20 +1594,26 @@ function renderStageList(){
 }
 new ResizeObserver(() => { stgView = null; renderStage(); }).observe($('#stg'));
 
-// ---- PIXEL MAP / TELAO (tuning.PIXEL_MAP = {on, w, h}; native _stage). Um telao de verdade chega ao
-// computador como UMA resolucao (o EDID da processadora): quais gabinetes, onde cada um esta' no raster
-// e o espaco entre eles ficam na processadora — nada disso volta. Entao, ligado: o CANVAS E' o raster
-// w x h e sai como esta'; as telas viram BLOCOS dele (ox, oy, pw, ph em px = o pixel map, editado na
-// vista "Pixel map": grade ou desenhar, arrastar/redimensionar pra acertar). Fora dos blocos = preto.
-// x/y/w/h/rot em metros viram so' o PREVIEW fisico (vista Palco): cada bloco mostra a regiao dele da
-// saida; mexer ali nao muda o que sai.
+// ---- PIXEL MAP / TELAO (tuning.PIXEL_MAP = {on, w, h}; native _out_blocks + OUTPUT_MAP_SRC). Um telao
+// de verdade chega ao computador como UMA resolucao (o EDID da processadora): quais gabinetes, onde cada
+// um esta' no raster e o espaco entre eles ficam na processadora — nada disso volta. Como no Resolume
+// (input map x output map) e no disguise (stage x feed), sao DOIS espacos: o CANVAS continua o palco
+// (vista Palco, metros, com os vaos — o conteudo se monta ali) e cada tela com ox/oy e' copiada pro
+// BLOCO dela no raster (vista Pixel map: ox, oy em px; pw x ph = o painel nativo; orot = deitado na
+// processadora, ocupa ph x pw). Fora dos blocos = preto. Sem blocos o pixel map nao vale.
 let lastPM = { on: 0, w: 1920, h: 1080 }, pmTouched = 0; pmReady = true;
 const inMap = t => t.ox != null && t.oy != null;
 const isBlock = t => !!lastPM.on && inMap(t);
-const PM_DENS = 400;   // px por metro do preview de um bloco novo (o tamanho fisico de verdade e' do palco)
+const PM_DENS = 400;   // px por metro de um bloco novo no palco (o tamanho fisico de verdade se acerta la')
+const qOf = t => Math.round((t.orot || 0) / 90) & 3;
+const fpOf = t => qOf(t) & 1 ? [t.ph, t.pw] : [t.pw, t.ph];   // o que o bloco ocupa no raster
+function rotPoly(poly, q){   // poligono do painel (u, v) -> no bloco girado (= inversa do OUTPUT_MAP_SRC)
+  if (!poly || !q) return poly;
+  return poly.map(([u, v]) => q === 1 ? [rnd(1 - v, 1e4), u] : q === 2 ? [rnd(1 - u, 1e4), rnd(1 - v, 1e4)] : [v, rnd(1 - u, 1e4)]);
+}
 function sendPM(){ pmTouched = now(); post('/pixelmap', lastPM).then(r => { if (r.pixel_map) lastPM = r.pixel_map; renderPmap(); renderStage(); renderCanvas(); }).catch(e => toast('pixel map: ' + e, 'err')); }
 $('#pm-on').onchange = () => { lastPM.on = $('#pm-on').checked ? 1 : 0; sendPM(); };
-const pmHit = (a, b) => a.ox < b.ox + b.pw && b.ox < a.ox + a.pw && a.oy < b.oy + b.ph && b.oy < a.oy + a.ph;
+const pmHit = (a, b) => { const [aw, ah] = fpOf(a), [bw, bh] = fpOf(b); return a.ox < b.ox + bw && b.ox < a.ox + aw && a.oy < b.oy + bh && b.oy < a.oy + ah; };
 function newBlock(ox, oy, pw, ph, name){   // bloco = tela com lugar no raster; o preview nasce no mesmo arranjo do raster
   return { name, x: rnd(ox / PM_DENS), y: rnd(oy / PM_DENS), w: rnd(Math.max(0.05, pw / PM_DENS), 100), h: rnd(Math.max(0.05, ph / PM_DENS), 100), pw, ph, ox, oy };
 }
@@ -1626,7 +1636,7 @@ $('#pmap').addEventListener('pointerdown', e => {   // desenhar bloco: arrasto n
   e.preventDefault(); e.stopPropagation();
   const el = $('#pmap'), v = el._v, b = el.getBoundingClientRect(); if (!v) return;
   const toPx = ev => { const x = (ev.clientX - b.left - v.x0) / v.sc, y = (ev.clientY - b.top - v.y0) / v.sc;
-    const ts = [0, ...lastScreens.filter(inMap).flatMap(t => [t.ox, t.ox + t.pw]), lastPM.w], us = [0, ...lastScreens.filter(inMap).flatMap(t => [t.oy, t.oy + t.ph]), lastPM.h];
+    const ts = [0, ...lastScreens.filter(inMap).flatMap(t => [t.ox, t.ox + fpOf(t)[0]]), lastPM.w], us = [0, ...lastScreens.filter(inMap).flatMap(t => [t.oy, t.oy + fpOf(t)[1]]), lastPM.h];
     const near = (q, arr) => { if (ev.altKey) return q; let best = q, bd = 8 / v.sc; for (const a of arr) if (Math.abs(a - q) < bd){ bd = Math.abs(a - q); best = a; } return best; };
     return [Math.round(Math.max(0, Math.min(lastPM.w, near(x, ts)))), Math.round(Math.max(0, Math.min(lastPM.h, near(y, us))))]; };
   const p0 = toPx(e), box = h('div', { class: 'pm-new' }); el.append(box); el.setPointerCapture(e.pointerId);
@@ -1663,7 +1673,7 @@ async function mapTelao(m, why){
   ledSig = ledSigOf(m);
   const n = lastScreens.filter(inMap).length, st = $('#tl-status'); st.innerHTML = '';
   st.append(h('b', { text: `✓ ${why || 'telão'} ${m.name}${m.virtual ? ' (simulador)' : ''} · ${m.w}×${m.h}` }),
-    ' — o canvas é o raster do telão, pixel map ligado, saída em tela cheia lá. ' +
+    ' — pixel map ligado, saída em tela cheia lá: cada tela do palco sai no bloco dela do raster. ' +
     (n ? `${n} bloco(s) no raster.` : 'Divida o raster em blocos (Pixel map: grade ou ▭ desenhar).'));
   toast(`${why || 'telão'}: ${m.name} ${m.w}×${m.h}`);
   if (!n) setStgView('raster');
@@ -1705,11 +1715,11 @@ setInterval(pollOutputs, 2000);
 function pmIssues(){
   const on = lastScreens.filter(inMap), bad = new Set(), msg = [], o = lastOutput;
   if (lastPM.on){
-    on.forEach(t => { if (t.ox + t.pw > lastPM.w || t.oy + t.ph > lastPM.h){ bad.add(t); msg.push(`${t.name} passa do raster`); } });
+    on.forEach(t => { const [fw, fh] = fpOf(t); if (t.ox + fw > lastPM.w || t.oy + fh > lastPM.h){ bad.add(t); msg.push(`${t.name} passa do raster`); } });
     on.forEach((a, i) => on.slice(i + 1).forEach(b => { if (pmHit(a, b)){ bad.add(a); bad.add(b); msg.push(`${a.name} × ${b.name} se sobrepõem no raster`); } }));
-    if (!on.length) msg.push('sem blocos no raster: a saída fica preta — divida o raster (Pixel map)');
+    if (!on.length) msg.push('sem blocos no raster: o pixel map não vale (sai o canvas inteiro na janela) — divida o raster (Pixel map)');
     const out = lastScreens.filter(t => !inMap(t));
-    if (out.length) msg.push(`fora do raster (não saem): ${out.map(t => t.name).join(', ')}`);
+    if (out.length && on.length) msg.push(`fora do raster (só no palco, não saem): ${out.map(t => t.name).join(', ')}`);
     if (o && o.window_w && (o.window_w !== lastPM.w || o.window_h !== lastPM.h))
       msg.push(`janela ${o.window_w}×${o.window_h} ≠ raster ${lastPM.w}×${lastPM.h}: sai escalado, não pixel a pixel`);
   }
@@ -1734,11 +1744,12 @@ function renderPmap(){
     let d = els[i];
     if (!d){ d = h('div', { class: 'scr' }, h('b'), h('small'), ['nw', 'ne', 'sw', 'se'].map(c => h('i', { 'data-c': c }))); d.onpointerdown = e => pmStart(e, d, i); el.append(d); }
     d.hidden = !inMap(t); if (d.hidden) return;
-    Object.assign(d.style, { left: x0 + t.ox * sc + 'px', top: y0 + t.oy * sc + 'px', width: t.pw * sc + 'px', height: t.ph * sc + 'px' });
+    const [fw, fh] = fpOf(t);
+    Object.assign(d.style, { left: x0 + t.ox * sc + 'px', top: y0 + t.oy * sc + 'px', width: fw * sc + 'px', height: fh * sc + 'px' });
     d.classList.toggle('sel', i === scrSel); d.classList.toggle('bad', bad.has(t));
-    setPolyEl(d, t);
+    setPolyEl(d, { poly: rotPoly(polyOf(t), qOf(t)) });
     const le = $$(':scope > b, :scope > small', d);
-    le[0].textContent = t.name; le[1].textContent = `${t.ox},${t.oy} · ${t.pw}×${t.ph}`;
+    le[0].textContent = t.name; le[1].textContent = `${t.ox},${t.oy} · ${t.pw}×${t.ph}` + (qOf(t) ? ` · ↻${qOf(t) * 90}°` : '');
   });
   renderPmList();
 }
@@ -1746,10 +1757,11 @@ function pmStart(e, d, i){   // mover/redimensionar o bloco no raster (px)
   const t = lastScreens[i], el = $('#pmap'), v = el._v; if (!t || !v || pmDraw) return;
   if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); }
   const others = lastScreens.filter((o, j) => j !== i && inMap(o));
-  rectDrag(e, d, { r0: [t.ox, t.oy, t.pw, t.ph], ux: v.sc, uy: v.sc, min: 8,
-    tx: [0, lastPM.w, ...others.flatMap(o => [o.ox, o.ox + o.pw])], ty: [0, lastPM.h, ...others.flatMap(o => [o.oy, o.oy + o.ph])],
+  rectDrag(e, d, { r0: [t.ox, t.oy, ...fpOf(t)], ux: v.sc, uy: v.sc, min: 8,
+    tx: [0, lastPM.w, ...others.flatMap(o => [o.ox, o.ox + fpOf(o)[0]])], ty: [0, lastPM.h, ...others.flatMap(o => [o.oy, o.oy + fpOf(o)[1]])],
     move: ([x, y, w, hh], gs) => {
-      Object.assign(t, { ox: Math.max(0, Math.round(x)), oy: Math.max(0, Math.round(y)), pw: Math.max(8, Math.round(w)), ph: Math.max(8, Math.round(hh)) });
+      const fw = Math.max(8, Math.round(w)), fh = Math.max(8, Math.round(hh));   // deitado: o painel e' fh x fw
+      Object.assign(t, { ox: Math.max(0, Math.round(x)), oy: Math.max(0, Math.round(y)) }, qOf(t) & 1 ? { pw: fh, ph: fw } : { pw: fw, ph: fh });
       drawGuides(el, gs, x => v.x0 + x * v.sc, y => v.y0 + y * v.sc);
       renderPmap(); sendScreensLive();
     },
@@ -1763,31 +1775,52 @@ function renderPmList(){
       inp.onchange = () => { const x = Math.round(+inp.value); if (!(x >= min)) return; t[k] = x; if (k === 'ox' || k === 'oy'){ t.ox = t.ox ?? 0; t.oy = t.oy ?? 0; } sendScreens(true); inp.blur(); renderPmap(); renderStage(); renderCanvas(); }; return inp; };
     box.append(h('div', { class: 'srow2' + (i === scrSel ? ' sel' : ''), onpointerdown: () => { if (scrSel !== i){ scrSel = i; renderStage(); renderStageList(); renderPmap(); } } },
       h('b', { text: t.name }), h('label', {}, 'x', num('ox', 0)), h('label', {}, 'y', num('oy', 0)), h('label', {}, 'larg. px', num('pw', 8)), h('label', {}, 'alt. px', num('ph', 8)),
-      h('span', { class: 'hint num', text: inMap(t) ? `até ${t.ox + t.pw},${t.oy + t.ph}` : 'fora do raster' }), h('span', { class: 'grow' }),
-      inMap(t) ? h('button', { class: 'btn sm', text: 'tirar do raster', onclick: () => { delete t.ox; delete t.oy; sendScreens(true); renderPmap(); renderStage(); renderCanvas(); } })
+      inMap(t) ? h('label', { title: 'painel deitado na processadora: entra girado no raster (horário) e ocupa alt. × larg.' }, '↻', (() => {
+        const sel = h('select', { class: 'inp sm' }, [0, 90, 180, 270].map(a => h('option', { value: a, text: a + '°', ...(a === qOf(t) * 90 ? { selected: true } : {}) })));
+        sel.onchange = () => { if (+sel.value) t.orot = +sel.value; else delete t.orot; sendScreens(true); sel.blur(); renderPmap(); };
+        return sel; })()) : '',
+      h('span', { class: 'hint num', text: inMap(t) ? `até ${t.ox + fpOf(t)[0]},${t.oy + fpOf(t)[1]}` : 'fora do raster' }), h('span', { class: 'grow' }),
+      inMap(t) ? h('button', { class: 'btn sm', text: 'tirar do raster', onclick: () => { delete t.ox; delete t.oy; delete t.orot; sendScreens(true); renderPmap(); renderStage(); renderCanvas(); } })
                : h('button', { class: 'btn sm', text: 'pôr no raster', onclick: () => { t.ox = 0; t.oy = 0; sendScreens(true); renderPmap(); renderStage(); renderCanvas(); } }),
       h('button', { class: 'x', text: '×', title: 'tirar este bloco', onclick: () => { lastScreens.splice(i, 1); scrSel = -1; sendScreens(true); renderStage(true); renderStageList(); renderCanvas(); } })));
   });
 }
-// ---- PREVIEW DOS BLOCOS (vista Palco, com telao): a saida (/frame?which=out = o raster) recortada na
-// regiao de cada bloco, desenhada dentro da tela dele no palco (girada/forma como ela)
-addPreview($('#stg-src'), '/frame?which=out', 10, 'saida', paintBlocks);
-function paintBlocks(){
-  const src = $('#stg-src'), on = lastPM.on && src.width > 1;
+// ---- PREVIA NO PALCO: o canvas pronto (/frame?which=cv = native cv_pv: o palco, sem o raster)
+// desenhado dentro de cada tela no (u, v) do painel — girada/forma como ela: o que o publico ve
+addPreview($('#stg-src'), '/frame?which=cv', 10, 'saida', paintStage);
+function paintStage(){
+  const src = $('#stg-src'), st = stageOf(lastScreens), on = src.width > 1 && !!st;
   $$('#stg .scr').forEach((d, i) => {
-    const t = lastScreens[i], blk = !!(t && on && inMap(t));
-    d.classList.toggle('blk', blk);
+    const t = lastScreens[i], ok = !!(t && on);
+    d.classList.toggle('pvon', ok);
     let cv = d.querySelector(':scope > canvas.pv');
-    if (!blk){ if (cv) cv.remove(); return; }
+    if (!ok){ if (cv) cv.remove(); return; }
     if (!cv){ cv = h('canvas', { class: 'pv' }); d.prepend(cv); }
-    const k = Math.min(src.width / lastPM.w, src.height / lastPM.h), bx = (src.width - lastPM.w * k) / 2, by = (src.height - lastPM.h * k) / 2;   // raster encaixado no frame
-    const cw = Math.max(1, Math.round(t.pw * k)), ch = Math.max(1, Math.round(t.ph * k));
+    // painel (u, v) -> previa: q = o + u*ex + v*ey (m) * k; a inversa leva a previa pro painel (cw x ch px)
+    const A = shapeAxes(t), kx = src.width / st.W, ky = src.height / st.H;
+    const ax = A.ex[0] * kx, ay = A.ex[1] * ky, bx = A.ey[0] * kx, by = A.ey[1] * ky, det = ax * by - bx * ay || 1e-9;
+    const cw = Math.max(2, Math.round(Math.hypot(ax, ay))), ch = Math.max(2, Math.round(Math.hypot(bx, by)));
     if (cv.width !== cw || cv.height !== ch){ cv.width = cw; cv.height = ch; }
-    cv.getContext('2d').drawImage(src, bx + t.ox * k, by + t.oy * k, t.pw * k, t.ph * k, 0, 0, cw, ch);
+    const ox = (A.o[0] - st.x0) * kx, oy = (A.o[1] - st.y0) * ky;
+    const ma = cw * by / det, mc = -cw * bx / det, mb = -ch * ay / det, md = ch * ax / det;
+    const g = cv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch);
+    g.setTransform(ma, mb, mc, md, -(ma * ox + mc * oy), -(mb * ox + md * oy));
+    g.drawImage(src, 0, 0);
     const poly = polyOf(t);
     cv.style.clipPath = poly ? `polygon(${poly.map(([u, v]) => `${u * 100}% ${v * 100}%`).join(',')})` : '';
   });
 }
+// ---- PREVIA NO PIXEL MAP: a saida (/frame?which=out = a janela, que o native encaixa no raster) no
+// retangulo do raster — o que o telao recebe de fato, bloco por bloco
+addPreview($('#pm-src'), '/frame?which=out', 10, 'saida', () => {
+  const src = $('#pm-src'), cv = $('#pm-out');
+  if (src.width < 2 || !lastPM.on){ cv.width = 1; return; }
+  const k = Math.min(src.width / lastPM.w, src.height / lastPM.h), w = lastPM.w * k, hh = lastPM.h * k;
+  const cw = Math.max(1, Math.round(w)), ch = Math.max(1, Math.round(hh));
+  if (cv.width !== cw || cv.height !== ch){ cv.width = cw; cv.height = ch; }
+  cv.getContext('2d').drawImage(src, (src.width - w) / 2, (src.height - hh) / 2, w, hh, 0, 0, cw, ch);
+});
 new ResizeObserver(() => renderPmap()).observe($('#pmap'));
 setStgView(stgMode);
 
@@ -1799,11 +1832,8 @@ setStgView(stgMode);
 // rect = [x, y, w, h] no canvas, 0..1, origem em cima (OVERLAYS[i].rect; native _rect_uv).
 let mesaView = LS.get('v2mesaView', 'mesa');
 const cvEls = {};
-function canvasOf(){   // = native _stage: com telao (pixel map), o raster + os blocos dele; senao o palco fisico
-  if (!lastPM.on) return stageOf(lastScreens);
-  const W = lastPM.w, H = lastPM.h, bl = lastScreens.filter(inMap);
-  return { cw: W, ch: H, rects: bl.map(t => [t.ox / W, t.oy / H, t.pw / W, t.ph / H]),
-           polys: bl.map(t => (polyOf(t) || RECT_UV).map(([u, v]) => [(t.ox + u * t.pw) / W, (t.oy + v * t.ph) / H])), names: bl.map(t => t.name) };
+function canvasOf(){   // = native _stage: SEMPRE o palco fisico (com telao, o raster e' so' a saida)
+  return stageOf(lastScreens);
 }
 function cvDims(){   // canvas em vigor: o raster do telao, o contorno das telas, ou a janela
   const st = canvasOf(), o = lastOutput || {};

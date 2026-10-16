@@ -36,14 +36,18 @@ Cada ferramenta isolada, depois comparar, só então compor.
   Fora do `pool` some da mesa/saída mas fica lembrado.
 - 60 fps (`OUTPUT_FPS`): `src_tex`/`comp_last` só refazem se o frame é OUTRO objeto (`is`, guardando o frame).
 - Passes: mistura → `SCENE_GRADE` → transição (`from` antes da calibração) → `OUTPUT_GRADE` (`master` →
-  `u_dim`); os dois grades usam `calibrar.frag`.
-- Canvas (`_stage` no native = `stageOf`/`canvasOf` no dash), encaixado com barras (`_canvas_box`): o contorno das
-  telas `SCREENS`, ou o raster do telão. Fonte no canvas = `rect` 0..1 (origem em cima) em `OVERLAYS` → `_rect_uv`.
+  `u_dim`) → com telão, `OUTPUT_MAP_SRC`; os dois grades usam `calibrar.frag`.
+- Canvas (`_stage` no native = `stageOf`/`canvasOf` no dash) = SEMPRE o palco: contorno das telas `SCREENS` com os
+  vãos. Sem telão: encaixado na janela com barras (`_canvas_box`). Fonte no canvas = `rect` 0..1 (origem em cima)
+  em `OVERLAYS` → `_rect_uv`.
 - Tela com forma livre: `rot` (centro) + `poly` (0..1 no painel SEM giro); geometria única em
   `dash_data.screen_axes` (= `shapeAxes` no dash). Shader: `inShape` (`POLY_GLSL`, textura `u_poly` 32×16, unidade 8).
 - **Telão** = `PIXEL_MAP = {on, w, h}`. O computador vê o telão como UMA resolução (EDID); blocos e espaço entre eles
-  ficam na processadora. Ligado: canvas É o raster e sai como está; tela com `ox/oy/pw/ph` = BLOCO (vista Pixel
-  map). x/y/w/h/rot em metros = só PREVIEW (`isBlock`: redimensionar no palco não mexe em pw/ph; `paintBlocks`).
+  ficam na processadora. Dois espaços (= input/output map do Resolume, stage/feed do disguise): ligado e com
+  blocos (`_out_blocks`), a MISTURA é o canvas do palco no tamanho dele (`CMP_W/H`, teto `MAX_CANVAS_PX`); os passes
+  finais desenham na textura `canvas` e o último (`OUTPUT_MAP_SRC`) copia cada tela pro BLOCO dela no raster =
+  janela (`ox/oy` px; `pw/ph` = painel nativo; `orot` 90/180/270 = deitado, ocupa ph×pw). Palco muda o que sai;
+  `isBlock`: redimensionar no palco não mexe em pw/ph. Prévias: `/frame?which=cv` (canvas → `paintStage`) e `out`.
   Reconhecer: `/detect-output` (relê o xrandr — o native só lista monitores ao abrir) / `pollOutputs` → `mapTelao`.
 - `src/telao_sim.py` (só Linux) = processadora de mentira: monta o telão (salvo em `~/.config/prisma/telao_sim.json`)
   e anuncia SÓ nome + resolução em `dash_data.VIRTUAL_OUTPUTS`; recorta pelo mapa DELE. Captura a saída pelo id

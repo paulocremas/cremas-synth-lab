@@ -11,6 +11,7 @@ import argparse
 import collections
 import colorsys
 import importlib
+import math
 import os
 import re
 import signal
@@ -759,28 +760,9 @@ def _raster(pm):
     return None
 
 
-def _stage(screens, win_w, win_h, pm=None):
-    """Canvas e telas -> (cw, ch, shapes). shapes = cada tela no canvas (_shape_in); com telas, a
-    camada so' aparece dentro delas (fora = preto).
-    PIXEL MAP ligado (tuning.PIXEL_MAP = {on, w, h}: o TELAO, que o computador ve como UMA resolucao —
-    os gabinetes e o espaco entre eles estao na processadora): o canvas E' o raster w x h e sai como
-    esta' (a janela = o raster); as telas sao BLOCOS dele — regiao (ox, oy, pw, ph) em px + forma
-    (poly). x/y/w/h/rot em metros viram so' o PREVIEW fisico (dash), nao mexem na saida. Tela sem
-    ox/oy fica fora do raster.
-    Desligado: telas do palco fisico (tuning.SCREENS = [{name, x, y, w, h (metros, origem em cima a
-    esquerda), pw, ph, rot, poly}]); o canvas e' o retangulo que envolve o contorno de todas, na
-    MAIOR densidade (px/m) entre elas (ate 8192). Sem telas: o canvas e' a janela, sem recorte."""
-    rr = _raster(pm)
-    if rr:
-        out = []
-        for t in screens or []:
-            try:
-                ox, oy, pw, ph = (int(t[k]) for k in ('ox', 'oy', 'pw', 'ph'))
-                if pw > 0 and ph > 0 and len(out) < MAX_SCREENS:
-                    out.append(_shape_in({'x': ox, 'y': oy, 'w': pw, 'h': ph, 'poly': t.get('poly')}, (0, 0) + rr))
-            except (KeyError, TypeError, ValueError, AttributeError):
-                continue
-        return rr[0], rr[1], out
+def _valid_screens(screens):
+    """tuning.SCREENS -> [(t, bbox, w, h, pw, ph)] das telas com x/y/w/h validos (ate MAX_SCREENS).
+    A ORDEM daqui = a das shapes do _stage, dos blocos do _out_blocks e das linhas de u_poly."""
     scr = []
     for t in screens or []:
         try:
@@ -790,7 +772,21 @@ def _stage(screens, win_w, win_h, pm=None):
                 scr.append((t, dash_data.screen_bbox(t), w, h, pw, ph))
         except (KeyError, TypeError, ValueError, AttributeError):
             continue
-    scr = scr[:MAX_SCREENS]
+    return scr[:MAX_SCREENS]
+
+
+MAX_CANVAS_PX = 3840 * 2160   # canvas MAPEADO (pixel map) = a mistura: acima disso a densidade cai junto
+
+
+def _stage(screens, win_w, win_h, max_px=None):
+    """Canvas e telas -> (cw, ch, shapes). shapes = cada tela no canvas (_shape_in); com telas, a
+    camada so' aparece dentro delas (fora = preto). O canvas e' SEMPRE o palco fisico (tuning.SCREENS =
+    [{name, x, y, w, h (metros, origem em cima a esquerda), pw, ph, rot, poly}]): o retangulo que
+    envolve o contorno de todas, com os vaos entre elas, na MAIOR densidade (px/m) entre elas (ate
+    8192; max_px = teto de area, a densidade cai por igual). Com o PIXEL MAP ligado esse canvas vira a
+    mistura e cada tela e' copiada dele pro bloco dela no raster (_out_blocks, OUTPUT_MAP_SRC) — como o
+    input map x output map do Resolume / stage x feed do disguise. Sem telas: o canvas e' a janela."""
+    scr = _valid_screens(screens)
     if not scr:
         return win_w, win_h, []
     x0, y0 = min(t[1][0] for t in scr), min(t[1][1] for t in scr)
@@ -798,8 +794,40 @@ def _stage(screens, win_w, win_h, pm=None):
     H = max(t[1][3] for t in scr) - y0
     dens = max(max(t[4] / t[2], t[5] / t[3]) for t in scr) or 100.0
     k = min(dens, 8192 / W, 8192 / H)
+    if max_px:
+        k = min(k, math.sqrt(max_px / (W * H)))
     return (max(16, int(round(W * k))), max(16, int(round(H * k))),
             [_shape_in(t[0], (x0, y0, W, H)) for t in scr])
+
+
+def _out_blocks(screens, pm):
+    """PIXEL MAP (tuning.PIXEL_MAP = {on, w, h}: o TELAO, que o computador ve como UMA resolucao — os
+    gabinetes e o espaco entre eles estao na processadora) -> None (desligado/invalido/sem blocos) ou
+    (rw, rh, blocos), blocos alinhados com as shapes do _stage: (ox, oy, fw, fh, q) em px do raster
+    (origem em cima; fw x fh = o que o bloco ocupa, pw x ph deitado se q e' impar) ou None (tela fora
+    do raster). q = orot / 90: o painel entra GIRADO no raster (gabinete deitado na processadora)."""
+    rr = _raster(pm)
+    if not rr:
+        return None
+    out = []
+    for t, *_ in _valid_screens(screens):
+        try:
+            ox, oy, pw, ph = (int(t[k]) for k in ('ox', 'oy', 'pw', 'ph'))
+            q = int(round(float(t.get('orot') or 0) / 90.0)) % 4
+            out.append(((ox, oy, ph, pw, q) if q % 2 else (ox, oy, pw, ph, q)) if pw > 0 and ph > 0 else None)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            out.append(None)
+    return (rr[0], rr[1], out) if any(out) else None
+
+
+def _map_uniforms(shapes, blocks):
+    """Telas + blocos -> (u_ba, u_bb, u_bc) do OUTPUT_MAP_SRC, um vec4 por tela (fora do raster = zeros)."""
+    ba, bb, bc = [], [], []
+    for (_, o, ex, ey, poly), b in zip(shapes, blocks):
+        ba.append(b[:4] if b else (0, 0, 0, 0))
+        bb.append((o[0], o[1], ex[0], ex[1]))
+        bc.append((ey[0], ey[1], b[4] if b else 0, len(poly or ())))
+    return [np.array(x, np.float32).ravel() for x in (ba, bb, bc)]
 
 
 POLY_TEX_W = dash_data.MAX_POLY   # textura dos poligonos: POLY_TEX_W x MAX_SCREENS, linha i = tela i
@@ -1191,13 +1219,16 @@ def _source_frames():
 
 def _preview_frame(which, key='', max_w=320):
     """Pixels crus REDUZIDOS pro dash v2 desenhar num canvas (GET /frame) — sem JPEG/ffmpeg,
-    por isso da pra atualizar a ~15 fps. which: 'out' = a saida (lida pequena na GPU pelo loop GL,
+    por isso da pra atualizar a ~15 fps. which: 'cv' = o canvas do palco (idem, state['cv_want']), 'out' = a saida (lida pequena na GPU pelo loop GL,
     so' enquanto alguem pede — ver state['out_want']), 'sel' = a fonte selecionada (state['frame']),
     'src' = um canal da mesa (key: fonte viva ou arquivo de midia, '#N' ignorado).
     Devolve (bytes rgb24, w, h) | None."""
     if which == 'out':
         state['out_want'] = time.time()
         return state.get('out_small')
+    if which == 'cv':                          # o CANVAS do palco pronto (com telao: antes do raster)
+        state['cv_want'] = time.time()
+        return state.get('cv_small')
     if which == 'fx':                          # canal da mesa DEPOIS da pilha de efeitos (key = chave do canal)
         state.setdefault('fx_want', {})[key] = time.time()
         return (state.get('fx_small') or {}).get(key)
@@ -2558,21 +2589,74 @@ def build_layer_blend_program():
     return p, u
 
 
+# --- PIXEL MAP / OUTPUT MAP (ultimo passe, so' com telao: _out_blocks): a janela E' o raster da
+# processadora (u_box: o raster u_rast encaixado na janela; janela = raster -> 1:1); cada pixel dentro de um bloco (u_ba: ox, oy, fw, fh em px, origem em cima) vira o (u, v)
+# do painel (girado u_bc.z quartos de volta: gabinete deitado), cai fora se sai do poligono (inShape) e
+# busca a cor no CANVAS do palco em o + u*ex + v*ey (u_bb, u_bc.xy). Fora dos blocos = preto.
+OUTPUT_MAP_SRC = """
+#ifdef GL_ES
+precision mediump float;
+#endif
+uniform vec2 u_res;
+uniform vec4 u_box;
+uniform vec2 u_rast;
+uniform sampler2D u_canvas;
+uniform int u_nblk;
+uniform vec4 u_ba[16];
+uniform vec4 u_bb[16];
+uniform vec4 u_bc[16];
+""" + POLY_GLSL + """
+void main() {
+    vec2 r = (gl_FragCoord.xy / u_res - u_box.xy) / u_box.zw;
+    vec2 p = vec2(r.x, 1.0 - r.y) * u_rast;   // px do raster, origem em cima
+    vec3 col = vec3(0.0);
+    for (int i = 0; i < 16; i++) {
+        if (i >= u_nblk) break;
+        vec4 a = u_ba[i], b = u_bb[i], c = u_bc[i];
+        if (a.z <= 0.0) continue;
+        vec2 l = (p - a.xy) / a.zw;
+        if (any(lessThan(l, vec2(0.0))) || any(greaterThan(l, vec2(1.0)))) continue;
+        vec2 uv = l;
+        if (c.z > 2.5) uv = vec2(1.0 - l.y, l.x);
+        else if (c.z > 1.5) uv = 1.0 - l;
+        else if (c.z > 0.5) uv = vec2(l.y, 1.0 - l.x);
+        if (!inShape(float(i), c.w, uv)) continue;
+        vec2 q = b.xy + uv.x * b.zw + uv.y * c.xy;
+        col = texture2D(u_canvas, vec2(q.x, 1.0 - q.y)).rgb;
+    }
+    gl_FragColor = vec4(col, 1.0);
+}
+"""
+OUTPUT_MAP_UNIT = 9   # u_canvas (a textura `canvas` dos layer targets)
+
+
+def build_output_map_program():
+    p = build_program(OUTPUT_MAP_SRC)
+    _use_basic(p)
+    u = _locs(p, 'u_res', 'u_box', 'u_rast', 'u_canvas', 'u_nblk', 'u_ba', 'u_bb', 'u_bc', 'u_poly')
+    glUniform1i(u['u_canvas'], OUTPUT_MAP_UNIT)
+    glUniform1i(u['u_poly'], POLY_UNIT)
+    return p, u
+
+
 def make_layer_targets(w, h):
-    """1 FBO + 7 texturas do tamanho da MISTURA (a janela): out[0]/out[1] (a saida acumulada,
-    ping-pong), src[0]/src[1] (o resultado da fonte da vez, ping-pong), layer (o shader da vez) e
-    from (a imagem final do set que SAI, pra transicao de set). Recriado quando o tamanho muda (main)."""
-    texs = glGenTextures(7)
+    """1 FBO + 8 texturas do tamanho da MISTURA (a janela; com telao, o canvas do palco): out[0]/out[1]
+    (a saida acumulada, ping-pong), src[0]/src[1] (o resultado da fonte da vez, ping-pong), layer (o
+    shader da vez), from (a imagem final do set que SAI, pra transicao de set) e canvas (a imagem final
+    do palco antes do OUTPUT_MAP; linear: o bloco reamostra). Recriado quando o tamanho muda (main)."""
+    texs = glGenTextures(8)
     for t in texs:
         glBindTexture(GL_TEXTURE_2D, t)
+        filt = GL_LINEAR if t == texs[7] else GL_NEAREST
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filt)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
     return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
             'src': [texs[2], texs[3]], 'layer': texs[4], 'from': texs[5],
-            'mask': texs[6]}   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
+            'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
+            'canvas': texs[7]}
 
 
 def build_fumaca_program():
@@ -2771,6 +2855,7 @@ def main():
         return prog_cache[lp]
 
     blend_prog, blend_u = build_layer_blend_program()
+    map_prog, map_u = build_output_map_program()
     ltargets = [None]   # make_layer_targets(...) sob demanda (camada ativa ou transicao de set)
     poly_tex = [None, None]   # textura dos poligonos das telas (_poly_tex) + o que ela tem
 
@@ -2779,7 +2864,7 @@ def main():
             if ltargets[0]:
                 glDeleteFramebuffers(1, [ltargets[0]['fbo']])
                 glDeleteTextures([t for k in ('out', 'src') for t in ltargets[0][k]] +
-                                 [ltargets[0][k] for k in ('layer', 'from', 'mask')])
+                                 [ltargets[0][k] for k in ('layer', 'from', 'mask', 'canvas')])
             ltargets[0] = make_layer_targets(CMP_W, CMP_H)
         return ltargets[0]
 
@@ -2866,12 +2951,14 @@ def main():
     # inteira o custo cai ~20x). Le a OUT_PREVIEW_HZ enquanto alguem pede (/frame?which=out, dash
     # v2) ou com a analise ligada; a analise (medidores do Output Image) roda a OUT_ANALYSIS_HZ
     # em cima da mesma leitura. Tudo por TEMPO (o fps da saida muda ao vivo, tuning.OUTPUT_FPS).
+    CV_PV_MAX = 480       # previa do canvas: o lado maior (canvas do palco costuma ser bem largo)
     OUT_ANALYSIS_HZ = 10
     OUT_PREVIEW_HZ = 15
     OUT_PV_W = 320
     out_an_t = [0.0]
     out_pv_t = [0.0]
     out_pv = {'fbo': None, 'tex': None, 'wh': None}
+    cv_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0}   # previa do CANVAS do palco (/frame?which=cv)
     # previa de cada FONTE JA COM OS EFEITOS (canvas do Palco v2: GET /frame?which=fx): a textura
     # da fonte depois da pilha (lt['src']) reduzida por blit, so' das pedidas (state['fx_want'])
     FX_PV_HZ, FX_PV_W = 10, 240
@@ -2924,21 +3011,28 @@ def main():
             trans_cache.clear()          # contexto GL novo -> programas de transicao invalidos
             layer_bad.clear()            # camadas de shader recompilam no proximo frame
             blend_prog, blend_u = build_layer_blend_program()
+            map_prog, map_u = build_output_map_program()
             ltargets[0] = None           # FBO/texturas das camadas eram do contexto velho
             poly_tex[:] = [None, None]   # idem a dos poligonos
             src_tex.clear()              # texturas por fonte idem (sem glDelete: o contexto ja foi)
             out_pv['wh'] = None          # FBO da previa da saida idem
+            cv_pv.update(fbo=None, tex=None, wh=None)
             fx_pv.update(fbo=None, tex=None, wh=None)
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
             scene_tr = None              # o snapshot (ltargets 'from') era do contexto velho
             state['output'].update(mode=out_mode, window_w=WIN_W, window_h=WIN_H, pos=list(out_pos),
                                     monitor=out_cfg['monitor'], fullscreen=out_cfg['fullscreen'])
 
-        pm_ = getattr(tuning, 'PIXEL_MAP', None)
-        FIT_W, FIT_H, scr_rects = _stage(getattr(tuning, 'SCREENS', None), WIN_W, WIN_H, pm_)   # o 'fit' mira o canvas
+        # CANVAS = o palco (telas em metros, com os vaos). Sem telao: encaixado na janela (barras).
+        # Com telao (pixel map com blocos): a mistura E' o canvas, no tamanho dele, e o ultimo passe
+        # (OUTPUT_MAP_SRC) copia cada tela pro bloco dela no raster = a janela.
+        scr_ = getattr(tuning, 'SCREENS', None)
+        omap = _out_blocks(scr_, getattr(tuning, 'PIXEL_MAP', None))
+        FIT_W, FIT_H, scr_rects = _stage(scr_, WIN_W, WIN_H, MAX_CANVAS_PX if omap else None)   # o 'fit' mira o canvas
+        CMP_W, CMP_H = (FIT_W, FIT_H) if omap else (WIN_W, WIN_H)
         state['output']['canvas'] = [FIT_W, FIT_H]
-        CMP_W, CMP_H = WIN_W, WIN_H
-        state['output']['map'] = [FIT_W, FIT_H, len(scr_rects)] if _raster(pm_) else None   # telao: raster + blocos
+        state['output']['comp'] = [CMP_W, CMP_H]
+        state['output']['map'] = [omap[0], omap[1], sum(1 for b in omap[2] if b)] if omap else None   # telao: raster + blocos
         src_frames = _source_frames()             # fontes MARCADAS com frame pronto (a saida)
         # mistura na CPU (so' pra fumaca / analise / cor dominante): refeita so' se alguma fonte
         # trouxe frame novo (ou mudou opacidade/alpha/ordem). Igual = mesma tex/tex_prev de antes,
@@ -3134,7 +3228,7 @@ def main():
         sh_avail = (state.get('pool') or {}).get('shaders')   # disponiveis no set (None = todos)
         src_blend = {_chkey(o): o.get('blend') for o in state.get('overlays') or []}
         src_rect = {_chkey(o): o.get('rect') for o in state.get('overlays') or []}
-        cbox = _canvas_box(WIN_W, WIN_H, FIT_W, FIT_H)   # canvas encaixado na janela (barras fora; telao 1:1 = sem barra)
+        cbox = FULL_UV if omap else _canvas_box(WIN_W, WIN_H, FIT_W, FIT_H)   # canvas encaixado na janela (barras fora; telao: a mistura e' o canvas)
         scr_uv = _blend_scr(scr_rects)                  # telas (forma livre): fora delas fica preto
         poly_sig = [sh[4] for sh in scr_rects]          # poligonos -> u_poly (so' re-sobe se mudou)
         if poly_tex[0] is None or poly_tex[1] != poly_sig:
@@ -3269,13 +3363,22 @@ def main():
             gh = None
         # calibrada: a transicao fica em textura e a calibracao desenha na tela. `final` = a imagem
         # ANTES da calibracao (vira o 'from' da proxima transicao).
+        # com telao, "a tela" desses passes e' a textura `canvas` (o palco pronto) e o OUTPUT_MAP a
+        # desenha no raster no fim
+        def to_screen():
+            if omap:
+                glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['canvas'], 0)
+            else:
+                glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
         final = lt['out'][oi]
         if scene_tr and gh:
             glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
             final = lt['layer']
         else:
-            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            to_screen()
         if scene_tr:                                    # transicao de set: from -> saida nova
             use_trans_program(scene_tr['prog'])
             glUniform2f(tuni['res'], CMP_W, CMP_H)
@@ -3292,7 +3395,7 @@ def main():
         elif not gh:                                    # copia (modo 0, a=1) a saida pra tela
             glClear(GL_COLOR_BUFFER_BIT)
             _use_basic(blend_prog)
-            glUniform2f(blend_u['u_res'], WIN_W, WIN_H)
+            glUniform2f(blend_u['u_res'], CMP_W, CMP_H)
             glUniform1f(blend_u['u_a'], 1.0)
             glUniform1i(blend_u['u_mode'], 0)
             glUniform1i(blend_u['u_flip'], 0)
@@ -3306,7 +3409,7 @@ def main():
             glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
             glDrawArrays(GL_TRIANGLES, 0, 3)
         if gh:                                          # final -> calibrar.frag -> tela
-            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            to_screen()
             use_program(gh[1], gh[3])
             set_uniforms(gfx)
             glUniform1i(glGetUniformLocation(gh[1], 'u_test'), int(g_test))
@@ -3314,6 +3417,24 @@ def main():
             glActiveTexture(GL_TEXTURE0)
             glBindTexture(GL_TEXTURE_2D, final)
             glClear(GL_COLOR_BUFFER_BIT)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+        if omap:                                        # OUTPUT MAP: palco pronto -> blocos do raster (a janela)
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            glViewport(0, 0, WIN_W, WIN_H)
+            glClear(GL_COLOR_BUFFER_BIT)
+            _use_basic(map_prog)
+            ba, bb, bc = _map_uniforms(scr_rects, omap[2])
+            glUniform2f(map_u['u_res'], WIN_W, WIN_H)
+            glUniform4f(map_u['u_box'], *_canvas_box(WIN_W, WIN_H, omap[0], omap[1]))
+            glUniform2f(map_u['u_rast'], omap[0], omap[1])
+            glUniform1i(map_u['u_nblk'], len(scr_rects))
+            glUniform4fv(map_u['u_ba'], len(scr_rects), ba)
+            glUniform4fv(map_u['u_bb'], len(scr_rects), bb)
+            glUniform4fv(map_u['u_bc'], len(scr_rects), bc)
+            glActiveTexture(GL_TEXTURE0 + POLY_UNIT)
+            glBindTexture(GL_TEXTURE_2D, poly_tex[0])
+            glActiveTexture(GL_TEXTURE0 + OUTPUT_MAP_UNIT)
+            glBindTexture(GL_TEXTURE_2D, lt['canvas'])
             glDrawArrays(GL_TRIANGLES, 0, 3)
         glActiveTexture(GL_TEXTURE0)
         state['output']['shader'] = f'{len(src_frames)} fonte(s)'
@@ -3372,13 +3493,50 @@ def main():
                                                           out_img['peaks'], out_img['prev_val'],
                                                           out_img['prev_mean'])
 
+        # PREVIA DO CANVAS (vista Palco do dash: cada tela mostra a regiao dela): o palco pronto, sem o
+        # raster — com telao a textura `canvas`; sem, a janela no retangulo do canvas (sem as barras)
+        if time.time() - state.get('cv_want', 0) < 1.5 and t_pv - cv_pv['t'] >= 1.0 / OUT_PREVIEW_HZ:
+            cv_pv['t'] = t_pv
+            try:
+                k = min(1.0, CV_PV_MAX / max(1, FIT_W, FIT_H))
+                pw, ph = max(2, int(round(FIT_W * k))), max(2, int(round(FIT_H * k)))
+                if cv_pv['wh'] != (pw, ph):
+                    if cv_pv['fbo'] is None:
+                        cv_pv['fbo'], cv_pv['tex'] = glGenFramebuffers(1), glGenTextures(1)
+                    glBindTexture(GL_TEXTURE_2D, cv_pv['tex'])
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, pw, ph, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
+                    glBindFramebuffer(GL_FRAMEBUFFER, cv_pv['fbo'])
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cv_pv['tex'], 0)
+                    cv_pv['wh'] = (pw, ph)
+                if omap:
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['canvas'], 0)
+                    sr = (0, 0, CMP_W, CMP_H)
+                else:
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)
+                    sr = (int(round(cbox[0] * WIN_W)), int(round(cbox[1] * WIN_H)),
+                          int(round((cbox[0] + cbox[2]) * WIN_W)), int(round((cbox[1] + cbox[3]) * WIN_H)))
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, cv_pv['fbo'])
+                glBlitFramebuffer(*sr, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, cv_pv['fbo'])
+                glPixelStorei(GL_PACK_ALIGNMENT, 1)
+                buf = glReadPixels(0, 0, pw, ph, GL_RGB, GL_UNSIGNED_BYTE)
+                a = np.ascontiguousarray(np.frombuffer(buf, dtype=np.uint8).reshape(ph, pw, 3)[::-1])
+                state['cv_small'] = (a.tobytes(), pw, ph)
+            except Exception as e:                      # sem blit: o Palco fica sem previa
+                if not cv_pv.get('warned'):
+                    print('previa do canvas indisponivel ->', e)
+                    cv_pv['warned'] = True
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
         pend = state.pop('scene_pending', None)
         if pend:
             if pend.get('transition'):                  # guarda a imagem final que SAI
                 lt = layer_targets()
-                if gh:                                  # calibrada: guarda a de ANTES da calibracao
+                if gh or omap:                          # calibrada: guarda a de ANTES da calibracao
                     glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # (senao a transicao calibra 2x;
-                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, final, 0)
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                           final if gh else lt['canvas'], 0)   # telao: o palco, nao o raster
                 glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
                 glBindTexture(GL_TEXTURE_2D, lt['from'])
                 glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, CMP_W, CMP_H)
@@ -3446,15 +3604,20 @@ def _selfcheck():
     assert pt.shape == (16, 32, 4) and tuple(pt[0, 1]) == (128, 0, 0, 0) and not pt[1].any()
     assert _blend_scr(_stage(tri, 800, 600)[2])[0][1][2] == 3
     assert _stage([], 800, 600) == (800, 600, [])   # sem telas: canvas = janela
-    # TELAO (pixel map ligado): o canvas E' o raster; as telas sao blocos dele (ox/oy/pw/ph + forma), a
-    # posicao em metros (preview) nao conta; sem ox/oy = fora do raster
-    blocos = [dict(arco[0], ox=0, oy=0, x=9, rot=30), dict(arco[2], ox=256, oy=0, poly=[[0, 0], [1, 0], [0, 1]]), arco[1], {'x': 'ruim'}]
+    # TELAO (pixel map ligado): o canvas continua o PALCO; cada tela com ox/oy vira um bloco do raster
+    # (pw x ph; orot = deitado: ocupa ph x pw), alinhado com as shapes do _stage; sem ox/oy = fora
+    blocos = [dict(arco[0], ox=0, oy=0, rot=30), dict(arco[2], ox=256, oy=0, orot=90, poly=[[0, 0], [1, 0], [0, 1]]), arco[1], {'x': 'ruim'}]
+    pm = {'on': 1, 'w': 1920, 'h': 1080}
     assert _raster({'on': 0, 'w': 1920, 'h': 1080}) is None and _raster({'on': 1, 'w': 8, 'h': 8}) is None
-    cw, ch, rb = _stage(blocos, 800, 600, {'on': 1, 'w': 1920, 'h': 1080})
-    assert (cw, ch) == (1920, 1080) and len(rb) == 2, rb
-    assert ok(rb[0][0], (0, 0, 256 / 1920, 1024 / 1080)) and ok(rb[0][2], (256 / 1920, 0))   # sem giro: o giro e' so' preview
-    assert ok(rb[1][1], (256 / 1920, 0)) and rb[1][4] == [(0, 0), (1, 0), (0, 1)]
-    assert _stage(blocos, 800, 600, {'on': 0, 'w': 1920, 'h': 1080})[:2] != (1920, 1080)       # desligado: palco fisico
+    assert _stage(blocos, 800, 600)[:2] == _stage(blocos, 800, 600, MAX_CANVAS_PX)[:2] != (1920, 1080)   # canvas = palco
+    rw, rh, bl = _out_blocks(blocos, pm)
+    assert (rw, rh) == (1920, 1080) and bl == [(0, 0, 256, 1024, 0), (256, 0, 256, 1024, 1), None], bl
+    assert _out_blocks(blocos, dict(pm, on=0)) is None and _out_blocks([arco[1]], pm) is None   # desligado / sem blocos
+    ba, bb, bc = _map_uniforms(_stage(blocos, 800, 600)[2], bl)
+    assert ba.shape == (12,) and tuple(ba[4:8]) == (256, 0, 256, 1024) and not ba[8:].any()
+    assert tuple(bc[4:8])[2:] == (1, 3) and bc[3] == 0                    # quartos de giro, pontos do poligono
+    cw, ch, _ = _stage([{'x': 0, 'y': 0, 'w': 10, 'h': 1, 'pw': 8000, 'ph': 800}], 800, 600, 1000 * 100)
+    assert (cw, ch) == (1000, 100), (cw, ch)                              # teto de area: a densidade cai por igual
     assert ok(_rect_uv([0.5, 0, 0.5, 0.5], FULL_UV), (0.5, 0.5, 0.5, 0.5))   # canto de CIMA a direita
     p = os.path.join(tempfile.mkdtemp(), 't.png')
     subprocess.run(['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=320x240',

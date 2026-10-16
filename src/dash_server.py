@@ -1546,7 +1546,8 @@ def set_output_fps(fps, tuning_path=None):
 
 def _norm_screens(items):
     """TELAS do palco fisico: [{name, x, y, w, h (metros, origem em cima a esquerda), pw, ph (pixels
-    do painel), ox, oy (opcional: canto da tela no raster do PIXEL_MAP, px), rot (opcional: graus,
+    do painel), ox, oy (opcional: canto da tela no raster do PIXEL_MAP, px), orot (opcional: 90/180/270
+    = o painel entra GIRADO no raster, gabinete deitado na processadora), rot (opcional: graus,
     horario, em volta do centro), poly (opcional: [[u, v], ...] 0..1 no painel sem giro = a forma
     acesa; ver dash_data.screen_axes)}]. O canvas da saida e' o contorno delas (native_synth._stage).
     Ate 16. rot 0 / poly invalido = sem o campo."""
@@ -1563,6 +1564,9 @@ def _norm_screens(items):
         try:
             if t.get('ox') is not None and t.get('oy') is not None:   # fora do raster = sem campo
                 d['ox'], d['oy'] = (max(0, min(16384, int(t[k]))) for k in ('ox', 'oy'))
+                orot = int(round(float(t.get('orot') or 0) / 90.0)) % 4 * 90
+                if orot:
+                    d['orot'] = orot
         except (TypeError, ValueError):
             pass
         try:
@@ -2912,6 +2916,10 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     t = set_screens([{'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': -3},
                      {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': None}], save=False)
     assert (t[0]['ox'], t[0]['oy']) == (5, 0) and 'ox' not in t[1], t   # ox/oy: os 2 ou nenhum
+    t = set_screens([{'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 0, 'oy': 0, 'orot': -90},
+                     {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 0, 'oy': 0, 'orot': 360},
+                     {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'orot': 90}], save=False)
+    assert t[0]['orot'] == 270 and 'orot' not in t[1] and 'orot' not in t[2], t   # giro no raster: so' com bloco
     t = set_screens([{'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'rot': 270, 'poly': [[0, 0], [1, 0], [0.33333, 2]]},
                      {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'rot': 0, 'poly': [[0, 0]]}], save=False)
     assert t[0]['rot'] == -90.0 and t[0]['poly'] == [[0, 0], [1, 0], [0.3333, 1]], t   # forma livre

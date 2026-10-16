@@ -9,8 +9,10 @@ com efeitos e bandeja arrasta-e-solta); fora das telas = preto. Tela com forma l
 editor com giro/vértices/formas prontas/lápis; native, pixel map e telao_sim).
 Ainda não:
 - **Várias saídas**: o pixel map (`PIXEL_MAP` + blocos `ox/oy/pw/ph`) é um raster/janela só. Falta mais de
-  um (uma janela por saída/monitor) pra parede maior que um 4K ou LED + projetor. Bloco girado no raster
-  (gabinete deitado na processadora).
+  um (uma janela por saída/monitor) pra parede maior que um 4K ou LED + projetor. Espelho por bloco.
+- **Load-in**: padrão de teste POR BLOCO no raster (borda 1 px, nome, grade — hoje o Teste.frag/calibração
+  rodam no canvas do palco); exportar PNG do pixel map e do canvas do palco (template pro técnico de LED e
+  pra quem faz conteúdo).
 - **Rotação** e **recorte** (crop) por OBJETO (fonte no canvas). Tela com keystone/quad livre (projeção;
   hoje o painel é retângulo girado + polígono). Ímã com tela girada (hoje desliga).
 - Imagem da cena e calibração ainda passam na janela inteira; a análise/fumaça (`_composite` na
