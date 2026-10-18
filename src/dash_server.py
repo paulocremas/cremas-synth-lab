@@ -240,7 +240,7 @@ def _shader_manifests(names, defaults=False):
     out = {}
     for rel in names:
         try:
-            with open(os.path.join(_SHADERS, rel)) as f:
+            with open(os.path.join(_SHADERS, rel), encoding='utf-8', errors='replace') as f:
                 d = dash_data.parse_fx_defaults(f.read(4000))
         except OSError:
             d = {}
@@ -1737,7 +1737,7 @@ GRADE_FRAG = 'calibrar.frag'   # shaders/calibrar.frag — calibracao da SAIDA (
 def output_grade_defaults():
     """{knob: padrao} do cabecalho // fx: do calibrar.frag (o dash monta os knobs disso)."""
     try:
-        with open(os.path.join(_SHADERS, GRADE_FRAG)) as f:
+        with open(os.path.join(_SHADERS, GRADE_FRAG), encoding='utf-8', errors='replace') as f:
             return dash_data.parse_fx_defaults(f.read(4000))
     except OSError:
         return {}
