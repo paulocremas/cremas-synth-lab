@@ -192,9 +192,40 @@ def cam_input_args(device, w, h):
     return a + ['-video_size', f'{w}x{h}', '-i', device]
 
 
+_dda_ok = {}   # (output_idx, w, h) -> o ddagrab capturou 1 frame desse monitor inteiro
+
+
+def _dda_spec(r, mons):
+    """ddagrab (Desktop Duplication, GPU — o que o OBS usa) pro retangulo r, ou None se r nao cabe
+    num monitor so'. Offset e' relativo ao monitor. ponytail: output_idx = ordem do
+    EnumDisplayMonitors (o DXGI costuma bater; o teste de 1 frame confere o tamanho e pega o
+    descasamento quando os monitores diferem) e so' a placa padrao — outro caso cai no gdigrab."""
+    for i, m in enumerate(mons):
+        x, y = r['x'] - m['x'], r['y'] - m['y']
+        if 0 <= x and 0 <= y and x + r['w'] <= m['w'] and y + r['h'] <= m['h']:
+            return i, m, (f"ddagrab=output_idx={i}:framerate=30:offset_x={x}:offset_y={y}"
+                          f":video_size={r['w']}x{r['h']},hwdownload,format=bgra")
+    return None
+
+
 def screen_input_args(r):
-    """Args de ENTRADA do ffmpeg pra um retangulo da tela r = {x, y, w, h}."""
+    """Args de ENTRADA do ffmpeg pra um retangulo da tela r = {x, y, w, h}. Windows: ddagrab
+    (GPU, aguenta 1080p30 e janela acelerada) quando o teste passa; senao gdigrab (GDI, CPU)."""
     if IS_WIN:
+        d = _dda_spec(r, _win_monitors())
+        if d:
+            i, m, spec = d
+            k = (i, m['w'], m['h'])
+            if k not in _dda_ok:
+                try:
+                    _dda_ok[k] = len(subprocess.run(   # 1 frame BGRA do monitor inteiro = tamanho dele?
+                        ['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', f"ddagrab=output_idx={i},hwdownload,format=bgra",
+                         '-frames:v', '1', '-f', 'rawvideo', '-'],
+                        capture_output=True, timeout=5).stdout) == m['w'] * m['h'] * 4
+                except (OSError, subprocess.TimeoutExpired):
+                    _dda_ok[k] = False
+            if _dda_ok[k]:
+                return ['-f', 'lavfi', '-i', spec]
         return ['-f', 'gdigrab', '-framerate', '30', '-offset_x', str(r['x']), '-offset_y', str(r['y']),
                 '-video_size', f"{r['w']}x{r['h']}", '-i', 'desktop']
     display = os.environ.get('DISPLAY', ':0') + f"+{r['x']},{r['y']}"
@@ -488,6 +519,10 @@ if __name__ == '__main__':  # self-check das partes puras (roda em qualquer SO)
     assert parse_dshow_cams(txt) == ['Integrated Camera', 'OBS Virtual Camera']
     assert cam_input_args('/dev/video0', 640, 480)[:2] == ['-f', 'v4l2'] or IS_WIN
     assert screen_input_args({'x': 10, 'y': 0, 'w': 100, 'h': 50})[-1].endswith('+10,0') or IS_WIN
+    ms = [{'x': 0, 'y': 0, 'w': 1920, 'h': 1080}, {'x': 1920, 'y': 0, 'w': 1280, 'h': 720}]
+    i, _, s = _dda_spec({'x': 2020, 'y': 10, 'w': 640, 'h': 360}, ms)
+    assert i == 1 and 'offset_x=100:offset_y=10:video_size=640x360' in s, s     # relativo ao monitor 2
+    assert _dda_spec({'x': 1800, 'y': 0, 'w': 400, 'h': 100}, ms) is None       # cruza 2 monitores -> gdigrab
     assert hw_decode('/nao/existe.mp4', 'scale=640:480,setsar=1') == ([], 'scale=640:480,setsar=1')   # falhou = software
     if not IS_WIN and os.environ.get('DISPLAY') and shutil.which('xrandr'):   # CI sem X: pula
         assert 'connected' in outputs_text()
