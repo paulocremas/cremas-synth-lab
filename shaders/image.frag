@@ -1,4 +1,4 @@
-// fx: wave, flow, rgbsplit, channels, scanlines, grain, vignette, grayscale, layer
+// fx: wave, flow, rgbsplit, channels, scanlines, grain, vignette, grayscale, layer, paleta=0
 // ^ manifest lido por dash_data.parse_fx_manifest: cada nome vira o uniform u_fx_<nome>
 //   (0..1, 1.0 = cheio) e um potenciometro na aba "Efeitos" do dash. Multiplica a
 //   intensidade do efeito correspondente lah embaixo.
@@ -46,6 +46,7 @@ uniform float u_fx_grain;
 uniform float u_fx_vignette;
 uniform float u_fx_grayscale;
 uniform float u_fx_layer;
+uniform float u_fx_paleta;
 
 // ruído branco pontual — equivale a WhiteNoise do SC: hash de uma posição -> 0..1
 float random(vec2 p) {
@@ -75,8 +76,8 @@ void main() {
     // ===== EFEITO 2: RGB SPLIT — lê cada canal com um deslocamento diferente (fantasmas coloridos) =====
     // 'split' = distância entre os fantasmas; abre no kick
     float split = 0.01 * u_subbass * u_kick * u_fx_rgbsplit;  // <- edita aqui. 0 = desligado. testa 0.002 a 0.03
-    float r = texture2D(u_texture_0, st + vec2(split, 0.0)).r;
-    float g = texture2D(u_texture_0, st).g;
+    float r = texture2D(u_texture_0, st).r;
+    float g = texture2D(u_texture_0, st + vec2(split, 0.0)).g;
     float b = texture2D(u_texture_0, st - vec2(split, 0.0)).b;
     vec3 col = vec3(r, g, b);
 
@@ -102,7 +103,7 @@ void main() {
     col *= 0.1 - vig * dot(d, d) * 2.0;
 
     // ===== EFEITO 6: GRAYSCALE — colapsa RGB num só valor (luminância perceptual, Rec. 601) =====
-    float gray = dot(col, vec3(0.299 * u_treble, 0.587, 0.114 * u_subbass)); // <- edita aqui. 0 = desligado, 1 = P&B total
+    float gray = dot(col, vec3(0.299 * u_treble, 0.57, 0.114 * u_subbass)); // <- edita aqui. 0 = desligado, 1 = P&B total
     float gray_mix = -15.0 * u_highmid * u_fx_grayscale;         // <- edita aqui. 0 = colorido, 1 = P&B total
     col = mix(col, vec3(gray), gray_mix);
 
@@ -110,6 +111,16 @@ void main() {
     vec3 orig = texture2D(u_texture_0, st0).rgb;
     float layer = 0.6 * u_fx_layer;    // <- edita aqui. 0 = só original de fundo, 1 = só efeito, 0.5 = meio a meio
     col = mix(orig, col, layer);
+
+    // ===== EFEITO 10: PALETA — troca as cores primárias por outras =====
+    // a vinheta/grayscale acima empurram cada canal pro extremo (sobra vermelho/azul/preto puros);
+    // aqui cada canal vira uma cor escolhida: R -> pal_r, G -> pal_g, B -> pal_b
+    vec3 pal_r = vec3(1.0, 0.15, 0.55);   // <- edita aqui: o que era vermelho (rosa choque)
+    vec3 pal_g = vec3(0.85, 1.0, 0.1);    // <- edita aqui: o que era verde (amarelo-limão)
+    vec3 pal_b = vec3(0.0, 0.85, 0.8);    // <- edita aqui: o que era azul (ciano/turquesa)
+    vec3 c = clamp(col, 0.0, 1.0);
+    vec3 pal = clamp(c.r * pal_r + c.g * pal_g + c.b * pal_b, 0.0, 1.0);
+    col = mix(c, pal, u_fx_paleta);
 
     gl_FragColor = vec4(col, 1.0);
 }

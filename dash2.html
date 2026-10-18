@@ -40,7 +40,7 @@
     --bg: #0d0f12; --s1: #14171b; --s2: #1a1e23; --s3: #232830; --s4: #2c323a; --line: #242a31; --line2: #353c45;
     --tx: #e8eaed; --tx2: #aab1b9; --tx3: #7d858e;
     --live: #3fd08f; --live-d: #173327; --sel: #ff9d52; --sel-d: #35220f; --midi: #5eb0ff; --midi-d: #13263a;
-    --bad: #ff5b61; --bad-d: #3a1517; --warn: #e8c14a;
+    --bad: #ff5b61; --bad-d: #3a1517; --warn: #e8c14a; --subj: #e46cff;
     --r: 12px; --r2: 8px; --gap: 10px;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
@@ -263,6 +263,7 @@
   .led.on::before { background: var(--live); box-shadow: 0 0 7px rgba(63,208,143,.7); }
   .iname { flex: 1; min-width: 0; background: none; border: none; text-align: left; cursor: pointer; padding: 5px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tx); }
   .ins .bl { font-size: 9px; color: var(--tx3); text-transform: uppercase; letter-spacing: .05em; }
+  .rg { font-size: 12px; line-height: 1; color: var(--subj); } .rg.bg { color: var(--tx2); }
   .addsel { width: 100%; min-height: 30px; font-size: 12px; color: var(--tx2); background: var(--s1); }
   .addcol { width: 170px; flex: none; }
   /* inspetor (fonte selecionada + efeito escolhido) — fixo ao lado da mesa */
@@ -439,6 +440,10 @@
   .cvs { position: absolute; background: #000; outline: 1px solid var(--line2); touch-action: none; }
   .cvs.drop { outline: 2px solid var(--live); }
   .cobj canvas, .cobj img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .cobj canvas.cmask { mix-blend-mode: screen; opacity: .85; z-index: 1; }
+  .objlist .mskbox { margin-top: 6px; padding: 6px; border: 1px solid var(--subj); border-radius: var(--r2); display: flex; flex-direction: column; gap: 6px; }
+  .objlist .mskbox .oh { color: var(--subj); padding: 0; }
+  #cvmask-btn.on { border-color: var(--subj); color: var(--subj); }
   .cvs .cvmask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 150; }
   .cvs .cvlines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 160; overflow: visible; }
   .cvs .cscr { fill: rgba(94,176,255,.06); stroke: rgba(94,176,255,.7); stroke-width: 1px; vector-effect: non-scaling-stroke; }
@@ -626,6 +631,7 @@
       <div class="panel mesa-p">
         <div class="ph"><span class="seg" id="mesa-view"><button data-v="mesa">Mesa</button><button data-v="canvas" title="cada fonte (com os efeitos) é um objeto no canvas das telas">Canvas</button></span>
           <span class="hint" id="mesa-hint"></span><span class="grow"></span>
+          <button class="btn sm" id="cvmask-btn" hidden title="mostra a máscara do ASSUNTO (objeto saliente) do objeto selecionado + ajuste de limiar/borda">◐ assunto</button>
           <button class="btn sm" id="keys-btn" title="atalhos do teclado">⌨ atalhos</button></div>
         <div class="mixer" id="mixer"></div>
         <div class="cvpanel" id="cvpanel" hidden>
@@ -1251,7 +1257,10 @@ function renderOutput(o){
     ...(o.monitors || []).map(m => h('div', { class: 'txtrow' }, h('span', { class: 'lbl', text: 'monitor' }), `${m.name}  ${m.w}×${m.h}  +${m.x}+${m.y}` + (m.primary ? '  (principal)' : ''))));
 }
 $('#out-mon').addEventListener('pointerdown', () => { outTouched = now(); });
-$('#out-mon').addEventListener('change', sendOutput);
+$('#out-mon').addEventListener('change', () => {   // escolher monitor = ocupar ele (senao vira janelinha 640x480 no canto)
+  if ($('#out-mon').value){ outFull = true; $('#out-full').classList.add('on'); $('#out-w').disabled = $('#out-h').disabled = true; }
+  sendOutput();
+});
 $('#out-full').onclick = () => {
   outFull = !outFull;
   if (!outFull){ const p = LS.get('outSize', null); if (p && p.w && p.h){ $('#out-w').value = p.w; $('#out-h').value = p.h; } }
@@ -1832,6 +1841,10 @@ setStgView(stgMode);
 // rect = [x, y, w, h] no canvas, 0..1, origem em cima (OVERLAYS[i].rect; native _rect_uv).
 let mesaView = LS.get('v2mesaView', 'mesa');
 const cvEls = {};
+// ASSUNTO: ◐ liga a mascara (/frame?which=mask, native subject_thread) por cima do objeto
+// SELECIONADO (so' ele: cada mascara custa ~110 ms de CPU) + limiar/borda dele na lista de objetos.
+let cvMask = !!LS.get('v2cvMask', false);
+$('#cvmask-btn').onclick = () => { cvMask = !cvMask; LS.set('v2cvMask', cvMask); renderCanvas(); };
 function canvasOf(){   // = native _stage: SEMPRE o palco fisico (com telao, o raster e' so' a saida)
   return stageOf(lastScreens);
 }
@@ -1842,7 +1855,7 @@ function cvDims(){   // canvas em vigor: o raster do telao, o contorno das telas
 function setMesaView(v){
   mesaView = v === 'canvas' ? 'canvas' : 'mesa'; LS.set('v2mesaView', mesaView);
   $$('#mesa-view button').forEach(b => b.classList.toggle('on', b.dataset.v === mesaView));
-  $('#mixer').hidden = mesaView === 'canvas'; $('#cvpanel').hidden = mesaView !== 'canvas';
+  $('#mixer').hidden = mesaView === 'canvas'; $('#cvpanel').hidden = mesaView !== 'canvas'; $('#cvmask-btn').hidden = mesaView !== 'canvas';
   $('#mesa-hint').textContent = mesaView === 'canvas'
     ? 'arraste · cantos = tamanho (Shift = proporção) · 2 cliques = encher a tela · Alt = sem ímã'
     : '1 = embaixo · o último fica por cima · 2 cliques no card = efeitos';
@@ -1903,16 +1916,21 @@ function renderCanvas(){
     const [rx, ry, rw, rh] = cvRect(x), sel = key === lastSelected;
     Object.assign(el.style, { left: rx * 100 + '%', top: ry * 100 + '%', width: rw * 100 + '%', height: rh * 100 + '%', zIndex: sel ? 99 : i + 1 });
     el.classList.toggle('sel', sel);
-    const lbl = posLabel(i + 1) + ' · ' + srcInfo(key).name + (stackOf(key).length ? ` · ${stackOf(key).length} fx` : '');
+    let mc = el.querySelector('.cmask');   // no FIM dos filhos: children[2] = o rotulo
+    if (cvMask && sel && !mc){ mc = h('canvas', { class: 'cmask' }); el.append(mc); addPreview(mc, '/frame?which=mask&src=' + encodeURIComponent(key), 8, 'palco'); }
+    else if (!(cvMask && sel) && mc) mc.remove();
+    const lbl = posLabel(i + 1) + ' · ' + srcInfo(key).name + (stackOf(key).length ? ` · ${stackOf(key).length} fx` : '') + regionCount(key);
     if (el.children[2].textContent !== lbl) el.children[2].textContent = lbl;
   });
+  $('#cvmask-btn').classList.toggle('on', cvMask);
   renderTray(); renderObjList(on);
 }
 // LISTA DE OBJETOS (estilo OBS): de cima (frente) pra baixo. Clique = seleciona (a selecionada vem
 // pra frente no canvas, mesmo embaixo de outra); passar o mouse acende o objeto; ⛶ = canvas inteiro.
 function renderObjList(on){
   const box = $('#objlist');
-  const sig = JSON.stringify([on.map(o => [chKey(o), !!o.rect, stackOf(chKey(o)).length]), lastSelected, perform, mixKeys.family]);
+  const sig = JSON.stringify([on.map(o => [chKey(o), !!o.rect, stackOf(chKey(o)).length, regionCount(chKey(o))]), lastSelected, perform, mixKeys.family, cvMask,
+    stackOf(lastSelected).map(s => [s.file, s.region || ''])]);
   if (box._sig === sig) return;
   box._sig = sig; box.innerHTML = '';
   box.append(h('div', { class: 'oh', text: 'OBJETOS · frente → fundo' }));
@@ -1920,7 +1938,7 @@ function renderObjList(on){
   on.map((o, i) => [o, i]).reverse().forEach(([o, i]) => {
     const key = chKey(o), n = stackOf(key).length;
     const row = h('div', { class: 'orow' + (key === lastSelected ? ' sel' : ''), title: srcInfo(key).name + (n ? ` · ${n} efeito(s)` : '') },
-      h('span', { class: 'pos', text: posLabel(i + 1) }), h('span', { class: 'on', text: srcInfo(key).name + (n ? ` · ${n} fx` : '') }),
+      h('span', { class: 'pos', text: posLabel(i + 1) }), h('span', { class: 'on', text: srcInfo(key).name + (n ? ` · ${n} fx` : '') + regionCount(key) }),
       o.rect ? h('button', { text: '⛶', title: 'encher o canvas', onclick: e => { e.stopPropagation(); const x = lastOverlays.find(z => chKey(z) === key); if (x){ delete x.rect; sendOverlays(true); renderCanvas(); } } }) : null,
       perform ? null : h('button', { text: '↑', title: 'pra frente', onclick: e => { e.stopPropagation(); const v = on.map(chKey); if (i < v.length - 1) moveSource(key, v[i + 1]); } }),
       perform ? null : h('button', { text: '↓', title: 'pra trás', onclick: e => { e.stopPropagation(); const v = on.map(chKey); if (i > 0) moveSource(key, v[i - 1]); } }));
@@ -1929,6 +1947,15 @@ function renderObjList(on){
     row.onmouseleave = () => cvEls[key] && cvEls[key].classList.remove('hl');
     box.append(row);
   });
+  const sk = lastSelected;   // ASSUNTO do selecionado: limiar/borda (BINDINGS[canal].mask) + o que cai em cada regiao
+  if (!cvMask || !sk || !on.some(o => chKey(o) === sk)) return;
+  const mk = n => fader({ id: `mask:${n}:${sk}`, label: n === 'th' ? 'limiar' : 'borda', mlabel: `assunto · ${n === 'th' ? 'limiar' : 'borda'} · ${srcInfo(sk).name}`,
+    dflt: n === 'th' ? 0.5 : 0.15, io: KNOB_BIND, get: () => ((binding(sk) || {}).mask || {})[n] ?? (n === 'th' ? 0.5 : 0.15),
+    set: v => { const b = binding(sk, true); b.mask = Object.assign({}, b.mask, { [n]: Math.round(v * 1000) / 1000 }); } });
+  const st = stackOf(sk), names = r => st.filter(s => (s.region || '') === r).map(s => fxName(s.file)).join(', ') || '—';
+  box.append(h('div', { class: 'mskbox' }, h('div', { class: 'oh', text: '◐ ASSUNTO · ' + srcInfo(sk).name }), mk('th'), mk('soft'),
+    h('div', { class: 'hint', text: '◉ assunto: ' + names('subject') }), h('div', { class: 'hint', text: '◌ fundo: ' + names('bg') }),
+    h('div', { class: 'hint', text: 'tudo: ' + names('') + ' · região de cada efeito no inspetor' })));
 }
 const _isLiveKey = f => /^(webcam|screen):/.test(f);
 function renderTray(){
@@ -2127,6 +2154,11 @@ let lastPool = null, poolTouched = 0;
 let lastVideoInputs = [], lastSourceFit = {}, fitTouched = 0, lastAudioSources = [];
 const selTouched = { audio: 0, src: 0 };
 const LAYER_BLENDS = [['normal', 'normal'], ['soma', 'soma'], ['tela', 'tela (screen)'], ['multiplicar', 'multiplicar'], ['clarear', 'clarear (max)']];
+const REGIONS = [['', 'tudo'], ['subject', '◉ assunto'], ['bg', '◌ fundo']];
+const regionTag = s => s.region ? h('span', { class: 'rg ' + s.region, text: s.region === 'subject' ? '◉' : '◌',
+  title: s.region === 'subject' ? 'só no assunto' : 'só no fundo' }) : '';
+const regionCount = key => { const st = stackOf(key), a = st.filter(s => s.region === 'subject').length, f = st.filter(s => s.region === 'bg').length;
+  return (a ? ` ◉${a}` : '') + (f ? ` ◌${f}` : ''); };
 const VIDEO_ICON = { webcam: '📷', screen: '🖥', media: '🎞' };
 const VIDEO_KIND = { webcam: 'câmera', screen: 'tela' };
 const shortShader = n => n.startsWith('presets/') ? n.replace(/^presets\/[^/]+\//, '') : n;
@@ -2243,7 +2275,7 @@ function renderMixer(){
   if (activeDrag) return;
   const strips = mixStrips();
   const sig = JSON.stringify([strips.map(o => [chKey(o), o.off || 0, o.blend || '', o.audio || 0]), lastAudioMedia,
-    strips.map(o => stackOf(chKey(o)).map(s => [s.file, s.off || 0, s.blend || ''])),
+    strips.map(o => stackOf(chKey(o)).map(s => [s.file, s.off || 0, s.blend || '', s.region || ''])),
     lastSelected, mixMode, fxPick, lastMedia, lastVideoInputs, lastSourceFit, lastBounceBusy,
     lastShaderList, lastManifests, mixKeys, lastPool, perform]);
   if (sig === mixSig) return;
@@ -2341,7 +2373,7 @@ function insertEl(key, s, j, picked, info){
     get: () => (stackOf(key)[j] || {}).opacity ?? 1,
     set: v => { const x = stackOf(key)[j]; if (!x) return; x.opacity = Math.round(v * 1000) / 1000;
                 if (key === lastSelected && j === pickedFx(key) && devEls.op) devEls.op._show(v); } });
-  row.append(h('span', { class: 'ik', text: posLabel(j + 1) }), led, nb, s.blend && s.blend !== 'normal' ? h('span', { class: 'bl', text: s.blend }) : '', mini,
+  row.append(h('span', { class: 'ik', text: posLabel(j + 1) }), led, nb, regionTag(s), s.blend && s.blend !== 'normal' ? h('span', { class: 'bl', text: s.blend }) : '', mini,
     h('button', { class: 'x ed', text: '×', title: 'tirar este efeito da fonte', onclick: () => {
       const st = stackOf(key); if (!st[j]) return; const p = pickedFx(key);
       st.splice(j, 1); if (p > j) fxPick[key] = p - 1; sendBindings(true); remix(); } }));
@@ -2407,6 +2439,11 @@ function renderInspector(){
     const x = cur(); if (!x) return; if (v === 'normal') delete x.blend; else x.blend = v; sendBindings(true); remix();
   }, (s.blend || 'normal') === v ? 'pick' : ''));
   sec.append(bl);
+  const rgs = h('div', { class: 'blendseg', style: 'margin-top:6px' });   // ASSUNTO: onde o efeito vale (native subject_thread)
+  for (const [v, t] of REGIONS) rgs.append(chip(t, false, 'região: ' + t + (v ? ' (máscara no Canvas: ◐ assunto)' : ''), () => {
+    const x = cur(); if (!x) return; if (v) x.region = v; else delete x.region; sendBindings(true); remix();
+  }, (s.region || '') === v ? 'pick' : ''));
+  sec.append(rgs);
   const names = lastManifests[file] || [];
   if (names.length){
     const kn = h('div', { class: 'dev-knobs' });

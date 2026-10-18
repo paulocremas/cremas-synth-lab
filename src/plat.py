@@ -201,6 +201,29 @@ def screen_input_args(r):
     return ['-f', 'x11grab', '-framerate', '30', '-video_size', f"{r['w']}x{r['h']}", '-i', display]
 
 
+_VAAPI = ['-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi']
+_hw_ok = {}   # arquivo -> a GPU decodificou 1 frame dele (testa 1x por arquivo)
+
+
+def hw_decode(path, vf):
+    """(args de ENTRADA, -vf) pra decodificar um VIDEO na GPU: Linux com VAAPI = decode e
+    escala la, so' o frame ja pequeno volta pra CPU (1080p60 em software come ~2.5 nucleos).
+    Testa 1 frame do arquivo antes (codec que a GPU nao tem = erro); falhou = ([], vf) igual
+    antes. ponytail: Windows fica no software — d3d11va quando alguem medir la."""
+    head, _, rest = vf.partition(',')
+    if IS_WIN or not head.startswith('scale=') or not os.path.exists('/dev/dri/renderD128'):
+        return [], vf
+    gvf = f'scale_vaapi={head[6:]},hwdownload,format=nv12' + (',' + rest if rest else '')
+    if path not in _hw_ok:
+        try:
+            _hw_ok[path] = subprocess.run(
+                ['ffmpeg', '-loglevel', 'error', *_VAAPI, '-i', path, '-frames:v', '1', '-vf', gvf, '-f', 'null', '-'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            _hw_ok[path] = False
+    return (_VAAPI, gvf) if _hw_ok[path] else ([], vf)
+
+
 # ---------------------------------------------------------------- audio (Windows: WASAPI)
 
 class Resampler:
@@ -465,6 +488,7 @@ if __name__ == '__main__':  # self-check das partes puras (roda em qualquer SO)
     assert parse_dshow_cams(txt) == ['Integrated Camera', 'OBS Virtual Camera']
     assert cam_input_args('/dev/video0', 640, 480)[:2] == ['-f', 'v4l2'] or IS_WIN
     assert screen_input_args({'x': 10, 'y': 0, 'w': 100, 'h': 50})[-1].endswith('+10,0') or IS_WIN
+    assert hw_decode('/nao/existe.mp4', 'scale=640:480,setsar=1') == ([], 'scale=640:480,setsar=1')   # falhou = software
     if not IS_WIN and os.environ.get('DISPLAY') and shutil.which('xrandr'):   # CI sem X: pula
         assert 'connected' in outputs_text()
     print('plat self-check ok')

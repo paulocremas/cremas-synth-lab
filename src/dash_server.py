@@ -527,6 +527,17 @@ def _read_media(setname=None, media_dir=None):
                     'fit': 'fit' if m.get('fit') == 'fit' else 'fill',
                     'transition': str(m.get('transition', '') or ''),
                     **_bounce_field(m)})
+    # arquivo na pasta do set mas fora de MEDIA (tuning.py trocado/limpo, copiado a mao): entra
+    # com o padrao — senao some da galeria e o upload dele acusa "ja existe"
+    have = {m['file'] for m in out} | {str(m.get('file', '')).replace('\\', '/') for m in getattr(_tuning, 'MEDIA', [])}
+    names = {(m['set'], m['name']) for m in out}
+    for s in [setname] if setname is not None else _list_media_sets(media_dir):
+        for p in sorted(glob.glob(os.path.join(d, s, '*'))):
+            fname = os.path.basename(p)
+            stem, ext = os.path.splitext(fname)
+            kind = _media_kind_for(ext.lower())
+            if kind and _media_rel(s, fname) not in have and (s, stem) not in names and os.path.isfile(p):
+                out.append({'name': stem, 'file': _media_rel(s, fname), 'set': s, 'kind': kind, 'fit': 'fill', 'transition': ''})
     return out
 
 
@@ -653,7 +664,8 @@ def add_media(orig_name, kind=None, data=b'', setname=None, tuning_path=None, me
         if os.path.exists(part):
             os.remove(part)
         raise
-    _write_media(_read_media(None, media_dir) + [entry], tuning_path)
+    # sem o proprio arquivo: _read_media ja o adota da pasta (gravado logo acima)
+    _write_media([m for m in _read_media(None, media_dir) if m['file'] != entry['file']] + [entry], tuning_path)
     return dict(entry, set=setname)
 
 
@@ -789,6 +801,8 @@ def _norm_overlays(items, dedupe=True):
             o['blend'] = it['blend']
         if it.get('off'):   # desligada: fica na lista (posicao/opacidade lembradas), fora da saida
             o['off'] = 1
+        if it.get('region') in ('subject', 'bg'):   # item da pilha so' no ASSUNTO / no FUNDO (ausente = tudo)
+            o['region'] = it['region']
         if it.get('audio') and not aud:   # 🔊 video = fonte de audio no lugar do PulseAudio (so' 1)
             o['audio'], aud = 1, True
         if isinstance(it.get('fx'), dict):   # forcas desta entrada da pilha (ausente = fx[shader] da fonte)
@@ -884,6 +898,11 @@ def _norm_bindings(b):
                 continue
             fx[str(sh)] = _norm_fx(lv)
         out[key] = {'shaders': _norm_overlays(v.get('shaders'), dedupe=False), 'fx': fx}
+        mk = v.get('mask')   # mascara do ASSUNTO do canal: limiar + borda 0..1 (native SUBJECT_TH/SOFT)
+        if isinstance(mk, dict):
+            mk = {n: round(max(0.0, min(1.0, float(mk[n]))), 3) for n in ('th', 'soft') if n in mk}
+            if mk:
+                out[key]['mask'] = mk
     return out
 
 
@@ -2516,6 +2535,10 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
         {'d/b.png#2': {'shaders': [], 'fx': {}}}
     two = _norm_bindings({'cam': {'shaders': [{'file': 'x.frag', 'fx': {'a': 0.2}}, {'file': 'x.frag'}]}})
     assert [o.get('fx') for o in two['cam']['shaders']] == [{'a': 0.2}, None], 'mesmo shader 2x na pilha'
+    rg = _norm_bindings({'cam': {'shaders': [{'file': 'x.frag', 'region': 'subject'}, {'file': 'y.frag', 'region': 'xyz'}],
+                                 'mask': {'th': 1.7, 'soft': 0.1, 'lixo': 3}}})
+    assert [o.get('region') for o in rg['cam']['shaders']] == ['subject', None], 'region do item da pilha'
+    assert rg['cam']['mask'] == {'th': 1.0, 'soft': 0.1}, 'mascara do assunto: so th/soft, 0..1'
     assert _norm_overlays([{'file': 'a.png', 'opacity': 1, 'off': True}, {'file': 'b.png', 'off': 0}]) == \
         [{'file': 'a.png', 'opacity': 1.0, 'off': 1}, {'file': 'b.png', 'opacity': 1.0}], 'off (desligada) se perdeu'
     assert [o.get('audio') for o in _norm_overlays([{'file': 'a.mp4', 'audio': 1}, {'file': 'b.mp4', 'audio': True},

@@ -26,9 +26,9 @@ BANDS_ENABLED = 1
 OUT_ANALYSIS_ENABLED = 1
 OUTPUT_FPS = 60            # fps da janela de saida (dash v2 > Saida: 24/30/50/60)
 FREQ_BAND_HZ = [
-    [21, 88],  # Sub-bass
-    [88, 342],  # Low-mid
-    [342, 1313],  # Midrange
+    [21, 83],  # Sub-bass
+    [83, 321],  # Low-mid
+    [321, 1313],  # Midrange
     [1313, 3130],  # High-mid
     [3130, 4815],  # Presence
     [4815, 7684],  # Treble
@@ -96,7 +96,7 @@ KICK_WARMUP_CHUNKS = 38
 # as ultimas 2 batidas detectadas e recalcula o decay pra caber nesse intervalo — musica
 # rapida decai rapido (nao borra na proxima batida), lenta decai devagar (o pulso "dura"
 # mais). Os limites abaixo protegem contra tempos extremos.
-KICK_FADE_FLOOR = 0.17      # "considerado apagado" quando o envelope cai abaixo disso
+KICK_FADE_FLOOR = 0.15      # "considerado apagado" quando o envelope cai abaixo disso
 KICK_DECAY_FRACTION = 0.6   # decai ate o FADE_FLOOR em X% do intervalo entre batidas
 KICK_DECAY_MIN = 0.54        # decay mais rapido permitido (musica muito rapida)
 KICK_DECAY_MAX = 0.95       # decay mais lento permitido (batida isolada, tempo espacado)
@@ -168,7 +168,9 @@ CHANNELS = [
 # Selecionar (clicar / dropdown "Media" / tecla de MEDIA_KEYS) faz native_synth respawnar o
 # ffmpeg apontando pro arquivo. Gravado pelo dash (POST /media, /media-add, /media-del).
 MEDIA = [
-    {"name": "2026-09-2601-34-33", "file": "default/2026-09-2601-34-33.mp4", "kind": "video", "fit": "fill", "transition": ""},
+    {"name": "paulocremas-og-image", "file": "teste/paulocremas-og-image.png", "kind": "image", "fit": "fill", "transition": ""},
+    {"name": "YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p", "file": "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4", "kind": "video", "fit": "fill", "transition": "", "bounce": 1},
+    {"name": "Don-Toliver-No-Pole", "file": "default/Don-Toliver-No-Pole.mp4", "kind": "video", "fit": "fill", "transition": ""},
 ]
 
 # TRANSIÇÕES de mídia — galeria "Transições" na aba Visuals, espelho da galeria de shader mas
@@ -205,20 +207,22 @@ VIDEO_POOL_MAX = 4
 
 # SETS (cenas) da aba Visuals: fonte + camadas + shader + camadas de shader + forca dos efeitos (dash, sub-aba Sets)
 SCENES = [
-    {"name": "default", "key": "", "transition": "", "selected": "default/2026-09-2601-34-33.mp4#2", "sources": [{"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "rect": [0.0, 0.0, 0.2553, 1.0]}, {"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "dup": 2, "rect": [0.4281, 0.0, 0.3043, 0.2467]}], "bindings": {"webcam:/dev/video0": {"shaders": [{"file": "presets/default/Silhueta.frag", "opacity": 1.0}], "fx": {}}, "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}}}},
+    {"name": "default", "key": "", "transition": "", "selected": "webcam:/dev/video0", "sources": [{"file": "webcam:/dev/video0", "opacity": 0.708}, {"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2}], "bindings": {"webcam:/dev/video0": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "region": "bg", "fx": {"temperatura": 0.0, "matiz": 1.0, "exposicao": 0.0, "contraste": 0.0, "realces": 0.5, "sombras": 0.0, "brancos": 0.0, "pretos": 1.0, "claridade": 0.0, "neblina": 0.0, "vibracao": 1.0, "saturacao": 1.0}}, {"file": "image.frag", "opacity": 1.0, "region": "bg", "fx": {}}], "fx": {}}, "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}}, "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}}, "webcam:/dev/video0#2": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "fx": {"temperatura": 0.0, "matiz": 1.0}}, {"file": "image.frag", "opacity": 0.383, "fx": {}}, {"file": "presets/default/Crescendo.frag", "opacity": 1.0, "fx": {}}], "fx": {}}}},
 ]
 SCENE = "default"
 
 # camadas de midia por cima da fonte (dash, aba Visuals)
 OVERLAYS = [
-    {"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "rect": [0.0, 0.0, 0.2553, 1.0]},
-    {"file": "default/2026-09-2601-34-33.mp4", "opacity": 1.0, "dup": 2, "rect": [0.4281, 0.0, 0.3043, 0.2467]},
+    {"file": "webcam:/dev/video0", "opacity": 0.708},
+    {"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2},
 ]
 
 # fonte/midia -> shaders dela (+ forca dos efeitos), dash aba Visuals > Sets
 BINDINGS = {
-    "webcam:/dev/video0": {"shaders": [{"file": "presets/default/Silhueta.frag", "opacity": 1.0}], "fx": {}},
+    "webcam:/dev/video0": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "region": "bg", "fx": {"temperatura": 0.0, "matiz": 1.0, "exposicao": 0.0, "contraste": 0.0, "realces": 0.5, "sombras": 0.0, "brancos": 0.0, "pretos": 1.0, "claridade": 0.0, "neblina": 0.0, "vibracao": 1.0, "saturacao": 1.0}}, {"file": "image.frag", "opacity": 1.0, "region": "bg", "fx": {}}], "fx": {}},
     "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}},
+    "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}},
+    "webcam:/dev/video0#2": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "fx": {"temperatura": 0.0, "matiz": 1.0}}, {"file": "image.frag", "opacity": 0.383, "fx": {}}, {"file": "presets/default/Crescendo.frag", "opacity": 1.0, "fx": {}}], "fx": {}},
 }
 
 # imagem da CENA ativa (calibrar.frag na mistura, antes da transicao); copia do campo "grade" do set ativo
@@ -228,11 +232,11 @@ SCENE_GRADE = {
 }
 
 # pixel map da saida (dash v2 > Saida): a janela vira o raster w x h da processadora de LED; cada tela com ox/oy (SCREENS) vai la no tamanho nativo
-PIXEL_MAP = {"on": 1, "w": 3840, "h": 2160}
+PIXEL_MAP = {"on": 0, "w": 800, "h": 600}
 
 # telas do palco fisico (dash v2 > Saida): metros (x, y, w, h; origem em cima a esquerda) + pixels (pw, ph). O canvas e' o contorno delas
 SCREENS = [
-    {"name": "coluna 1", "x": -0.1, "y": 1.75, "w": 1.39, "h": 0.81, "pw": 354, "ph": 208, "ox": 0, "oy": 0},
+    {"name": "coluna 1", "x": 0.05, "y": 1.75, "w": 1.64, "h": 1.15, "pw": 418, "ph": 295, "ox": 0, "oy": 0},
 ]
 
 # telao do simulador (dash v2 > Saida): paineis no raster dele (ox/oy/pw/ph/poly, vem do telao) + o que cada um mostra (x/y/w/h/rot em cima do canvas, metros)
@@ -287,4 +291,13 @@ TELAO = {
             "oy": 0
         }
     ]
+}
+
+# calibracao da saida (telao): shaders/calibrar.frag, knobs na aba Output Image. fx ausente = padrao do .frag
+OUTPUT_GRADE = {
+    "fx": {
+        "exposicao": 1.0
+    },
+    "on": 1,
+    "test": 0
 }

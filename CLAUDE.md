@@ -54,7 +54,11 @@ Cada ferramenta isolada, depois comparar, só então compor.
   (WM_CLASS `prisma.prisma`; o título do dash também tem "Saída"); janela fora da tela, sem `_wm_fullscreen`.
 - O app empacotado só leva o que o `if False:` do `launcher.py` importa: import novo em `src/` → listar lá
   (`packaging/check_imports.py` no CI acusa).
-- Prévias v2: `/frame?which=out|sel|comp|src|fx` (`_preview_frame`; `out_want`/`fx_want` = só enquanto pedidas).
+- **Assunto** (efeito modular): item da pilha com `region: subject|bg` → `blend_into` multiplica pela máscara
+  (`u_use_mask` 2/3, `smoothstep(u_mth)`); máscara = `subject_thread` (U²-Net-p `models/u2netp.onnx` via `cv2.dnn`,
+  192 px ~110 ms) por fonte base, só sob demanda (`subject_want`); limiar/borda em `BINDINGS[canal].mask`.
+  Dash: região no inspetor, ◐ assunto no Canvas (`which=mask`). `cv2` precisa estar no `.venv` (requirements).
+- Prévias v2: `/frame?which=out|sel|comp|src|fx|mask` (`_preview_frame`; `out_want`/`fx_want` = só enquanto pedidas).
 - Dash v2: decisões no comentário do topo do `dash2.html`. Faixas na ordem do ESPECTRO (`specOrder`/
   `_clamp_ranges`; v1 ainda por índice). localStorage `mixKeys`/`fxPick` compartilhado com a v1.
 - Elemento recriado a cada SSE perde clique/pointer capture — atualizar no lugar.

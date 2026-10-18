@@ -375,7 +375,7 @@ void main() {
 """
 
 state = {'frame': np.zeros(FRAME_SIZE, dtype=np.uint8), 'amp': 0.0, 'bass': 0.0, 'mid': 0.0, 'treble': 0.0,
-         'kick': 0.0, 'dominant': (0.5, 0.5, 0.5),
+         'kick': 0.0, 'beats': 0.0, 'build': 0.0, 'dominant': (0.5, 0.5, 0.5),
          # faixas finas de mixagem (Sub-bass..Air) — controlam u_subbass..u_air no shader
          'subbass': 0.0, 'lowmid': 0.0, 'midrange': 0.0, 'highmid': 0.0, 'presence': 0.0,
          'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {}, 'out_image': {}, 'bounce_busy': [],
@@ -906,7 +906,8 @@ def _spawn_ffmpeg(v):
         vf = _fit_vf(v.get('fit', 'fill'), *(_probe_dims(v['path']) or (0, 0)))
         if v.get('media_kind') == 'video':  # loop infinito, em tempo real
             src = _bounce_source(v['path']) if v.get('bounce') else v['path']
-            cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-stream_loop', '-1', '-re',
+            hw, vf = plat.hw_decode(src, vf)   # GPU decodifica + escala quando da
+            cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-stream_loop', '-1', '-re', *hw,
                    '-i', src, '-map', '0:v:0', '-vf', vf, '-r', '30', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
             if v.get('audio') and plat.IS_WIN:   # sem pass_fds no Windows: 2o ffmpeg so' pro audio
                 p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -1232,6 +1233,16 @@ def _preview_frame(which, key='', max_w=320):
     if which == 'fx':                          # canal da mesa DEPOIS da pilha de efeitos (key = chave do canal)
         state.setdefault('fx_want', {})[key] = time.time()
         return (state.get('fx_small') or {}).get(key)
+    if which == 'mask':                        # ASSUNTO do canal: magenta (--subj) no preto (dash: mix-blend screen)
+        state.setdefault('mask_want', {})[key] = time.time()
+        m = subject_mask.get(re.sub(r'#\d+$', '', key or ''))
+        if m is None:
+            return None
+        lo, hi = _subject_params((state.get('bindings') or {}).get(key))
+        s = np.clip((m / 255.0 - lo) / (hi - lo), 0, 1)
+        s = s * s * (3 - 2 * s)                    # = smoothstep do shader
+        a = (s[..., None] * np.array([228, 108, 255])).astype(np.uint8)
+        return np.ascontiguousarray(a).tobytes(), SUBJECT_DET, SUBJECT_DET
     if which == 'comp':                        # mistura crua das fontes NO AR (so' opacidade/alpha, sem efeitos)
         f = state.get('frame_comp')
         if f is None:
@@ -2051,6 +2062,7 @@ def audio_thread(device):
     kick_decay_dynamic = tuning.KICK_DECAY  # ate a 1a batida ter intervalo medido, usa o fixo
     kick_chunk_count = 0
     kick_last_hit_chunk = 0
+    amp_slow = 0.0   # media do amp nos ultimos ~10 s (referencia do crescendo, u_build)
     monitor_frame = [0]
     # estado entre throttles pro image_dash_data (auto-gain de pico + deltas de movimento/cor)
     html_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
@@ -2243,9 +2255,18 @@ def audio_thread(device):
                     raw_decay = tuning.KICK_FADE_FLOOR ** (1.0 / max(target_chunks, 1.0))
                     kick_decay_dynamic = min(tuning.KICK_DECAY_MAX, max(tuning.KICK_DECAY_MIN, raw_decay))
                 kick_env = 1.0
+                state['beats'] += 1.0   # u_beats: contador de batidas (shader da 1 passo por batida)
             else:
                 kick_env *= kick_decay_dynamic
             state['kick'] = kick_env
+            # u_build (0..1) = CRESCENDO, a memoria que o shader nao tem: sobe devagar (~20 s ate 1)
+            # enquanto o som segura perto da media dos ultimos ~10 s e cai rapido (~1.5 s) quando a
+            # musica baixa (break/silencio). Efeito que "vai crescendo" le daqui.
+            amp_slow = amp_slow * 0.998 + state['amp'] * 0.002
+            if state['amp'] > max(0.03, amp_slow * 0.9):
+                state['build'] = min(1.0, state['build'] + 1 / 900)
+            else:
+                state['build'] = max(0.0, state['build'] - 1 / 65)
 
             # canal com "output" escolhido E "src" bound SUBSTITUI a variavel (kick = onset,
             # o resto = nivel) por cima do que acabou de ser calculado acima. Sem src, a
@@ -2406,6 +2427,56 @@ def eyes_thread():
         time.sleep(0.03)
 
 
+# ASSUNTO ("selecionar assunto" do Lightroom): mascara do objeto saliente (U^2-Net-p, cv2.dnn)
+# numa thread, como os olhos. So' roda pras fontes com item da pilha em region assunto/fundo (ou
+# com a previa da mascara aberta): o loop GL poe subject_want[fonte base] = (instante, frame).
+# Resultado em subject_mask[fonte base] = uint8 SUBJECT_DET x SUBJECT_DET, origem em cima, 0..255
+# = chance de ser assunto (quadrada: a uv estica de volta). Limiar/borda (BINDINGS[canal]['mask'])
+# ficam no shader de mistura. Sem cv2/modelo = sem mascara: efeito no assunto nao aparece.
+SUBJECT_MODEL = os.path.join(_ROOT, 'models', 'u2netp.onnx')
+SUBJECT_DET = 192       # lado da entrada da rede: 192 ~110 ms, 320 ~380 ms (12 nucleos)
+SUBJECT_SMOOTH = 0.6    # 0..1, peso da mascara nova (menos = treme menos, mais atraso)
+SUBJECT_TH, SUBJECT_SOFT = 0.5, 0.15   # padrao do limiar / meia-largura da borda (dash: ajustar mascara)
+subject_want, subject_mask = {}, {}
+
+
+def subject_thread():
+    try:
+        import cv2
+        net = cv2.dnn.readNetFromONNX(SUBJECT_MODEL)
+    except Exception as e:
+        print('assunto: deteccao desligada ->', e)
+        return
+    while running:
+        now = time.time()
+        want = {k: f for k, (t, f) in list(subject_want.items()) if now - t < 1.0}
+        for k in [k for k in subject_mask if k not in want]:
+            subject_mask.pop(k, None)
+        if not want:
+            time.sleep(0.2)
+            continue
+        for k, f in want.items():
+            if len(f) != FRAME_SIZE:
+                continue
+            # normalizacao do U^2-Net (ImageNet); std dos 3 canais ~igual -> 1 escala so'
+            blob = cv2.dnn.blobFromImage(np.asarray(f, np.uint8).reshape(HEIGHT, WIDTH, 3), 1 / (255 * 0.226),
+                                         (SUBJECT_DET, SUBJECT_DET), (123.7, 116.3, 103.5))
+            net.setInput(blob)
+            m = net.forward()[0, 0]
+            prev = subject_mask.get(k)
+            if prev is not None:
+                m = prev / 255.0 + (m - prev / 255.0) * SUBJECT_SMOOTH
+            subject_mask[k] = (np.clip(m, 0, 1) * 255).astype(np.uint8)
+        time.sleep(0.01)
+
+
+def _subject_params(b):
+    """(limiar - borda, limiar + borda) do smoothstep da mascara; b = BINDINGS[canal]."""
+    mk = (b or {}).get('mask') or {}
+    th, soft = float(mk.get('th', SUBJECT_TH)), max(0.01, float(mk.get('soft', SUBJECT_SOFT)))
+    return th - soft, th + soft
+
+
 def compile_shader(src, kind):
     s = glCreateShader(kind)
     glShaderSource(s, src)
@@ -2533,7 +2604,8 @@ uniform float u_a;
 uniform int u_mode;
 uniform int u_flip;   // 1 = u_layer e' a fonte CRUA (textura topo->baixo, como os presets leem)
 uniform sampler2D u_mask;   // alpha da fonte (imagem com transparencia), topo->baixo como a crua
-uniform int u_use_mask;
+uniform int u_use_mask;     // 1 = alpha da fonte; 2 = so' no ASSUNTO, 3 = so' no FUNDO (u_mask = subject_mask)
+uniform vec2 u_mth;         // assunto: smoothstep(x, y) da mascara (limiar -/+ borda)
 uniform vec4 u_rect;   // onde u_layer entra na tela (uv da janela, origem embaixo): x, y, w, h
 uniform vec4 u_clip;   // o CANVAS na janela: fora dele a camada nao aparece (barras ficam na base)
 uniform int u_nscr;    // telas do palco: com telas, a camada so' aparece DENTRO delas (forma livre)
@@ -2559,6 +2631,10 @@ void main() {
         a *= in_;
     }
     if (u_use_mask == 1) a *= texture2D(u_mask, vec2(lu.x, 1.0 - lu.y)).r;
+    else if (u_use_mask >= 2) {
+        float s = smoothstep(u_mth.x, u_mth.y, texture2D(u_mask, vec2(lu.x, 1.0 - lu.y)).r);
+        a *= u_use_mask == 2 ? s : 1.0 - s;
+    }
     vec3 b = texture2D(u_base, uv).rgb;
     vec3 l = texture2D(u_layer, u_flip == 1 ? vec2(lu.x, 1.0 - lu.y) : lu).rgb;
     vec3 m = l;
@@ -2577,7 +2653,7 @@ FULL_UV = (0.0, 0.0, 1.0, 1.0)
 def build_layer_blend_program():
     p = build_program(LAYER_BLEND_SRC)
     _use_basic(p)
-    u = _locs(p, 'u_res', 'u_base', 'u_layer', 'u_a', 'u_mode', 'u_flip', 'u_mask', 'u_use_mask', 'u_rect', 'u_clip', 'u_nscr', 'u_sa', 'u_sb', 'u_poly')
+    u = _locs(p, 'u_res', 'u_base', 'u_layer', 'u_a', 'u_mode', 'u_flip', 'u_mask', 'u_use_mask', 'u_mth', 'u_rect', 'u_clip', 'u_nscr', 'u_sa', 'u_sb', 'u_poly')
     glUniform1i(u['u_base'], LAYER_BLEND_UNIT_BASE)
     glUniform1i(u['u_poly'], POLY_UNIT)
     glUniform1i(u['u_layer'], LAYER_BLEND_UNIT_LAYER)
@@ -2798,6 +2874,8 @@ def main():
         uniforms['mid'] = glGetUniformLocation(prog, 'u_mid')
         uniforms['treble'] = glGetUniformLocation(prog, 'u_treble')
         uniforms['kick'] = glGetUniformLocation(prog, 'u_kick')
+        uniforms['beats'] = glGetUniformLocation(prog, 'u_beats')   # nº de batidas desde que abriu
+        uniforms['build'] = glGetUniformLocation(prog, 'u_build')   # crescendo 0..1 (audio_thread)
         uniforms['dominant'] = glGetUniformLocation(prog, 'u_dominant')
         uniforms['eyes'] = glGetUniformLocation(prog, 'u_eyes')        # olhos da fonte (eyes_thread)
         uniforms['eyes_on'] = glGetUniformLocation(prog, 'u_eyes_on')
@@ -2931,6 +3009,7 @@ def main():
         threading.Thread(target=channel_thread, args=(slot,), daemon=True).start()
     threading.Thread(target=dominant_color_thread, daemon=True).start()
     threading.Thread(target=eyes_thread, daemon=True).start()
+    threading.Thread(target=subject_thread, daemon=True).start()
     dash_server.start(state, tuning, TUNING_PATH, lambda: running,
                       audio_source=audio_src, video_mode='screen' if args.screen else 'webcam',
                       on_inputs=list_inputs, on_set_input=set_input, on_set_output=set_output,
@@ -2967,6 +3046,7 @@ def main():
     # camera/video chegam a ~30 fps, a saida roda a 60: sem isso metade dos uploads e' repetida.
     # Guarda o proprio frame (nao id()) pra o endereco nao ser reusado por outro array.
     src_tex = {}          # chave do canal -> [textura, frame subido]
+    subj_tex = {}         # fonte base -> [textura, mascara subida] (subject_thread)
     comp_last = [None, None]   # [assinatura das fontes da mistura na CPU, frame_in]
     out_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
                'prev_val': [None], 'prev_mean': [None]}
@@ -3015,7 +3095,7 @@ def main():
             ltargets[0] = None           # FBO/texturas das camadas eram do contexto velho
             poly_tex[:] = [None, None]   # idem a dos poligonos
             src_tex.clear()              # texturas por fonte idem (sem glDelete: o contexto ja foi)
-            out_pv['wh'] = None          # FBO da previa da saida idem
+            out_pv.update(fbo=None, tex=None, wh=None)   # FBO da previa da saida idem (nome velho = textura de outro)
             cv_pv.update(fbo=None, tex=None, wh=None)
             fx_pv.update(fbo=None, tex=None, wh=None)
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
@@ -3182,6 +3262,8 @@ def main():
             glUniform1f(uniforms['mid'], state['mid'])
             glUniform1f(uniforms['treble'], state['treble'])
             glUniform1f(uniforms['kick'], state['kick'])
+            glUniform1f(uniforms['beats'], state['beats'] % 4096.0)   # float32 do GL: nao deixa crescer sem fim
+            glUniform1f(uniforms['build'], state['build'])
             glUniform3f(uniforms['dominant'], *state['dominant'])
             for name in FREQ_BAND_UNIFORM.values():
                 glUniform1f(uniforms[name], state[name])
@@ -3200,9 +3282,10 @@ def main():
             scene_tr = None
         lt = layer_targets()
 
-        def blend_into(dst, base, layer, a, mode, flip=0, mask=0, rect=FULL_UV, clip=FULL_UV, scr=()):
+        def blend_into(dst, base, layer, a, mode, flip=0, mask=0, rect=FULL_UV, clip=FULL_UV, scr=(), mth=(0.0, 1.0)):
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0)
             _use_basic(blend_prog)
+            glUniform2f(blend_u['u_mth'], *mth)
             glUniform2f(blend_u['u_res'], CMP_W, CMP_H)
             glUniform4f(blend_u['u_rect'], *rect)
             glUniform4f(blend_u['u_clip'], *clip)
@@ -3266,9 +3349,32 @@ def main():
             si = 0
             blend_into(lt['src'][0], ftex, ftex, 1.0, 0, flip=1)
             b = bindings.get(key) or {}
+            # ASSUNTO: pilha com region (ou previa da mascara aberta) -> pede a mascara dessa fonte
+            bk = re.sub(r'#\d+$', '', key)
+            if any(o.get('region') for o in b.get('shaders') or []) or \
+                    time.time() - (state.get('mask_want') or {}).get(key, 0) < 1.5:
+                subject_want[bk] = (time.time(), frame)
+            sjm, sjt = subject_mask.get(bk), subj_tex.get(bk)
+            if sjm is not None and (sjt is None or sjt[1] is not sjm):
+                if sjt is None:
+                    sjt = subj_tex[bk] = [glGenTextures(1), None]
+                glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
+                glBindTexture(GL_TEXTURE_2D, sjt[0])
+                for pn, pv in ((GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE), (GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE),
+                               (GL_TEXTURE_MIN_FILTER, GL_LINEAR), (GL_TEXTURE_MAG_FILTER, GL_LINEAR)):
+                    glTexParameteri(GL_TEXTURE_2D, pn, pv)
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SUBJECT_DET, SUBJECT_DET, 0, GL_RGB, GL_UNSIGNED_BYTE,
+                             np.repeat(sjm[..., None], 3, axis=2))
+                sjt[1] = sjm
+            elif sjm is None:
+                sjt = None
             for o in b.get('shaders') or []:
                 a = min(1.0, float(o.get('opacity', 0)))
                 if o.get('off') or (sh_avail is not None and o['file'] not in sh_avail):
+                    a = 0
+                rg = o.get('region')
+                if rg == 'subject' and sjt is None:     # sem mascara (ainda): assunto vazio
                     a = 0
                 h = layer_program(o['file']) if a > 0 else None
                 if not h:
@@ -3287,7 +3393,12 @@ def main():
                 glClear(GL_COLOR_BUFFER_BIT)
                 glDrawArrays(GL_TRIANGLES, 0, 3)
                 mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
-                blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode)
+                um = 0
+                if rg and sjt is not None:              # so' dentro (2) / fora (3) do assunto
+                    glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
+                    glBindTexture(GL_TEXTURE_2D, sjt[0])
+                    um = 2 if rg == 'subject' else 3
+                blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode, mask=um, mth=_subject_params(b))
                 si = 1 - si
             fx_want = state.get('fx_want') or {}
             if time.time() - fx_want.get(key, 0) < 1.5 and time.perf_counter() - fx_pv['t'].get(key, 0) >= 1.0 / FX_PV_HZ:
