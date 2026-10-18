@@ -1956,9 +1956,10 @@ class _Handler(BaseHTTPRequestHandler):
                 {'grade': _current_output_grade(), 'defaults': output_grade_defaults()}).encode())
         elif path == '/shaders':  # glob aqui, nao no _payload de 20 Hz (igual /inputs)
             s = _active_shader_set()
+            al = _all_shaders()   # todos os sets (nao ha seletor de SHADER_SET no dash); atalhos = so' o ativo
             self._send(200, 'application/json', json.dumps(
-                {'list': _list_shaders(s), 'manifests': _shader_manifests(_list_shaders(s)),
-                 'fxDefaults': _shader_manifests(_list_shaders(s), defaults=True),
+                {'list': al, 'manifests': _shader_manifests(al),
+                 'fxDefaults': _shader_manifests(al, defaults=True),
                  'keys': _read_keys_for('SHADER_KEYS', s),
                  'set': s, 'sets': _list_shader_sets()}).encode())
         elif path == '/media':

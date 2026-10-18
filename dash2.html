@@ -2352,7 +2352,10 @@ function stripEl(o, i){
   mixEls[key] = { fd, minis: {} };
   st.forEach((s, j) => fb.append(insertEl(key, s, j, sel && j === picked, info)));
   if (!st.length) fb.append(h('div', { class: 'empty', text: 'sem efeitos — imagem crua' }));
-  const add = h('select', { class: 'inp addsel' }, h('option', { value: '', text: '+ efeito…' }), lastShaderList.map(f => h('option', { value: f, text: fxName(f) })));
+  const groups = {};   // um grupo por set (presets/<set>/), image.frag em "base"
+  for (const f of lastShaderList) (groups[(f.match(/^presets\/([^/]+)\//) || [])[1] || 'base'] ||= []).push(f);
+  const add = h('select', { class: 'inp addsel' }, h('option', { value: '', text: '+ efeito…' }),
+    Object.entries(groups).map(([g, fs]) => h('optgroup', { label: g }, fs.map(f => h('option', { value: f, text: fxName(f) })))));
   add.onchange = () => {
     if (!add.value) return;
     const b = binding(key, true); b.shaders.push({ file: add.value, opacity: 1, fx: {} });
@@ -2444,7 +2447,19 @@ function renderInspector(){
     const x = cur(); if (!x) return; if (v) x.region = v; else delete x.region; sendBindings(true); remix();
   }, (s.region || '') === v ? 'pick' : ''));
   sec.append(rgs);
-  const names = lastManifests[file] || [];
+  // knob "on_<nome>" no // fx: = CAIXA liga/desliga (0/1; o shader le com step(0.5, ...)), fora da
+  // numeracao dev:N do MIDI. Ex.: on_kick = so' na batida; on_subbass..on_air = faixas que disparam.
+  const all = lastManifests[file] || [], toggles = all.filter(n => n.startsWith('on_')), names = all.filter(n => !n.startsWith('on_'));
+  if (toggles.length){
+    const tg = h('div', { class: 'chips', style: 'margin-top:6px;flex-wrap:wrap' });
+    for (const n of toggles){
+      const on = fxVal(src, s, n) >= 0.5;
+      tg.append(chip((on ? '☑ ' : '☐ ') + n.slice(3), on, n === 'on_kick' ? 'só dispara junto com o kick' : 'faixa que dispara o efeito (pode marcar várias)', () => {
+        const x = cur(); if (!x) return; setFxVal(src, x, n, fxVal(src, x, n) >= 0.5 ? 0 : 1); sendBindings(true); remix();
+      }));
+    }
+    sec.append(tg);
+  }
   if (names.length){
     const kn = h('div', { class: 'dev-knobs' });
     names.forEach((n, i) => {
