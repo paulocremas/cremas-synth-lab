@@ -19,7 +19,7 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - **Release**: tag `vX.Y.Z` → `.github/workflows/release.yml` (`.deb`, `.exe` `packaging/prisma.iss`, zip portátil);
   tag com `-` = pré. `packaging/updater.py` compara `VERSION` com a última Release. Publicado: `v0.1.0-beta.2`
   (master = branch `dashboard-channels-output`). Docs `#baixar` lê a Release mais nova da API (pré incluída).
-- Dash = Chromium `--app --kiosk` próprio (`_open_dash_window`; Edge no Windows; `PRISMA_NO_BROWSER=1` nos testes).
+- Dash = Chromium `--app --start-maximized` próprio (arrastável entre monitores) (`_open_dash_window`; Edge no Windows; `PRISMA_NO_BROWSER=1` nos testes).
   3× Esc (saída ou dash → `POST /quit`) fecha tudo.
 - Hot-reload por mtime: `.frag`, `transitions/*.glsl`, `tuning.py`, `dash_server.py`, `dash_data.py`,
   `dash*.html`. **`native_synth.py` e `telao_sim.py` só reabrindo** (dash novo + native velho não combinam).

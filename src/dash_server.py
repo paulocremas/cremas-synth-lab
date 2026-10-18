@@ -2499,10 +2499,11 @@ def _open_dash_window(url):
         try:
             os.makedirs(prof, exist_ok=True)
             _no_translate(prof)
-            # --kiosk = tela cheia SEM o balao "aperte Esc pra sair" (o --start-fullscreen mostra);
-            # sai com Alt+F4 (ou fechando o prisma). --class=prisma = mesmo WM_CLASS da janela de
-            # saida (SDL_VIDEO_X11_WMCLASS no native) -> as duas empilham como UM app na barra
-            p = subprocess.Popen([exe, '--app=' + url, '--user-data-dir=' + prof, '--kiosk', '--class=prisma',
+            # --start-maximized (nao --kiosk): janela normal ocupando a tela, com barra de titulo pra
+            # arrastar pra outro monitor (maximiza de novo ao soltar no topo / Super+Shift+seta);
+            # o perfil lembra o monitor na proxima abertura. --class=prisma = mesmo WM_CLASS da janela
+            # de saida (SDL_VIDEO_X11_WMCLASS no native) -> as duas empilham como UM app na barra
+            p = subprocess.Popen([exe, '--app=' + url, '--user-data-dir=' + prof, '--start-maximized', '--class=prisma',
                                   '--disable-features=Translate', '--no-first-run',
                                   '--no-default-browser-check'],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

@@ -453,7 +453,7 @@ def resolve_output(cfg):
 def _wm_fullscreen():
     """Pede tela cheia ao gerenciador de janelas (_NET_WM_STATE_FULLSCREEN): so' NOFRAME no
     tamanho do monitor fica ATRAS da barra de tarefas do Cinnamon; com o estado fullscreen a
-    saida cobre a barra, igual ao dash (--kiosk). Sem wmctrl: fica como antes."""
+    saida cobre a barra, como o --kiosk fazia no dash. Sem wmctrl: fica como antes."""
     wid = pygame.display.get_wm_info().get('window')
     if not wid:
         return

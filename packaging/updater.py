@@ -6,10 +6,13 @@
   Release mais nova no GitHub                -> janelinha: "Atualizar" | "Agora nao"
       Atualizar: baixa o instalador da Release (Windows .exe | Linux .deb), roda e fecha o app
       (Windows: o instalador abre o PRISMA no fim; Linux: pkexec apt instala e reabre)
+      Portatil: baixa o zip, extrai e um .bat espera o app fechar, troca a pasta (menos `dados`)
+      e reabre
 
 Versao = tag da Release (vMAIOR.MENOR.PATCH), gravada no arquivo VERSION ao lado do binario
-pelo build (packaging/build.sh). PRISMA_NO_UPDATE=1 desliga. Sem VERSION (rodando do repo) nao
-checa. Usa so' a stdlib + pygame (ja vai no binario) pra janela.
+pelo build (packaging/build.sh). Quem esta numa beta tambem ve as betas novas; versao final so'
+ve finais. PRISMA_NO_UPDATE=1 desliga. Sem VERSION (rodando do repo) nao checa. Usa so' a
+stdlib + pygame (ja vai no binario) pra janela.
 """
 import json
 import os
@@ -19,17 +22,21 @@ import sys
 import tempfile
 import threading
 import urllib.request
+import zipfile
 
 REPO = 'paulocremas/cremas-synth-lab'
-API = os.environ.get('PRISMA_UPDATE_API') or f'https://api.github.com/repos/{REPO}/releases/latest'   # env: testes
+API = os.environ.get('PRISMA_UPDATE_API') or f'https://api.github.com/repos/{REPO}/releases?per_page=20'   # env: testes
 IS_WIN = sys.platform == 'win32'
 
 
 def parse_ver(s):
-    """'v0.3.1' / '0.3' -> (0, 3, 1, 0) / (0, 3, 0, 0); pre-lancamento 'v0.3.1-beta.1' -> (0, 3, 1, -1)
-    (vem ANTES da v0.3.1 final); outra coisa (ex. hash de dev) -> None."""
+    """'v0.3.1' / '0.3' -> (0, 3, 1, 0, 0) / (0, 3, 0, 0, 0); pre-lancamento 'v0.3.1-beta.2' ->
+    (0, 3, 1, -1, 2) (vem ANTES da v0.3.1 final, depois da beta.1); outra coisa (hash de dev) -> None."""
     m = re.fullmatch(r'v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(-[0-9A-Za-z.]+)?', (s or '').strip())
-    return (*(int(g or 0) for g in m.groups()[:3]), -1 if m.group(4) else 0) if m else None
+    if not m:
+        return None
+    n = re.findall(r'\d+', m.group(4) or '')
+    return (*(int(g or 0) for g in m.groups()[:3]), -1 if m.group(4) else 0, int(n[-1]) if n else 0)
 
 
 def is_newer(latest, current):
@@ -43,43 +50,52 @@ def is_portable(here):
 
 
 def install_kind(exe):
-    """Como esta copia foi instalada -> qual asset da Release serve: 'exe' (Windows), 'deb'
-    (.deb em /opt/prisma) | None (pasta solta ou zip portatil: so' abre a pagina da Release)."""
+    """Como esta copia foi instalada -> qual asset da Release serve: 'zip' (portatil do Windows),
+    'exe' (Windows), 'deb' (.deb em /opt/prisma) | None (pasta solta: so' abre a pagina da Release)."""
     if is_portable(os.path.dirname(os.path.realpath(exe))):
-        return None
+        return 'zip' if IS_WIN else None
     if IS_WIN:
         return 'exe'
     return 'deb' if os.path.realpath(exe).startswith('/opt/prisma/') else None
 
 
 def pick_asset(assets, kind):
-    ext = {'exe': '.exe', 'deb': '.deb'}.get(kind)
+    ext = {'exe': '.exe', 'deb': '.deb', 'zip': '-windows-portatil.zip'}.get(kind)
     return next((a for a in assets or [] if ext and a.get('name', '').lower().endswith(ext)), None)
 
 
-def fetch_latest(timeout=3.0):
-    """Ultima Release: {'tag', 'notes', 'page', 'assets': [{name, url, size}]} | None (offline,
-    sem Release, limite da API, JSON estranho...). Nunca levanta."""
+def pick_release(rels, current):
+    """A Release mais nova que `current` | None. Beta (tag com '-') so' conta se `current` ja' e'
+    beta — quem esta na final nao e' empurrado pra pre-lancamento."""
+    pre_ok = (parse_ver(current) or (0, 0, 0, 0, 0))[3] < 0
+    ok = [r for r in rels if (pre_ok or not r['pre']) and is_newer(r['tag'], current)]
+    return max(ok, key=lambda r: parse_ver(r['tag']), default=None)
+
+
+def fetch_releases(timeout=3.0):
+    """Releases publicadas: [{'tag', 'pre', 'notes', 'page', 'assets': [{name, url, size}]}] | []
+    (offline, limite da API, JSON estranho...). Nunca levanta."""
     try:
         req = urllib.request.Request(API, headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'prisma-updater'})
         with urllib.request.urlopen(req, timeout=timeout) as r:
             d = json.load(r)
-        return {'tag': d['tag_name'], 'notes': d.get('body') or '', 'page': d.get('html_url') or '',
-                'assets': [{'name': a['name'], 'url': a['browser_download_url'], 'size': a.get('size', 0)}
-                           for a in d.get('assets') or []]}
+        return [{'tag': x['tag_name'], 'pre': bool(x.get('prerelease')), 'notes': x.get('body') or '',
+                 'page': x.get('html_url') or '',
+                 'assets': [{'name': a['name'], 'url': a['browser_download_url'], 'size': a.get('size', 0)}
+                            for a in x.get('assets') or []]}
+                for x in (d if isinstance(d, list) else [d]) if not x.get('draft')]
     except Exception:                                       # noqa: BLE001 — offline = segue normal
-        return None
+        return []
 
 
 def check(current, timeout=2.0):
     """Release mais nova que `current` | None. Roda numa thread com prazo: DNS travado sem rede
     nao segura a abertura do app alem de `timeout`."""
     box = []
-    t = threading.Thread(target=lambda: box.append(fetch_latest(timeout)), daemon=True)
+    t = threading.Thread(target=lambda: box.append(fetch_releases(timeout)), daemon=True)
     t.start()
     t.join(timeout + 0.5)
-    rel = box[0] if box else None
-    return rel if rel and is_newer(rel['tag'], current) else None
+    return pick_release(box[0] if box else [], current)
 
 
 def download(url, dst, progress=None):
@@ -96,8 +112,31 @@ def download(url, dst, progress=None):
                 progress(done, total)
 
 
+def swap_script(pid, src, here, exe):
+    """.bat do portatil: espera o app (pid) fechar, espelha `src` (a pasta nova) em `here` sem
+    tocar em `dados`, reabre. /MIR apaga o que a versao nova nao tem; /XD poupa os dados.
+    chcp 65001 = caminho com acento (o .bat vai em UTF-8)."""
+    return '\r\n'.join([
+        '@echo off', 'chcp 65001 >nul',
+        ':w', f'tasklist /FI "PID eq {pid}" /NH | find "{pid}" >nul && (timeout /t 1 /nobreak >nul & goto w)',
+        f'robocopy "{src}" "{here}" /MIR /XD "{os.path.join(here, "dados")}" /R:10 /W:1 >nul',
+        f'start "" "{os.path.join(here, exe)}"',
+        f'rmdir /S /Q "{os.path.dirname(src)}"', ''])
+
+
 def run_installer(path, kind):
     """Dispara o instalador e devolve True se o app deve FECHAR (o instalador assume)."""
+    if kind == 'zip':   # o .exe rodando nao pode ser sobrescrito: o .bat troca depois que fechamos
+        tmp = tempfile.mkdtemp(prefix='prisma-up-')
+        with zipfile.ZipFile(path) as z:
+            z.extractall(tmp)
+        os.remove(path)
+        exe = os.path.realpath(sys.executable)
+        bat = os.path.join(tmp, 'atualizar.bat')
+        with open(bat, 'w', encoding='utf-8') as fh:
+            fh.write(swap_script(os.getpid(), os.path.join(tmp, 'PRISMA'), os.path.dirname(exe), os.path.basename(exe)))
+        subprocess.Popen(['cmd', '/c', bat], creationflags=0x08000000, close_fds=True)   # CREATE_NO_WINDOW
+        return True
     if kind == 'exe':
         subprocess.Popen([path, '/SP-'], close_fds=True)      # assistente normal; no fim reabre o PRISMA
         return True
@@ -200,7 +239,8 @@ def maybe_update(here, exe):
 
 
 if __name__ == '__main__':  # self-check (roda: python packaging/updater.py)
-    assert parse_ver('v0.3.1') == (0, 3, 1, 0) and parse_ver('1.2') == (1, 2, 0, 0) and parse_ver('abc1234') is None
+    assert parse_ver('v0.3.1') == (0, 3, 1, 0, 0) and parse_ver('1.2') == (1, 2, 0, 0, 0) and parse_ver('abc1234') is None
+    assert is_newer('v0.1.0-beta.4', 'v0.1.0-beta.3') and is_newer('v0.1.0-beta.10', 'v0.1.0-beta.9')
     assert is_newer('v0.1.0', 'v0.1.0-beta.1') and not is_newer('v0.1.0-beta.1', 'v0.1.0')   # beta < final
     assert is_newer('v0.10.0', 'v0.9.9') and not is_newer('v0.3.0', 'v0.3.0') and not is_newer('v0.2', 'v0.3')
     assert not is_newer('v1.0', 'abc1234')                  # dev nunca "atrasado"
@@ -208,4 +248,11 @@ if __name__ == '__main__':  # self-check (roda: python packaging/updater.py)
     assert pick_asset(a, 'exe')['name'].endswith('.exe') and pick_asset(a, 'deb')['name'].endswith('.deb')
     assert pick_asset(a, None) is None
     assert install_kind('/opt/prisma/prisma') == ('exe' if IS_WIN else 'deb')
+    assert pick_asset(a + [{'name': 'PRISMA-0.3.0-windows-portatil.zip'}], 'zip')['name'].endswith('.zip')
+    rels = [{'tag': 'v0.2.0', 'pre': False}, {'tag': 'v0.3.0-beta.2', 'pre': True}, {'tag': 'v0.1.0', 'pre': False}]
+    assert pick_release(rels, 'v0.1.0')['tag'] == 'v0.2.0'               # final nao ve beta
+    assert pick_release(rels, 'v0.3.0-beta.1')['tag'] == 'v0.3.0-beta.2'  # beta ve beta nova
+    assert pick_release(rels, 'v0.3.0-beta.2') is None and pick_release([], 'v0.1.0') is None
+    s = swap_script(42, r'C:\t\PRISMA', r'C:\Users\é\PRISMA', 'prisma.exe')
+    assert '/MIR' in s and '/XD "' in s and 'dados' in s and 'PID eq 42' in s and s.endswith('\r\n')
     print('updater self-check ok')
