@@ -3254,7 +3254,7 @@ def main():
 
         now_t = time.perf_counter() - t0
 
-        def set_uniforms(fx):
+        def set_uniforms(fx, mod=None):
             glUniform2f(uniforms['res'], CMP_W, CMP_H)
             glUniform1f(uniforms['time'], now_t)
             glUniform1f(uniforms['amp'], state['amp'])
@@ -3270,8 +3270,12 @@ def main():
             for i in range(MAX_CHANNELS):
                 glUniform1f(uniforms['chan'][i], state['chan'][i])
                 glUniform1f(uniforms['chan_hit'][i], state['chan_hit'][i])
+            mod = mod or {}
             for n, (loc, d) in uniforms['fx'].items():
-                glUniform1f(loc, fx.get(n, d))
+                v = fx.get(n, d)
+                if n in mod:   # ♪ no knob (entrada['mod']): o som empurra do valor do knob ate 1, pela faixa marcada mais forte
+                    v += (1.0 - v) * min(1.0, max(state.get(b, 0.0) for b in mod[n]))
+                glUniform1f(loc, v)
 
         # --- SAIDA: so' as fontes MARCADAS (src_frames, de baixo pra cima), cada uma pela SUA
         # pilha (state['bindings'][fonte]): a fonte crua -> cada shader marcado desenha com ela de
@@ -3382,7 +3386,7 @@ def main():
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
                 use_program(h[1], h[3])
                 set_uniforms(o['fx'] if isinstance(o.get('fx'), dict)   # forcas da ENTRADA (mesmo .frag pode vir 2x)
-                             else (b.get('fx') or {}).get(o['file']) or {})
+                             else (b.get('fx') or {}).get(o['file']) or {}, o.get('mod'))
                 if uniforms['eyes'] >= 0:                   # shader usa olhos -> pede deteccao dessa fonte
                     eyes_want[key] = (time.time(), frame)
                     ey = (state.get('eyes') or {}).get(key) or (0.0, 0.0, 0.0, 0.0, 0.0)
@@ -3458,6 +3462,29 @@ def main():
             glClear(GL_COLOR_BUFFER_BIT)
             glDrawArrays(GL_TRIANGLES, 0, 3)
             oi = 1 - oi
+        # CALIBRACAO POR TELA (SCREENS[i]['grade'], dash v2 > Saida): igualar paineis diferentes.
+        # calibrar.frag na mistura inteira -> 'layer', e o blend so' deixa passar DENTRO da tela i
+        # (forma livre). As telas antes dela vao pra longe (sa.xy = 1e6) so' pra manter o indice i =
+        # a linha dela no u_poly. Antes da transicao (fixa por tela, os 2 lados ja' saem calibrados).
+        if scr_rects:
+            for i, t in enumerate(_valid_screens(scr_)):
+                tfx = t[0].get('grade') or {}
+                th = layer_program(dash_server.GRADE_FRAG) if tfx else None
+                if not th or i >= len(scr_uv):
+                    continue
+                glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
+                use_program(th[1], th[3])
+                set_uniforms(tfx)
+                glUniform1i(glGetUniformLocation(th[1], 'u_test'), 0)
+                glUniform1f(glGetUniformLocation(th[1], 'u_dim'), 0.0)
+                glActiveTexture(GL_TEXTURE0)
+                glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+                glClear(GL_COLOR_BUFFER_BIT)
+                glDrawArrays(GL_TRIANGLES, 0, 3)
+                far = ((1e6, 1e6, 1.0, 0.0), (0.0, 1.0, 0.0, 0.0))
+                blend_into(lt['out'][1 - oi], lt['out'][oi], lt['layer'], 1.0, 0, clip=cbox, scr=[far] * i + [scr_uv[i]])
+                oi = 1 - oi
         # CALIBRACAO DA SAIDA (tuning.OUTPUT_GRADE, shaders/calibrar.frag): ligada e fora do
         # neutro (ou no padrao de teste) -> a imagem final (copia ou transicao) vai pra textura
         # `final` e o calibrar.frag a desenha na tela. Neutro = caminho de sempre, sem passe extra.

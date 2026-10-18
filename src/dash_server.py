@@ -787,6 +787,10 @@ def _norm_rect(r):
     return None if [x, y, w, h] == [0, 0, 1, 1] else [x, y, w, h]
 
 
+# fontes de som de um knob com ♪ (= chaves do state no native: as 8 faixas + o kick), ordem do espectro
+MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick')
+
+
 def _norm_overlays(items, dedupe=True):
     """dedupe=False na pilha de shaders: o mesmo .frag pode entrar 2x na mesma fonte (cada entrada
     com as suas forcas em 'fx')."""
@@ -811,6 +815,11 @@ def _norm_overlays(items, dedupe=True):
             o['audio'], aud = 1, True
         if isinstance(it.get('fx'), dict):   # forcas desta entrada da pilha (ausente = fx[shader] da fonte)
             o['fx'] = _norm_fx(it['fx'])
+        if isinstance(it.get('mod'), dict):  # ♪ knob -> faixas que o mexem com o som (native set_uniforms)
+            m = {str(n): [b for b in MOD_SOURCES if b in bs] for n, bs in it['mod'].items() if isinstance(bs, list)}
+            m = {n: bs for n, bs in m.items() if bs}
+            if m:
+                o['mod'] = m
         r = _norm_rect(it.get('rect'))
         if r:               # objeto no CANVAS (posicao/tamanho); ausente = canvas inteiro
             o['rect'] = r
@@ -1601,6 +1610,12 @@ def _norm_screens(items):
         poly = dash_data.screen_poly(t)
         if poly:
             d['poly'] = [[round(u, 4), round(v, 4)] for u, v in poly]
+        try:   # calibracao SO' desta tela (knobs do calibrar.frag; padrao = omitido) — antes da do telao
+            g = _grade_fx({'fx': t.get('grade') or {}})
+        except (TypeError, ValueError, AttributeError):
+            g = {}
+        if g:
+            d['grade'] = g
         out.append(d)
     return out[:16]
 
@@ -2549,6 +2564,11 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
         [{'file': 'a.png', 'opacity': 1.0, 'off': 1}, {'file': 'b.png', 'opacity': 1.0}], 'off (desligada) se perdeu'
     assert [o.get('audio') for o in _norm_overlays([{'file': 'a.mp4', 'audio': 1}, {'file': 'b.mp4', 'audio': True},
                                                    {'file': 'c.mp4'}])] == [1, None, None], '🔊 e so 1 por mesa'
+    assert _norm_overlays([{'file': 'x.frag', 'mod': {'matiz': ['kick', 'lixo', 'subbass'], 'vazio': []}}], dedupe=False)[0]['mod'] \
+        == {'matiz': ['subbass', 'kick']}, '♪ knob: so faixas validas, ordem do espectro, vazio some'
+    sg = _norm_screens([{'name': 'a', 'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 10, 'ph': 10, 'grade': {'gama': 0.7, 'x y': 1}},
+                        {'name': 'b', 'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 10, 'ph': 10, 'grade': {'gama': 0.7}}])
+    assert 'grade' not in sg[0] and sg[1]['grade'].get('gama') == 0.7, 'calibracao por tela: knob invalido zera, valido passa'
     txt = open(p).read()
     assert 'KICK_THRESHOLD = 2.0 ' in txt, txt
     assert '# grave cru passa X vezes a media' in txt, 'comentario perdido'

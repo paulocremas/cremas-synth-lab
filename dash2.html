@@ -278,6 +278,12 @@
   .fxtabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
   .fxtabs .chip.offfx { text-decoration: line-through; text-decoration-color: var(--tx3); }
   .dev-knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px 4px; justify-items: center; padding: 8px 0; }
+  .kcell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .sndb { min-width: 26px; height: 18px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line2); background: var(--s2); color: var(--tx3); font-size: 11px; cursor: pointer; }
+  .sndb:hover { color: var(--tx); }
+  .sndb.on { background: var(--live-d); border-color: #2c6e50; color: #c5f2dc; }
+  .modrow { flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .modrow .gt { min-width: 90px; font-size: 11px; color: var(--tx2); }
   .dev-title { font-size: 15px; font-weight: 800; }
   details.keys summary { cursor: pointer; color: var(--tx3); font-size: 12px; padding: 6px 2px; user-select: none; }
   .keyhelp { display: grid; grid-template-columns: 1fr; gap: 3px; font-size: 12px; color: var(--tx2); }
@@ -736,6 +742,12 @@
         <button class="btn sm" id="grade-reset">zerar</button></div>
       <div class="gradegrid" id="grade-knobs"></div>
     </div>
+    <div class="panel">
+      <div class="ph"><b>Calibração por tela</b><span class="hint">só dentro da tela escolhida · antes da calibração do telão · centro = neutro · duplo-clique zera</span><span class="grow"></span>
+        <select class="inp" id="sgr-scr" title="tela do palco"></select>
+        <button class="btn sm" id="sgr-reset">zerar</button></div>
+      <div class="gradegrid" id="sgr-knobs"></div>
+    </div>
   </section>
 
   <!-- ================= BIBLIOTECA ================= -->
@@ -1165,7 +1177,7 @@ function syncGrade(){
   for (const [n, k] of Object.entries(gradeEls)) if (activeDrag !== 'grade:' + n) k._show(gradeVal(n));
   syncMaster();
 }
-fetch('/output-grade').then(r => r.json()).then(d => { gradeDefaults = d.defaults || {}; lastGrade = d.grade || lastGrade; renderGrade(); renderSGrade(); }).catch(() => {});
+fetch('/output-grade').then(r => r.json()).then(d => { gradeDefaults = d.defaults || {}; lastGrade = d.grade || lastGrade; renderGrade(); renderSGrade(); renderScrGrade(); }).catch(() => {});
 $('#grade-on').onchange = () => { lastGrade.on = $('#grade-on').checked ? 1 : 0; sendGrade(true); };
 $('#grade-test').onchange = () => { lastGrade.test = $('#grade-test').checked ? 1 : 0; sendGrade(true); };
 $('#grade-reset').onclick = () => { lastGrade.fx = {}; syncGrade(); sendGrade(true); };
@@ -1204,6 +1216,35 @@ $('#sgrade-btn').onclick = () => { const b = $('#sgrade-box'); b.hidden = !b.hid
 $('#sgrade-box').hidden = !LS.get('v2sgrade', 0);
 $('#sgrade-on').onchange = () => { lastSGrade.on = $('#sgrade-on').checked ? 1 : 0; syncSGrade(); sendSGrade(true); };
 $('#sgrade-reset').onclick = () => { lastSGrade.fx = {}; syncSGrade(); sendSGrade(true); };
+// ---- CALIBRACAO POR TELA (SCREENS[i].grade): mesmos knobs, so' dentro daquela tela (native,
+// antes da calibracao do telao) — igualar paineis de lotes/modelos diferentes. Vai junto do /screens ----
+let sgrIdx = 0, sgrEls = {}, sgrSig = '';
+const sgrVal = n => { const g = (lastScreens[sgrIdx] || {}).grade || {}; return n in g ? g[n] : (gradeDefaults[n] ?? 1); };
+const IO_SGR = { touch(){ scrTouched = now(); }, live: () => sendScreensLive(), commit: () => sendScreens(true) };
+function renderScrGrade(){
+  if (sgrIdx >= lastScreens.length) sgrIdx = 0;
+  const sig = JSON.stringify([lastScreens.map(t => t.name), sgrIdx, Object.keys(gradeDefaults)]);
+  if (sig !== sgrSig){
+    sgrSig = sig; sgrEls = {};
+    const sel = $('#sgr-scr'), box = $('#sgr-knobs'); box.innerHTML = '';
+    sel.replaceChildren(...lastScreens.map((t, i) => h('option', { value: i, text: t.name })));
+    sel.value = sgrIdx; sel.hidden = !lastScreens.length;
+    if (!lastScreens.length){ box.append(h('div', { class: 'empty', text: 'sem telas — crie no Palco acima' })); return; }
+    for (const [t, ns0] of GRADE_GROUPS){
+      const ns = ns0.filter(n => n in gradeDefaults); if (!ns.length) continue;
+      const kn = h('div', { class: 'knobs' });
+      for (const n of ns){
+        const k = knob({ id: 'sgr:' + n, label: GRADE_LABEL[n] || n, mlabel: 'calibração da tela · ' + n, dflt: gradeDefaults[n], io: IO_SGR,
+          get: () => sgrVal(n), set: v => { const s = lastScreens[sgrIdx]; if (s) s.grade = Object.assign({}, s.grade || {}, { [n]: Math.round(v * 1000) / 1000 }); } });
+        sgrEls[n] = k; kn.append(k);
+      }
+      box.append(h('div', { class: 'kgroup' }, h('span', { class: 'gt', text: t }), kn));
+    }
+  }
+  for (const [n, k] of Object.entries(sgrEls)) if (activeDrag !== 'sgr:' + n) k._show(sgrVal(n));
+}
+$('#sgr-scr').onchange = () => { sgrIdx = +$('#sgr-scr').value || 0; renderScrGrade(); };
+$('#sgr-reset').onclick = () => { const s = lastScreens[sgrIdx]; if (s){ delete s.grade; sendScreens(true); renderScrGrade(); } };
 // ---- fps da saida (tuning.OUTPUT_FPS, ao vivo) ----
 const FPS_CHOICES = [24, 30, 50, 60];
 let outFps = 60, fpsTouched = 0;
@@ -1366,6 +1407,7 @@ const SHAPES = { 'retângulo': null, 'triângulo': [[0.5, 0], [1, 1], [0, 1]], '
 const shapeName = t => { const p = JSON.stringify(polyOf(t)); return Object.keys(SHAPES).find(k => JSON.stringify(SHAPES[k]) === p) || 'livre'; };
 function sendScreens(save){
   scrTouched = now(); post('/screens', { screens: lastScreens, save }).catch(e => toast('telas: ' + e, 'err'));
+  if (typeof renderScrGrade === 'function') renderScrGrade();   // telas novas/renomeadas -> seletor da calibracao por tela
 }
 let scrLiveT = null;
 function sendScreensLive(){ scrTouched = now(); if (!scrLiveT) scrLiveT = setTimeout(() => { scrLiveT = null; sendScreens(false); }, 60); }
@@ -2409,6 +2451,8 @@ function addSourceEl(strips){
 }
 // INSPETOR: a fonte selecionada (previa viva) + o efeito escolhido (abas da pilha, opacidade,
 // mistura e knobs em grade de 4 — slots dev:0 = opacidade, dev:1..N = forcas do // fx:)
+const MOD_BANDS = [['subbass', 'sub'], ['lowmid', 'lowmid'], ['midrange', 'mid'], ['highmid', 'highmid'], ['presence', 'presence'],
+  ['treble_hi', 'treble'], ['brilho', 'brilliance'], ['air', 'air'], ['kick', 'kick']];   // = dash_server.MOD_SOURCES
 function renderInspector(){
   const box = $('#inspector'); box.innerHTML = ''; devEls = {};
   const src = lastSelected, info = src ? srcInfo(src) : null;
@@ -2461,14 +2505,27 @@ function renderInspector(){
     sec.append(tg);
   }
   if (names.length){
+    // ♪ embaixo do knob = o SOM mexe nele (entrada.mod[knob] = faixas): o knob vira o piso e a faixa
+    // marcada mais forte empurra ate 1 (native set_uniforms). Ligado -> linha de faixas abaixo da grade.
+    const mods = s.mod || {};
+    const editMod = fn => { const x = cur(); if (!x) return; x.mod = Object.assign({}, x.mod || {}); fn(x.mod);
+      if (!Object.keys(x.mod).length) delete x.mod; sendBindings(true); remix(); };
     const kn = h('div', { class: 'dev-knobs' });
     names.forEach((n, i) => {
       const k = knob({ id: 'dev:' + (i + 1), size: 44, label: n, mlabel: `efeito selecionado · knob ${i + 1}`, dflt: fxDefault(file, n), io: KNOB_BIND,
         get: () => { const x = cur(); return x ? fxVal(src, x, n) : fxDefault(file, n); }, set: v => { const x = cur(); if (x) setFxVal(src, x, n, v); } });
       k.prepend(h('span', { class: 'slot', text: String(i + 1) }));
-      devEls['fx:' + n] = k; kn.append(k);
+      devEls['fx:' + n] = k;
+      kn.append(h('div', { class: 'kcell' }, k, h('button', { class: 'sndb' + (mods[n] ? ' on' : ''), text: '♪', title: mods[n] ? 'som ligado neste knob (clique desliga)' : 'mexer este knob com o som',
+        onclick: () => editMod(m => { if (m[n]) delete m[n]; else m[n] = ['subbass']; }) })));
     });
     sec.append(kn);
+    for (const n of names.filter(n => mods[n])){
+      const row = h('div', { class: 'chips modrow' }, h('span', { class: 'gt', text: '♪ ' + n }));
+      for (const [b, t] of MOD_BANDS) row.append(chip(t, mods[n].includes(b), b === 'kick' ? 'batida (pula e decai)' : 'faixa que mexe o knob (várias = a mais forte vale)',
+        () => editMod(m => { m[n] = m[n].includes(b) ? m[n].filter(x => x !== b) : m[n].concat([b]); if (!m[n].length) delete m[n]; })));
+      sec.append(row);
+    }
   } else sec.append(h('div', { class: 'empty', text: 'este efeito não tem knobs (// fx: no .frag)' }));
 }
 function syncMixer(){   // valores mudam sem rebuild (outra aba, MIDI, scene nova com a mesma estrutura)
@@ -3453,7 +3510,7 @@ function process(stateOnly){
   if (d.output && d.output.window_w) lastOutput = d.output;   // o canvas do Palco precisa da janela em qualquer aba
   if (d.pixel_map && now() - pmTouched > TOUCH_MS && JSON.stringify(d.pixel_map) !== JSON.stringify(lastPM)){ lastPM = d.pixel_map; renderPmap(); }
   if (d.screens && now() - scrTouched > TOUCH_MS && activeDrag !== 'rect' && JSON.stringify(d.screens) !== JSON.stringify(lastScreens)){
-    lastScreens = d.screens; if (scrSel >= lastScreens.length) scrSel = -1; stgView = null; renderStage(true); renderStageList(); renderCanvas(); }
+    lastScreens = d.screens; if (scrSel >= lastScreens.length) scrSel = -1; stgView = null; renderStage(true); renderStageList(); renderCanvas(); renderScrGrade(); }
   syncKnobs(d.knobs); syncDyn(d.band_tweaks);
   if (d.inputs && d.inputs.audio && now() - selTouched.audio >= TOUCH_MS){ const s = $('#sel-audio'); if (s.value !== d.inputs.audio && [...s.options].some(o => o.value === d.inputs.audio)) s.value = d.inputs.audio; }
   renderMixer();   // em qualquer aba: registra os controles da mesa pro MIDI (so' refaz se a estrutura mudou)
