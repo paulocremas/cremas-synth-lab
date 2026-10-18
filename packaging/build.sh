@@ -20,6 +20,7 @@ fi
 "$PY" -m PyInstaller --noconfirm --clean --log-level ERROR \
   --name prisma --onedir "${EXTRA[@]}" \
   --collect-submodules OpenGL \
+  --python-option "X utf8" `# open() sem encoding = UTF-8 tambem no Windows (cp1252 quebrava nos .frag com acento)` \
   --distpath "$DIST" --workpath build --specpath build \
   packaging/launcher.py
 D=$DIST/prisma
