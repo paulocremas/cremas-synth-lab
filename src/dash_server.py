@@ -77,10 +77,14 @@ _cfg = {'is_running': lambda: True, 'audio_source': '', 'video_mode': '', 'tunin
 
 def _write_atomic(path, text):
     """Grava o tuning.py de uma vez (temporario + os.replace): o native recarrega o arquivo pelo
-    mtime a qualquer momento, e com open('w') ele podia ler o arquivo truncado pela metade."""
+    mtime a qualquer momento, e com open('w') ele podia ler o arquivo truncado pela metade.
+    fsync antes do replace: PC que cai (driver de video, energia) logo depois deixava o tuning.py
+    do tamanho certo mas cheio de bytes nulos (Windows/NTFS) -> app nao abria."""
     tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
     with open(tmp, 'w') as f:
         f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 

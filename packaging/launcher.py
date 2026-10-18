@@ -59,6 +59,30 @@ def _user_copy(bundle, home):
     os.makedirs(os.path.join(home, 'media'), exist_ok=True)
 
 
+def _tuning_ok(path):
+    try:
+        with open(path, 'rb') as f:
+            compile(f.read(), path, 'exec')
+        return True
+    except (OSError, SyntaxError, ValueError):
+        return False
+
+
+def _guard_tuning(bundle, home):
+    """tuning.py estragado (PC caiu no meio da gravacao -> bytes nulos; edicao a mao errada) nao
+    abre o app: guarda o ruim como tuning.py.quebrado e volta o ultimo que abriu (tuning.py.bom)
+    ou o padrao do binario. Abriu bem -> vira o novo .bom."""
+    t = os.path.join(home, 'src', 'tuning.py')
+    good = t + '.bom'
+    if _tuning_ok(t):
+        shutil.copyfile(t, good)
+        return
+    if os.path.exists(t):
+        os.replace(t, t + '.quebrado')
+        print('tuning.py estragado -> tuning.py.quebrado; voltando o ultimo bom', flush=True)
+    shutil.copyfile(good if _tuning_ok(good) else os.path.join(bundle, 'src', 'tuning.py'), t)
+
+
 def _data_dir(here):   # = plat.data_dir (o plat.py ainda nao esta no path aqui)
     if os.environ.get('PRISMA_HOME'):
         return os.environ['PRISMA_HOME']
@@ -81,6 +105,7 @@ if updater.maybe_update(here, sys.executable):
     sys.exit(0)                     # o instalador da versao nova assumiu
 
 _user_copy(here, root)
+_guard_tuning(here, root)
 app = os.path.join(root, 'src', 'native_synth.py')
 sys.path.insert(0, os.path.dirname(app))
 sys.argv[0] = app
