@@ -123,6 +123,37 @@
      <a href="https://github.com/paulocremas/cremas-synth-lab/blob/master/README.md">README</a></p>
 </header>
 
+<!-- Download: links da Release mais nova (pré incluída — /releases/latest pula pré e o nome do
+     arquivo tem a versão), lidos da API do GitHub na hora. Sem JS / API fora = página de Releases. -->
+<section id="baixar">
+<h2>baixar o PRISMA!</h2>
+<p class="dl">
+  <a class="dlbtn" data-asset="-windows-portatil.zip" href="https://github.com/paulocremas/cremas-synth-lab/releases">Windows · portátil (.zip)</a>
+  <a class="dlbtn" data-asset="-setup.exe" href="https://github.com/paulocremas/cremas-synth-lab/releases">Windows · instalador (.exe)</a>
+  <a class="dlbtn" data-asset=".deb" href="https://github.com/paulocremas/cremas-synth-lab/releases">Linux · Ubuntu/Mint (.deb)</a>
+</p>
+<p class="lead"><span id="dlver">última versão</span> · portátil = descompacta e abre o <code>prisma.exe</code>, sem instalar
+(sets, mídias e ajustes ficam na pasta <code>dados</code> ao lado) ·
+<a href="https://github.com/paulocremas/cremas-synth-lab/releases">todas as versões</a></p>
+<style>
+  .dl { display: flex; flex-wrap: wrap; gap: 8px; }
+  .dlbtn { display: inline-block; padding: 8px 14px; border: 1px solid #30363d; border-radius: 6px;
+           background: #161b22; color: #58a6ff; text-decoration: none; font-weight: 600; }
+  .dlbtn:hover { border-color: #58a6ff; }
+</style>
+<script>
+fetch('https://api.github.com/repos/paulocremas/cremas-synth-lab/releases?per_page=1')
+  .then(r => r.json()).then(([rel]) => {
+    if (!rel) return;
+    document.getElementById('dlver').textContent = rel.tag_name + (rel.prerelease ? ' (beta)' : '');
+    for (const a of document.querySelectorAll('.dlbtn')) {
+      const f = rel.assets.find(x => x.name.endsWith(a.dataset.asset));
+      if (f) a.href = f.browser_download_url;
+    }
+  }).catch(() => {});
+</script>
+</section>
+
 <!-- Referência rápida no topo: todo comando/flag do native_synth.py num lugar só.
      Sem data-glossary de propósito — igual à tabela de #uniforms, linkify embrulharia
      termo em toda célula. Neutro (sem cor de região): as flags cruzam áudio, imagem e proc. -->
