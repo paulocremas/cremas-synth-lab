@@ -3370,8 +3370,8 @@ function healthChecks(d){
   rows.push({ id: 'fps', label: 'fps', tab: 'saida', sev: !tgt ? 'off' : fc ? 'crit' : fl ? 'warn' : 'ok', v: tgt ? fps.toFixed(0) : '—' });
   const age = hl.audio_age, amp = (d.audio?.bands || []).find(b => b.name === 'amp');
   const quiet = held('silence', amp && amp.raw_mag < 0.0005);
-  rows.push({ id: 'audio', label: 'áudio', tab: 'audio', sev: age == null ? 'off' : age > 2 ? 'crit' : quiet ? 'warn' : 'ok',
-    v: age == null ? '' : age > 2 ? 'parado' : quiet ? 'silêncio' : '' });
+  rows.push({ id: 'audio', label: 'áudio', tab: 'audio', sev: hl.audio_err ? 'crit' : age == null ? 'off' : age > 2 ? 'crit' : quiet ? 'warn' : 'ok',
+    v: hl.audio_err ? 'erro' : age == null ? '' : age > 2 ? 'parado' : quiet ? 'silêncio' : '' });
   const st = hl.stale || [], nsrc = parseInt(o.shader) || 0;
   rows.push({ id: 'video', label: 'vídeo', tab: 'palco', sev: st.length ? 'crit' : o.shader && !nsrc ? 'warn' : 'ok',
     v: st.length ? 'parou' : o.shader && !nsrc ? 'sem fonte' : '' });
@@ -3407,7 +3407,9 @@ function healthDetail(r, d){
   } else if (r.id === 'audio'){
     const age = hl.audio_age, amp = (d?.audio?.bands || []).find(b => b.name === 'amp');
     D.now = age == null ? 'Sem captura de áudio.' : `fonte: ${lastAudioMedia ? '🔊 ' + srcInfo(lastAudioMedia).name : (d.audio_source || '—')}\núltimo pedaço há ${age.toFixed(1)} s · nível ${amp ? amp.raw_level.toFixed(2) : '—'}`;
-    if (r.v === 'parado'){ D.why = ['a fonte de áudio sumiu (fone/placa desconectada) ou foi trocada', 'o PipeWire suspendeu a saída — o motor reinicia a captura sozinho a cada 2 s'];
+    if (hl.audio_err){ D.now += '\nERRO da captura: ' + hl.audio_err; D.why = ['a captura de áudio falhou (motivo acima) — o motor tenta de novo sozinho'];
+      D.todo = ['troque a fonte na aba Áudio (no Windows: a que diz “som do sistema”)', 'mande o texto do erro pro suporte']; }
+    else if (r.v === 'parado'){ D.why = ['a fonte de áudio sumiu (fone/placa desconectada) ou foi trocada', 'o PipeWire suspendeu a saída — o motor reinicia a captura sozinho a cada 2 s'];
       D.todo = ['confira a fonte na aba Áudio', 'se persistir, escolha outra fonte e volte pra ela']; }
     else if (r.v === 'silêncio'){ D.why = ['nada tocando na fonte escolhida', 'fonte errada (ex.: monitor de uma saída muda)', 'volume do sistema zerado ou mudo'];
       D.todo = ['toque algo e veja se as barras do topo mexem', 'troque a fonte na aba Áudio']; }

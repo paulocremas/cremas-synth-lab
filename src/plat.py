@@ -343,23 +343,37 @@ class PcmProc:
             if info is None:
                 info = next(d for d in devs if d['name'] == default_audio())
             ch, rate = max(1, int(info['maxInputChannels'])), int(info['defaultSampleRate'])
-            st = p.open(format=pa.paInt16, channels=ch, rate=rate, input=True,
-                        input_device_index=info['index'], frames_per_buffer=512)
-            rs, last = Resampler(rate, AUDIO_RATE), time.monotonic()
-            while not self._stop.is_set():
-                n = st.get_read_available()
-                now = time.monotonic()
-                if n >= 256:
-                    x = np.frombuffer(st.read(n, exception_on_overflow=False), np.int16).reshape(-1, ch).mean(axis=1)
-                    y = rs.process(x)
-                    last = now
-                elif now - last >= 0.05:                    # nada tocando: silencio do tempo que passou
-                    y, last = np.zeros(int((now - last) * AUDIO_RATE), np.float32), now
-                else:
-                    time.sleep(0.005)
-                    continue
+            rs, lock, last = Resampler(rate, AUDIO_RATE), threading.Lock(), [time.monotonic()]
+
+            def put(y):
                 if len(y):
                     os.write(self._w, np.clip(y, -32768, 32767).astype(np.int16).tobytes())
+
+            # CALLBACK (como o exemplo de loopback do PyAudioWPatch): o PortAudio entrega cada pacote.
+            # O modo bloqueante com get_read_available nao e' confiavel no loopback WASAPI (podia
+            # ficar em 0 pra sempre = silencio eterno com musica tocando).
+            def cb(data, frames, tinfo, status):
+                try:
+                    with lock:
+                        put(rs.process(np.frombuffer(data, np.int16).reshape(-1, ch).mean(axis=1)))
+                        last[0] = time.monotonic()
+                except Exception as e:                      # noqa: BLE001 — pipe fechado = parando
+                    self.errf.write(str(e).encode(errors='ignore'))
+                    return None, pa.paAbort
+                return None, pa.paContinue
+
+            st = p.open(format=pa.paInt16, channels=ch, rate=rate, input=True,
+                        input_device_index=info['index'], frames_per_buffer=512, stream_callback=cb)
+            st.start_stream()
+            while not self._stop.is_set() and st.is_active():
+                time.sleep(0.05)
+                with lock:                                  # nada tocando: o loopback cala -> silencio
+                    now = time.monotonic()
+                    if now - last[0] >= 0.1:
+                        put(np.zeros(int((now - last[0]) * AUDIO_RATE), np.float32))
+                        last[0] = now
+            if not self._stop.is_set():
+                self.errf.write(b'captura WASAPI parou sozinha')
         except Exception as e:                              # noqa: BLE001 — vai pro log do native
             self.errf.write(str(e).encode(errors='ignore'))
         finally:

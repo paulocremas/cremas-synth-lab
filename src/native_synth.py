@@ -2192,11 +2192,14 @@ def audio_thread(device):
                     stall_t = 0.0
                     data = read_exact(proc.stdout, chunk_bytes)
                     state['audio_t'] = time.monotonic()   # saude do dash: audio_age
+                    if data is not None:
+                        state.pop('audio_err', None)
                 if data is None:
                     if not running:
                         break
                     err = _parec_err(proc)
                     print('audio parou' + (': ' + err if err else '') + ' — retomando ' + cur_src)
+                    state['audio_err'] = err or 'a captura fechou sem dizer o motivo'   # dash: saude > audio (Windows nao tem terminal)
                     time.sleep(0.5)
                     _kill(proc)
                     proc = _spawn_parec(cur_src)
@@ -3708,7 +3711,7 @@ def main():
             state['output']['media_dims'] = list(dims) if dims else None
             at = state.get('audio_t')
             state['health'] = {'audio_age': round(time.monotonic() - at, 1) if at else None,
-                               'stale': _stale_sources()}
+                               'audio_err': state.get('audio_err'), 'stale': _stale_sources()}
 
     # da um instante pras threads daemon (audio_thread) notarem running=False e rodarem
     # seu "finally" (ex. sair da tela alternada) antes do processo sumir de baixo delas
