@@ -1353,6 +1353,39 @@ def _persist_scene(name, sc, path, gen):
             print('cena: troca nao gravou no tuning.py ->', e)
 
 
+def set_cue(name=None, step=0):
+    """PROXIMA cena (preview, sem ir pro ar): por nome, ou step +-1 na ordem da lista (encoder MIDI; parte
+    da proxima ou, sem ela, da ativa). '' = limpa. O native abre as fontes dela (aquecimento) e desenha a
+    previa quando pedida (state['scene_cue_sc']). Devolve o nome (ou '')."""
+    names = [sc['name'] for sc in _read_scenes()]
+    if step and names:
+        cur = _state.get('scene_cue') or _active_scene_name()
+        i = names.index(cur) if cur in names else -1
+        name = names[(i + (1 if step > 0 else -1)) % len(names)]
+    if not name:
+        _state.pop('scene_cue', None)
+        _state.pop('scene_cue_sc', None)
+        return ''
+    sc = _find_scene(name)
+    _state['scene_cue_sc'] = {'overlays': _norm_overlays(sc.get('sources') or []), 'bindings': _norm_bindings(sc.get('bindings') or {}),
+                              'pool': _norm_pool(sc.get('pool')), 'grade': sc.get('grade') or {}}
+    _state['scene_cue'] = name
+    return name
+
+
+def take_cue():
+    """GO: a proxima vai pro ar (transicao + quantizacao de sempre) e a proxima passa a ser a SEGUINTE da
+    lista (setlist). Devolve a que entrou."""
+    name = _state.get('scene_cue')
+    if not name:
+        raise ValueError('nenhuma cena marcada como proxima')
+    request_scene(name)
+    names = [sc['name'] for sc in _read_scenes()]
+    if len(names) > 1 and name in names:
+        set_cue(names[(names.index(name) + 1) % len(names)])
+    return name
+
+
 def request_scene(name):
     """Pedido de troca vindo do dash / tecla: valida e deixa pro loop GL aplicar no fim do
     frame (ele captura a imagem que sai pra transicao). Sem loop GL (testes): aplica direto."""
@@ -2041,6 +2074,7 @@ def _payload():
                    'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
         'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3)),
         'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)
+        'cue': _state.get('scene_cue') or '',                         # PROXIMA cena (preview/GO)
         'limit': dict(_state.get('limit') or {}, cfg=_limits_cfg()),    # protecao: ganho agora + motivo   # ritmo.py: BPM, TAP, tom, compasso
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
@@ -2216,6 +2250,14 @@ class _Handler(BaseHTTPRequestHandler):
                 b = json.loads(raw.decode())
                 out = set_band_ranges(b.get('overlap'), b['ranges'], enabled=b.get('enabled'))
                 self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/cue':   # {name} marca | {step: +-1} encoder | {take: 1} GO | {name: ''} limpa
+            try:
+                b = json.loads(raw.decode() or '{}')
+                out = take_cue() if b.get('take') else set_cue(b.get('name'), int(b.get('step') or 0))
+                self._send(200, 'application/json', json.dumps({'cue': _state.get('scene_cue') or '', 'went': out if b.get('take') else ''}).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
@@ -2869,6 +2911,15 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     ns = {}; exec(open(p).read(), ns); assert ns['MACROS'] == [1.0, 0.0, 0.5, 0.0], 'macros gravados'
     assert _norm_mod1({'b': ['m2', 'air', 'nada']}) == {'b': ['air', 'm2']}, 'macro = fonte do ♪'
     assert set_limits({'bright': 0.05, 'flash': 0}, p) == {'on': 1, 'flash': 0, 'bright': 0.2}, 'teto minimo 0.2'
+    st_cue = globals()['_state']
+    globals()['_state'] = {}
+    ns_ = [sc['name'] for sc in _read_scenes()]
+    if len(ns_) >= 2:
+        a0 = _active_scene_name()
+        nxt = ns_[(ns_.index(a0) + 1) % len(ns_)] if a0 in ns_ else ns_[0]
+        assert set_cue(step=1) == nxt and 'overlays' in _state['scene_cue_sc'], 'encoder: anda a partir da ativa'
+        assert set_cue('') == '' and 'scene_cue' not in _state, 'limpar'
+    globals()['_state'] = st_cue
     set_tempo_cfg({'quant': 'bar', 'beats': 99, 'colors': 'scriabin'}, p)
     ns = {}; exec(open(p).read(), ns)
     assert (ns['SCENE_QUANT'], ns['TRANS_BEATS'], ns['KEY_COLORS']) == ('bar', 32, 'scriabin'), 'tempo: gravado no tuning.py'

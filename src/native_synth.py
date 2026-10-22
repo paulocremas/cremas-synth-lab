@@ -1243,7 +1243,8 @@ def _sync_overlays():
     want = {}
     apath = _audio_media()
     fr = state.get('scene_from')          # cena que SAI numa transicao: as fontes dela seguem abertas
-    for m, _ in _overlay_items() + (_overlay_items(scene=fr) if fr else []):
+    cu = state.get('scene_cue_sc')        # PROXIMA cena (preview): as fontes dela ja' abrem (aquecimento)
+    for m, _ in _overlay_items() + (_overlay_items(scene=fr) if fr else []) + (_overlay_items(scene=cu) if cu else []):
         if _is_live(m):
             want[m] = _ovl[m]['v'] if m in _ovl and _ovl[m]['v'].get('fit') == _live_fit(m) \
                 else _video_from_id(m)
@@ -1322,6 +1323,9 @@ def _preview_frame(which, key='', max_w=320):
     so' enquanto alguem pede — ver state['out_want']), 'sel' = a fonte selecionada (state['frame']),
     'src' = um canal da mesa (key: fonte viva ou arquivo de midia, '#N' ignorado).
     Devolve (bytes rgb24, w, h) | None."""
+    if which == 'cue':                         # PREVIEW da proxima cena (loop GL, so' enquanto pedida)
+        state['cue_want'] = time.time()
+        return state.get('cue_small') if state.get('scene_cue_sc') else None
     if which == 'lightmap':                    # foto base do mapeamento das luzes (light_scan_thread)
         return state.get('light_map')
     if which == 'out':
@@ -2932,12 +2936,13 @@ def build_output_map_program():
 
 
 def make_layer_targets(w, h):
-    """1 FBO + 9 texturas do tamanho da MISTURA (a janela; com telao, o canvas do palco): out[0]/out[1]
+    """1 FBO + 11 texturas do tamanho da MISTURA (a janela; com telao, o canvas do palco): out[0]/out[1]
     (a saida acumulada, ping-pong), src[0]/src[1] (o resultado da fonte da vez, ping-pong), layer (o
     shader da vez), canvas (a imagem final do palco antes do OUTPUT_MAP; linear: o bloco reamostra) e
-    old[0]/old[1] (a mistura da cena que SAI, desenhada viva durante a transicao). Recriado quando o
+    old[0]/old[1] (a mistura da cena que SAI, desenhada viva durante a transicao) e cue[0]/cue[1] (a
+    PROXIMA cena, so' quando a previa dela e' pedida). Recriado quando o
     tamanho muda (main)."""
-    texs = glGenTextures(9)
+    texs = glGenTextures(11)
     for t in texs:
         glBindTexture(GL_TEXTURE_2D, t)
         filt = GL_LINEAR if t == texs[7] else GL_NEAREST
@@ -2947,7 +2952,7 @@ def make_layer_targets(w, h):
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
     return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
-            'src': [texs[2], texs[3]], 'layer': texs[4], 'old': [texs[5], texs[8]],
+            'src': [texs[2], texs[3]], 'layer': texs[4], 'old': [texs[5], texs[8]], 'cue': [texs[9], texs[10]],
             'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
             'canvas': texs[7]}
 
@@ -3137,7 +3142,7 @@ def main():
         if not ltargets[0] or ltargets[0]['size'] != (CMP_W, CMP_H):
             if ltargets[0]:
                 glDeleteFramebuffers(1, [ltargets[0]['fbo']])
-                glDeleteTextures([t for k in ('out', 'src', 'old') for t in ltargets[0][k]] +
+                glDeleteTextures([t for k in ('out', 'src', 'old', 'cue') for t in ltargets[0][k]] +
                                  [ltargets[0][k] for k in ('layer', 'mask', 'canvas')])
             ltargets[0] = make_layer_targets(CMP_W, CMP_H)
         return ltargets[0]
@@ -3237,6 +3242,7 @@ def main():
     LIGHT_PV_W = 64   # LUZES: o canvas pronto lido nesse tamanho (a cor de uma zona nao precisa de mais)
     lt_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0, 'prev': {}, 'tx': None}
     lim_pv = {'fbo': None, 'tex': None, 'wh': None}   # PROTECAO: leitura minuscula da saida (Limiter)
+    cue_pv = {'fbo': None, 'tex': None, 'wh': None}   # PREVIEW da proxima cena (/frame?which=cue)
     limiter, lim_g = Limiter(), [1.0]
     # previa de cada FONTE JA COM OS EFEITOS (canvas do Palco v2: GET /frame?which=fx): a textura
     # da fonte depois da pilha (lt['src']) reduzida por blit, so' das pedidas (state['fx_want'])
@@ -3347,6 +3353,7 @@ def main():
             fx_pv.update(fbo=None, tex=None, wh=None)
             lt_pv.update(fbo=None, tex=None, wh=None)
             lim_pv.update(fbo=None, tex=None, wh=None)
+            cue_pv.update(fbo=None, tex=None, wh=None)
             pbos.clear()                 # PBOs das previas idem
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
             scene_tr = None              # as texturas da transicao eram do contexto velho
@@ -3600,7 +3607,12 @@ def main():
         old = scene_tr.get('old') if scene_tr else None
         old_alpha = {}
         old_frames = _source_frames(old, old_alpha) if old else []
-        keep = {x[0] for x in src_frames} | {x[0] for x in old_frames}
+        # PREVIEW da PROXIMA cena (state['scene_cue_sc']): so' enquanto o dash pede (/frame?which=cue), a cada
+        # 3 frames (~20 Hz basta pra uma previa) — custa uma mistura extra so' nesses frames
+        cue = state.get('scene_cue_sc') if time.time() - state.get('cue_want', 0) < 1.5 and frame_n % 3 == 0 else None
+        cue_alpha = {}
+        cue_frames = _source_frames(cue, cue_alpha) if cue else []
+        keep = {x[0] for x in src_frames} | {x[0] for x in old_frames} | {x[0] for x in cue_frames}
         for k in [k for k in src_tex if k not in keep]:
             glDeleteTextures([src_tex.pop(k)[0]])       # canal saiu da saida: libera a textura
             e = pbos.pop('fx:' + k, None)                # e os PBOs da previa com efeitos dele
@@ -3780,6 +3792,20 @@ def main():
                                        'pool': state.get('pool'), 'grade': getattr(tuning, 'SCENE_GRADE', None)},
                            src_frames, _alpha_now, True)
         mixed_from = render_mix(lt['old'], old, old_frames, old_alpha, False) if old else None
+        if cue:
+            try:
+                ctex = render_mix(lt['cue'], cue, cue_frames, cue_alpha, False)
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ctex, 0)
+                pw = min(FX_PV_W, CMP_W)
+                a = pv_grab(cue_pv, 'cue', (0, 0, CMP_W, CMP_H), pw, max(2, int(round(pw * CMP_H / max(1, CMP_W)))))
+                if a is not None:
+                    state['cue_small'] = (a.tobytes(), a.shape[1], a.shape[0])
+            except Exception as e:
+                if cue_pv.get('err') != str(e):
+                    print('previa da proxima cena ->', e)
+                    cue_pv['err'] = str(e)
+            glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
         # CALIBRACAO DA SAIDA (tuning.OUTPUT_GRADE, shaders/calibrar.frag): ligada e fora do
         # neutro (ou no padrao de teste) -> a imagem final (copia ou transicao) vai pra textura
         # `final` e o calibrar.frag a desenha na tela. Neutro = caminho de sempre, sem passe extra.

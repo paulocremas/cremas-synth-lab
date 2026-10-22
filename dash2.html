@@ -41,7 +41,8 @@
     qualquer aba) · saude (S) · MIDI (P/C) · editar/palco (S: trava a estrutura no show) · EFEITOS
     (P: intensidade de todos os efeitos num gesto) · MASTER + BLACKOUT (P/S: brilho da sala, saida
     preta de emergencia).
-  - Palco: macros M1-M4 (P: um gesto mexe varios knobs, cada um na sua faixa — intensidade de um "look"
+  - Palco: PROXIMA cena + previa + GO (P: preparar a troca sem ir pro ar e cortar no tempo; S: ver
+    antes o que vai entrar; encoder MIDI gira/aperta) · macros M1-M4 (P: um gesto mexe varios knobs, cada um na sua faixa — intensidade de um "look"
     inteiro; MIDI) · cenas (P) + transicao de entrada (P) · ◐ imagem da cena (P: cor por cena) · mesa/canvas
     (P: o que esta' no ar, opacidade, ordem, onde; "auto" = auto-nivel da fonte, S: camera/luz trocada
     nao estoura os efeitos) · monitor Saida (S: o PROGRAMA = o que o publico
@@ -187,6 +188,13 @@
   .tp-sw2 { width: 26px; height: 26px; border-radius: 6px; }
   .mon .mon-lim { position: absolute; right: 8px; top: 8px; display: none; background: var(--warn); color: #231a00; font: 800 10px var(--sans); letter-spacing: .06em; padding: 3px 8px; border-radius: 5px; }
   .mon .mon-lim.on { display: block; }
+  .scenes-row { display: flex; gap: 12px; align-items: stretch; } .scenes-row .scenes { flex: 1; min-width: 0; }
+  .pad.cue { border-style: dashed; border-color: var(--sel); box-shadow: 0 0 0 1px rgba(255,159,74,.25); }
+  .cue-box { display: flex; gap: 8px; align-items: stretch; flex: none; padding: 4px; border-radius: var(--r2); border: 1px dashed var(--sel); background: var(--sel-d); }
+  .cue-mon { width: 120px; aspect-ratio: 16 / 9; height: auto; }
+  .cue-side { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; min-width: 90px; }
+  .cue-side b { font-size: 13px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn.go { background: linear-gradient(180deg, #1d6b4a, #155238); border-color: var(--live); color: #eafff4; font-weight: 800; letter-spacing: .06em; }
   .macros { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .macros .fader { height: 30px; }
   .side .macro-p { padding: 10px 12px; } .side .macro-p .ph { margin-bottom: 8px; padding-bottom: 6px; }
   #palco .macro-p { --tick: var(--midi); }
@@ -808,7 +816,11 @@
           <span class="hint" id="scene-trans"></span>
           <button class="btn sm" id="sgrade-btn" title="imagem da scene inteira (temperatura, luz, cor) — guardada em cada scene">◐ imagem</button>
           <button class="btn sm ed" id="reload-lists" title="recarregar listas (fontes, mídia, efeitos, scenes)">↻</button></div>
-        <div class="scenes" id="scenes"></div>
+        <div class="scenes-row"><div class="scenes" id="scenes"></div>
+          <div class="cue-box" id="cue-box" hidden><div class="mon cue-mon"><canvas id="cue-pv"></canvas><span class="mon-wait">aquecendo…</span></div>
+            <div class="cue-side"><span class="hint">PRÓXIMA</span><b id="cue-name"></b>
+              <button class="btn go" id="cue-go" title="GO: a próxima vai pro ar (com a transição e a quantização) e a seguinte da lista vira a próxima">GO ▶</button>
+              <button class="x" id="cue-x" title="desmarcar a próxima">×</button></div></div></div>
         <div id="sgrade-box" hidden>
           <div class="ph"><b>Imagem da scene</b><span class="hint" id="sgrade-name"></span><span class="hint">na mistura inteira, antes da transição e da calibração · centro = neutro · duplo-clique zera</span><span class="grow"></span>
             <label class="chk"><input type="checkbox" id="sgrade-on"> ligada</label>
@@ -1299,6 +1311,12 @@ function midiMsg(e){
   }
   const id = MIDI.map[key], c = id && CTRL[id];
   if (!c || (c.el && !c.el.isConnected)) return;
+  if (c.kind === 'rel'){   // ENCODER infinito (CC relativo): 63/65 (offset binario) ou 1/127 (complemento de 2)
+    if (!key.startsWith('cc')) return;
+    const n = d2 >= 57 && d2 <= 71 ? d2 - 64 : d2 < 64 ? d2 : d2 - 128;
+    if (n) c.step(n > 0 ? 1 : -1);   // ponytail: 1 passo por mensagem — encoder rapido manda varias
+    return;
+  }
   if (c.kind === 'trig'){
     if (key.startsWith('note')){ if (on) c.fire(); }
     else { const hi = v >= 0.5; if (hi && !MIDI.edge[key]) c.fire(); MIDI.edge[key] = hi; }
@@ -2363,20 +2381,23 @@ function renderTop(d){
 // PALCO — scenes
 // =====================================================================================
 let lastScenes = [], activeScene = '', sceneSig = '', sceneOpen = '', sceneAdding = false;
+let lastCue = '';   // PROXIMA cena (preview/GO — ver cueScene)
 let lastTrans = [], lastTransDefault = 'none', transSig = '';
 function loadScenes(){ fetch('/scenes').then(r => r.json()).then(gotScenes).catch(() => {}); }
 function gotScenes(d){ lastScenes = d.list || []; activeScene = d.active || ''; sceneSig = ''; renderScenes(); if (Object.keys(sgEls).length) syncSGrade(); }
 const scenePost = (url, body) => post(url, body).then(gotScenes);
 function goScene(name){ scenePost('/scene', { name }).catch(e => toast('scene: ' + e, 'err')); }
 function renderScenes(){
-  const sig = JSON.stringify([lastScenes, activeScene, sceneOpen, lastTrans, lastTransDefault, sceneAdding, perform, mixKeys.family]);
+  const sig = JSON.stringify([lastScenes, activeScene, sceneOpen, lastTrans, lastTransDefault, sceneAdding, perform, mixKeys.family, lastCue]);
   if (sig === sceneSig) return;
   sceneSig = sig;
   const bar = $('#scenes'); bar.innerHTML = '';
   for (const sc of lastScenes){
-    const pad = h('button', { class: 'pad' + (sc.name === activeScene ? ' active' : ''), title: 'entrar nesta scene' + (sc.key ? ` (tecla ${sc.key.toUpperCase()})` : '') },
+    const pad = h('button', { class: 'pad' + (sc.name === activeScene ? ' active' : '') + (sc.name === lastCue ? ' cue' : ''),
+      title: 'clique: entrar nesta scene · clique direito/Alt+clique: marcar como PRÓXIMA (prévia + GO)' + (sc.key ? ` (tecla ${sc.key.toUpperCase()})` : '') },
       h('span', { class: 'kc', text: sc.key ? sc.key.toUpperCase() : '·' }), h('span', { text: sc.name }));
-    pad.onclick = () => goScene(sc.name);
+    pad.onclick = e => { if (e.altKey) cueScene(sc.name); else goScene(sc.name); };
+    pad.oncontextmenu = e => { e.preventDefault(); cueScene(sc.name); };   // clique direito / Alt+clique = PROXIMA
     const gear = h('span', { class: 'gear ed', role: 'button', text: '⚙', title: 'renomear / tecla / apagar' });
     gear.onclick = e => { e.stopPropagation(); sceneOpen = sceneOpen === sc.name ? '' : sc.name; sceneSig = ''; renderScenes(); };
     pad.append(gear);
@@ -3824,6 +3845,7 @@ function process(stateOnly){
     lastScreens = d.screens; if (scrSel >= lastScreens.length) scrSel = -1; stgView = null; renderStage(true); renderStageList(); renderCanvas(); renderScrGrade(); }
   syncKnobs(d.knobs); syncDyn(d.band_tweaks);
   if (d.inputs && d.inputs.audio && now() - selTouched.audio >= TOUCH_MS){ const s = $('#sel-audio'); if (s.value !== d.inputs.audio && [...s.options].some(o => o.value === d.inputs.audio)) s.value = d.inputs.audio; }
+  syncCue(d.cue);
   syncMacros(d.macros);   // em qualquer aba: o MIDI (soft takeover) le macroV
   renderMixer();   // em qualquer aba: registra os controles da mesa pro MIDI (so' refaz se a estrutura mudou)
   if (stateOnly) return;
@@ -4022,6 +4044,21 @@ function renderLimit(L){
   const ml = $('#mon-lim'); ml.classList.toggle('on', on); ml.textContent = txt;
   $('#lim-now').textContent = on ? txt.toLowerCase() : (limCfg.on ? 'sem limitar agora' : 'desligada');
 }
+
+// =====================================================================================
+// PROXIMA CENA (preview + GO): clique direito/Alt+clique no card ou ENCODER MIDI (girar = escolher,
+// apertar = GO). As fontes dela ja' abrem no native; a previa e' a mistura dela (/frame?which=cue).
+// =====================================================================================
+const cueScene = name => post('/cue', { name }).then(r => { lastCue = r.cue; sceneSig = ''; renderScenes(); renderCue(); }).catch(e => toast('próxima: ' + e, 'err'));
+const cueGo = () => post('/cue', { take: 1 }).then(r => { toast('GO → ' + r.went); lastCue = r.cue; sceneSig = ''; renderScenes(); renderCue(); }).catch(e => toast(String(e), 'err'));
+$('#cue-go').onclick = cueGo;
+$('#cue-x').onclick = () => cueScene('');
+reg('cue:step', { kind: 'rel', step: n => post('/cue', { step: n }).then(r => { lastCue = r.cue; sceneSig = ''; renderScenes(); renderCue(); }).catch(() => {}),
+  label: 'escolher a próxima cena (encoder)', el: $('#cue-box') });
+reg('cue:go', { kind: 'trig', fire: cueGo, label: 'GO (próxima cena)', el: $('#cue-go') });
+addPreview($('#cue-pv'), '/frame?which=cue', 8, 'palco', () => $('#cue-pv').classList.add('ok'));
+function renderCue(){ $('#cue-box').hidden = !lastCue; $('#cue-name').textContent = lastCue; }
+function syncCue(c){ if (c === undefined || c === lastCue) return; lastCue = c; sceneSig = ''; renderScenes(); renderCue(); }
 
 let lastT = 0;
 function loop(t){

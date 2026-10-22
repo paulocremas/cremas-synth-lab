@@ -42,6 +42,10 @@ Cada ferramenta isolada, depois comparar, só então compor.
   Krumhansl; `key_rgb`: círculo das quintas | Scriabin). O `audio_thread` alimenta com TODO chunk (lote de vídeo
   inclusive — pular chunk distorce o BPM); a fase (`u_beat`/`u_bar`) é calculada no render a cada frame. Troca de
   cena quantizada (`SCENE_QUANT`) espera `next_boundary` no fim do frame; `TRANS_BEATS` = transição em batidas.
+- Show (fase 4): macros = fontes `m1..m4` do ♪ (`MOD_SOURCES`, `MACROS`); proteção `Limiter` (anti-estrobo
+  WCAG 2.3.1 + teto de brilho, ganho no master, `LIMITS`); auto-nível por fonte (`auto`, `_auto_levels` → `u_lv`
+  no blend); PRÓXIMA cena (`set_cue`/`take_cue`, `state['scene_cue_sc']` aquece fontes, prévia `which=cue` em
+  `lt['cue']`); MIDI `kind: 'rel'` = encoder (63/65 ou 1/127).
 - Luzes: `src/luzes.py` (Art-Net, detector ArtPoll/WLED, mapeamento por câmera `scan`) + aba Luzes; `LIGHTS`.
 - Testar o native: SEMPRE em segundo plano com a webcam e `PRISMA_HIDDEN=1` (janela nunca na tela);
   `PRISMA_GL_CHECK=1` religa a checagem de erro do PyOpenGL (desligada por desempenho).
