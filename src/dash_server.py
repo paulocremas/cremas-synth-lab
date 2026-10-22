@@ -25,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import dash_data  # parse_fx_manifest (mesma pasta src/)
 import plat       # Linux x Windows (saidas, navegador, sair)
+import luzes      # luzes: procurar na rede (Art-Net/WLED)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))          # src/
 _ROOT = os.path.dirname(_HERE)                              # raiz do repo
@@ -160,6 +161,25 @@ def set_band_ranges(overlap, ranges, tuning_path=None, enabled=None):
     if enabled is not None:
         out['enabled'] = enabled
     return out
+
+
+def set_bands_off(names, tuning_path=None):
+    """Reescreve BANDS_OFF em tuning.py = faixas DESLIGADAS (botao na coluna da aba Audio): nomes de
+    _BAND_NAMES + 'kick', valem 0 pro shader e pro ♪ (native audio_thread). tuning.py sem a linha
+    (pasta de dados velha) ganha ela no fim. Devolve a lista normalizada (ordem: kick, grave -> agudo)."""
+    ok = ['kick'] + list(_BAND_NAMES)
+    off = [n for n in ok if n in set(names or [])]
+    line = f'BANDS_OFF = {json.dumps(off)}'
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(r'(?m)^BANDS_OFF = .*$', line, src)
+        if n == 0:
+            src = src.rstrip('\n') + '\n\n# faixas desligadas (dash: botao na coluna da aba Audio) — 0 pro shader/♪\n' + line + '\n'
+        _write_atomic(path, src)
+    if _tuning is not None:
+        _tuning.BANDS_OFF = off
+    return off
 
 
 # dinamica por faixa (release/attack/auto-gain das 8 finas): 3 listas de 8 floats em
@@ -791,6 +811,20 @@ def _norm_rect(r):
 MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick')
 
 
+def _norm_mod1(v):
+    """Um ♪ -> {b: faixas validas (ordem do espectro), lo?, hi?} | None. Lista solta = formato velho (so' b)."""
+    v = {'b': v} if isinstance(v, list) else v
+    if not isinstance(v, dict) or not isinstance(v.get('b'), list):
+        return None
+    d = {'b': [b for b in MOD_SOURCES if b in v['b']]}
+    for k in ('lo', 'hi'):
+        try:
+            d[k] = round(max(0.0, min(1.0, float(v[k]))), 3)
+        except (KeyError, TypeError, ValueError):
+            pass
+    return d if d['b'] else None
+
+
 def _norm_overlays(items, dedupe=True):
     """dedupe=False na pilha de shaders: o mesmo .frag pode entrar 2x na mesma fonte (cada entrada
     com as suas forcas em 'fx')."""
@@ -811,13 +845,14 @@ def _norm_overlays(items, dedupe=True):
             o['off'] = 1
         if it.get('region') in ('subject', 'bg'):   # item da pilha so' no ASSUNTO / no FUNDO (ausente = tudo)
             o['region'] = it['region']
+        if it.get('kick'):  # item da pilha so' na batida: opacidade x kick (native; kick 0 = nem desenha)
+            o['kick'] = 1
         if it.get('audio') and not aud:   # 🔊 video = fonte de audio no lugar do PulseAudio (so' 1)
             o['audio'], aud = 1, True
         if isinstance(it.get('fx'), dict):   # forcas desta entrada da pilha (ausente = fx[shader] da fonte)
             o['fx'] = _norm_fx(it['fx'])
-        if isinstance(it.get('mod'), dict):  # ♪ knob -> faixas que o mexem com o som (native set_uniforms)
-            m = {str(n): [b for b in MOD_SOURCES if b in bs] for n, bs in it['mod'].items() if isinstance(bs, list)}
-            m = {n: bs for n, bs in m.items() if bs}
+        if isinstance(it.get('mod'), dict):  # ♪ knob -> {b: faixas, lo, hi}: o som anda de lo a hi (native set_uniforms)
+            m = {str(n): d for n, v in it['mod'].items() if (d := _norm_mod1(v))}
             if m:
                 o['mod'] = m
         r = _norm_rect(it.get('rect'))
@@ -827,11 +862,12 @@ def _norm_overlays(items, dedupe=True):
     return out
 
 
-def _set_layers(key, var, items, save, tuning_path, comment):
+def _set_layers(key, var, items, save, tuning_path, comment, live=True):
     """Mecanica comum das camadas (midia e shader): _state[key] ao vivo; save=True reescreve o
-    bloco `var = [...]` do tuning.py (acrescenta no fim se o tuning.py ainda nao tem o bloco)."""
+    bloco `var = [...]` do tuning.py (acrescenta no fim se o tuning.py ainda nao tem o bloco).
+    live=False = so' grava (troca de cena em segundo plano: o estado vivo ja' foi posto)."""
     clean = _norm_overlays(items)
-    if _state is not None:
+    if _state is not None and live:
         _state[key] = clean
     if save:
         body = '\n'.join('    ' + json.dumps(o) + ',' for o in clean)
@@ -862,8 +898,8 @@ def _remap_layers(key, var, setter, mapping, tuning_path=None):
     setter([o for o in new if o['file']], save=True, tuning_path=tuning_path)
 
 
-def set_overlays(items, save=False, tuning_path=None):
-    return _set_layers('overlays', 'OVERLAYS', items, save, tuning_path,
+def set_overlays(items, save=False, tuning_path=None, live=True):
+    return _set_layers('overlays', 'OVERLAYS', items, save, tuning_path, live=live, comment=
                        'camadas de midia por cima da fonte (dash, aba Visuals)')
 
 
@@ -919,10 +955,10 @@ def _norm_bindings(b):
     return out
 
 
-def set_bindings(b, save=False, tuning_path=None):
+def set_bindings(b, save=False, tuning_path=None, live=True):
     """Aplica as ligacoes ao vivo; save=True reescreve o bloco BINDINGS (acrescenta se nao tem)."""
     clean = _norm_bindings(b)
-    if _state is not None:
+    if _state is not None and live:
         _state['bindings'] = clean
     if save:
         body = '\n'.join(f'    {json.dumps(k, ensure_ascii=False)}: {json.dumps(v, ensure_ascii=False)},'
@@ -1197,19 +1233,28 @@ def _find_scene(name, scenes=None):
     return sc
 
 
-def apply_scene(name, tuning_path=None):
-    """Carrega o set `name` no estado ao vivo e marca como ativo. Devolve o set."""
+_persist = {'gen': 0, 'lock': threading.Lock()}   # gravacao da troca de cena em segundo plano
+
+
+def apply_scene(name, tuning_path=None, defer=False):
+    """Carrega o set `name` no estado ao vivo e marca como ativo. Devolve o set.
+    defer=True (loop GL): o estado vivo muda JA' e o tuning.py e' gravado numa thread — gravar
+    (4 blocos + fsync) levava 10-17 ms DENTRO do frame da transicao = 1 frame perdido bem na troca.
+    Trocas seguidas: so' a ultima grava (gen)."""
     scenes = _read_scenes()
     sc = _find_scene(name, scenes)
     path = tuning_path or _cfg['tuning_path']
     _applying[0] = True
     try:
-        _write_scenes(scenes, active=name, tuning_path=path)
+        if not defer:
+            _write_scenes(scenes, active=name, tuning_path=path)
+        elif _tuning is not None:
+            _tuning.SCENE = name
         if _state is not None:
             _state['pool'] = _norm_pool(sc.get('pool'))
-        set_overlays(sc.get('sources') or [], save=True, tuning_path=path)
-        set_bindings(sc.get('bindings') or {}, save=True, tuning_path=path)
-        set_scene_grade(sc.get('grade') or {}, save=True, tuning_path=path)   # sem campo = neutra
+        set_overlays(sc.get('sources') or [], save=not defer, tuning_path=path)
+        set_bindings(sc.get('bindings') or {}, save=not defer, tuning_path=path)
+        set_scene_grade(sc.get('grade') or {}, save=not defer, tuning_path=path)   # sem campo = neutra
         if sc.get('selected'):
             try:
                 select_source(sc['selected'])
@@ -1217,7 +1262,25 @@ def apply_scene(name, tuning_path=None):
                 pass                                    # fonte sumiu (camera desplugada, midia apagada)
     finally:
         _applying[0] = False
+    if defer:
+        _persist['gen'] += 1
+        _persist['thr'] = threading.Thread(target=_persist_scene, args=(name, sc, path, _persist['gen']), daemon=True)
+        _persist['thr'].start()
     return sc
+
+
+def _persist_scene(name, sc, path, gen):
+    """So' GRAVA a troca de cena (o estado vivo ja' foi posto pelo apply_scene(defer=True))."""
+    with _persist['lock']:
+        if gen != _persist['gen']:      # trocou de novo enquanto esperava: a mais nova grava
+            return
+        try:
+            _write_scenes(_read_scenes(), active=name, tuning_path=path)
+            set_overlays(sc.get('sources') or [], save=True, tuning_path=path, live=False)
+            set_bindings(sc.get('bindings') or {}, save=True, tuning_path=path, live=False)
+            set_scene_grade(sc.get('grade') or {}, save=True, tuning_path=path, autosave=False)
+        except (OSError, KeyError) as e:
+            print('cena: troca nao gravou no tuning.py ->', e)
 
 
 def request_scene(name):
@@ -1715,6 +1778,59 @@ def detect_led_output(run=subprocess.run):
     return {'monitor': _mon(o),
             'monitors': _publish_monitors(outs)}
 
+def _norm_lights(c):
+    """tuning.LIGHTS valido (formato em luzes.py). Campo torto cai no padrao; aparelho sem dict some."""
+    c = c if isinstance(c, dict) else {}
+    num = lambda v, lo, hi, d, t=float: max(lo, min(hi, t(v))) if isinstance(v, (int, float, str)) and str(v).strip() else d
+    try:
+        fps = int(num(c.get('fps', 40), 1, 60, 40, int))
+    except ValueError:
+        fps = 40
+    out = {'on': 1 if c.get('on') else 0, 'host': str(c.get('host') or '255.255.255.255')[:64], 'fps': fps, 'fixtures': []}
+    for f in c.get('fixtures') or []:
+        if not isinstance(f, dict):
+            continue
+        try:
+            o = {'name': str(f.get('name') or f"luz {len(out['fixtures']) + 1}")[:40],
+                 'ch': ''.join(x for x in str(f.get('ch', 'rgb')).lower() if x in 'rgbwdx')[:32] or 'rgb',
+                 'uni': int(num(f.get('uni', 0), 0, 32767, 0, int)), 'addr': int(num(f.get('addr', 1), 1, 512, 1, int))}
+            if int(num(f.get('count', 1), 1, 2000, 1, int)) > 1:
+                o['count'] = int(num(f['count'], 1, 2000, 1, int))
+            for k, n in (('zone', 4), ('pos', 2)):
+                if isinstance(f.get(k), list) and len(f[k]) == n:
+                    o[k] = [round(num(v, 0.0, 1.0, 0.0), 3) for v in f[k]]
+            if isinstance(f.get('color'), list) and len(f['color']) >= 3:
+                o['color'] = [int(num(v, 0, 255, 0, int)) for v in f['color'][:3]]
+            if (m := _norm_mod1(f.get('mod'))):
+                o['mod'] = m
+            if f.get('smooth') is not None:
+                o['smooth'] = round(num(f['smooth'], 0.0, 0.95, 0.5), 2)
+            if f.get('rev'):
+                o['rev'] = 1
+            if f.get('host'):
+                o['host'] = str(f['host'])[:64]
+        except (TypeError, ValueError):
+            continue
+        out['fixtures'].append(o)
+    return out
+
+
+def set_lights(cfg, tuning_path=None):
+    """Grava tuning.LIGHTS (normalizado) — tuning.py sem a linha ganha ela no fim. Devolve o gravado."""
+    out = _norm_lights(cfg)
+    line = 'LIGHTS = ' + json.dumps(out, ensure_ascii=False)
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(r'(?m)^LIGHTS = .*$', lambda _m: line, src)
+        if n == 0:
+            src = src.rstrip('\n') + '\n\n# LUZES (Art-Net) — formato em src/luzes.py\n' + line + '\n'
+        _write_atomic(path, src)
+    if _tuning is not None:
+        _tuning.LIGHTS = out
+    return out
+
+
 def set_out_analysis(enabled, tuning_path=None):
     """Reescreve OUT_ANALYSIS_ENABLED em tuning.py — checkbox "calcular" na tab Output Image
     (liga a leitura pos-shader pros mesmos medidores do Source Image, ver native_synth.main)."""
@@ -1747,8 +1863,9 @@ def _current_output_grade():
     g = getattr(_tuning, 'OUTPUT_GRADE', None) or {}
     out = {'on': int(bool(g.get('on', 1))), 'test': int(bool(g.get('test', 0))),
            'fx': dict(g.get('fx') or {})}
-    if 'master' in g:
-        out['master'] = g['master']
+    for k in ('master', 'fxamt'):
+        if k in g:
+            out[k] = g[k]
     return out
 
 
@@ -1772,7 +1889,7 @@ def _current_scene_grade():
     return {'on': int(bool(g.get('on', 1))), 'fx': dict(g.get('fx') or {})}
 
 
-def set_scene_grade(grade, save=True, tuning_path=None):
+def set_scene_grade(grade, save=True, tuning_path=None, autosave=True):
     """IMAGEM DA CENA (dash v2, Palco): mesmos knobs do calibrar.frag, aplicados na mistura da
     cena ANTES da transicao e da calibracao do telao. {'on': 0|1, 'fx': {knob: 0..1}} ->
     tuning.SCENE_GRADE (ao vivo) e, com save, no set ativo (campo 'grade'; neutro = sem campo).
@@ -1790,7 +1907,8 @@ def set_scene_grade(grade, save=True, tuning_path=None):
                 src = src.rstrip('\n') + ('\n\n# imagem da CENA ativa (calibrar.frag na mistura, antes da transicao);'
                                           ' copia do campo "grade" do set ativo\n') + block + '\n'
             _write_atomic(path, src)
-        save_active_scene(tuning_path)
+        if autosave:   # troca de cena em segundo plano: so' grava o bloco (o set ja' tem essa grade)
+            save_active_scene(tuning_path)
     return out
 
 
@@ -1804,6 +1922,9 @@ def set_output_grade(grade, save=True, tuning_path=None):
     master = round(min(1.0, max(0.0, float(grade.get('master', 1.0)))), 3)
     if master < 1.0:
         out['master'] = master
+    fxamt = round(min(1.0, max(0.0, float(grade.get('fxamt', 1.0)))), 3)   # INTENSIDADE dos efeitos (fader EFEITOS)
+    if fxamt < 1.0:
+        out['fxamt'] = fxamt
     if _tuning is not None:
         _tuning.OUTPUT_GRADE = out
     if save:
@@ -1854,6 +1975,9 @@ def _payload():
         'out_analysis_enabled': int(getattr(_tuning, 'OUT_ANALYSIS_ENABLED', 0)),
         'output_grade': _current_output_grade(),   # calibracao da saida (knobs em /output-grade)
         'scene_grade': _current_scene_grade(),     # imagem da cena ativa (knobs no Palco, /scene-grade)
+        'lights': {'cfg': getattr(_tuning, 'LIGHTS', None) or {'on': 0, 'fixtures': []},   # luzes.py (painel: depois)
+                   'live': _state.get('lights_live', []),
+                   'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
@@ -1869,6 +1993,7 @@ def _payload():
         'pixel_map': getattr(_tuning, 'PIXEL_MAP', None) or {'on': 0, 'w': 1920, 'h': 1080},
         'bands_hz': {'overlap': int(getattr(_tuning, 'HZ_OVERLAP', 0)),
                      'enabled': int(getattr(_tuning, 'BANDS_ENABLED', 1)),
+                     'off': list(getattr(_tuning, 'BANDS_OFF', None) or []),   # botao por coluna (set_bands_off)
                      'ranges': [list(x) for x in getattr(_tuning, 'FREQ_BAND_HZ', [])],
                      'names': _BAND_NAMES},
         # dinamica por faixa (popup "engrenagem" de cada faixa) — 3 listas de 8, ordem de bands_hz
@@ -2027,6 +2152,34 @@ class _Handler(BaseHTTPRequestHandler):
                 b = json.loads(raw.decode())
                 out = set_band_ranges(b.get('overlap'), b['ranges'], enabled=b.get('enabled'))
                 self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/lights':   # {cfg} -> tuning.LIGHTS (aba Luzes)
+            try:
+                out = set_lights(json.loads(raw.decode()))
+                self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/lights/discover':   # quem responde na rede (ArtPoll + WLED), ~2 s
+            self._send(200, 'application/json', json.dumps(luzes.discover()).encode())
+            return
+        if path == '/lights/scan':   # {src, unis, n, settle, host} comeca | {stop: 1} para (native light_scan_thread)
+            try:
+                b = json.loads(raw.decode() or '{}')
+            except ValueError:
+                b = {}
+            if b.get('stop'):
+                _state['light_scan_stop'] = True
+            else:
+                _state['light_scan_req'] = b
+            self._send(200, 'application/json', b'{}')
+            return
+        if path == '/bands-off':   # {off: ['kick', 'Sub-bass', ...]}
+            try:
+                out = set_bands_off(json.loads(raw.decode())['off'])
+                self._send(200, 'application/json', json.dumps({'off': out}).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
@@ -2559,13 +2712,17 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     rg = _norm_bindings({'cam': {'shaders': [{'file': 'x.frag', 'region': 'subject'}, {'file': 'y.frag', 'region': 'xyz'}],
                                  'mask': {'th': 1.7, 'soft': 0.1, 'lixo': 3}}})
     assert [o.get('region') for o in rg['cam']['shaders']] == ['subject', None], 'region do item da pilha'
+    assert [o.get('kick') for o in _norm_overlays([{'file': 'x.frag', 'kick': True}, {'file': 'y.frag', 'kick': 0}],
+                                                 dedupe=False)] == [1, None], 'kick do item da pilha = 1 ou ausente'
     assert rg['cam']['mask'] == {'th': 1.0, 'soft': 0.1}, 'mascara do assunto: so th/soft, 0..1'
     assert _norm_overlays([{'file': 'a.png', 'opacity': 1, 'off': True}, {'file': 'b.png', 'off': 0}]) == \
         [{'file': 'a.png', 'opacity': 1.0, 'off': 1}, {'file': 'b.png', 'opacity': 1.0}], 'off (desligada) se perdeu'
     assert [o.get('audio') for o in _norm_overlays([{'file': 'a.mp4', 'audio': 1}, {'file': 'b.mp4', 'audio': True},
                                                    {'file': 'c.mp4'}])] == [1, None, None], '🔊 e so 1 por mesa'
-    assert _norm_overlays([{'file': 'x.frag', 'mod': {'matiz': ['kick', 'lixo', 'subbass'], 'vazio': []}}], dedupe=False)[0]['mod'] \
-        == {'matiz': ['subbass', 'kick']}, '♪ knob: so faixas validas, ordem do espectro, vazio some'
+    assert _norm_overlays([{'file': 'x.frag', 'mod': {'matiz': ['kick', 'lixo', 'subbass'], 'vazio': [],
+                                                       'luz': {'b': ['air'], 'lo': -1, 'hi': '0.4'}}}], dedupe=False)[0]['mod'] \
+        == {'matiz': {'b': ['subbass', 'kick']}, 'luz': {'b': ['air'], 'lo': 0.0, 'hi': 0.4}}, \
+        '♪ knob: faixas validas na ordem do espectro, lista velha vira {b}, lo/hi 0..1, vazio some'
     sg = _norm_screens([{'name': 'a', 'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 10, 'ph': 10, 'grade': {'gama': 0.7, 'x y': 1}},
                         {'name': 'b', 'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 10, 'ph': 10, 'grade': {'gama': 0.7}}])
     assert 'grade' not in sg[0] and sg[1]['grade'].get('gama') == 0.7, 'calibracao por tela: knob invalido zera, valido passa'
@@ -2609,6 +2766,16 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert txt.count('FREQ_BAND_HZ = [') == 1 and txt.rstrip().endswith(']'), txt
     out2 = set_band_ranges(1, default, p)  # enabled=None (default) -> nao mexe na linha
     assert 'enabled' not in out2 and 'BANDS_ENABLED = 0' in open(p).read(), out2
+    lg = _norm_lights({'on': True, 'fps': 999, 'fixtures': [{'ch': 'DRGB?', 'addr': 0, 'count': 60, 'mod': {'b': ['air', 'x']},
+                                                            'zone': [0, 0, 2, 1], 'color': [300, 1, 2]}, 'lixo', {'addr': 'x'}]})
+    assert lg == {'on': 1, 'host': '255.255.255.255', 'fps': 60, 'fixtures': [
+        {'name': 'luz 1', 'ch': 'drgb', 'uni': 0, 'addr': 1, 'count': 60, 'zone': [0.0, 0.0, 1.0, 1.0],
+         'color': [255, 1, 2], 'mod': {'b': ['air']}}]}, lg
+    assert set_lights(lg, p)['fps'] == 60 and open(p).read().count('LIGHTS = ') == 1
+    assert set_lights({'on': 0}, p)['fixtures'] == [] and open(p).read().count('LIGHTS = ') == 1
+    assert set_bands_off(['Air', 'lixo', 'kick'], p) == ['kick', 'Air'], 'faixas desligadas: validas, ordem fixa'
+    assert set_bands_off(['Sub-bass'], p) == ['Sub-bass'] and open(p).read().count('BANDS_OFF = ') == 1, \
+        'sem a linha: cria no fim; com ela: reescreve'
 
     # --- channels: lista de tamanho livre, sem slot fixo ---
     open(p, 'w').write('CHANNELS = [\n    {"name": "kick", "src": "", "output": ""},\n]\n')
@@ -3022,6 +3189,15 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert _current_scene_grade() == {'on': 1, 'fx': {}} and 'grade' not in _find_scene(other)
     apply_scene(act, tuning_path=p2)
     assert _current_scene_grade() == g, _current_scene_grade()
+    # troca ADIADA (loop GL): o vivo muda na hora, o arquivo depois (thread); a ultima troca vence
+    apply_scene(other, tuning_path=p2, defer=True)
+    apply_scene(act, tuning_path=p2, defer=True)
+    assert _active_scene_name() == act and _current_scene_grade() == g, 'defer: estado vivo ja trocado'
+    _persist['thr'].join(5)
+    ns = {}; exec(open(p2).read(), ns)
+    assert ns['SCENE'] == act and ns['SCENE_GRADE'] == g, 'defer: a ultima troca e a que fica gravada'
+    g2 = set_output_grade({'on': 1, 'fxamt': 0.4, 'fx': {}}, tuning_path=p2)
+    assert g2['fxamt'] == 0.4 and 'fxamt' not in set_output_grade({'on': 1, 'fxamt': 1, 'fx': {}}, tuning_path=p2)
     set_scene_grade({'on': 1, 'fx': {}}, tuning_path=p2)
     assert 'grade' not in _find_scene(act) and open(p2).read().count('SCENE_GRADE =') == 1
     # preencher/encaixar de camera/tela: bloco SOURCE_FIT so com os 'fit'; a capturada respawna

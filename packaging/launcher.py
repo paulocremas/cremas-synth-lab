@@ -26,11 +26,11 @@ import updater
 # imports so pra o PyInstaller enxergar e empacotar o que o native_synth.py/dash_*/plat usam
 # (o app roda dos .py soltos; packaging/check_imports.py confere que nada falta aqui)
 if False:
-    import argparse, atexit, collections, colorsys, copy, ctypes, ctypes.wintypes, glob, hashlib, importlib  # noqa
-    import io, json, math, re, select, signal, subprocess  # noqa
+    import argparse, atexit, collections, colorsys, concurrent.futures, copy, ctypes, ctypes.wintypes, glob, hashlib, importlib  # noqa
+    import io, json, math, re, select, signal, socket, subprocess  # noqa
     import msvcrt  # noqa  (so' existe no Windows: plat.readable)
     import tempfile, threading, types, time, urllib.parse, urllib.request, webbrowser, http.server  # noqa
-    import numpy, pygame, OpenGL.GL, cv2  # noqa
+    import numpy, pygame, OpenGL, OpenGL.GL, cv2  # noqa
     import pyaudiowpatch  # noqa  (so' existe no build do Windows)
 
 IS_WIN = sys.platform == 'win32'

@@ -10,6 +10,7 @@ Uso: .venv/bin/python src/native_synth.py [--screen [--source NOME]] [--fullscre
 import argparse
 import collections
 import colorsys
+import ctypes
 import importlib
 import math
 import os
@@ -25,12 +26,17 @@ import numpy as np
 # WM_CLASS da janela de saida = a do dash (--class no dash_server) -> uma pilha so' na barra
 os.environ.setdefault('SDL_VIDEO_X11_WMCLASS', 'prisma')
 import pygame
+import OpenGL
+# checagem de erro do PyOpenGL = 1 glGetError extra por chamada (~25% de cada uma, centenas por frame).
+# Erro de compilacao de shader nao depende disso (glGetShaderiv). PRISMA_GL_CHECK=1 religa pra depurar.
+OpenGL.ERROR_CHECKING = bool(os.environ.get('PRISMA_GL_CHECK'))
 from OpenGL.GL import *
 
 import tuning
 import dash_server
 import dash_data
 import plat   # Linux x Windows: monitores, captura, audio, pipes (ver plat.py)
+import luzes  # refletores/fitas LED (Art-Net) seguindo a saida + o som
 
 plat.init_process()   # Windows: DPI-aware (pixel fisico; senao o pixel map nao e' 1:1)
 
@@ -485,6 +491,8 @@ def open_window(cfg):
         pygame.display.set_icon(pygame.image.load(os.path.join(_ROOT, 'favicon.png')))
     except (pygame.error, FileNotFoundError):
         pass
+    if os.environ.get('PRISMA_HIDDEN'):   # testes: renderiza igual, mas a janela nunca aparece na tela
+        flags |= pygame.HIDDEN
     pygame.display.set_mode((win_w, win_h), flags)
     pygame.display.set_caption('PRISMA! · saída')
     if cfg.get('fullscreen') and not label.startswith('telão virtual'):   # WM encolheria pro monitor real
@@ -842,6 +850,30 @@ def _poly_tex(shapes):
             qu, qv = int(round(u * 65535)), int(round(v * 65535))
             a[i, j] = (qu >> 8, qu & 255, qv >> 8, qv & 255)
     return a
+
+
+def _mod_value(v, m, levels):
+    """Knob com ♪ (entrada['mod'][knob] = {b: faixas, lo, hi}, dash v2): o som anda de lo (silencio)
+    a hi (faixa no maximo), pela faixa marcada MAIS forte (levels = state: as 8 faixas + 'kick').
+    Sem lo/hi (formato velho) = do valor do knob `v` ate 1. Sem ♪ = `v`."""
+    if not m or not m.get('b'):
+        return v
+    lo, hi = m.get('lo', v), m.get('hi', 1.0)
+    return lo + (hi - lo) * min(1.0, max(levels.get(b, 0.0) for b in m['b']))
+
+
+def _smooth(store, key, target, k, frame, start=None):
+    """Valor que DESLIZA ate `target` (um polo: anda a fracao k por frame) — knob do MIDI (128 passos)
+    e do dash (25 Hz) viram movimento continuo, sem degrau. store = {key: [valor, frame do ultimo uso]}.
+    Chave nova comeca em `start` (opacidade: 0 = entra com fade) ou ja' no alvo."""
+    e = store.get(key)
+    if e is None:
+        e = store[key] = [target if start is None else start, frame]
+    v = target if k >= 1.0 else e[0] + (target - e[0]) * k
+    if abs(target - v) < 1e-4:
+        v = target
+    e[0], e[1] = v, frame
+    return v
 
 
 def _blend_scr(shapes):
@@ -1224,6 +1256,8 @@ def _preview_frame(which, key='', max_w=320):
     so' enquanto alguem pede — ver state['out_want']), 'sel' = a fonte selecionada (state['frame']),
     'src' = um canal da mesa (key: fonte viva ou arquivo de midia, '#N' ignorado).
     Devolve (bytes rgb24, w, h) | None."""
+    if which == 'lightmap':                    # foto base do mapeamento das luzes (light_scan_thread)
+        return state.get('light_map')
     if which == 'out':
         state['out_want'] = time.time()
         return state.get('out_small')
@@ -1277,9 +1311,17 @@ def _thumb_frame(key):
 
 def _composite(frames):
     """Mistura na CPU das fontes marcadas (preto + cada uma por cima com a opacidade dela) — so'
-    pra analise de imagem / fumaca / cor dominante. A SAIDA e' feita na GPU (ver main)."""
-    out = np.zeros(FRAME_SIZE, np.uint16)
-    for k, a, f in frames:
+    pra analise de imagem / fumaca / cor dominante. A SAIDA e' feita na GPU (ver main).
+    A ULTIMA fonte opaca (opacidade 1, sem alpha) cobre as de baixo: comeca dela — com 1 fonte so'
+    devolve o proprio frame (era ~3 ms por frame novo pra dar o mesmo resultado)."""
+    base, rest = None, frames
+    for i, (k, a, f) in enumerate(frames):
+        if a >= 1.0 and _alpha_now.get(k) is None:
+            base, rest = f, frames[i + 1:]
+    if base is not None and not rest:
+        return base
+    out = np.zeros(FRAME_SIZE, np.uint16) if base is None else base.astype(np.uint16)
+    for k, a, f in rest:
         a8 = int(round(min(1.0, a) * 256))
         al = _alpha_now.get(k)
         if al is not None:                           # imagem com transparencia: peso por pixel
@@ -2222,6 +2264,8 @@ def audio_thread(device):
             # vem 0..1 (relativo ao pico ENTRE as 8 bandas, auto-calibrado, sem escala
             # manual por banda) — so falta suavizar igual as outras.
             named_levels = named_band_levels(spectrum, freqs, fine_bands, band_peaks, band_peakdecay)
+            # faixas DESLIGADAS no dash (botao na coluna, tuning.BANDS_OFF: nomes + 'kick') = 0 pro shader/♪
+            off = {FREQ_BAND_UNIFORM.get(n, n) for n in getattr(tuning, 'BANDS_OFF', None) or ()}
             for name, _, level in named_levels:
                 raw[FREQ_BAND_UNIFORM[name]] = level
             for k in smooth:
@@ -2236,7 +2280,7 @@ def audio_thread(device):
                 smooth[k] = smooth[k] * s + raw[k] * (1 - s)
                 # BANDS_ENABLED=0 so silencia o que alimenta o shader/dash ("final"); smooth[k]
                 # continua calculado (auto-gain/attack-release nao perdem o fio quando reativa)
-                state[k] = smooth[k] if (k not in FINE_BAND_KEYS or tuning.BANDS_ENABLED) else 0.0
+                state[k] = smooth[k] if (k not in FINE_BAND_KEYS or tuning.BANDS_ENABLED) and k not in off else 0.0
 
             kick_chunk_count += 1
             # bass_raw (sem teto) em vez de raw['bass'] (clampado em 1.0) — com o clamp, se
@@ -2258,10 +2302,11 @@ def audio_thread(device):
                     raw_decay = tuning.KICK_FADE_FLOOR ** (1.0 / max(target_chunks, 1.0))
                     kick_decay_dynamic = min(tuning.KICK_DECAY_MAX, max(tuning.KICK_DECAY_MIN, raw_decay))
                 kick_env = 1.0
-                state['beats'] += 1.0   # u_beats: contador de batidas (shader da 1 passo por batida)
+                if 'kick' not in off:
+                    state['beats'] += 1.0   # u_beats: contador de batidas (shader da 1 passo por batida)
             else:
                 kick_env *= kick_decay_dynamic
-            state['kick'] = kick_env
+            state['kick'] = 0.0 if 'kick' in off else kick_env
             # u_build (0..1) = CRESCENDO, a memoria que o shader nao tem: sobe devagar (~20 s ate 1)
             # enquanto o som segura perto da media dos ultimos ~10 s e cai rapido (~1.5 s) quando a
             # musica baixa (break/silencio). Efeito que "vai crescendo" le daqui.
@@ -2291,7 +2336,7 @@ def audio_thread(device):
                              for name, mag, lvl in named_levels]  # grave->agudo (ordem freq_bands())
                 state['audio_dash'] = dash_data.audio_dash_data(
                     bands_raw, amp_raw, raw['amp'], state['amp'], smoothing_used['amp'],
-                    kick_env, kick_decay_dynamic, smooth_spectrum, freqs,
+                    state['kick'], kick_decay_dynamic, smooth_spectrum, freqs,
                     band_lohi=[(lo, hi) for _, lo, hi in fine_bands])  # tint + cinza nos buracos
 
                 arr_s = frame_downsample(state.get('frame_comp', state['frame']), WIDTH, HEIGHT) \
@@ -2473,6 +2518,58 @@ def subject_thread():
         time.sleep(0.01)
 
 
+# MAPEAMENTO DAS LUZES pela camera (sem rider; dash > Luzes > mapear): luzes.scan acende canal a canal
+# por Art-Net e compara fotos de uma fonte VIVA. Enquanto roda o telao fica preto (g_dim no loop GL) e o
+# envio normal das luzes para. Resultado em state['light_scan']['result'] + a foto base em state['light_map'].
+LIGHT_SCAN_W = 160     # largura da foto analisada (manchas de luz nao precisam de mais)
+
+
+def light_scan_thread(req):
+    key = req.get('src') or next((k for k in _ovl if _is_live(k)), '')
+    host = str(req.get('host') or (getattr(tuning, 'LIGHTS', None) or {}).get('host') or '255.255.255.255')
+    settle = min(2.0, max(0.05, float(req.get('settle', 0.25))))
+    st = state['light_scan']
+    tx = luzes.Sender()
+
+    def cam():
+        e = _ovl.get(key)
+        return e['frame'] if e else state.get('frame')
+
+    def grab():
+        time.sleep(settle)               # o aparelho acender + a camera expor
+        for _ in range(2):               # 2 frames NOVOS depois disso (o 1o pode ter comecado antes)
+            f0, end = cam(), time.monotonic() + 1.0
+            while cam() is f0 and time.monotonic() < end and running:
+                time.sleep(0.005)
+        f = cam()
+        if f is None or len(f) != FRAME_SIZE:
+            raise RuntimeError('a camera parou de mandar imagem')
+        s_ = max(1, WIDTH // LIGHT_SCAN_W)
+        return np.asarray(f, np.uint8).reshape(HEIGHT, WIDTH, 3)[::s_, ::s_]
+
+    def prog(fr, txt):
+        st.update(prog=round(fr, 3), txt=txt)
+    try:
+        if cam() is None:
+            raise RuntimeError('nenhuma câmera no ar: ponha uma câmera na mesa')
+        unis = [int(u) for u in (req.get('unis') or [0])][:8]
+        res = luzes.scan(lambda u, d: tx.send({(host, u): d}), grab, unis=unis,
+                         n=min(512, max(1, int(req.get('n', 128)))), progress=prog,
+                         stop=lambda: bool(state.pop('light_scan_stop', False)) or not running)
+        if res is None:
+            st.update(run=0, txt='parado')
+            return
+        for f in res['fixtures']:
+            if host != '255.255.255.255':
+                f['host'] = host
+        b = np.ascontiguousarray(res['base'])
+        state['light_map'] = (b.tobytes(), b.shape[1], b.shape[0])
+        st.update(run=0, prog=1.0, txt=f"{len(res['fixtures'])} aparelho(s)", result=res['fixtures'], src=key)
+    except Exception as e:
+        st.update(run=0, txt='erro', err=str(e))
+        print('luzes: mapeamento ->', e)
+
+
 def _subject_params(b):
     """(limiar - borda, limiar + borda) do smoothstep da mascara; b = BINDINGS[canal]."""
     mk = (b or {}).get('mask') or {}
@@ -2493,6 +2590,7 @@ def build_program(frag_src):
     prog = glCreateProgram()
     glAttachShader(prog, compile_shader(VERT_SRC, GL_VERTEX_SHADER))
     glAttachShader(prog, compile_shader(frag_src, GL_FRAGMENT_SHADER))
+    glBindAttribLocation(prog, 0, 'a_pos')   # a_pos sempre no 0: _use_basic nao pergunta por frame
     glLinkProgram(prog)
     if not glGetProgramiv(prog, GL_LINK_STATUS):
         raise RuntimeError(glGetProgramInfoLog(prog).decode())
@@ -2504,13 +2602,36 @@ def _use_basic(prog):
     programa da simulacao de fumaca usa o mesmo VERT_SRC, entao a_pos cai sempre no location 0
     (mesma logica do use_program/use_trans_program, so' que sem uniforms de conteudo pra ler)."""
     glUseProgram(prog)
-    loc = glGetAttribLocation(prog, 'a_pos')
-    glEnableVertexAttribArray(loc)
-    glVertexAttribPointer(loc, 2, GL_FLOAT, GL_FALSE, 0, None)
+    glEnableVertexAttribArray(0)   # build_program fixa a_pos no 0
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, None)
 
 
 def _locs(prog, *names):
     return {n: glGetUniformLocation(prog, n) for n in names}
+
+
+_STATE_U = ('amp', 'bass', 'mid', 'treble', 'kick', 'build') + tuple(FREQ_BAND_UNIFORM.values())
+
+
+def _prog_locs(prog, manifest):
+    """Locations de um programa da pilha, perguntadas UMA vez (eram ~45 glGetUniformLocation por
+    camada por frame). Uniform que o shader nao declara fica fora das listas (nem chama glUniform).
+    Fixa tambem as unidades de textura (estado do programa: basta 1x)."""
+    g = lambda n: glGetUniformLocation(prog, n)
+    u = {k: g(n) for k, n in (('res', 'u_resolution'), ('time', 'u_time'), ('beats', 'u_beats'),
+                              ('dominant', 'u_dominant'), ('eyes', 'u_eyes'), ('eyes_on', 'u_eyes_on'),
+                              ('test', 'u_test'), ('dim', 'u_dim'))}
+    u['state'] = [(l, k) for k in _STATE_U if (l := g('u_' + k)) >= 0]
+    u['chan'] = [(l, k, i) for k in ('chan', 'chan_hit') for i in range(MAX_CHANNELS) if (l := g(f'u_{k}[{i}]')) >= 0]
+    # potenciometros: u_fx_<nome> do manifest {nome: padrao} -> [(nome, loc, padrao)]
+    u['fx'] = [(n, l, d) for n, d in manifest.items() if (l := g('u_fx_' + n)) >= 0]
+    smoke, fumaca = g('u_texture_smoke'), g('u_texture_fumaca')
+    u['sim'] = smoke >= 0 or fumaca >= 0     # so' quem le roda a sim de fluido/fumaca (main)
+    glUseProgram(prog)
+    for l, unit in ((g('u_texture_0'), 0), (smoke, 3), (fumaca, 4)):
+        if l >= 0:
+            glUniform1i(l, unit)
+    return u
 
 
 def build_sim_programs():
@@ -2863,42 +2984,19 @@ def main():
         state['bindings'] = dash_server._norm_bindings(getattr(tuning, 'BINDINGS', {}))
 
     uniforms = {}
+    sim_want = [False]   # algum shader no ar le u_texture_smoke/_fumaca (frame anterior) -> roda a sim
 
-    def use_program(prog, manifest):
-        glUseProgram(prog)
-        loc = glGetAttribLocation(prog, 'a_pos')
-        glEnableVertexAttribArray(loc)
-        glVertexAttribPointer(loc, 2, GL_FLOAT, GL_FALSE, 0, None)
-        uniforms['res'] = glGetUniformLocation(prog, 'u_resolution')
-        uniforms['time'] = glGetUniformLocation(prog, 'u_time')
-        uniforms['tex0'] = glGetUniformLocation(prog, 'u_texture_0')
-        uniforms['amp'] = glGetUniformLocation(prog, 'u_amp')
-        uniforms['bass'] = glGetUniformLocation(prog, 'u_bass')
-        uniforms['mid'] = glGetUniformLocation(prog, 'u_mid')
-        uniforms['treble'] = glGetUniformLocation(prog, 'u_treble')
-        uniforms['kick'] = glGetUniformLocation(prog, 'u_kick')
-        uniforms['beats'] = glGetUniformLocation(prog, 'u_beats')   # nº de batidas desde que abriu
-        uniforms['build'] = glGetUniformLocation(prog, 'u_build')   # crescendo 0..1 (audio_thread)
-        uniforms['dominant'] = glGetUniformLocation(prog, 'u_dominant')
-        uniforms['eyes'] = glGetUniformLocation(prog, 'u_eyes')        # olhos da fonte (eyes_thread)
-        uniforms['eyes_on'] = glGetUniformLocation(prog, 'u_eyes_on')
-        uniforms['tex_smoke'] = glGetUniformLocation(prog, 'u_texture_smoke')  # densidade da sim de fluido (EFEITO 7 silhueta)
-        uniforms['tex_fumaca'] = glGetUniformLocation(prog, 'u_texture_fumaca')  # fumaca procedural (EFEITO 6)
-        for name in FREQ_BAND_UNIFORM.values():
-            uniforms[name] = glGetUniformLocation(prog, 'u_' + name)
-        uniforms['chan'] = [glGetUniformLocation(prog, f'u_chan[{i}]') for i in range(MAX_CHANNELS)]
-        uniforms['chan_hit'] = [glGetUniformLocation(prog, f'u_chan_hit[{i}]') for i in range(MAX_CHANNELS)]
-        # potenciometros de efeito: um uniform u_fx_<nome> por nome do manifest do shader ativo.
-        # nome sem uniform correspondente no GLSL -> loc -1 -> glUniform1f(-1, x) e' no-op.
-        # manifest = {nome: padrao} (parse_fx_defaults) -> uniforms['fx'] = {nome: (loc, padrao)}.
-        uniforms['fx'] = {n: (glGetUniformLocation(prog, 'u_fx_' + n), d) for n, d in manifest.items()}
-        glUniform1i(uniforms['tex0'], 0)
-        glUniform1i(uniforms['tex_smoke'], 3)
-        glUniform1i(uniforms['tex_fumaca'], 4)
+    def use_program(h):
+        """h = prog_cache[...]: liga o programa e aponta `uniforms` pras locations dele (_prog_locs)."""
+        _use_basic(h[1])
+        uniforms.clear()
+        uniforms.update(h[4])
+        if h[4]['sim']:
+            sim_want[0] = True
 
     # cache de programa por arquivo de shader: compila 1x, voltar num shader ja usado e' so
     # glUseProgram. Invalidado por mtime (editou o .frag = hot-reload) e por troca de janela
-    # (contexto GL novo). (mtime, program, src, manifest) por caminho absoluto.
+    # (contexto GL novo). (mtime, program, src, manifest, locations) por caminho absoluto.
     prog_cache = {}
 
     # --- programa de um shader da pilha de uma fonte (state['bindings'][fonte]['shaders']):
@@ -2930,7 +3028,7 @@ def main():
         if hit:
             glDeleteProgram(hit[1])
         manifest = dash_data.parse_fx_defaults(src)
-        prog_cache[lp] = (mt, prog, src, manifest)
+        prog_cache[lp] = (mt, prog, src, manifest, _prog_locs(prog, manifest))
         state['output']['shader_status'] = 'ok'
         state['output'].pop('shader_error', None)
         return prog_cache[lp]
@@ -2961,10 +3059,7 @@ def main():
     trans_cache = {}
 
     def use_trans_program(prog):
-        glUseProgram(prog)
-        loc = glGetAttribLocation(prog, 'a_pos')
-        glEnableVertexAttribArray(loc)
-        glVertexAttribPointer(loc, 2, GL_FLOAT, GL_FALSE, 0, None)
+        _use_basic(prog)
         tuni['res'] = glGetUniformLocation(prog, 'u_resolution')
         tuni['progress'] = glGetUniformLocation(prog, 'u_progress')
         tuni['from'] = glGetUniformLocation(prog, 'u_from')
@@ -3000,6 +3095,8 @@ def main():
     sim_last_t = [time.perf_counter()]  # p/ calcular o dt real da simulacao (frame a frame)
     fumaca_idx = 0  # ping-pong: fumaca_tex[fumaca_idx] = "atual", [1-fumaca_idx] = escrita
     prev_frame_buf = [state['frame'].copy()]  # frame de 1 iteracao atras, pra detectar movimento
+    tex_fresh = [False]   # `tex`/`tex_prev` tem a mistura atual (a sim parada nao as atualiza)
+    sm_store, sm_last = {}, [0.0]   # suavizacao dos parametros (_smooth): valores atuais + relogio
 
     if capture_region and 'id' in capture_region:
         threading.Thread(target=window_capture_thread, args=(capture_region['id'],), daemon=True).start()
@@ -3041,10 +3138,59 @@ def main():
     out_pv_t = [0.0]
     out_pv = {'fbo': None, 'tex': None, 'wh': None}
     cv_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0}   # previa do CANVAS do palco (/frame?which=cv)
+    LIGHT_PV_W = 64   # LUZES: o canvas pronto lido nesse tamanho (a cor de uma zona nao precisa de mais)
+    lt_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0, 'prev': {}, 'tx': None}
     # previa de cada FONTE JA COM OS EFEITOS (canvas do Palco v2: GET /frame?which=fx): a textura
     # da fonte depois da pilha (lt['src']) reduzida por blit, so' das pedidas (state['fx_want'])
     FX_PV_HZ, FX_PV_W = 10, 240
     fx_pv = {'fbo': None, 'tex': None, 'wh': None, 't': {}}
+    # leitura ASSINCRONA das previas: glReadPixels pra um PBO (volta na hora, a copia corre na GPU) e
+    # o resultado e' pego na PROXIMA leitura do mesmo key (~1/HZ depois, ja pronto). O glReadPixels
+    # direto parava a CPU ate a GPU acabar o frame inteiro, a cada previa (CPU e GPU em fila, nao juntas).
+    pbos = {}   # key -> [2 PBOs, qual recebe agora, [(w, h) que cada um tem]]
+
+    def read_async(key, pw, ph):
+        """READ framebuffer ligado (pw x ph) -> PBO; devolve a leitura ANTERIOR desse key como
+        np.uint8 (h, w, 3) topo->baixo, ou None na 1a."""
+        e = pbos.get(key)
+        if e is None:
+            e = pbos[key] = [glGenBuffers(2), 0, [None, None]]
+        b, i, wh = e
+        out = None
+        try:
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, int(b[i]))
+            if wh[i] != (pw, ph):
+                glBufferData(GL_PIXEL_PACK_BUFFER, pw * ph * 3, None, GL_STREAM_READ)
+            glPixelStorei(GL_PACK_ALIGNMENT, 1)
+            glReadPixels(0, 0, pw, ph, GL_RGB, GL_UNSIGNED_BYTE, ctypes.c_void_p(0))
+            wh[i] = (pw, ph)
+            if wh[1 - i]:
+                w2, h2 = wh[1 - i]
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, int(b[1 - i]))
+                p = glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY)
+                if p:
+                    out = np.frombuffer(ctypes.string_at(p, w2 * h2 * 3), np.uint8).reshape(h2, w2, 3)[::-1]
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER)
+            e[1] = 1 - i
+        finally:
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0)   # senao um glReadPixels comum depois escreve no PBO
+        return out
+
+    def pv_grab(pv, key, sr, pw, ph):
+        """Previa pequena pro dash: blit da regiao sr (x0, y0, x1, y1) do READ framebuffer JA ligado ->
+        FBO pw x ph da previa `pv` (reduz na GPU) -> read_async(key)."""
+        if pv['wh'] != (pw, ph):
+            if pv['fbo'] is None:
+                pv['fbo'], pv['tex'] = glGenFramebuffers(1), glGenTextures(1)
+            glBindTexture(GL_TEXTURE_2D, pv['tex'])
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, pw, ph, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, pv['fbo'])   # DRAW: nao solta o READ que o chamador ligou
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pv['tex'], 0)
+            pv['wh'] = (pw, ph)
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, pv['fbo'])
+        glBlitFramebuffer(*sr, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, pv['fbo'])
+        return read_async(key, pw, ph)
     # textura POR FONTE: so' sobe (glTexSubImage2D) quando o frame da fonte e' OUTRO objeto —
     # camera/video chegam a ~30 fps, a saida roda a 60: sem isso metade dos uploads e' repetida.
     # Guarda o proprio frame (nao id()) pra o endereco nao ser reusado por outro array.
@@ -3101,6 +3247,8 @@ def main():
             out_pv.update(fbo=None, tex=None, wh=None)   # FBO da previa da saida idem (nome velho = textura de outro)
             cv_pv.update(fbo=None, tex=None, wh=None)
             fx_pv.update(fbo=None, tex=None, wh=None)
+            lt_pv.update(fbo=None, tex=None, wh=None)
+            pbos.clear()                 # PBOs das previas idem
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
             scene_tr = None              # o snapshot (ltargets 'from') era do contexto velho
             state['output'].update(mode=out_mode, window_w=WIN_W, window_h=WIN_H, pos=list(out_pos),
@@ -3131,154 +3279,167 @@ def main():
         else:
             frame_in = comp_last[1]
         state['frame_comp'] = frame_in
-        glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, tex)
-        if comp_changed:
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, frame_in)
+        # SIM DE FLUIDO + FUMACA so' com algum shader no ar que le u_texture_smoke/_fumaca (sim_want,
+        # visto no frame anterior): sao ~27 passes + 1 na resolucao do conteudo por frame. Parada, a
+        # sim congela onde estava; `tex`/`tex_prev` re-sobem quando ela volta (tex_fresh).
+        run_sim, sim_want[0] = sim_want[0], False
+        if not run_sim and comp_changed:
+            tex_fresh[0] = False
+        if run_sim:
+            up = comp_changed or not tex_fresh[0]
+            tex_fresh[0] = True
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_2D, tex)
+            if up:
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, frame_in)
 
-        # --- passe da FUMACA (Stable Fluids — ver SIM_*_SRC / Caos.frag EFEITO 6): 7 sub-passes
-        # numa grade menor (SIM_W x SIM_H). Roda sempre, mesmo se o preset ativo nao usar
-        # u_texture_smoke — a grade e' pequena, e' barato.
-        glActiveTexture(GL_TEXTURE2)
-        glBindTexture(GL_TEXTURE_2D, tex_prev)
-        if comp_changed:
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, prev_frame_buf[0])
+            # --- passe da FUMACA (Stable Fluids — ver SIM_*_SRC / Caos.frag EFEITO 6): 7 sub-passes
+            # numa grade menor (SIM_W x SIM_H).
+            glActiveTexture(GL_TEXTURE2)
+            glBindTexture(GL_TEXTURE_2D, tex_prev)
+            if up:
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, prev_frame_buf[0])
 
-        sim_now = time.perf_counter()
-        sim_dt = min(0.05, max(0.0, sim_now - sim_last_t[0]))
-        sim_last_t[0] = sim_now
+            sim_now = time.perf_counter()
+            sim_dt = min(0.05, max(0.0, sim_now - sim_last_t[0]))
+            sim_last_t[0] = sim_now
 
-        glBindFramebuffer(GL_FRAMEBUFFER, sim_fbo)
-        glViewport(0, 0, SIM_W, SIM_H)
+            glBindFramebuffer(GL_FRAMEBUFFER, sim_fbo)
+            glViewport(0, 0, SIM_W, SIM_H)
 
-        vr, vw = sim_vel[sim_idx], sim_vel[1 - sim_idx]
-        dr, dw = sim_density[sim_idx], sim_density[1 - sim_idx]
+            vr, vw = sim_vel[sim_idx], sim_vel[1 - sim_idx]
+            dr, dw = sim_density[sim_idx], sim_density[1 - sim_idx]
 
-        # 1) ADVECT_VEL: velocidade se advecta por si mesma + empuxo (dr) + impulso do movimento
-        prog, u = sim_progs['adv']
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vw, 0)
-        glUseProgram(prog)
-        glUniform2f(u['u_res'], SIM_W, SIM_H)
-        glUniform1f(u['u_dt'], sim_dt)
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vr)
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, dr)
-        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, tex)
-        glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, tex_prev)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
-
-        # 2) VORTICITY: rotacional de vw
-        prog, u = sim_progs['vort']
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sim_vort, 0)
-        glUseProgram(prog)
-        glUniform2f(u['u_res'], SIM_W, SIM_H)
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
-
-        # 3) CONFINEMENT: soma a forca de confinamento em vw -> escreve no OUTRO slot (vr, ja
-        # consumido no passo 1, vira scratch) e troca os apelidos: vw passa a ser o resultado
-        prog, u = sim_progs['conf']
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr, 0)
-        glUseProgram(prog)
-        glUniform2f(u['u_res'], SIM_W, SIM_H)
-        glUniform1f(u['u_dt'], sim_dt)
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, sim_vort)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
-        vw, vr = vr, vw
-
-        # 4) DIVERGENCE de vw
-        prog, u = sim_progs['div']
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sim_div, 0)
-        glUseProgram(prog)
-        glUniform2f(u['u_res'], SIM_W, SIM_H)
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
-
-        # 5) PRESSURE: Jacobi, PRESSURE_ITERS vezes, p^(0) = 0 (nao herda do frame anterior —
-        # mais previsivel). ping-pong local entre os 2 slots de sim_pressure.
-        prog, u = sim_progs['pres']
-        pr, pw = sim_pressure[0], sim_pressure[1]
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pr, 0)
-        glClear(GL_COLOR_BUFFER_BIT)
-        glUseProgram(prog)
-        glUniform2f(u['u_res'], SIM_W, SIM_H)
-        for _ in range(PRESSURE_ITERS):
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pw, 0)
-            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, pr)
-            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, sim_div)
+            # 1) ADVECT_VEL: velocidade se advecta por si mesma + empuxo (dr) + impulso do movimento
+            prog, u = sim_progs['adv']
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vw, 0)
+            glUseProgram(prog)
+            glUniform2f(u['u_res'], SIM_W, SIM_H)
+            glUniform1f(u['u_dt'], sim_dt)
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vr)
+            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, dr)
+            glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, tex)
+            glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, tex_prev)
             glDrawArrays(GL_TRIANGLES, 0, 3)
-            pr, pw = pw, pr
 
-        # 6) PROJECT: tira o gradiente de pressao de vw -> campo sem divergencia
-        prog, u = sim_progs['proj']
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr, 0)
-        glUseProgram(prog)
-        glUniform2f(u['u_res'], SIM_W, SIM_H)
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, pr)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
-        vw, vr = vr, vw  # vw = velocidade final (sem divergencia) deste frame
+            # 2) VORTICITY: rotacional de vw
+            prog, u = sim_progs['vort']
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sim_vort, 0)
+            glUseProgram(prog)
+            glUniform2f(u['u_res'], SIM_W, SIM_H)
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
 
-        # 7) ADVECT_DENS: densidade se advecta pelo campo final + injecao de movimento + decaimento
-        prog, u = sim_progs['dens']
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dw, 0)
-        glUseProgram(prog)
-        glUniform2f(u['u_res'], SIM_W, SIM_H)
-        glUniform1f(u['u_dt'], sim_dt)
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, dr)
-        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, tex)
-        glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, tex_prev)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
+            # 3) CONFINEMENT: soma a forca de confinamento em vw -> escreve no OUTRO slot (vr, ja
+            # consumido no passo 1, vira scratch) e troca os apelidos: vw passa a ser o resultado
+            prog, u = sim_progs['conf']
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr, 0)
+            glUseProgram(prog)
+            glUniform2f(u['u_res'], SIM_W, SIM_H)
+            glUniform1f(u['u_dt'], sim_dt)
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
+            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, sim_vort)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+            vw, vr = vr, vw
 
-        # --- passe da FUMAÇA procedural (ver SMOKE_SRC): 1 passe so', na resolucao do
-        # conteudo (nao da grade da sim de fluido acima). Roda no mesmo FBO reaproveitado.
-        fr, fw = fumaca_tex[fumaca_idx], fumaca_tex[1 - fumaca_idx]
-        glViewport(0, 0, WIDTH, HEIGHT)
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fw, 0)
-        glUseProgram(p_fumaca)
-        glUniform2f(u_fumaca['u_resolution'], WIDTH, HEIGHT)
-        glUniform1f(u_fumaca['u_time'], time.perf_counter() - t0)
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, tex)
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, tex_prev)
-        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, fr)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
+            # 4) DIVERGENCE de vw
+            prog, u = sim_progs['div']
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sim_div, 0)
+            glUseProgram(prog)
+            glUniform2f(u['u_res'], SIM_W, SIM_H)
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            # 5) PRESSURE: Jacobi, PRESSURE_ITERS vezes, p^(0) = 0 (nao herda do frame anterior —
+            # mais previsivel). ping-pong local entre os 2 slots de sim_pressure.
+            prog, u = sim_progs['pres']
+            pr, pw = sim_pressure[0], sim_pressure[1]
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pr, 0)
+            glClear(GL_COLOR_BUFFER_BIT)
+            glUseProgram(prog)
+            glUniform2f(u['u_res'], SIM_W, SIM_H)
+            for _ in range(PRESSURE_ITERS):
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pw, 0)
+                glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, pr)
+                glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, sim_div)
+                glDrawArrays(GL_TRIANGLES, 0, 3)
+                pr, pw = pw, pr
+
+            # 6) PROJECT: tira o gradiente de pressao de vw -> campo sem divergencia
+            prog, u = sim_progs['proj']
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, vr, 0)
+            glUseProgram(prog)
+            glUniform2f(u['u_res'], SIM_W, SIM_H)
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
+            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, pr)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+            vw, vr = vr, vw  # vw = velocidade final (sem divergencia) deste frame
+
+            # 7) ADVECT_DENS: densidade se advecta pelo campo final + injecao de movimento + decaimento
+            prog, u = sim_progs['dens']
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dw, 0)
+            glUseProgram(prog)
+            glUniform2f(u['u_res'], SIM_W, SIM_H)
+            glUniform1f(u['u_dt'], sim_dt)
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, vw)
+            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, dr)
+            glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, tex)
+            glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, tex_prev)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+
+            # --- passe da FUMAÇA procedural (ver SMOKE_SRC): 1 passe so', na resolucao do
+            # conteudo (nao da grade da sim de fluido acima). Roda no mesmo FBO reaproveitado.
+            fr, fw = fumaca_tex[fumaca_idx], fumaca_tex[1 - fumaca_idx]
+            glViewport(0, 0, WIDTH, HEIGHT)
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fw, 0)
+            glUseProgram(p_fumaca)
+            glUniform2f(u_fumaca['u_resolution'], WIDTH, HEIGHT)
+            glUniform1f(u_fumaca['u_time'], time.perf_counter() - t0)
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, tex)
+            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, tex_prev)
+            glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, fr)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            sim_idx = 1 - sim_idx      # o resultado (vw/dw, fisicamente no slot 1-sim_idx) vira o "atual"
+            fumaca_idx = 1 - fumaca_idx
         glViewport(0, 0, CMP_W, CMP_H)             # a mistura; o que desenha na janela volta pra WIN_W x WIN_H
         glActiveTexture(GL_TEXTURE3)
-        glBindTexture(GL_TEXTURE_2D, dw)         # silhueta (sim de fluido) deste frame -> u_texture_smoke
+        glBindTexture(GL_TEXTURE_2D, sim_density[sim_idx])   # silhueta (sim de fluido) deste frame -> u_texture_smoke
         glActiveTexture(GL_TEXTURE4)
-        glBindTexture(GL_TEXTURE_2D, fw)         # fumaca (procedural) deste frame -> u_texture_fumaca
+        glBindTexture(GL_TEXTURE_2D, fumaca_tex[fumaca_idx])  # fumaca (procedural) deste frame -> u_texture_fumaca
         if comp_changed:
             prev_frame_buf[0] = frame_in.copy()
-        sim_idx = 1 - sim_idx      # o resultado (vw/dw, fisicamente no slot 1-sim_idx) vira o "atual" no proximo frame
-        fumaca_idx = 1 - fumaca_idx
 
         now_t = time.perf_counter() - t0
+        # SUAVIZACAO (tuning.PARAM_SMOOTH_MS, ~80 ms): knobs, opacidades, liga/desliga e intensidade
+        # deslizam ate o valor novo em vez de pular. O som (♪/kick) NAO passa por aqui (ja' tem attack/
+        # release proprio; suavizar de novo so' atrasaria a reacao). Master/blackout tambem nao (seguranca).
+        sm_dt = now_t - sm_last[0]
+        sm_last[0] = now_t
+        tau = max(0.0, float(getattr(tuning, 'PARAM_SMOOTH_MS', 80) or 0)) / 1000.0
+        k_sm = 1.0 if tau <= 0 else 1.0 - math.exp(-max(0.0, sm_dt) / tau)
+        if frame_n % 300 == 0:   # chave que sumiu (efeito tirado, cena trocada) nao fica pra sempre
+            for k_ in [k_ for k_, e_ in sm_store.items() if frame_n - e_[1] > 300]:
+                del sm_store[k_]
+        smv = lambda key, v, start=None: _smooth(sm_store, key, v, k_sm, frame_n, start)
+        # INTENSIDADE DOS EFEITOS (fader EFEITOS no topo do dash = OUTPUT_GRADE.fxamt): multiplica a
+        # opacidade de TODO efeito da pilha; 0 = so' as fontes cruas (a mistura/telas/calibracao seguem)
+        fx_amt = min(1.0, max(0.0, float((getattr(tuning, 'OUTPUT_GRADE', None) or {}).get('fxamt', 1.0))))
 
-        def set_uniforms(fx, mod=None):
+        def set_uniforms(fx, mod=None, sk=None):
             glUniform2f(uniforms['res'], CMP_W, CMP_H)
             glUniform1f(uniforms['time'], now_t)
-            glUniform1f(uniforms['amp'], state['amp'])
-            glUniform1f(uniforms['bass'], state['bass'])
-            glUniform1f(uniforms['mid'], state['mid'])
-            glUniform1f(uniforms['treble'], state['treble'])
-            glUniform1f(uniforms['kick'], state['kick'])
             glUniform1f(uniforms['beats'], state['beats'] % 4096.0)   # float32 do GL: nao deixa crescer sem fim
-            glUniform1f(uniforms['build'], state['build'])
             glUniform3f(uniforms['dominant'], *state['dominant'])
-            for name in FREQ_BAND_UNIFORM.values():
-                glUniform1f(uniforms[name], state[name])
-            for i in range(MAX_CHANNELS):
-                glUniform1f(uniforms['chan'][i], state['chan'][i])
-                glUniform1f(uniforms['chan_hit'][i], state['chan_hit'][i])
+            for loc, k in uniforms['state']:          # amp/bass/.../kick/build + as 8 faixas (as que o shader le)
+                glUniform1f(loc, state[k])
+            for loc, k, i in uniforms['chan']:        # u_chan[i] / u_chan_hit[i]
+                glUniform1f(loc, state[k][i])
             mod = mod or {}
-            for n, (loc, d) in uniforms['fx'].items():
+            for n, loc, d in uniforms['fx']:   # sk = chave da suavizacao (None = valor cru)
                 v = fx.get(n, d)
-                if n in mod:   # ♪ no knob (entrada['mod']): o som empurra do valor do knob ate 1, pela faixa marcada mais forte
-                    v += (1.0 - v) * min(1.0, max(state.get(b, 0.0) for b in mod[n]))
-                glUniform1f(loc, v)
+                glUniform1f(loc, _mod_value(smv(sk + (n,), v) if sk else v, mod.get(n), state))
 
         # --- SAIDA: so' as fontes MARCADAS (src_frames, de baixo pra cima), cada uma pela SUA
         # pilha (state['bindings'][fonte]): a fonte crua -> cada shader marcado desenha com ela de
@@ -3336,6 +3497,9 @@ def main():
         glBindTexture(GL_TEXTURE_2D, poly_tex[0])
         for k in [k for k in src_tex if k not in {x[0] for x in src_frames}]:
             glDeleteTextures([src_tex.pop(k)[0]])       # canal saiu da saida: libera a textura
+            e = pbos.pop('fx:' + k, None)                # e os PBOs da previa com efeitos dele
+            if e:
+                glDeleteBuffers(2, e[0])
         for key, src_a, frame in src_frames:
             glActiveTexture(GL_TEXTURE0)                 # a fonte crua -> u_texture_0 dos shaders
             st_ = src_tex.get(key)
@@ -3376,20 +3540,24 @@ def main():
                 sjt[1] = sjm
             elif sjm is None:
                 sjt = None
-            for o in b.get('shaders') or []:
+            for oj, o in enumerate(b.get('shaders') or []):
                 a = min(1.0, float(o.get('opacity', 0)))
                 if o.get('off') or (sh_avail is not None and o['file'] not in sh_avail):
                     a = 0
                 rg = o.get('region')
                 if rg == 'subject' and sjt is None:     # sem mascara (ainda): assunto vazio
                     a = 0
-                h = layer_program(o['file']) if a > 0 else None
+                sk = ('fx', key, oj, o['file'])         # suavizacao: liga/desliga/opacidade viram fade curto
+                a = smv(sk, a * fx_amt, 0.0)
+                if o.get('kick'):                       # kick no efeito: opacidade x kick (batida = 1, decai ate 0)
+                    a *= state['kick']
+                h = layer_program(o['file']) if a > 0.002 else None
                 if not h:
                     continue
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
-                use_program(h[1], h[3])
+                use_program(h)
                 set_uniforms(o['fx'] if isinstance(o.get('fx'), dict)   # forcas da ENTRADA (mesmo .frag pode vir 2x)
-                             else (b.get('fx') or {}).get(o['file']) or {}, o.get('mod'))
+                             else (b.get('fx') or {}).get(o['file']) or {}, o.get('mod'), sk)
                 if uniforms['eyes'] >= 0:                   # shader usa olhos -> pede deteccao dessa fonte
                     eyes_want[key] = (time.time(), frame)
                     ey = (state.get('eyes') or {}).get(key) or (0.0, 0.0, 0.0, 0.0, 0.0)
@@ -3413,23 +3581,11 @@ def main():
                 try:
                     pw = min(FX_PV_W, CMP_W)
                     ph = max(2, int(round(pw * CMP_H / max(1, CMP_W))))
-                    if fx_pv['wh'] != (pw, ph):
-                        if fx_pv['fbo'] is None:
-                            fx_pv['fbo'], fx_pv['tex'] = glGenFramebuffers(1), glGenTextures(1)
-                        glBindTexture(GL_TEXTURE_2D, fx_pv['tex'])
-                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, pw, ph, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
-                        glBindFramebuffer(GL_FRAMEBUFFER, fx_pv['fbo'])
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fx_pv['tex'], 0)
-                        fx_pv['wh'] = (pw, ph)
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
                     glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['src'][si], 0)
-                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fx_pv['fbo'])
-                    glBlitFramebuffer(0, 0, CMP_W, CMP_H, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, fx_pv['fbo'])
-                    glPixelStorei(GL_PACK_ALIGNMENT, 1)
-                    buf = glReadPixels(0, 0, pw, ph, GL_RGB, GL_UNSIGNED_BYTE)
-                    a = np.ascontiguousarray(np.frombuffer(buf, dtype=np.uint8).reshape(ph, pw, 3)[::-1])
-                    state.setdefault('fx_small', {})[key] = (a.tobytes(), pw, ph)
+                    a = pv_grab(fx_pv, 'fx:' + key, (0, 0, CMP_W, CMP_H), pw, ph)
+                    if a is not None:
+                        state.setdefault('fx_small', {})[key] = (a.tobytes(), a.shape[1], a.shape[0])
                 except Exception as e:                  # sem blit: fica sem previa com efeito (o dash cai na crua)
                     if not fx_pv.get('warned'):
                         print('previa com efeitos indisponivel ->', e)
@@ -3444,7 +3600,7 @@ def main():
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, al)
-            blend_into(lt['out'][1 - oi], lt['out'][oi], lt['src'][si], min(1.0, src_a), sm,
+            blend_into(lt['out'][1 - oi], lt['out'][oi], lt['src'][si], smv(('src', key), min(1.0, src_a), 0.0), sm,
                        mask=int(al is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
             oi = 1 - oi
         # IMAGEM DA CENA (tuning.SCENE_GRADE = campo 'grade' do set ativo; knobs no Palco do v2):
@@ -3456,10 +3612,10 @@ def main():
         if sgh and any(abs(float(sfx.get(n, d)) - d) > 1e-4 for n, d in sgh[3].items()):
             glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['out'][1 - oi], 0)
-            use_program(sgh[1], sgh[3])
-            set_uniforms(sfx)
-            glUniform1i(glGetUniformLocation(sgh[1], 'u_test'), 0)
-            glUniform1f(glGetUniformLocation(sgh[1], 'u_dim'), 0.0)
+            use_program(sgh)
+            set_uniforms(sfx, sk=('sg',))
+            glUniform1i(uniforms['test'], 0)
+            glUniform1f(uniforms['dim'], 0.0)
             glActiveTexture(GL_TEXTURE0)
             glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
             glClear(GL_COLOR_BUFFER_BIT)
@@ -3477,10 +3633,10 @@ def main():
                     continue
                 glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
-                use_program(th[1], th[3])
-                set_uniforms(tfx)
-                glUniform1i(glGetUniformLocation(th[1], 'u_test'), 0)
-                glUniform1f(glGetUniformLocation(th[1], 'u_dim'), 0.0)
+                use_program(th)
+                set_uniforms(tfx, sk=('scr', i))
+                glUniform1i(uniforms['test'], 0)
+                glUniform1f(uniforms['dim'], 0.0)
                 glActiveTexture(GL_TEXTURE0)
                 glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
                 glClear(GL_COLOR_BUFFER_BIT)
@@ -3496,6 +3652,8 @@ def main():
         grade = getattr(tuning, 'OUTPUT_GRADE', None) or {}
         g_on = bool(grade.get('on', 1))
         g_dim = 1.0 - min(1.0, max(0.0, float(grade.get('master', 1.0))))
+        if (state.get('light_scan') or {}).get('run'):   # mapeando as luzes: telao preto (a camera so' ve o rig)
+            g_dim = 1.0
         g_test = g_on and bool(grade.get('test'))
         gh = layer_program(dash_server.GRADE_FRAG) if (g_on or g_dim > 1e-4) else None
         gfx = (grade.get('fx') or {}) if g_on else {}
@@ -3551,10 +3709,10 @@ def main():
             glDrawArrays(GL_TRIANGLES, 0, 3)
         if gh:                                          # final -> calibrar.frag -> tela
             to_screen()
-            use_program(gh[1], gh[3])
-            set_uniforms(gfx)
-            glUniform1i(glGetUniformLocation(gh[1], 'u_test'), int(g_test))
-            glUniform1f(glGetUniformLocation(gh[1], 'u_dim'), g_dim)
+            use_program(gh)
+            set_uniforms(gfx, sk=('og',))
+            glUniform1i(uniforms['test'], int(g_test))
+            glUniform1f(uniforms['dim'], g_dim)
             glActiveTexture(GL_TEXTURE0)
             glBindTexture(GL_TEXTURE_2D, final)
             glClear(GL_COLOR_BUFFER_BIT)
@@ -3592,22 +3750,9 @@ def main():
             ph = max(2, int(round(pw * WIN_H / max(1, WIN_W))))
             small = None
             try:
-                if out_pv['wh'] != (pw, ph):
-                    if out_pv['fbo'] is None:
-                        out_pv['fbo'], out_pv['tex'] = glGenFramebuffers(1), glGenTextures(1)
-                    glBindTexture(GL_TEXTURE_2D, out_pv['tex'])
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, pw, ph, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
-                    glBindFramebuffer(GL_FRAMEBUFFER, out_pv['fbo'])
-                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, out_pv['tex'], 0)
-                    out_pv['wh'] = (pw, ph)
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)
-                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, out_pv['fbo'])
-                glBlitFramebuffer(0, 0, WIN_W, WIN_H, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, out_pv['fbo'])
-                glPixelStorei(GL_PACK_ALIGNMENT, 1)
-                buf = glReadPixels(0, 0, pw, ph, GL_RGB, GL_UNSIGNED_BYTE)
-                small = np.frombuffer(buf, dtype=np.uint8).reshape(ph, pw, 3)
-            except Exception as e:                      # sem blit (driver velho): le inteira e reduz
+                small = pv_grab(out_pv, 'out', (0, 0, WIN_W, WIN_H), pw, ph)
+            except Exception as e:                      # sem blit/PBO (driver velho): le inteira e reduz
                 if not out_pv.get('warned'):
                     print('previa da saida: blit indisponivel, lendo a janela inteira ->', e)
                     out_pv['warned'] = True
@@ -3615,13 +3760,14 @@ def main():
                 glBindFramebuffer(GL_FRAMEBUFFER, 0)
                 buf = glReadPixels(0, 0, WIN_W, WIN_H, GL_RGB, GL_UNSIGNED_BYTE)
                 st_ = max(1, -(-WIN_W // OUT_PV_W))
-                small = np.frombuffer(buf, dtype=np.uint8).reshape(WIN_H, WIN_W, 3)[::st_, ::st_]
+                # OpenGL le de baixo pra cima — inverte pra topo->baixo (igual ao Source Image / ffmpeg)
+                small = np.frombuffer(buf, dtype=np.uint8).reshape(WIN_H, WIN_W, 3)[::st_, ::st_][::-1]
             glBindFramebuffer(GL_FRAMEBUFFER, 0)
-            # OpenGL le de baixo pra cima — inverte pra topo->baixo (igual ao Source Image / ffmpeg)
-            small = np.ascontiguousarray(small[::-1])
-            sh_, sw_ = small.shape[:2]
-            state['out_small'] = (small.tobytes(), sw_, sh_)
-            if tuning.OUT_ANALYSIS_ENABLED and t_pv - out_an_t[0] >= 1.0 / OUT_ANALYSIS_HZ:
+            if small is not None:
+                small = np.ascontiguousarray(small)
+                sh_, sw_ = small.shape[:2]
+                state['out_small'] = (small.tobytes(), sw_, sh_)
+            if small is not None and tuning.OUT_ANALYSIS_ENABLED and t_pv - out_an_t[0] >= 1.0 / OUT_ANALYSIS_HZ:
                 out_an_t[0] = t_pv
                 out_frame = small.reshape(-1)
                 arr_s = frame_downsample(out_frame, sw_, sh_)
@@ -3641,14 +3787,6 @@ def main():
             try:
                 k = min(1.0, CV_PV_MAX / max(1, FIT_W, FIT_H))
                 pw, ph = max(2, int(round(FIT_W * k))), max(2, int(round(FIT_H * k)))
-                if cv_pv['wh'] != (pw, ph):
-                    if cv_pv['fbo'] is None:
-                        cv_pv['fbo'], cv_pv['tex'] = glGenFramebuffers(1), glGenTextures(1)
-                    glBindTexture(GL_TEXTURE_2D, cv_pv['tex'])
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, pw, ph, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
-                    glBindFramebuffer(GL_FRAMEBUFFER, cv_pv['fbo'])
-                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cv_pv['tex'], 0)
-                    cv_pv['wh'] = (pw, ph)
                 if omap:
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
                     glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['canvas'], 0)
@@ -3657,17 +3795,47 @@ def main():
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)
                     sr = (int(round(cbox[0] * WIN_W)), int(round(cbox[1] * WIN_H)),
                           int(round((cbox[0] + cbox[2]) * WIN_W)), int(round((cbox[1] + cbox[3]) * WIN_H)))
-                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, cv_pv['fbo'])
-                glBlitFramebuffer(*sr, 0, 0, pw, ph, GL_COLOR_BUFFER_BIT, GL_LINEAR)
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, cv_pv['fbo'])
-                glPixelStorei(GL_PACK_ALIGNMENT, 1)
-                buf = glReadPixels(0, 0, pw, ph, GL_RGB, GL_UNSIGNED_BYTE)
-                a = np.ascontiguousarray(np.frombuffer(buf, dtype=np.uint8).reshape(ph, pw, 3)[::-1])
-                state['cv_small'] = (a.tobytes(), pw, ph)
+                a = pv_grab(cv_pv, 'cv', sr, pw, ph)
+                if a is not None:
+                    state['cv_small'] = (a.tobytes(), a.shape[1], a.shape[0])
             except Exception as e:                      # sem blit: o Palco fica sem previa
                 if not cv_pv.get('warned'):
                     print('previa do canvas indisponivel ->', e)
                     cv_pv['warned'] = True
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+        # LUZES (tuning.LIGHTS, ver luzes.py): o canvas pronto (= o da previa cv) pequeno -> cor de cada
+        # zona -> brilho pelo som (♪, mesmo _mod_value dos knobs) x master -> Art-Net a LIGHTS['fps']
+        lcfg = getattr(tuning, 'LIGHTS', None) or {}
+        req = state.pop('light_scan_req', None)
+        if req and not (state.get('light_scan') or {}).get('run'):
+            state['light_scan'] = {'run': 1, 'prog': 0.0, 'txt': 'começando'}
+            threading.Thread(target=light_scan_thread, args=(req,), daemon=True).start()
+        if lcfg.get('on') and lcfg.get('fixtures') and not (state.get('light_scan') or {}).get('run') and t_pv - lt_pv['t'] >= 1.0 / max(1, min(60, int(lcfg.get('fps', 40)))):
+            lt_pv['t'] = t_pv
+            try:
+                pw = min(LIGHT_PV_W, FIT_W)
+                ph = max(2, int(round(pw * FIT_H / max(1, FIT_W))))
+                if omap:
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['canvas'], 0)
+                    sr = (0, 0, CMP_W, CMP_H)
+                else:
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)
+                    sr = (int(round(cbox[0] * WIN_W)), int(round(cbox[1] * WIN_H)),
+                          int(round((cbox[0] + cbox[2]) * WIN_W)), int(round((cbox[1] + cbox[3]) * WIN_H)))
+                img = pv_grab(lt_pv, 'luz', sr, pw, ph)
+                if img is not None:
+                    lt_pv['tx'] = lt_pv['tx'] or luzes.Sender()
+                    unis = luzes.dmx_frame(img, lcfg['fixtures'], lambda fx: _mod_value(1.0, fx.get('mod'), state),
+                                           lt_pv['prev'], master=1.0 - g_dim, host=str(lcfg.get('host') or '255.255.255.255'))
+                    lt_pv['tx'].send(unis)
+                    state['lights_live'] = [[int(c) for c in (lt_pv['prev'].get(i) or [(0, 0, 0)])[0]]
+                                            for i in range(len(lcfg['fixtures']))]   # 1a cor de cada aparelho (dash)
+            except Exception as e:                      # config torta / sem rede: o video nao para por causa da luz
+                if lt_pv.get('err') != str(e):
+                    print('luzes ->', e)
+                    lt_pv['err'] = str(e)
             glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
         pend = state.pop('scene_pending', None)
@@ -3684,7 +3852,7 @@ def main():
                 glActiveTexture(GL_TEXTURE0)
                 glBindFramebuffer(GL_FRAMEBUFFER, 0)
             try:
-                dash_server.apply_scene(pend['name'])
+                dash_server.apply_scene(pend['name'], defer=True)   # memoria agora; disco numa thread (sem perder frame)
                 print('set ->', pend['name'])
             except (KeyError, ValueError, OSError) as e:
                 print('set: nao aplicou', pend.get('name'), '->', e)
@@ -3875,6 +4043,35 @@ def _selfcheck():
     state['overlays'] = []
     MEDIA_DIR = _md0
     print('native_synth overlay self-check ok')
+    lv = {'subbass': 0.5, 'air': 0.9, 'kick': 0.0}
+    assert _mod_value(0.3, None, lv) == 0.3, '♪ desligado = o knob'
+    assert abs(_mod_value(0.3, {'b': ['subbass'], 'lo': 0.2, 'hi': 0.6}, lv) - 0.4) < 1e-9, '♪ = lo + (hi-lo) * nivel'
+    assert abs(_mod_value(0.3, {'b': ['subbass', 'air'], 'lo': 1.0, 'hi': 0.0}, lv) - 0.1) < 1e-9, '♪ mais forte vale; hi<lo inverte'
+    assert abs(_mod_value(0.5, {'b': ['kick']}, lv) - 0.5) < 1e-9, '♪ formato velho = do knob ate 1'
+    print('native_synth mod self-check ok')
+    rng = np.random.default_rng(1)
+    fa, fb = (rng.integers(0, 256, FRAME_SIZE, dtype=np.uint8) for _ in range(2))
+
+    def slow(frames):   # a conta de antes (preto + cada uma por cima), sem o atalho da opaca
+        out = np.zeros(FRAME_SIZE, np.uint16)
+        for _k, a, f in frames:
+            a8 = int(round(min(1.0, a) * 256))
+            out = (out * (256 - a8) + f * np.uint16(1) * a8) >> 8
+        return out.astype(np.uint8)
+    _alpha_now.clear()
+    for fr in ([('a', 1.0, fa)], [('a', 0.4, fa)], [('a', 1.0, fa), ('b', 0.5, fb)], [('a', 0.5, fa), ('b', 1.0, fb)],
+               [('a', 0.3, fa), ('b', 1.0, fb), ('c', 0.7, fa)]):
+        assert np.array_equal(_composite(fr), slow(fr)), [(k, a) for k, a, _ in fr]
+    assert _composite([('a', 1.0, fa)]) is fa, 'fonte opaca sozinha = o proprio frame, sem copia'
+    print('native_synth composite self-check ok')
+    st_ = {}
+    assert _smooth(st_, 'a', 1.0, 0.5, 0, start=0.0) == 0.5, 'chave nova com start: anda a partir dele'
+    assert _smooth(st_, 'a', 1.0, 0.5, 1) == 0.75 and _smooth(st_, 'b', 0.3, 0.5, 1) == 0.3, 'sem start = ja no alvo'
+    assert _smooth(st_, 'a', 0.2, 1.0, 2) == 0.2, 'k=1 (suavizacao desligada) = pula'
+    for f in range(3, 200):
+        v = _smooth(st_, 'a', 0.9, 0.2, f)
+    assert v == 0.9, 'chega exatamente no alvo (sem ficar rastejando pra sempre)'
+    print('native_synth smooth self-check ok')
 
 
 if __name__ == '__main__':

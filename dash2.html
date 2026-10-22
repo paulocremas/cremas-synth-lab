@@ -145,7 +145,9 @@
   #midi-btn .dot.hit { opacity: 1; box-shadow: 0 0 6px var(--midi); }
   #midi-btn.learn { background: var(--midi-d); border-color: var(--midi); color: var(--tx); }
   #mode-btn.edit { background: var(--sel-d); border-color: var(--sel); color: var(--tx); }
+  #master-wrap { display: inline-flex; gap: 6px; }
   #master-wrap .fader { width: 150px; height: 34px; }
+  .fader.fxamt .f-fill { background: linear-gradient(90deg, #3a2410, #ff9f4a); opacity: .5; }
   #blk-btn { position: relative; min-height: 34px; padding: 0 12px; border-radius: var(--r2); border: 1px solid #55282b; background: var(--bad-d);
              color: #ffb3b6; cursor: pointer; font-weight: 800; letter-spacing: .06em; font-size: 12px; }
   #blk-btn.on { background: var(--bad); color: #fff; border-color: var(--bad); animation: pulse 1s ease-in-out infinite; }
@@ -155,7 +157,7 @@
   main { padding: 12px; }
   main > section { display: none; }
   body[data-panel="palco"] #palco, body[data-panel="audio"] #audio, body[data-panel="imagem"] #imagem,
-  body[data-panel="saida"] #saida, body[data-panel="lib"] #lib { display: block; }
+  body[data-panel="saida"] #saida, body[data-panel="lib"] #lib, body[data-panel="luzes"] #luzes { display: block; }
 
   /* ---------- KNOB ---------- */
   .knob { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: 58px; cursor: ns-resize;
@@ -283,6 +285,11 @@
   .sndb:hover { color: var(--tx); }
   .sndb.on { background: var(--live-d); border-color: #2c6e50; color: #c5f2dc; }
   .modrow { flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .rng { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 70px; padding-top: 16px; }
+  .rng-tr { position: relative; width: 64px; height: 10px; margin-bottom: 8px; border-radius: 5px; background: var(--s2); border: 1px solid var(--line2); cursor: ew-resize; touch-action: none; }
+  .rng-fill { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: var(--live-d); }
+  .rng-h { position: absolute; top: -4px; width: 8px; height: 16px; margin-left: -4px; border-radius: 3px; background: var(--tx); }
+  .rng-live { position: absolute; top: -3px; width: 3px; height: 14px; margin-left: -1.5px; border-radius: 1px; background: var(--sel); }
   .modrow .gt { min-width: 90px; font-size: 11px; color: var(--tx2); }
   .dev-title { font-size: 15px; font-weight: 800; }
   details.keys summary { cursor: pointer; color: var(--tx3); font-size: 12px; padding: 6px 2px; user-select: none; }
@@ -309,6 +316,8 @@
   .cols { display: grid; grid-template-columns: repeat(10, minmax(104px, 1fr)); gap: 6px; margin-top: var(--gap); overflow-x: auto; }
   .col { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 4px 6px; background: var(--s2); border-radius: var(--r2); min-width: 0; }
   .col.lead { background: var(--s3); }
+  .col.off .mv, .col.off .lv, .col.off .cn { opacity: .3; }
+  .col .mute { font-size: 10px; padding: 1px 6px; }
   .col .cn { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .col .mv { display: flex; align-items: flex-end; gap: 6px; }
   .tall { position: relative; width: 26px; height: 96px; background: var(--bg); border-radius: 4px; overflow: hidden; }
@@ -590,6 +599,117 @@
   .blk .kv b { color: var(--tx); font-family: var(--mono); font-weight: 500; }
   .blk .sws { display: flex; gap: 6px; margin: 6px 0; }
   .blk .sws span { flex: 1; height: 22px; border-radius: 5px; display: grid; place-items: center; font-size: 9px; color: rgba(255,255,255,.85); text-shadow: 0 1px 2px #000; }
+
+  /* ---------- LUZES ---------- */
+  .lz-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: var(--gap); margin-bottom: var(--gap); }
+  .lz-main { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--gap); align-items: start; }
+  @media (max-width: 1100px) { .lz-top, .lz-main { grid-template-columns: 1fr; } }
+  .lz-dev { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 8px; border-radius: var(--r2); background: var(--s2); margin-bottom: 6px; font-size: 13px; }
+  .lz-dev .tag, .lz-row .pos { font: 700 10px var(--mono); padding: 2px 7px; border-radius: 9px; background: var(--midi-d); color: var(--midi); }
+  .lz-dev .tag.wled { background: var(--sel-d); color: var(--sel); }
+  .lz-prog { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; margin: 12px 0 6px; }
+  .lz-prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--live-d), var(--live)); transform-origin: left; transform: scaleX(0); transition: transform .3s; }
+  .lz-st { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+  .lz-map { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r2); overflow: hidden; background: #050607; }
+  .lz-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .75; }
+  .lz-map .mon-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tx3); font-size: 12px; }
+  .lz-pin { --c: #888; position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; display: grid; place-items: center;
+            background: var(--c); color: #000; font: 800 11px var(--mono); cursor: grab; touch-action: none; user-select: none;
+            box-shadow: 0 0 0 2px rgba(0,0,0,.7), 0 0 18px var(--c); text-shadow: 0 0 3px rgba(255,255,255,.7); }
+  .lz-pin.fita { border-radius: 6px; }
+  .lz-pin.sel { box-shadow: 0 0 0 2px var(--sel), 0 0 0 4px rgba(0,0,0,.7), 0 0 22px var(--c); }
+  .lz-row { padding: 8px; border-radius: var(--r2); border: 1px solid transparent; background: var(--s2); margin-bottom: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .lz-row.sel { border-color: var(--sel); background: var(--sel-d); }
+  .lz-l1 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .lz-l1 label { display: inline-flex; align-items: center; gap: 4px; }
+  .lz-sw { width: 22px; height: 22px; border-radius: 6px; background: #222; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); flex: none; }
+  .lz-row .chips .chip { min-height: 22px; font-size: 11px; padding: 0 7px; }
+
+  /* =====================================================================================
+     PELE v3 — inspirada em Resolume / Ableton / grandMA: superficies em camadas (elevacao por
+     tom + sombra, nao por borda grossa), um acento por funcao (verde no ar, laranja selecao, azul
+     MIDI, vermelho perigo), abas sublinhadas, medidores em segmentos de LED, ajuda longa numa linha
+     so' (inteira no hover). So' aparencia: nenhuma classe/ID nova que a logica dependa.
+     ===================================================================================== */
+  :root {
+    --bg: #090b0e; --s1: #101317; --s2: #161a1f; --s3: #1e2329; --s4: #29303a;
+    --line: rgba(255,255,255,.06); --line2: rgba(255,255,255,.11);
+    --tx: #eceef1; --tx2: #a7afb9; --tx3: #6c7580;
+    --live: #34d399; --live-d: #0f2e23; --sel: #ff9f4a; --sel-d: #2f1d0b; --midi: #60a5fa; --midi-d: #0f2236;
+    --bad: #f87171; --bad-d: #351416; --warn: #fbbf24;
+    --r: 10px; --r2: 7px; --gap: 10px;
+    --sans: "Inter", "Segoe UI Variable", system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
+    --shadow: 0 1px 0 rgba(255,255,255,.035) inset, 0 10px 30px -12px rgba(0,0,0,.6);
+    --ease: cubic-bezier(.2, .7, .2, 1);
+  }
+  body { background: radial-gradient(1200px 500px at 20% -10%, #121820 0%, transparent 60%), var(--bg); background-attachment: fixed; letter-spacing: .005em; }
+  ::selection { background: rgba(96,165,250,.35); }
+  :focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-thumb { background: var(--s4); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* paineis: superficie em degrade sutil + cabecalho separado por linha fina */
+  .panel { background: linear-gradient(180deg, #12161b, var(--s1) 90px); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 14px; }
+  .ph { margin: -4px -2px 12px; padding: 0 2px 10px; border-bottom: 1px solid var(--line); flex-wrap: nowrap; }
+  .ph > b { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .14em; color: var(--tx2); flex: none; }
+  .ph > b::before { content: ''; width: 3px; height: 12px; border-radius: 2px; background: var(--tick, var(--tx3)); }
+  .ph .hint { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ph > .seg, .ph > .btn, .ph > label, .ph > button { flex: none; }
+  #palco .scenes-p { --tick: var(--live); } .mesa-p { --tick: var(--sel); } .side .mon-p { --tick: var(--bad); } .insp-p { --tick: var(--sel); }
+  #audio { --tick: #8b5cf6; } #imagem { --tick: var(--midi); } #saida { --tick: var(--bad); } #luzes { --tick: var(--warn); } #lib { --tick: var(--tx2); }
+  .hint { color: var(--tx3); }
+  .empty { color: var(--tx3); }
+
+  /* controles: "tecla" com luz por cima (hardware), resposta rapida */
+  .btn, .seg button, .chip, .pad, .ib, .x, .sndb, .onbtn, .mapc, .orow, .lrow { transition: background-color .12s var(--ease), border-color .12s var(--ease), color .12s var(--ease), box-shadow .12s var(--ease), transform .06s; }
+  .btn { background: linear-gradient(180deg, #1c2127, #161a1f); border-color: var(--line2); color: var(--tx2); box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 1px 2px rgba(0,0,0,.4); }
+  .btn:hover { background: linear-gradient(180deg, #232931, #1b2026); color: var(--tx); }
+  .btn:active, .pad:active, .chip:active { transform: translateY(1px); }
+  .btn.on { background: linear-gradient(180deg, #13392b, #0f2e23); border-color: rgba(52,211,153,.55); color: #d1fae5; }
+  .btn.danger { color: var(--bad); border-color: rgba(248,113,113,.35); }
+  .inp, select.inp { background: #0c0f12; border-color: var(--line2); border-radius: var(--r2); transition: border-color .12s; }
+  .inp:hover { border-color: rgba(255,255,255,.18); }
+  .chip { background: var(--s2); border-color: var(--line2); }
+  .chip.on { background: var(--live-d); border-color: rgba(52,211,153,.45); color: #c9f7e3; }
+  .chip.pick { background: var(--sel-d); border-color: rgba(255,159,74,.7); color: #ffe0c2; }
+
+  /* topo: tres grupos (navegacao | sinal | controle), abas SUBLINHADAS como nos softwares de palco */
+  #top { background: rgba(12,14,18,.86); backdrop-filter: blur(12px) saturate(1.2); border-bottom: 1px solid var(--line); padding: 8px 14px; gap: 8px 14px; }
+  #brand { font-size: 15px; letter-spacing: .08em; padding-right: 6px; border-right: 1px solid var(--line); margin-right: 2px; }
+  nav#tabs.seg { background: none; border: none; padding: 0; gap: 0; }
+  nav#tabs button { position: relative; min-height: 34px; padding: 0 12px; border-radius: 6px; color: var(--tx3); font-weight: 600; letter-spacing: .01em; }
+  nav#tabs button:hover { color: var(--tx); background: rgba(255,255,255,.04); }
+  nav#tabs button.on { background: none; color: var(--tx); }
+  nav#tabs button.on::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 1px; height: 2px; border-radius: 2px; background: var(--live); box-shadow: 0 0 10px rgba(52,211,153,.6); }
+  #tm, #health { background: #0c0f12; border-color: var(--line); }
+  #blk-btn { background: linear-gradient(180deg, #3d1618, #301214); border-color: rgba(248,113,113,.4); box-shadow: 0 1px 0 rgba(255,255,255,.04) inset; }
+  #blk-btn.on { background: var(--bad); }
+  .fader { background: #0c0f12; border-color: var(--line2); }
+  .f-fill { background: linear-gradient(90deg, #0f3d2c, #34d399); opacity: .55; }
+
+  /* palco: cards de cena como "pads" de controlador */
+  .pad { background: linear-gradient(180deg, #1b2026, #15191e); border-color: var(--line2); box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 2px 6px rgba(0,0,0,.35); }
+  .pad.active { background: linear-gradient(180deg, #154031, #0f2e23); border-color: var(--live); box-shadow: 0 0 0 1px rgba(52,211,153,.25), 0 0 24px -6px rgba(52,211,153,.55); }
+  .strip { background: linear-gradient(180deg, #181c22, #13171b); border-color: transparent; box-shadow: var(--shadow); }
+  .strip.sel { border-color: var(--sel); background: linear-gradient(180deg, #221b14, #17140f); box-shadow: 0 0 0 1px rgba(255,159,74,.2), 0 12px 30px -14px rgba(255,159,74,.45); }
+  .card { box-shadow: 0 0 0 1px var(--line) inset; }
+  .mon { box-shadow: 0 0 0 1px var(--line), 0 12px 36px -16px #000; }
+  .ins { background: #0f1216; }
+
+  /* audio: medidores em SEGMENTOS (LED de mesa); a cor da faixa continua dizendo qual e' qual */
+  .tall { width: 24px; height: 120px; background: #07090b; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--line); }
+  .tall i { -webkit-mask: repeating-linear-gradient(to top, #000 0 3px, transparent 3px 4px); mask: repeating-linear-gradient(to top, #000 0 3px, transparent 3px 4px); }
+  .tall i:not(.raw) { filter: saturate(1.15) brightness(1.08); }
+  .col { background: linear-gradient(180deg, #171b20, #12161a); box-shadow: var(--shadow); gap: 6px; padding: 10px 6px 8px; }
+  .col.lead { background: linear-gradient(180deg, #1d2229, #161a1f); }
+  .col .lv { font-size: 12px; color: var(--tx); }
+  .spec-wrap { background: #07090b; box-shadow: inset 0 0 0 1px var(--line); height: 250px; }
+  .vb { background: #1a1f25; }
+
+  .k-tr { stroke: #232930; } .k-ar { filter: drop-shadow(0 0 3px rgba(52,211,153,.45)); }
+  .knob.drag .k-ar { filter: drop-shadow(0 0 4px rgba(255,159,74,.6)); }
+  dialog, #hpop, #midipop, #keys-box { background: #12161b; border-color: var(--line2); box-shadow: 0 24px 60px -12px rgba(0,0,0,.75); }
+  #toast { background: #1b2026; box-shadow: 0 10px 30px -10px #000; }
 </style>
 
 <header id="top">
@@ -599,6 +719,7 @@
     <button data-tab="audio">Áudio</button>
     <button data-tab="imagem">Imagem</button>
     <button data-tab="saida">Saída</button>
+    <button data-tab="luzes">Luzes</button>
     <button data-tab="lib" class="ed">Biblioteca</button>
   </nav>
   <span id="tm" title="áudio chegando: kick · amp · 8 faixas (grave → agudo) — clique abre a aba Áudio">
@@ -707,7 +828,7 @@
         <div class="fpsgraph"><canvas id="fps-graph"></canvas><span class="hint num" id="fps-stats"></span></div>
         <p class="hint">60 deixa o movimento dos efeitos e transições liso; câmera e vídeo seguem no fps deles (frame repetido não é reenviado pra GPU). Se o número real ficar abaixo do alvo, volte pra 30.</p>
         <div id="outinfo"></div>
-        <p class="hint" style="margin-top:12px">Luzes de palco (DMX): ainda não implementado.</p>
+        <p class="hint" style="margin-top:12px">Luzes de palco e fitas LED (Art-Net / WLED): aba <b>Luzes</b>.</p>
       </div>
       <div class="panel mon-p"><div class="ph"><b>Monitor</b><span class="hint">o que está indo pro telão · ~15 quadros/s</span></div>
         <div class="mon"><canvas id="mon-out2"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div></div>
@@ -751,6 +872,40 @@
   </section>
 
   <!-- ================= BIBLIOTECA ================= -->
+  <!-- ================= LUZES (src/luzes.py) ================= -->
+  <section id="luzes">
+    <div class="lz-top">
+      <div class="panel"><div class="ph"><b>Rede</b><span class="hint">nós Art-Net e fitas WLED que responderem agora</span><span class="grow"></span>
+          <button class="btn sm" id="lz-find">⌕ procurar</button></div>
+        <div id="lz-net"><div class="empty">sem rider? clique em procurar: lista quem está na rede e o que cada um aceita</div></div>
+      </div>
+      <div class="panel"><div class="ph"><b>Mapear com a câmera</b><span class="hint">acende canal por canal e vê onde a luz cai · o telão fica preto enquanto mapeia</span></div>
+        <div class="outbar">
+          <label>câmera <select class="inp" id="lz-cam"></select></label>
+          <label>universos <input class="inp num" id="lz-unis" value="0" style="width:84px" title="separe por vírgula: 0,1"></label>
+          <label>canais <input type="number" class="inp num" id="lz-n" value="128" min="1" max="512" style="width:72px"></label>
+          <label>espera <input type="number" class="inp num" id="lz-settle" value="0.25" step="0.05" min="0.05" max="2" style="width:72px">s</label>
+          <button class="btn" id="lz-scan">▶ mapear</button>
+        </div>
+        <div class="lz-prog"><i id="lz-bar"></i></div>
+        <div class="lz-st"><span class="hint" id="lz-txt">câmera apontada pro palco, luz da sala baixa · 128 canais ≈ 1 min</span><span class="grow"></span>
+          <button class="btn sm on" id="lz-use" hidden>usar estes aparelhos</button></div>
+      </div>
+    </div>
+    <div class="lz-main">
+      <div class="panel"><div class="ph"><b>Mapa do palco</b><span class="hint">foto da câmera · arraste um ponto pra mudar de onde a luz tira a cor</span><span class="grow"></span>
+          <label class="chk"><input type="checkbox" id="lz-on"> luzes seguindo a saída</label></div>
+        <div class="lz-map" id="lz-map"><canvas id="lz-photo"></canvas><div id="lz-pins"></div>
+          <div class="mon-wait" id="lz-wait">mapeie com a câmera pra ver o palco aqui</div></div>
+      </div>
+      <div class="panel"><div class="ph"><b>Aparelhos</b><span class="hint num" id="lz-count"></span><span class="grow"></span>
+          <label class="hint">IP <input class="inp sm" id="lz-host" style="width:128px" title="pra onde vai o Art-Net (255.255.255.255 = todos da rede)"></label>
+          <button class="btn sm" id="lz-add">+ aparelho</button></div>
+        <div id="lz-list"></div>
+      </div>
+    </div>
+  </section>
+
   <section id="lib">
     <div class="libcols">
       <div class="panel">
@@ -898,7 +1053,7 @@ async function pullPreview(p){
 // =====================================================================================
 const panelParam = new URLSearchParams(location.search).get('panel');
 if (panelParam) document.body.classList.add('popup');
-const TAB_TITLES = { palco: 'Palco', audio: 'Áudio', imagem: 'Imagem', saida: 'Saída', lib: 'Biblioteca' };
+const TAB_TITLES = { palco: 'Palco', audio: 'Áudio', imagem: 'Imagem', saida: 'Saída', luzes: 'Luzes', lib: 'Biblioteca' };
 let curTab = '';
 let perform = LS.get('v2perform', true);
 function showTab(p){
@@ -1138,7 +1293,13 @@ const masterVal = () => lastGrade.master ?? 1;
 const masterF = fader({ id: 'master', label: 'MASTER', cls: 'master', get: masterVal, dflt: 1, io: IO_GRADE,
   set: v => { v = Math.round(v * 1000) / 1000; if (v >= 1) delete lastGrade.master; else lastGrade.master = v; syncMaster(); },
   title: 'MASTER da saída — arraste ↔ · duplo-clique = 100% · vale mesmo com a calibração desligada' });
-$('#master-wrap').append(masterF);
+// INTENSIDADE DOS EFEITOS (OUTPUT_GRADE.fxamt): multiplica a opacidade de todo efeito da pilha (native,
+// suavizado); 0 = fontes cruas. Mesmo canal do master (live 25 Hz, grava ao soltar), MIDI learn pelo id.
+const fxamtVal = () => lastGrade.fxamt ?? 1;
+const fxamtF = fader({ id: 'fxamt', label: 'EFEITOS', cls: 'fxamt', get: fxamtVal, dflt: 1, io: IO_GRADE,
+  set: v => { v = Math.round(v * 1000) / 1000; if (v >= 1) delete lastGrade.fxamt; else lastGrade.fxamt = v; },
+  title: 'INTENSIDADE dos efeitos — 0 = imagem crua, 100% = como estão · arraste ↔ · duplo-clique = 100% · dá pra mapear no MIDI' });
+$('#master-wrap').append(fxamtF, masterF);
 let preBlack = 1;
 function blackout(){
   const m = masterVal();
@@ -1150,6 +1311,7 @@ $('#blk-btn').onclick = blackout;
 function syncMaster(){
   const m = masterVal();
   if (activeDrag !== 'master') masterF._show(m);
+  if (activeDrag !== 'fxamt') fxamtF._show(fxamtVal());
   $('#blk-btn').classList.toggle('on', m <= 0.001); document.body.classList.toggle('blackout', m <= 0.001);
 }
 const GRADE_GROUPS = [['Balanço de branco', ['temperatura', 'matiz']], ['Luz', ['exposicao', 'contraste', 'realces', 'sombras', 'brancos', 'pretos']],
@@ -2453,8 +2615,39 @@ function addSourceEl(strips){
 // mistura e knobs em grade de 4 — slots dev:0 = opacidade, dev:1..N = forcas do // fx:)
 const MOD_BANDS = [['subbass', 'sub'], ['lowmid', 'lowmid'], ['midrange', 'mid'], ['highmid', 'highmid'], ['presence', 'presence'],
   ['treble_hi', 'treble'], ['brilho', 'brilliance'], ['air', 'air'], ['kick', 'kick']];   // = dash_server.MOD_SOURCES
+// FAIXA de um knob com ♪: trilho com 2 pontas (min = som baixo, max = som alto; pode inverter) e o
+// marcador vivo (onde o som esta' agora). get() -> [lo, hi]; set(lo, hi) no arrasto; io = KNOB_BIND.
+function rangeCtl(o){
+  const fill = h('div', { class: 'rng-fill' }), live = h('div', { class: 'rng-live' }), a = h('div', { class: 'rng-h' }), b = h('div', { class: 'rng-h' });
+  const tr = h('div', { class: 'rng-tr' }, fill, live, a, b), val = h('div', { class: 'k-val' });
+  const w = h('div', { class: 'rng', title: 'arraste as pontas: mínimo (som baixo) e máximo (som alto) — o traço laranja é o som agora' },
+    tr, h('div', { class: 'k-lb', text: o.label }), val);
+  const fmt = v => o.bip ? (v >= 0.5 ? '+' : '') + Math.round((v - 0.5) * 200) : String(Math.round(v * 100));
+  const show = () => { const [lo, hi] = o.get(); a.style.left = lo * 100 + '%'; b.style.left = hi * 100 + '%';
+    fill.style.left = Math.min(lo, hi) * 100 + '%'; fill.style.width = Math.abs(hi - lo) * 100 + '%'; val.textContent = fmt(lo) + ' → ' + fmt(hi); };
+  const at = e => { const r = tr.getBoundingClientRect(); return Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 1000) / 1000; };
+  let which = -1;
+  const move = e => { if (which < 0) return; const [lo, hi] = o.get(), x = at(e); o.set(which ? lo : x, which ? x : hi); show(); o.io.live(); };
+  tr.onpointerdown = e => { const x = at(e), [lo, hi] = o.get(); which = Math.abs(x - lo) <= Math.abs(x - hi) ? 0 : 1;
+    tr.setPointerCapture(e.pointerId); activeDrag = o.id; o.io.touch(); move(e); };
+  tr.onpointermove = move;
+  tr.onpointerup = tr.onpointercancel = () => { if (which < 0) return; which = -1; activeDrag = ''; o.io.commit(); };
+  w._show = show; w._live = v => { live.style.left = v * 100 + '%'; };
+  show(); return w;
+}
+// marcadores vivos das faixas (inspetor): nivel = a faixa marcada mais forte, igual ao native set_uniforms
+let modLive = [];
+const MOD_NAME = { subbass: 'Sub-bass', lowmid: 'Low-mid', midrange: 'Midrange', highmid: 'High-mid', presence: 'Presence', treble_hi: 'Treble', brilho: 'Brilliance', air: 'Air' };
+function syncModLive(a){
+  if (!modLive.length || !a) return;
+  const lv = {}; for (const r of a.bands || []) lv[r.name] = r.final || 0;
+  for (const m of modLive){
+    const l = Math.min(1, Math.max(0, ...m.bands.map(b => b === 'kick' ? (a.kick || {}).final || 0 : lv[MOD_NAME[b]] || 0)));
+    const [lo, hi] = m.lohi(); m.el._live(lo + (hi - lo) * l);
+  }
+}
 function renderInspector(){
-  const box = $('#inspector'); box.innerHTML = ''; devEls = {};
+  const box = $('#inspector'); box.innerHTML = ''; devEls = {}; modLive = [];
   const src = lastSelected, info = src ? srcInfo(src) : null;
   const pos = mixStrips().findIndex(o => chKey(o) === src);
   box.append(h('div', { class: 'ph' }, h('b', { text: 'Selecionada' }), h('span', { class: 'grow' }),
@@ -2494,8 +2687,13 @@ function renderInspector(){
   // knob "on_<nome>" no // fx: = CAIXA liga/desliga (0/1; o shader le com step(0.5, ...)), fora da
   // numeracao dev:N do MIDI. Ex.: on_kick = so' na batida; on_subbass..on_air = faixas que disparam.
   const all = lastManifests[file] || [], toggles = all.filter(n => n.startsWith('on_')), names = all.filter(n => !n.startsWith('on_'));
-  if (toggles.length){
+  {
     const tg = h('div', { class: 'chips', style: 'margin-top:6px;flex-wrap:wrap' });
+    // KICK em todo efeito: o .frag com on_kick decide sozinho (caixa abaixo); os outros ganham o da
+    // pilha (entrada.kick = 1 -> native: opacidade x kick, kick 0 = o efeito some)
+    if (!toggles.includes('on_kick')) tg.append(chip((s.kick ? '☑' : '☐') + ' kick', !!s.kick, 'só aparece na batida: a opacidade vai junto com o kick (sem batida = some)', () => {
+      const x = cur(); if (!x) return; if (x.kick) delete x.kick; else x.kick = 1; sendBindings(true); remix();
+    }));
     for (const n of toggles){
       const on = fxVal(src, s, n) >= 0.5;
       tg.append(chip((on ? '☑ ' : '☐ ') + n.slice(3), on, n === 'on_kick' ? 'só dispara junto com o kick' : 'faixa que dispara o efeito (pode marcar várias)', () => {
@@ -2512,18 +2710,29 @@ function renderInspector(){
       if (!Object.keys(x.mod).length) delete x.mod; sendBindings(true); remix(); };
     const kn = h('div', { class: 'dev-knobs' });
     names.forEach((n, i) => {
-      const k = knob({ id: 'dev:' + (i + 1), size: 44, label: n, mlabel: `efeito selecionado · knob ${i + 1}`, dflt: fxDefault(file, n), io: KNOB_BIND,
-        get: () => { const x = cur(); return x ? fxVal(src, x, n) : fxDefault(file, n); }, set: v => { const x = cur(); if (x) setFxVal(src, x, n, v); } });
-      k.prepend(h('span', { class: 'slot', text: String(i + 1) }));
-      devEls['fx:' + n] = k;
-      kn.append(h('div', { class: 'kcell' }, k, h('button', { class: 'sndb' + (mods[n] ? ' on' : ''), text: '♪', title: mods[n] ? 'som ligado neste knob (clique desliga)' : 'mexer este knob com o som',
-        onclick: () => editMod(m => { if (m[n]) delete m[n]; else m[n] = ['subbass']; }) })));
+      const md = mods[n], bip = fxDefault(file, n) === 0.5;
+      let ctl;
+      if (md){   // ♪ ligado: o knob vira a FAIXA de ativacao — som baixo = min, som alto = max
+        const lohi = () => { const x = cur(), m = ((x || {}).mod || {})[n] || {}; const v = x ? fxVal(src, x, n) : fxDefault(file, n);
+          return [m.lo ?? v, m.hi ?? 1]; };
+        ctl = rangeCtl({ id: 'rng:' + n, label: n, bip, io: KNOB_BIND, get: lohi,
+          set: (lo, hi) => { const x = cur(); if (x && x.mod && x.mod[n]) x.mod[n] = Object.assign({}, x.mod[n], { lo, hi }); } });
+        modLive.push({ el: ctl, bands: md.b || [], lohi });
+      } else {
+        ctl = knob({ id: 'dev:' + (i + 1), size: 44, label: n, mlabel: `efeito selecionado · knob ${i + 1}`, dflt: fxDefault(file, n), io: KNOB_BIND,
+          get: () => { const x = cur(); return x ? fxVal(src, x, n) : fxDefault(file, n); }, set: v => { const x = cur(); if (x) setFxVal(src, x, n, v); } });
+        ctl.prepend(h('span', { class: 'slot', text: String(i + 1) }));
+        devEls['fx:' + n] = ctl;
+      }
+      kn.append(h('div', { class: 'kcell' }, ctl, h('button', { class: 'sndb' + (md ? ' on' : ''), text: '♪', title: md ? 'som ligado: faixa mín→máx (clique volta a ser knob)' : 'mexer com o som (vira uma faixa mín→máx)',
+        onclick: () => editMod(m => { if (m[n]) delete m[n]; else { const x = cur(); m[n] = { b: ['subbass'], lo: x ? fxVal(src, x, n) : fxDefault(file, n), hi: 1 }; } }) })));
     });
     sec.append(kn);
     for (const n of names.filter(n => mods[n])){
+      const bs = mods[n].b || [];
       const row = h('div', { class: 'chips modrow' }, h('span', { class: 'gt', text: '♪ ' + n }));
-      for (const [b, t] of MOD_BANDS) row.append(chip(t, mods[n].includes(b), b === 'kick' ? 'batida (pula e decai)' : 'faixa que mexe o knob (várias = a mais forte vale)',
-        () => editMod(m => { m[n] = m[n].includes(b) ? m[n].filter(x => x !== b) : m[n].concat([b]); if (!m[n].length) delete m[n]; })));
+      for (const [b, t] of MOD_BANDS) row.append(chip(t, bs.includes(b), b === 'kick' ? 'batida (pula e decai)' : 'faixa que mexe o knob (várias = a mais forte vale)',
+        () => editMod(m => { const l = m[n].b || []; m[n] = Object.assign({}, m[n], { b: l.includes(b) ? l.filter(x => x !== b) : l.concat([b]) }); if (!m[n].b.length) delete m[n]; })));
       sec.append(row);
     }
   } else sec.append(h('div', { class: 'empty', text: 'este efeito não tem knobs (// fx: no .frag)' }));
@@ -2659,14 +2868,29 @@ const COLS = {};
 function mkCol(key, name, color, lead){
   const raw = h('i', { class: 'raw', style: `background:${color}` }), fin = h('i', { style: `background:${color}` });
   const lv = h('span', { class: 'lv num', text: '0.00' }), hz = h('div', { class: 'hzio' }), kn = h('div', { class: 'kn' });
+  // amp nao desliga (e' o volume, nao uma faixa); kick + as 8: botao liga/desliga (tuning.BANDS_OFF)
+  const mute = key === 'amp' ? '' : h('button', { class: 'sndb mute on', text: 'on', title: 'desligar esta faixa (vale 0 pros efeitos e pro ♪)', onclick: () => toggleBandOff(key) });
   const el = h('div', { class: 'col' + (lead ? ' lead' : '') }, h('span', { class: 'cn', text: name, style: `color:${color}` }),
-    h('div', { class: 'mv' }, h('span', { class: 'tall' }, raw, fin)), lv, hz, kn);
+    h('div', { class: 'mv' }, h('span', { class: 'tall' }, raw, fin)), lv, mute, hz, kn);
   $('#cols').append(el);
-  COLS[key] = { el, raw: meter(raw, 'y', 'audio'), fin: meter(fin, 'y', 'audio', key === 'kick' ? 60 : 32), lv, hz, kn };
+  COLS[key] = { el, raw: meter(raw, 'y', 'audio'), fin: meter(fin, 'y', 'audio', key === 'kick' ? 60 : 32), lv, hz, kn, mute };
 }
 mkCol('kick', 'kick', 'var(--sel)', true);
 mkCol('amp', 'amp', 'var(--tx2)', true);
 for (const n of BAND_NAMES) mkCol(n, n, BAND_COLORS[n]);
+// FAIXAS DESLIGADAS (POST /bands-off): o botao da coluna; o servidor ecoa em bands_hz.off
+let bandsOff = new Set(), bandsOffTouched = 0;
+function paintBandsOff(){
+  for (const [k, c] of Object.entries(COLS)) if (c.mute){
+    const off = bandsOff.has(k); c.el.classList.toggle('off', off);
+    c.mute.classList.toggle('on', !off); c.mute.textContent = off ? 'off' : 'on';
+    c.mute.title = off ? 'faixa desligada (vale 0) — clique religa' : 'desligar esta faixa (vale 0 pros efeitos e pro ♪)';
+  }
+}
+function toggleBandOff(k){
+  bandsOff.has(k) ? bandsOff.delete(k) : bandsOff.add(k); bandsOffTouched = now(); paintBandsOff();
+  post('/bands-off', { off: [...bandsOff] }).catch(() => {});
+}
 function renderLevels(a){
   if (a.kick){ COLS.kick.fin.tgt = clamp01(a.kick.final); COLS.kick.raw.tgt = clamp01(a.kick.decay); COLS.kick.lv.textContent = a.kick.final.toFixed(2); }
   for (const b of a.bands || []){
@@ -2957,6 +3181,7 @@ function renderRanges(bh){
   if (document.activeElement !== $('#ovl-cb')) $('#ovl-cb').checked = !!bh.overlap;
   if (document.activeElement !== $('#bands-cb')) $('#bands-cb').checked = bh.enabled !== 0;
   $('#lanes').classList.toggle('dim', bh.enabled === 0);
+  if (now() - bandsOffTouched > TOUCH_MS){ const o = new Set(bh.off || []); if ([...o].join() !== [...bandsOff].join()){ bandsOff = o; paintBandsOff(); } }
   if (dragRow >= 0 || now() - rangesTouched < 400) return;
   if (rangesSent){   // mandei e o servidor ainda nao confirmou: nao deixa o eco velho desfazer o arrasto
     const same = JSON.stringify(bh.ranges) === JSON.stringify(rangesSent);
@@ -3519,7 +3744,7 @@ function process(stateOnly){
   if (stateOnly) return;
   renderTop(d);
   const tab = curTab;
-  if (tab === 'palco'){ syncMixer(); if (activeDrag !== 'rect') renderCanvas(); }
+  if (tab === 'palco'){ syncMixer(); syncModLive(d.audio); if (activeDrag !== 'rect') renderCanvas(); }
   else if (tab === 'audio'){
     const a = d.audio || {};
     renderLevels(a); if (a.spectrum) setSpec(a.spectrum);
@@ -3532,8 +3757,114 @@ function process(stateOnly){
     if (now() - outimgTouched > TOUCH_MS) $('#outimg-cb').checked = !!d.out_analysis_enabled;
   }
   else if (tab === 'saida') renderOutput(d.output);
+  else if (tab === 'luzes') syncLz(d.lights);
   else if (tab === 'lib'){ renderMediaAdmin(); renderShaderAdmin(); renderTransitions(); }
 }
+// =====================================================================================
+// LUZES (src/luzes.py): sem rider -> procurar na rede (Art-Net/WLED) e mapear pela camera
+// (o native acende canal a canal); resultado = aparelhos (tuning.LIGHTS) com a cor da ZONA do
+// canvas e o brilho pelo som (♪ = MOD_BANDS, mesmo _mod_value dos knobs).
+// =====================================================================================
+let lzCfg = { on: 0, host: "255.255.255.255", fps: 40, fixtures: [] }, lzTouched = -1e9, lzSel = -1, lzRun = 0, lzResult = null, lzSig = '';
+const lzBand = { subbass: 'sub', lowmid: 'lowmid', midrange: 'mid', highmid: 'highmid', presence: 'presence', treble_hi: 'treble', brilho: 'brilliance', air: 'air', kick: 'kick' };
+function lzSend(){
+  lzTouched = now();
+  post('/lights', lzCfg).then(c => { lzCfg = c; lzSig = JSON.stringify(c); if (!$('#lz-list').contains(document.activeElement)) renderLz(); })
+    .catch(e => toast('luzes: ' + e, 'err'));
+}
+function lzCams(){
+  const sel = $('#lz-cam'), cur = sel.value, ks = [...new Set(mixStrips().map(o => o.file).filter(f => /^webcam:/.test(f || '')))];
+  const sig = ks.join('|'); if (sel._sig === sig) return; sel._sig = sig; sel.innerHTML = '';
+  if (!ks.length) sel.append(h('option', { value: '', text: 'ponha uma câmera na mesa' }));
+  for (const k of ks) sel.append(h('option', { value: k, text: srcInfo(k).name }));
+  if (ks.includes(cur)) sel.value = cur;
+}
+$('#lz-find').onclick = () => {
+  const box = $('#lz-net'); box.innerHTML = ''; box.append(h('div', { class: 'empty', text: 'procurando na rede… (~3 s)' }));
+  post('/lights/discover').then(d => {
+    box.innerHTML = '';
+    if (!d.artnet.length && !d.wled.length) box.append(h('div', { class: 'empty', text: `nada respondeu na rede ${d.ip.replace(/\.\d+$/, '.x')} — confira cabo/wi-fi e se o aparelho está em Art-Net` }));
+    for (const n of d.artnet) box.append(h('div', { class: 'lz-dev' }, h('span', { class: 'tag', text: 'Art-Net' }),
+      h('b', { text: n.name || n.ip }), h('span', { class: 'hint', text: `${n.ip} · universos ${n.unis.join(', ') || '—'}${n.long ? ' · ' + n.long : ''}` }), h('span', { class: 'grow' }),
+      h('button', { class: 'btn sm', text: 'mandar pra este IP', onclick: () => { lzCfg.host = n.ip; $('#lz-unis').value = (n.unis.length ? n.unis : [0]).join(','); lzSend(); toast('Art-Net → ' + n.ip); } })));
+    for (const w of d.wled) box.append(h('div', { class: 'lz-dev' }, h('span', { class: 'tag wled', text: 'WLED' }),
+      h('b', { text: w.name }), h('span', { class: 'hint', text: `${w.ip} · ${w.leds} LEDs · universo ${w.uni} · canal ${w.addr}` }),
+      w.aviso ? h('span', { class: 'kwarn', text: '⚠ ' + w.aviso }) : null, h('span', { class: 'grow' }),
+      h('button', { class: 'btn sm', text: '+ fita', onclick: () => {
+        lzCfg.fixtures.push(Object.assign({ zone: [0, 0.85, 1, 0.15], pos: [0.5, 0.92], mod: { b: ['subbass', 'kick'], lo: 0.2, hi: 1 } }, w.fixture)); lzSend(); } })));
+  }).catch(e => { box.innerHTML = ''; box.append(h('div', { class: 'empty', text: 'erro: ' + e })); });
+};
+$('#lz-scan').onclick = () => {
+  if (lzRun){ post('/lights/scan', { stop: 1 }); return; }
+  const unis = $('#lz-unis').value.split(/[ ,;]+/).map(Number).filter(n => Number.isInteger(n) && n >= 0);
+  post('/lights/scan', { src: $('#lz-cam').value, unis: unis.length ? unis : [0], n: +$('#lz-n').value || 128, settle: +$('#lz-settle').value || 0.25 })
+    .then(() => { lzRun = 1; $('#lz-use').hidden = true; });
+};
+$('#lz-use').onclick = () => {
+  const go = () => { lzCfg.fixtures = lzResult.map(f => Object.assign({}, f)); lzSend(); $('#lz-use').hidden = true; toast(lzResult.length + ' aparelho(s) salvos'); };
+  lzCfg.fixtures.length ? askConfirm(`trocar os ${lzCfg.fixtures.length} aparelhos atuais pelos ${lzResult.length} achados?`, go) : go();
+};
+$('#lz-on').onchange = () => { lzCfg.on = $('#lz-on').checked ? 1 : 0; lzSend(); };
+$('#lz-host').onchange = () => { lzCfg.host = $('#lz-host').value.trim() || '255.255.255.255'; lzSend(); };
+$('#lz-add').onclick = () => { lzCfg.fixtures.push({ name: 'luz ' + (lzCfg.fixtures.length + 1), ch: 'rgb', uni: 0, addr: 1, zone: [0.4, 0.4, 0.2, 0.2], pos: [0.5, 0.5] }); lzSel = lzCfg.fixtures.length - 1; lzSend(); renderLz(); };
+addPreview($('#lz-photo'), '/frame?which=lightmap', 1, 'luzes', () => {
+  const c = $('#lz-photo'); $('#lz-wait').hidden = true; $('#lz-map').style.aspectRatio = c.width + ' / ' + c.height; c.classList.add('ok');
+});
+const lzPos = f => f.pos || (f.zone ? [f.zone[0] + f.zone[2] / 2, f.zone[1] + f.zone[3] / 2] : [0.5, 0.5]);
+function renderLz(){
+  $('#lz-on').checked = !!lzCfg.on;
+  if (document.activeElement !== $('#lz-host')) $('#lz-host').value = lzCfg.host || '';
+  $('#lz-count').textContent = lzCfg.fixtures.length ? lzCfg.fixtures.length + ' · ' + lzCfg.fps + ' Hz' : '';
+  const pins = $('#lz-pins'), list = $('#lz-list'); pins.innerHTML = ''; list.innerHTML = '';
+  if (!lzCfg.fixtures.length) list.append(h('div', { class: 'empty', text: 'nenhum aparelho — procure na rede, mapeie com a câmera ou adicione à mão' }));
+  lzCfg.fixtures.forEach((f, i) => {
+    const [x, y] = lzPos(f), pin = h('div', { class: 'lz-pin' + (i === lzSel ? ' sel' : '') + (f.count ? ' fita' : ''), style: `left:${x * 100}%;top:${y * 100}%`, title: f.name, text: String(i + 1) });
+    pin.onpointerdown = e => {   // arrastar = mover o ponto e a zona junto (mesmo tamanho)
+      e.preventDefault(); lzSel = i; pin.setPointerCapture(e.pointerId); const r = $('#lz-map').getBoundingClientRect();
+      pin.onpointermove = ev => { const nx = clamp01((ev.clientX - r.left) / r.width), ny = clamp01((ev.clientY - r.top) / r.height);
+        pin.style.left = nx * 100 + '%'; pin.style.top = ny * 100 + '%'; f.pos = [+nx.toFixed(3), +ny.toFixed(3)];
+        const z = f.zone || [0, 0, 0.2, 0.2]; f.zone = [+clamp01(nx - z[2] / 2).toFixed(3), +clamp01(ny - z[3] / 2).toFixed(3), z[2], z[3]]; };
+      pin.onpointerup = () => { pin.onpointermove = null; lzSend(); renderLz(); };
+    };
+    pins.append(pin);
+    const num = (k, w, lo, hi) => h('input', { class: 'inp sm num', type: 'number', min: lo, max: hi, value: f[k] ?? '', style: `width:${w}px`, title: k,
+      onchange: e => { const v = parseInt(e.target.value); if (Number.isFinite(v)) f[k] = v; else delete f[k]; lzSend(); } });
+    const bs = (f.mod || {}).b || [];
+    const bands = h('div', { class: 'chips' }, h('span', { class: 'hint', text: '♪' }), ...MOD_BANDS.map(([b]) => chip(lzBand[b] || b, bs.includes(b), 'brilho pelo som (várias = a mais forte)', () => {
+      const l = bs.includes(b) ? bs.filter(x => x !== b) : bs.concat([b]);
+      if (l.length) f.mod = Object.assign({ lo: 0.2, hi: 1 }, f.mod || {}, { b: l }); else delete f.mod; lzSend(); renderLz(); })));
+    const row = h('div', { class: 'lz-row' + (i === lzSel ? ' sel' : ''), onclick: () => { if (lzSel !== i){ lzSel = i; renderLz(); } } },
+      h('div', { class: 'lz-l1' },
+        h('span', { class: 'lz-sw', 'data-i': i }), h('span', { class: 'pos', text: String(i + 1) }),
+        h('input', { class: 'inp sm', value: f.name, style: 'width:120px', onchange: e => { f.name = e.target.value; lzSend(); } }),
+        h('input', { class: 'inp sm num', value: f.ch, style: 'width:64px', title: 'canais DMX, uma letra cada: r g b w (branco) d (dimmer) x (sem uso)', onchange: e => { f.ch = e.target.value; lzSend(); } }),
+        h('label', { class: 'hint' }, 'U', num('uni', 52, 0, 32767)), h('label', { class: 'hint' }, 'end', num('addr', 58, 1, 512)),
+        h('label', { class: 'hint', title: 'pixels (fita)' }, 'px', num('count', 58, 1, 2000)),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'ib', text: '⚡', title: 'piscar branco (achar o aparelho no palco)', onclick: e => { e.stopPropagation();
+          const old = f.color; f.color = [255, 255, 255]; lzSend(); setTimeout(() => { if (old) f.color = old; else delete f.color; lzSend(); }, 1200); } }),
+        h('button', { class: 'ib del', text: '×', title: 'tirar', onclick: e => { e.stopPropagation(); lzCfg.fixtures.splice(i, 1); lzSel = -1; lzSend(); renderLz(); } })),
+      bands);
+    list.append(row);
+  });
+}
+function syncLz(L){
+  if (!L) return;
+  lzCams();
+  const sc = L.scan || {};
+  lzRun = sc.run ? 1 : 0;
+  $('#lz-bar').style.transform = `scaleX(${clamp01(sc.prog || 0)})`;
+  $('#lz-scan').textContent = lzRun ? '■ parar' : '▶ mapear'; $('#lz-scan').classList.toggle('danger', !!lzRun);
+  if (sc.txt) $('#lz-txt').textContent = sc.err ? 'erro: ' + sc.err : sc.txt;
+  if (!lzRun && sc.result && sc.result !== lzResult && JSON.stringify(sc.result) !== JSON.stringify(lzResult)){ lzResult = sc.result; $('#lz-use').hidden = !lzResult.length; }
+  const sig = JSON.stringify(L.cfg);
+  if (now() - lzTouched > TOUCH_MS && sig !== lzSig){ lzSig = sig; lzCfg = JSON.parse(sig); if (!lzCfg.fixtures) lzCfg.fixtures = []; renderLz(); }
+  (L.live || []).forEach((c, i) => {   // cor AO VIVO de cada aparelho (no lugar: sem recriar a lista)
+    const sw = $(`#lz-list .lz-sw[data-i="${i}"]`), pin = $('#lz-pins').children[i], col = `rgb(${c[0]},${c[1]},${c[2]})`;
+    if (sw) sw.style.background = col; if (pin) pin.style.setProperty('--c', col);
+  });
+}
+
 let lastT = 0;
 function loop(t){
   const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0.016; lastT = t;
@@ -3550,6 +3881,7 @@ document.body.classList.toggle('perform', perform);
 wheelX($('#mixer'));
 $('#mode-btn').classList.toggle('edit', !perform); $('#mode-btn').textContent = perform ? '✎ editar' : '✓ modo palco';
 showTab(panelParam || LS.get('v2tab', 'palco'));
+$$('.ph .hint').forEach(e => { if (!e.title) e.title = e.textContent.trim(); });   // pele v3: a ajuda fica numa linha, inteira no hover
 loadInputs(); loadShaders(); loadMedia(); loadTransitions(); loadScenes();
 connect();
 requestAnimationFrame(loop);

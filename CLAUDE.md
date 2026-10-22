@@ -30,7 +30,13 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - `None` nunca vai pro `tuning.py` (`_scene_with` tira o campo); flags = `1`, não `True` (`json.dumps`).
 - Sync entre abas = guard por TEMPO (`TOUCH_MS`), não foco. Campo "travado" → olhar isso.
 - Set ativo **é** o estado vivo e auto-salva (`save_active_scene`); troca = `request_scene` → aplicada no fim
-  do frame GL (`apply_scene`, `_applying`) + transição.
+  do frame GL (`apply_scene(defer=True)`: memória já, disco em `_persist_scene` numa thread — gravar no
+  loop custava 10–17 ms = frame perdido na transição) + transição.
+- Ao vivo: knobs/opacidades/intensidade passam por `_smooth` no native (`PARAM_SMOOTH_MS`); som (♪/kick) e
+  master/blackout NÃO. Intensidade dos efeitos = `OUTPUT_GRADE.fxamt` (fader EFEITOS, × opacidade de todo efeito).
+- Luzes: `src/luzes.py` (Art-Net, detector ArtPoll/WLED, mapeamento por câmera `scan`) + aba Luzes; `LIGHTS`.
+- Testar o native: SEMPRE em segundo plano com a webcam e `PRISMA_HIDDEN=1` (janela nunca na tela);
+  `PRISMA_GL_CHECK=1` religa a checagem de erro do PyOpenGL (desligada por desempenho).
 - `/select` não mexe na saída: fonte viva tem ffmpeg próprio em `_ovl`; v4l2 é exclusivo → `_feed` copia de lá.
 - Canal `file#N` = mesma fonte 2× (`_chkey`/`_base_key`); pilha por canal em `BINDINGS`, pela POSIÇÃO.
   Fora do `pool` some da mesa/saída mas fica lembrado.

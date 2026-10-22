@@ -18,6 +18,8 @@ MID_TREBLE_HZ = 4000
 # mostrando os numeros crus, so nao alimenta mais o shader) — pro checkbox "ativar" no dash.
 HZ_OVERLAP = 0
 BANDS_ENABLED = 1
+# BANDS_OFF: faixas desligadas UMA a UMA (botao na coluna da aba Audio): nomes + "kick" = 0 pro shader/♪
+BANDS_OFF = []
 
 # OUT_ANALYSIS_ENABLED: liga a leitura da imagem sintetizada (pos-shader) pros mesmos
 # medidores do Source Image (cor dominante, brilho, grids, histogramas), ~5x/s — tab
@@ -25,6 +27,9 @@ BANDS_ENABLED = 1
 # CPU/GPU a mais mesmo raro; liga so quando for de fato calibrar/usar essa aba.
 OUT_ANALYSIS_ENABLED = 1
 OUTPUT_FPS = 60            # fps da janela de saida (dash v2 > Saida: 24/30/50/60)
+PARAM_SMOOTH_MS = 80       # knobs/opacidades/intensidade deslizam ate o valor novo nesse tempo (0 = pula seco)
+# LUZES (Art-Net: refletores DMX, fitas LED/WLED) seguindo a cor da saida + o som — formato em src/luzes.py
+LIGHTS = {"on": 0, "host": "255.255.255.255", "fps": 40, "fixtures": []}
 FREQ_BAND_HZ = [
     [21, 83],  # Sub-bass
     [83, 321],  # Low-mid

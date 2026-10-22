@@ -29,6 +29,7 @@ jobs:
           python src/plat.py
           python src/dash_data.py
           python src/dash_server.py
+          python src/luzes.py
           python src/telao_sim.py --selfcheck
           python src/native_synth.py --selfcheck
           python packaging/updater.py
@@ -63,6 +64,7 @@ jobs:
           python src/plat.py
           python src/dash_data.py
           python src/dash_server.py
+          python src/luzes.py
           python src/native_synth.py --selfcheck
           python packaging/updater.py
           python packaging/check_imports.py
