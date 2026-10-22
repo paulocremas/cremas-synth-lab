@@ -866,6 +866,45 @@ def _mod_value(v, m, levels):
     return lo + (hi - lo) * min(1.0, max(levels.get(b, 0.0) for b in m['b']))
 
 
+class Limiter:
+    """PROTECAO DA SAIDA (tuning.LIMITS = {'on', 'bright', 'flash'}): ganho 0..1 que o loop GL aplica no
+    MASTER. step(t, luma) a cada frame com a luminancia MEDIA da saida ja' limitada (0..1); a conta usa
+    o nivel SEM o ganho (luma / g), entao nao oscila. Brilho: media acima do teto -> ganho = teto/nivel.
+    Anti-estrobo (WCAG 2.3.1): inversoes claro<->escuro de >= FLASH_STEP no ultimo segundo; mais de 3
+    flashes/s (6 inversoes) -> ganho FLASH_GAIN ate 1 s depois de parar. Desce rapido, sobe devagar."""
+    FLASH_STEP, FLASH_GAIN, HOLD_S, ATTACK_S, RELEASE_S = 0.10, 0.35, 1.0, 0.05, 1.0
+
+    def __init__(self):
+        self.g, self.ext, self.dir, self.flips, self.flash_t, self.t = 1.0, None, 0, collections.deque(), -1e9, None
+        self.why = ''
+
+    def step(self, t, luma, bright=1.0, flash=True):
+        raw = luma / max(self.g, 0.05)                    # o que sairia sem a protecao
+        if self.ext is None:
+            self.ext = raw
+        d = raw - self.ext
+        if (self.dir >= 0 and d <= -self.FLASH_STEP) or (self.dir <= 0 and d >= self.FLASH_STEP):
+            if self.dir != 0:
+                self.flips.append(t)                       # inverteu: mais meio flash
+            self.dir, self.ext = (1 if d > 0 else -1), raw
+        elif (self.dir > 0 and raw > self.ext) or (self.dir < 0 and raw < self.ext) or self.dir == 0:
+            self.ext = raw if self.dir != 0 else self.ext   # segue o extremo na mesma direcao
+        while self.flips and t - self.flips[0] > 1.0:
+            self.flips.popleft()
+        if flash and len(self.flips) > 6:
+            self.flash_t = t
+        target, self.why = 1.0, ''
+        if flash and t - self.flash_t < self.HOLD_S:
+            target, self.why = self.FLASH_GAIN, 'flash'
+        if bright < 1.0 and raw > bright and bright / raw < target:
+            target, self.why = bright / raw, 'brilho'
+        dt = 0.0 if self.t is None else max(0.0, t - self.t)
+        self.t = t
+        tau = self.ATTACK_S if target < self.g else self.RELEASE_S
+        self.g += (target - self.g) * (1.0 - math.exp(-dt / tau)) if dt else 0.0
+        return self.g
+
+
 def _smooth(store, key, target, k, frame, start=None):
     """Valor que DESLIZA ate `target` (um polo: anda a fracao k por frame) — knob do MIDI (128 passos)
     e do dash (25 Hz) viram movimento continuo, sem degrau. store = {key: [valor, frame do ultimo uso]}.
@@ -3175,6 +3214,8 @@ def main():
     cv_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0}   # previa do CANVAS do palco (/frame?which=cv)
     LIGHT_PV_W = 64   # LUZES: o canvas pronto lido nesse tamanho (a cor de uma zona nao precisa de mais)
     lt_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0, 'prev': {}, 'tx': None}
+    lim_pv = {'fbo': None, 'tex': None, 'wh': None}   # PROTECAO: leitura minuscula da saida (Limiter)
+    limiter, lim_g = Limiter(), [1.0]
     # previa de cada FONTE JA COM OS EFEITOS (canvas do Palco v2: GET /frame?which=fx): a textura
     # da fonte depois da pilha (lt['src']) reduzida por blit, so' das pedidas (state['fx_want'])
     FX_PV_HZ, FX_PV_W = 10, 240
@@ -3283,6 +3324,7 @@ def main():
             cv_pv.update(fbo=None, tex=None, wh=None)
             fx_pv.update(fbo=None, tex=None, wh=None)
             lt_pv.update(fbo=None, tex=None, wh=None)
+            lim_pv.update(fbo=None, tex=None, wh=None)
             pbos.clear()                 # PBOs das previas idem
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
             scene_tr = None              # as texturas da transicao eram do contexto velho
@@ -3715,7 +3757,7 @@ def main():
         # (ai com os knobs no neutro); vira u_dim = 1 - master no calibrar.frag.
         grade = getattr(tuning, 'OUTPUT_GRADE', None) or {}
         g_on = bool(grade.get('on', 1))
-        g_dim = 1.0 - min(1.0, max(0.0, float(grade.get('master', 1.0))))
+        g_dim = 1.0 - min(1.0, max(0.0, float(grade.get('master', 1.0)))) * lim_g[0]   # x protecao (Limiter)
         if (state.get('light_scan') or {}).get('run'):   # mapeando as luzes: telao preto (a camera so' ve o rig)
             g_dim = 1.0
         g_test = g_on and bool(grade.get('test'))
@@ -3844,6 +3886,36 @@ def main():
                                                           out_img['peaks'], out_img['prev_val'],
                                                           out_img['prev_mean'])
 
+        def read_canvas():
+            """liga o READ framebuffer no CANVAS pronto (o palco, sem o raster) e devolve a regiao (x0, y0,
+            x1, y1): com telao a textura `canvas`; sem, a janela no retangulo do canvas (sem as barras)."""
+            if omap:
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['canvas'], 0)
+                return (0, 0, CMP_W, CMP_H)
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)
+            return (int(round(cbox[0] * WIN_W)), int(round(cbox[1] * WIN_H)),
+                    int(round((cbox[0] + cbox[2]) * WIN_W)), int(round((cbox[1] + cbox[3]) * WIN_H)))
+
+        # PROTECAO DA SAIDA (Limiter; tuning.LIMITS): a saida pronta a 16 px, TODO frame (leitura async =
+        # quase de graca) -> luminancia media -> ganho do proximo frame (no master: g_dim). Estrobo/brilho.
+        lim = getattr(tuning, 'LIMITS', None) or {}
+        if lim.get('on', 1):
+            try:
+                pw = 16
+                img = pv_grab(lim_pv, 'lim', read_canvas(), pw, max(2, int(round(pw * FIT_H / max(1, FIT_W)))))
+                if img is not None:
+                    luma = float((img[..., 0] * 0.2126 + img[..., 1] * 0.7152 + img[..., 2] * 0.0722).mean()) / 255.0
+                    lim_g[0] = limiter.step(time.monotonic(), luma, float(lim.get('bright', 1.0)), bool(lim.get('flash', 1)))
+            except Exception as e:
+                if lim_pv.get('err') != str(e):
+                    print('protecao da saida ->', e)
+                    lim_pv['err'] = str(e)
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+        else:
+            lim_g[0], limiter.why = 1.0, ''
+        state['limit'] = {'g': round(lim_g[0], 2), 'why': limiter.why if lim_g[0] < 0.98 else ''}
+
         # PREVIA DO CANVAS (vista Palco do dash: cada tela mostra a regiao dela): o palco pronto, sem o
         # raster — com telao a textura `canvas`; sem, a janela no retangulo do canvas (sem as barras)
         if time.time() - state.get('cv_want', 0) < 1.5 and t_pv - cv_pv['t'] >= 1.0 / OUT_PREVIEW_HZ:
@@ -3851,14 +3923,7 @@ def main():
             try:
                 k = min(1.0, CV_PV_MAX / max(1, FIT_W, FIT_H))
                 pw, ph = max(2, int(round(FIT_W * k))), max(2, int(round(FIT_H * k)))
-                if omap:
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
-                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['canvas'], 0)
-                    sr = (0, 0, CMP_W, CMP_H)
-                else:
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)
-                    sr = (int(round(cbox[0] * WIN_W)), int(round(cbox[1] * WIN_H)),
-                          int(round((cbox[0] + cbox[2]) * WIN_W)), int(round((cbox[1] + cbox[3]) * WIN_H)))
+                sr = read_canvas()
                 a = pv_grab(cv_pv, 'cv', sr, pw, ph)
                 if a is not None:
                     state['cv_small'] = (a.tobytes(), a.shape[1], a.shape[0])
@@ -3880,14 +3945,7 @@ def main():
             try:
                 pw = min(LIGHT_PV_W, FIT_W)
                 ph = max(2, int(round(pw * FIT_H / max(1, FIT_W))))
-                if omap:
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
-                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['canvas'], 0)
-                    sr = (0, 0, CMP_W, CMP_H)
-                else:
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0)
-                    sr = (int(round(cbox[0] * WIN_W)), int(round(cbox[1] * WIN_H)),
-                          int(round((cbox[0] + cbox[2]) * WIN_W)), int(round((cbox[1] + cbox[3]) * WIN_H)))
+                sr = read_canvas()
                 img = pv_grab(lt_pv, 'luz', sr, pw, ph)
                 if img is not None:
                     lt_pv['tx'] = lt_pv['tx'] or luzes.Sender()
@@ -4145,6 +4203,22 @@ def _selfcheck():
         v = _smooth(st_, 'a', 0.9, 0.2, f)
     assert v == 0.9, 'chega exatamente no alvo (sem ficar rastejando pra sempre)'
     print('native_synth smooth self-check ok')
+    # protecao: estrobo a 8 Hz (preto/branco) e' contido; pulso a 1 Hz passa; imagem clara com teto 0.6 desce
+    L = Limiter()
+    for f in range(120):                               # 2 s a 60 fps, estrobo 8 Hz
+        t = f / 60
+        g = L.step(t, (1.0 if int(t * 16) % 2 else 0.0) * L.g)
+    assert L.why == 'flash' and g < 0.45, (L.why, g)
+    L = Limiter()
+    for f in range(180):                               # 3 s, pulso a 1 Hz (2 inversoes/s) = permitido
+        t = f / 60
+        g = L.step(t, (1.0 if int(t * 2) % 2 else 0.2) * L.g)
+    assert L.why == '' and g > 0.95, (L.why, g)
+    L = Limiter()
+    for f in range(120):
+        g = L.step(f / 60, 0.9 * L.g, bright=0.6)
+    assert L.why == 'brilho' and abs(0.9 * g - 0.6) < 0.03, (L.why, g)
+    print('native_synth limiter self-check ok')
 
 
 if __name__ == '__main__':

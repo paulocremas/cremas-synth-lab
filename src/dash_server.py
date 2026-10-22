@@ -207,6 +207,24 @@ def set_macros(v, save=False, tuning_path=None):
     return vals
 
 
+def _limits_cfg():
+    g = getattr(_tuning, 'LIMITS', None) or {}
+    return {'on': int(bool(g.get('on', 1))), 'flash': int(bool(g.get('flash', 1))),
+            'bright': round(max(0.2, min(1.0, float(g.get('bright', 1.0)))), 2)}
+
+
+def set_limits(cfg, tuning_path=None):
+    """PROTECAO DA SAIDA (native Limiter): {'on', 'flash' (anti-estrobo, WCAG 2.3.1), 'bright' (teto
+    da luminancia media 0.2..1; 1 = sem teto)} -> tuning.LIMITS. So' muda o que vier."""
+    cur = _limits_cfg()
+    for k in ('on', 'flash'):
+        if k in cfg:
+            cur[k] = int(bool(cfg[k]))
+    if 'bright' in cfg:
+        cur['bright'] = round(max(0.2, min(1.0, float(cfg['bright']))), 2)
+    return _write_var('LIMITS', cur, 'PROTECAO da saida: anti-estrobo (flash) + teto de brilho medio (bright, 1 = sem)', tuning_path)
+
+
 def set_tempo_cfg(cfg, tuning_path=None):
     """Ritmo/tom (dash): {'quant': '' | 'beat' | 'bar', 'beats': 0..32 (duracao da transicao em batidas;
     0 = o ms do .glsl), 'colors': 'quintas' | 'scriabin'} -> SCENE_QUANT / TRANS_BEATS / KEY_COLORS. So'
@@ -2020,7 +2038,8 @@ def _payload():
                    'live': _state.get('lights_live', []),
                    'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
         'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3)),
-        'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)   # ritmo.py: BPM, TAP, tom, compasso
+        'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)
+        'limit': dict(_state.get('limit') or {}, cfg=_limits_cfg()),    # protecao: ganho agora + motivo   # ritmo.py: BPM, TAP, tom, compasso
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
@@ -2195,6 +2214,12 @@ class _Handler(BaseHTTPRequestHandler):
                 b = json.loads(raw.decode())
                 out = set_band_ranges(b.get('overlap'), b['ranges'], enabled=b.get('enabled'))
                 self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/limits':   # {on, flash, bright}
+            try:
+                self._send(200, 'application/json', json.dumps(set_limits(json.loads(raw.decode()))).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
@@ -2841,6 +2866,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert set_macros([2, -1, '0.5'], save=True, tuning_path=p) == [1.0, 0.0, 0.5, 0.0]
     ns = {}; exec(open(p).read(), ns); assert ns['MACROS'] == [1.0, 0.0, 0.5, 0.0], 'macros gravados'
     assert _norm_mod1({'b': ['m2', 'air', 'nada']}) == {'b': ['air', 'm2']}, 'macro = fonte do ♪'
+    assert set_limits({'bright': 0.05, 'flash': 0}, p) == {'on': 1, 'flash': 0, 'bright': 0.2}, 'teto minimo 0.2'
     set_tempo_cfg({'quant': 'bar', 'beats': 99, 'colors': 'scriabin'}, p)
     ns = {}; exec(open(p).read(), ns)
     assert (ns['SCENE_QUANT'], ns['TRANS_BEATS'], ns['KEY_COLORS']) == ('bar', 32, 'scriabin'), 'tempo: gravado no tuning.py'

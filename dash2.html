@@ -51,7 +51,8 @@
     canais por instrumento (C).
   - Imagem: entrada x saida analisadas (S: camera estourada/escura ANTES do show; estudo de sinal —
     objetivo do projeto). Nao e' tela de show.
-  - Saida: janela/monitor/fps (C/S: queda de fps = travada no telao) · monitor grande (C: calibrar
+  - Saida: proteção — anti-estrobo + teto de brilho (S: crise fotossensivel / sala lavada; aviso no
+    monitor do Palco quando esta' limitando) · janela/monitor/fps (C/S: queda de fps = travada no telao) · monitor grande (C: calibrar
     cor vendo o resultado) · telas do palco + pixel map (C) · calibracao do telao e por tela (C).
   - Ritmo/tom: indicador no topo (S: mostra se o prisma esta' NO TEMPO antes de confiar na troca
     quantizada; P: o tom = a paleta) · TAP (P: corrige o tempo quando a deteccao erra; MIDI) · troca
@@ -183,6 +184,8 @@
   .tp-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
   .tp-big { display: flex; align-items: center; gap: 8px; } .tp-big b { font-size: 26px; } .tp-big small { color: var(--tx3); }
   .tp-sw2 { width: 26px; height: 26px; border-radius: 6px; }
+  .mon .mon-lim { position: absolute; right: 8px; top: 8px; display: none; background: var(--warn); color: #231a00; font: 800 10px var(--sans); letter-spacing: .06em; padding: 3px 8px; border-radius: 5px; }
+  .mon .mon-lim.on { display: block; }
   .macros { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .macros .fader { height: 30px; }
   .side .macro-p { padding: 10px 12px; } .side .macro-p .ph { margin-bottom: 8px; padding-bottom: 6px; }
   #palco .macro-p { --tick: var(--midi); }
@@ -828,7 +831,7 @@
       <div class="side">
         <div class="panel mon-p">
           <div class="ph"><b>Saída</b><span class="grow"></span><span class="hint num" id="mon-fps"></span></div>
-          <div class="mon" id="mon-palco"><canvas id="mon-out"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div>
+          <div class="mon" id="mon-palco"><canvas id="mon-out"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-lim" id="mon-lim"></span><span class="mon-wait">aguardando a saída…</span></div>
         </div>
         <div class="panel macro-p"><div class="ph"><b>Macros</b><span class="hint">um fader mexe vários knobs: no ♪ do knob, marque M1–M4 e ajuste a faixa</span></div>
           <div class="macros" id="macros"></div></div>
@@ -923,6 +926,14 @@
       <div class="hint" id="pm-warn"></div>
       <div id="stg-list" data-v="palco"></div>
       <div id="pm-list" data-v="raster"></div>
+    </div>
+    <div class="panel"><div class="ph"><b>Proteção</b><span class="hint">mede a própria saída a cada frame e baixa o brilho quando precisa — desce rápido, volta devagar</span>
+        <span class="grow"></span><span class="hint" id="lim-now"></span></div>
+      <div class="outbar">
+        <label class="chk" title="WCAG 2.3.1: mais de 3 flashes por segundo pode causar crise em quem tem epilepsia fotossensível — escurece até a cadência parar"><input type="checkbox" id="lim-flash"> anti-estrobo (máx. 3 flashes/s)</label>
+        <span id="lim-bright-w" style="width:260px;display:inline-flex"></span>
+        <label class="chk"><input type="checkbox" id="lim-on"> proteção ligada</label>
+      </div>
     </div>
     <div class="panel">
       <div class="ph"><b>Calibração do telão</b><span class="hint">último passe, na saída inteira · centro = neutro · duplo-clique zera</span><span class="grow"></span>
@@ -3814,6 +3825,7 @@ function process(stateOnly){
   if (stateOnly) return;
   renderTop(d);
   renderTempo(d.tempo);
+  renderLimit(d.limit);
   const tab = curTab;
   if (tab === 'palco'){ syncMixer(); syncModLive(d.audio); if (activeDrag !== 'rect') renderCanvas(); }
   else if (tab === 'audio'){
@@ -3985,6 +3997,26 @@ $('#macros').append(...macroEls);
 function syncMacros(v){
   if (!v || now() - macroTouched < TOUCH_MS) return;
   macroV = v.slice(0, 4); macroEls.forEach((el, i) => { if (activeDrag !== 'macro:' + (i + 1)) el._show(macroV[i]); });
+}
+
+// =====================================================================================
+// PROTECAO DA SAIDA (native Limiter, tuning.LIMITS): anti-estrobo + teto de brilho medio
+// =====================================================================================
+let limCfg = { on: 1, flash: 1, bright: 1 }, limTouched = -1e9;
+const limSend = o => { limTouched = now(); Object.assign(limCfg, o); post('/limits', o).catch(e => toast('proteção: ' + e, 'err')); };
+const limBright = fader({ id: 'lim-bright', label: 'brilho máximo', dflt: 1, io: { touch(){ limTouched = now(); }, live(){}, commit: () => limSend({ bright: limCfg.bright }) },
+  get: () => limCfg.bright, set: v => { limCfg.bright = Math.max(0.2, Math.round(v * 100) / 100); },
+  title: 'teto da luminância MÉDIA da saída (100% = sem teto): branco demais “lava” a sala e cansa o público' });
+$('#lim-bright-w').append(limBright);
+$('#lim-flash').onchange = e => limSend({ flash: e.target.checked ? 1 : 0 });
+$('#lim-on').onchange = e => limSend({ on: e.target.checked ? 1 : 0 });
+function renderLimit(L){
+  if (!L) return;
+  if (L.cfg && now() - limTouched > TOUCH_MS){ limCfg = Object.assign({}, L.cfg);
+    $('#lim-flash').checked = !!limCfg.flash; $('#lim-on').checked = !!limCfg.on; if (activeDrag !== 'lim-bright') limBright._show(limCfg.bright); }
+  const on = !!L.why, txt = on ? `PROTEÇÃO: ${L.why === 'flash' ? 'estrobo' : 'brilho'} −${Math.round((1 - (L.g || 1)) * 100)}%` : '';
+  const ml = $('#mon-lim'); ml.classList.toggle('on', on); ml.textContent = txt;
+  $('#lim-now').textContent = on ? txt.toLowerCase() : (limCfg.on ? 'sem limitar agora' : 'desligada');
 }
 
 let lastT = 0;
