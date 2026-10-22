@@ -163,23 +163,58 @@ def set_band_ranges(overlap, ranges, tuning_path=None, enabled=None):
     return out
 
 
+def _write_var(name, value, comment, tuning_path=None):
+    """`NAME = <literal JSON>` numa linha do tuning.py (+ patch do modulo na hora). tuning.py sem a linha
+    (pasta de dados de versao velha) ganha ela no fim com o comentario. So' str/numero/lista/dict (sem
+    bool/None: o literal sai via json.dumps e tem que ser Python valido)."""
+    line = f'{name} = ' + json.dumps(value, ensure_ascii=False)
+    path = tuning_path or _cfg['tuning_path']
+    with _knob_lock:
+        src = open(path).read()
+        src, n = re.subn(rf'(?m)^{re.escape(name)} = .*$', lambda _m: line, src)
+        if n == 0:
+            src = src.rstrip('\n') + f'\n\n# {comment}\n' + line + '\n'
+        _write_atomic(path, src)
+    if _tuning is not None:
+        setattr(_tuning, name, json.loads(json.dumps(value)))
+    return value
+
+
 def set_bands_off(names, tuning_path=None):
     """Reescreve BANDS_OFF em tuning.py = faixas DESLIGADAS (botao na coluna da aba Audio): nomes de
     _BAND_NAMES + 'kick', valem 0 pro shader e pro ♪ (native audio_thread). tuning.py sem a linha
     (pasta de dados velha) ganha ela no fim. Devolve a lista normalizada (ordem: kick, grave -> agudo)."""
     ok = ['kick'] + list(_BAND_NAMES)
     off = [n for n in ok if n in set(names or [])]
-    line = f'BANDS_OFF = {json.dumps(off)}'
-    path = tuning_path or _cfg['tuning_path']
-    with _knob_lock:
-        src = open(path).read()
-        src, n = re.subn(r'(?m)^BANDS_OFF = .*$', line, src)
-        if n == 0:
-            src = src.rstrip('\n') + '\n\n# faixas desligadas (dash: botao na coluna da aba Audio) — 0 pro shader/♪\n' + line + '\n'
-        _write_atomic(path, src)
-    if _tuning is not None:
-        _tuning.BANDS_OFF = off
-    return off
+    return _write_var('BANDS_OFF', off, 'faixas desligadas (dash: botao na coluna da aba Audio) — 0 pro shader/♪', tuning_path)
+
+
+TEMPO_QUANTS = ('', 'beat', 'bar')        # troca de cena: na hora / na proxima batida / no proximo "1"
+KEY_COLOR_MODES = ('quintas', 'scriabin')  # cor do tom: circulo das quintas / tabela do Scriabin (ritmo.key_rgb)
+
+
+def set_tempo_cfg(cfg, tuning_path=None):
+    """Ritmo/tom (dash): {'quant': '' | 'beat' | 'bar', 'beats': 0..32 (duracao da transicao em batidas;
+    0 = o ms do .glsl), 'colors': 'quintas' | 'scriabin'} -> SCENE_QUANT / TRANS_BEATS / KEY_COLORS. So'
+    grava o que vier no dict. Devolve o estado atual dos tres."""
+    if 'quant' in cfg:
+        q = str(cfg['quant'] or '')
+        if q not in TEMPO_QUANTS:
+            raise ValueError(f'quantizacao desconhecida: {q!r}')
+        _write_var('SCENE_QUANT', q, 'troca de cena quantizada: "" na hora | "beat" proxima batida | "bar" proximo compasso', tuning_path)
+    if 'beats' in cfg:
+        _write_var('TRANS_BEATS', max(0, min(32, int(cfg['beats']))), 'duracao da transicao em batidas (0 = o ms do .glsl)', tuning_path)
+    if 'colors' in cfg:
+        c = str(cfg['colors'])
+        if c not in KEY_COLOR_MODES:
+            raise ValueError(f'mapa de cor desconhecido: {c!r}')
+        _write_var('KEY_COLORS', c, 'cor do tom da musica: "quintas" (circulo das quintas) | "scriabin"', tuning_path)
+    return _tempo_cfg()
+
+
+def _tempo_cfg():
+    return {'quant': str(getattr(_tuning, 'SCENE_QUANT', '') or ''), 'beats': int(getattr(_tuning, 'TRANS_BEATS', 0) or 0),
+            'colors': str(getattr(_tuning, 'KEY_COLORS', 'quintas') or 'quintas')}
 
 
 # dinamica por faixa (release/attack/auto-gain das 8 finas): 3 listas de 8 floats em
@@ -1807,6 +1842,8 @@ def _norm_lights(c):
                 o['smooth'] = round(num(f['smooth'], 0.0, 0.95, 0.5), 2)
             if f.get('rev'):
                 o['rev'] = 1
+            if f.get('tom'):   # cor do TOM da musica (ritmo.key_rgb) no lugar da cor da zona
+                o['tom'] = 1
             if f.get('host'):
                 o['host'] = str(f['host'])[:64]
         except (TypeError, ValueError):
@@ -1817,18 +1854,7 @@ def _norm_lights(c):
 
 def set_lights(cfg, tuning_path=None):
     """Grava tuning.LIGHTS (normalizado) — tuning.py sem a linha ganha ela no fim. Devolve o gravado."""
-    out = _norm_lights(cfg)
-    line = 'LIGHTS = ' + json.dumps(out, ensure_ascii=False)
-    path = tuning_path or _cfg['tuning_path']
-    with _knob_lock:
-        src = open(path).read()
-        src, n = re.subn(r'(?m)^LIGHTS = .*$', lambda _m: line, src)
-        if n == 0:
-            src = src.rstrip('\n') + '\n\n# LUZES (Art-Net) — formato em src/luzes.py\n' + line + '\n'
-        _write_atomic(path, src)
-    if _tuning is not None:
-        _tuning.LIGHTS = out
-    return out
+    return _write_var('LIGHTS', _norm_lights(cfg), 'LUZES (Art-Net) — formato em src/luzes.py', tuning_path)
 
 
 def set_out_analysis(enabled, tuning_path=None):
@@ -1978,6 +2004,7 @@ def _payload():
         'lights': {'cfg': getattr(_tuning, 'LIGHTS', None) or {'on': 0, 'fixtures': []},   # luzes.py (painel: depois)
                    'live': _state.get('lights_live', []),
                    'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
+        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3)),   # ritmo.py: BPM, TAP, tom, compasso
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
@@ -2151,6 +2178,20 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 b = json.loads(raw.decode())
                 out = set_band_ranges(b.get('overlap'), b['ranges'], enabled=b.get('enabled'))
+                self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/tap':   # toque do TAP (botao/MIDI): o relogio do servidor marca (native audio_thread consome)
+            _state.setdefault('tap_q', []).append(time.monotonic())
+            self._send(200, 'application/json', b'{}')
+            return
+        if path == '/tempo':   # {auto: 1} volta pro BPM detectado | {quant, beats, colors} config
+            try:
+                b = json.loads(raw.decode() or '{}')
+                if b.get('auto'):
+                    _state['tempo_auto'] = True
+                out = set_tempo_cfg({k: b[k] for k in ('quant', 'beats', 'colors') if k in b})
                 self._send(200, 'application/json', json.dumps(out).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
@@ -2773,6 +2814,13 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
          'color': [255, 1, 2], 'mod': {'b': ['air']}}]}, lg
     assert set_lights(lg, p)['fps'] == 60 and open(p).read().count('LIGHTS = ') == 1
     assert set_lights({'on': 0}, p)['fixtures'] == [] and open(p).read().count('LIGHTS = ') == 1
+    set_tempo_cfg({'quant': 'bar', 'beats': 99, 'colors': 'scriabin'}, p)
+    ns = {}; exec(open(p).read(), ns)
+    assert (ns['SCENE_QUANT'], ns['TRANS_BEATS'], ns['KEY_COLORS']) == ('bar', 32, 'scriabin'), 'tempo: gravado no tuning.py'
+    try:
+        set_tempo_cfg({'quant': 'compasso'}, p); raise AssertionError('quant invalido devia falhar')
+    except ValueError:
+        pass
     assert set_bands_off(['Air', 'lixo', 'kick'], p) == ['kick', 'Air'], 'faixas desligadas: validas, ordem fixa'
     assert set_bands_off(['Sub-bass'], p) == ['Sub-bass'] and open(p).read().count('BANDS_OFF = ') == 1, \
         'sem a linha: cria no fim; com ela: reescreve'

@@ -37,6 +37,7 @@ import dash_server
 import dash_data
 import plat   # Linux x Windows: monitores, captura, audio, pipes (ver plat.py)
 import luzes  # refletores/fitas LED (Art-Net) seguindo a saida + o som
+import ritmo  # BPM/fase (TAP, troca no compasso) + tom da musica (cor do tom)
 
 plat.init_process()   # Windows: DPI-aware (pixel fisico; senao o pixel map nao e' 1:1)
 
@@ -382,6 +383,9 @@ void main() {
 
 state = {'frame': np.zeros(FRAME_SIZE, dtype=np.uint8), 'amp': 0.0, 'bass': 0.0, 'mid': 0.0, 'treble': 0.0,
          'kick': 0.0, 'beats': 0.0, 'build': 0.0, 'dominant': (0.5, 0.5, 0.5),
+         # ritmo.py: u_bpm, posicao na batida/compasso (0..1, calculada no render) e o TOM (matiz da cor
+         # do tom, menor 0/1, confianca 0..1)
+         'bpm': 0.0, 'beat': 0.0, 'bar': 0.0, 'key_hue': 0.0, 'key_minor': 0.0, 'key_conf': 0.0,
          # faixas finas de mixagem (Sub-bass..Air) — controlam u_subbass..u_air no shader
          'subbass': 0.0, 'lowmid': 0.0, 'midrange': 0.0, 'highmid': 0.0, 'presence': 0.0,
          'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {}, 'out_image': {}, 'bounce_busy': [],
@@ -2115,6 +2119,8 @@ def audio_thread(device):
     html_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
                 'prev_val': [None], 'prev_mean': [None]}
     smooth_spectrum = np.zeros(len(freqs))  # espectrograma piscava: era FFT crua, sem suavizar
+    tempo, key = ritmo.Tempo(rate / chunk_samples), ritmo.Key(rate)   # BPM/fase e tom (ritmo.py)
+    state['tempo_obj'] = tempo              # o render le a fase daqui (tempo.phase) a cada frame
     try:
         while running:
             # hot-reload do tuning.py — mesmo esquema do image.frag, so que pro lado Python:
@@ -2156,6 +2162,7 @@ def audio_thread(device):
             except FileNotFoundError:
                 pass
             media = state.get('audio_media')
+            extra = []                       # chunks ANTERIORES do mesmo lote (video): so' pro ritmo/tom
             if media != cur_media:  # video 🔊 na mesa substitui o PulseAudio (e volta quando sai)
                 cur_media = media
                 for k in band_peaks:  # auto-gain nao herda o teto da fonte anterior
@@ -2215,7 +2222,8 @@ def audio_thread(device):
                 elif listen:
                     _kill(listen)
                     listen = None
-                data = ready[-1]
+                data = ready[-1]                   # niveis: o mais novo basta
+                extra = ready[:-1]                 # ritmo/tom: TODOS (pular chunk = pular batida: 120 lia 90)
                 state['audio_t'] = time.monotonic()
             else:
                 if state['audio_source'] != cur_src:  # troca pedida pelo dash
@@ -2253,6 +2261,24 @@ def audio_thread(device):
                     continue
             samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
             spectrum = np.abs(np.fft.rfft(samples * window))
+            now_m = time.monotonic()
+            for tt in state.pop('tap_q', None) or ():      # TAP do dash/MIDI (dash_server /tap)
+                tempo.tap(tt)
+            if state.pop('tempo_auto', False):
+                tempo.auto()
+            dt_c = chunk_samples / rate
+            for j, ch in enumerate(extra):     # lote do video: cada chunk no instante dele, em ordem
+                xs = np.frombuffer(ch, dtype=np.int16).astype(np.float32) / 32768.0
+                tempo.update(now_m - (len(extra) - j) * dt_c, np.abs(np.fft.rfft(xs * window)))
+                key.push(xs)
+            tempo.update(now_m, spectrum)
+            key.push(samples)
+            state['bpm'] = round(tempo.bpm, 2)
+            km = str(getattr(tuning, 'KEY_COLORS', 'quintas') or 'quintas')
+            if key.tonic >= 0:
+                state['key_hue'], state['key_minor'], state['key_conf'] = ritmo.key_hue(key.tonic, key.minor, km), float(key.minor), key.conf
+            state['tempo'] = {'bpm': round(tempo.bpm, 1), 'conf': round(tempo.conf, 2), 'manual': int(tempo.manual),
+                              'key': key.name(), 'key_conf': round(key.conf, 2), 'key_rgb': list(ritmo.key_rgb(key.tonic, key.minor, km))}
             smooth_spectrum = smooth_spectrum * tuning.SMOOTHING + spectrum * (1 - tuning.SMOOTHING)
             bass_raw = float(spectrum[bass_bins].mean())
             mid_raw = float(spectrum[mid_bins].mean())
@@ -2615,7 +2641,8 @@ def _locs(prog, *names):
     return {n: glGetUniformLocation(prog, n) for n in names}
 
 
-_STATE_U = ('amp', 'bass', 'mid', 'treble', 'kick', 'build') + tuple(FREQ_BAND_UNIFORM.values())
+_STATE_U = ('amp', 'bass', 'mid', 'treble', 'kick', 'build', 'bpm', 'beat', 'bar', 'key_hue', 'key_minor',
+            'key_conf') + tuple(FREQ_BAND_UNIFORM.values())
 
 
 def _prog_locs(prog, manifest):
@@ -3419,6 +3446,9 @@ def main():
             prev_frame_buf[0] = frame_in.copy()
 
         now_t = time.perf_counter() - t0
+        tp_ = state.get('tempo_obj')            # posicao na batida/compasso NESTE frame (lisa, sem degrau do audio)
+        if tp_:
+            state['beat'], state['bar'] = tp_.phase(time.monotonic())
         # SUAVIZACAO (tuning.PARAM_SMOOTH_MS, ~80 ms): knobs, opacidades, liga/desliga e intensidade
         # deslizam ate o valor novo em vez de pular. O som (♪/kick) NAO passa por aqui (ja' tem attack/
         # release proprio; suavizar de novo so' atrasaria a reacao). Master/blackout tambem nao (seguranca).
@@ -3860,7 +3890,8 @@ def main():
                 if img is not None:
                     lt_pv['tx'] = lt_pv['tx'] or luzes.Sender()
                     unis = luzes.dmx_frame(img, lcfg['fixtures'], lambda fx: _mod_value(1.0, fx.get('mod'), state),
-                                           lt_pv['prev'], master=1.0 - g_dim, host=str(lcfg.get('host') or '255.255.255.255'))
+                                           lt_pv['prev'], master=1.0 - g_dim, host=str(lcfg.get('host') or '255.255.255.255'),
+                                           key_rgb=(state.get('tempo') or {}).get('key_rgb'))
                     lt_pv['tx'].send(unis)
                     state['lights_live'] = [[int(c) for c in (lt_pv['prev'].get(i) or [(0, 0, 0)])[0]]
                                             for i in range(len(lcfg['fixtures']))]   # 1a cor de cada aparelho (dash)
@@ -3870,7 +3901,15 @@ def main():
                     lt_pv['err'] = str(e)
             glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
-        pend = state.pop('scene_pending', None)
+        # TROCA QUANTIZADA (tuning.SCENE_QUANT = 'beat' | 'bar'; '' = na hora): o pedido espera a proxima
+        # batida/'1' do compasso (ritmo.Tempo); sem tempo detectado, troca na hora. Pedido novo substitui.
+        pend = state.get('scene_pending')
+        if pend and pend.get('transition') and tp_ and 'at' not in pend:
+            pend['at'] = tp_.next_boundary(time.monotonic(), str(getattr(tuning, 'SCENE_QUANT', '') or ''))
+        if pend and pend.get('at') and time.monotonic() < pend['at']:
+            pend = None                         # ainda nao chegou a batida
+        elif pend and state.get('scene_pending') is pend:
+            state.pop('scene_pending', None)
         if pend:
             # a cena que SAI segue viva na transicao (render_mix com os dados dela + fontes abertas).
             # ponytail: trocar NO MEIO de uma transicao larga a cena que ja' saia (corte nela); encadear
@@ -3885,6 +3924,9 @@ def main():
             else:
                 tpath, tms = _resolve_transition(dash_server.scene_transition_name(pend['name'])) \
                     if pend.get('transition') else (None, 0)
+                nb = float(getattr(tuning, 'TRANS_BEATS', 0) or 0)   # duracao em BATIDAS (0 = o ms do .glsl)
+                if tpath and nb > 0 and state.get('bpm'):
+                    tms = nb * 60000.0 / state['bpm']
                 prog_t = trans_program(tpath) if tpath else None
                 scene_tr = {'prog': prog_t, 'ms': tms, 't0': time.perf_counter(), 'old': old_sc} if prog_t and old_sc else None
                 if scene_tr:

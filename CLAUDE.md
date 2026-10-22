@@ -38,6 +38,10 @@ Cada ferramenta isolada, depois comparar, só então compor.
   estrutural (adicionar/tirar) leva `.ed` (some no modo palco).
 - Ao vivo: knobs/opacidades/intensidade passam por `_smooth` no native (`PARAM_SMOOTH_MS`); som (♪/kick) e
   master/blackout NÃO. Intensidade dos efeitos = `OUTPUT_GRADE.fxamt` (fader EFEITOS, × opacidade de todo efeito).
+- Ritmo/tom: `src/ritmo.py` (`Tempo`: fluxo espectral → autocorrelação → BPM, PLL de fase, TAP; `Key`: cromagrama +
+  Krumhansl; `key_rgb`: círculo das quintas | Scriabin). O `audio_thread` alimenta com TODO chunk (lote de vídeo
+  inclusive — pular chunk distorce o BPM); a fase (`u_beat`/`u_bar`) é calculada no render a cada frame. Troca de
+  cena quantizada (`SCENE_QUANT`) espera `next_boundary` no fim do frame; `TRANS_BEATS` = transição em batidas.
 - Luzes: `src/luzes.py` (Art-Net, detector ArtPoll/WLED, mapeamento por câmera `scan`) + aba Luzes; `LIGHTS`.
 - Testar o native: SEMPRE em segundo plano com a webcam e `PRISMA_HIDDEN=1` (janela nunca na tela);
   `PRISMA_GL_CHECK=1` religa a checagem de erro do PyOpenGL (desligada por desempenho).

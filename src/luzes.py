@@ -15,7 +15,8 @@ LIGHTS = {'on': 1, 'host': '255.255.255.255', 'fps': 40, 'fixtures': [
 - count > 1 = FITA: repete o padrao `ch` count vezes (pixel i = fatia i da zona, no eixo maior);
   passou de 512 canais continua no universo seguinte (como o WLED espera).
 - zone [x, y, w, h] 0..1 no canvas, origem em cima (= OVERLAYS rect). Ausente = canvas todo.
-- cor: media da zona; 'color': [r, g, b] 0..255 = cor fixa (so' o brilho segue o som).
+- cor: media da zona; 'color': [r, g, b] 0..255 = cor fixa (so' o brilho segue o som); 'tom': 1 = a
+  COR DO TOM da musica (ritmo.key_rgb: circulo das quintas / Scriabin).
 - mod = o mesmo ♪ dos knobs (native._mod_value): brilho vai de lo (silencio) a hi pela faixa
   marcada mais forte. Sem mod = brilho da imagem.
 - smooth 0..0.95 (padrao 0.5): suaviza a cor no tempo — refletor piscando a cada frame cansa.
@@ -66,11 +67,13 @@ def _channels(rgb, ch, bright):
     return bytes(min(255, max(0, int(round(v.get(c, 0.0))))) for c in ch)
 
 
-def fixture_colors(img, fx, prev=None):
+def fixture_colors(img, fx, prev=None, key_rgb=None):
     """[(r, g, b)] por pixel do aparelho (1, ou count na fita), suavizado com o frame anterior."""
     n = max(1, int(fx.get('count', 1)))
     z = _zone(img, fx.get('zone'))
-    if fx.get('color'):
+    if fx.get('tom') and key_rgb:
+        cols = [tuple(float(c) for c in key_rgb[:3])] * n
+    elif fx.get('color'):
         cols = [tuple(float(c) for c in fx['color'][:3])] * n
     elif n == 1:
         cols = [tuple(z.reshape(-1, 3).mean(0))]
@@ -90,12 +93,12 @@ def fixture_colors(img, fx, prev=None):
     return cols
 
 
-def dmx_frame(img, fixtures, bright_of, prev, master=1.0, host=''):
+def dmx_frame(img, fixtures, bright_of, prev, master=1.0, host='', key_rgb=None):
     """{(ip, universo): bytearray(512)} de todos os aparelhos (ip = fx['host'] ou o geral `host`).
     bright_of(fx) -> 0..1 (som/imagem); prev = {indice: cores} da chamada anterior (pro smooth)."""
     unis = {}
     for i, fx in enumerate(fixtures or []):
-        cols = prev[i] = fixture_colors(img, fx, prev.get(i))
+        cols = prev[i] = fixture_colors(img, fx, prev.get(i), key_rgb)
         ch = str(fx.get('ch', 'rgb')) or 'rgb'
         uni, pos = int(fx.get('uni', 0)), max(1, int(fx.get('addr', 1))) - 1
         br = max(0.0, min(1.0, bright_of(fx))) * master
@@ -402,6 +405,7 @@ if __name__ == '__main__':   # self-check: python src/luzes.py
     u = dmx_frame(img, [{'ch': 'rgb', 'color': [200, 0, 0], 'smooth': 0.5}], one, prev)
     assert u[('', 0)][0] == 100, 'smooth: metade do caminho por frame'
     assert list(dmx_frame(img, [{'ch': 'rgb', 'host': '10.0.0.9'}], one, {}, host='h')) == [('10.0.0.9', 0)], 'ip por aparelho'
+    assert bytes(dmx_frame(img, [{'ch': 'rgb', 'tom': 1, 'smooth': 0}], one, {}, key_rgb=[10, 20, 30])[('', 0)][:3]) == bytes([10, 20, 30])
     assert [c[0] for c in fixture_colors(img, {'count': 2, 'rev': 1, 'smooth': 0})] == [0.0, 255.0], 'fita rev'
     r = parse_poll_reply(b'Art-Net\x00' + b'\x00\x21' + bytes([10, 0, 0, 7]) + bytes(4) + bytes([0, 1]) + bytes(6)
                          + b'NoDMX'.ljust(18, b'\x00') + b'No DMX longo'.ljust(64, b'\x00') + bytes(64)

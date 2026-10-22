@@ -52,7 +52,10 @@
     objetivo do projeto). Nao e' tela de show.
   - Saida: janela/monitor/fps (C/S: queda de fps = travada no telao) · monitor grande (C: calibrar
     cor vendo o resultado) · telas do palco + pixel map (C) · calibracao do telao e por tela (C).
-  - Luzes: rede, mapear, mapa, aparelhos (C) · "seguindo a saida" (P).
+  - Ritmo/tom: indicador no topo (S: mostra se o prisma esta' NO TEMPO antes de confiar na troca
+    quantizada; P: o tom = a paleta) · TAP (P: corrige o tempo quando a deteccao erra; MIDI) · troca
+    na batida/compasso + duracao em batidas (P) · painel Tempo e tom na aba Audio (C).
+  - Luzes: rede, mapear, mapa, aparelhos (C) · "seguindo a saida" (P) · "tom" por aparelho (P).
   - Biblioteca (C). Tirados: link "v1" (sem uso ao vivo; a v1 segue em /), aviso "Luzes: aba
     Luzes" na Saida (repetia a aba).
 -->
@@ -167,7 +170,18 @@
   #midi-btn .dot.hit { opacity: 1; box-shadow: 0 0 6px var(--midi); }
   #midi-btn.learn { background: var(--midi-d); border-color: var(--midi); color: var(--tx); }
   #mode-btn.edit { background: var(--sel-d); border-color: var(--sel); color: var(--tx); }
-  #master-wrap { display: inline-flex; gap: 6px; }
+  #master-wrap { display: inline-flex; gap: 6px; } #master-wrap .fader { flex: none; }
+  #tempo { display: flex; align-items: center; gap: 6px; padding: 4px 10px; height: 34px; border-radius: var(--r2); background: var(--bg); border: 1px solid var(--line); cursor: pointer; }
+  #tempo b { font-size: 14px; min-width: 30px; text-align: right; } #tempo small { font-size: 9px; color: var(--tx3); letter-spacing: .08em; }
+  #tempo .dots { display: inline-flex; gap: 3px; margin: 0 4px; } #tempo .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--s4); }
+  #tempo .dots i.on { background: var(--sel); box-shadow: 0 0 6px var(--sel); } #tempo .dots i.one.on { background: var(--live); box-shadow: 0 0 6px var(--live); }
+  #tempo .key { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--tx2); white-space: nowrap; }
+  #tempo .key i, .tp-sw2 { width: 12px; height: 12px; border-radius: 3px; background: var(--s4); display: inline-block; }
+  #tempo.manual b { color: var(--sel); }
+  #tap-btn.hit { background: var(--sel-d); border-color: var(--sel); color: var(--tx); }
+  .tp-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
+  .tp-big { display: flex; align-items: center; gap: 8px; } .tp-big b { font-size: 26px; } .tp-big small { color: var(--tx3); }
+  .tp-sw2 { width: 26px; height: 26px; border-radius: 6px; }
   #master-wrap .fader { width: 150px; height: 34px; }
   .fader.fxamt .f-fill { background: linear-gradient(90deg, #3a2410, #ff9f4a); opacity: .5; }
   #blk-btn { position: relative; min-height: 34px; padding: 0 12px; border-radius: var(--r2); border: 1px solid #55282b; background: var(--bad-d);
@@ -732,6 +746,15 @@
   .knob.drag .k-ar { filter: drop-shadow(0 0 4px rgba(255,159,74,.6)); }
   dialog, #hpop, #midipop, #keys-box { background: #12161b; border-color: var(--line2); box-shadow: 0 24px 60px -12px rgba(0,0,0,.75); }
   #toast { background: #1b2026; box-shadow: 0 10px 30px -10px #000; }
+
+  /* TOPO NUMA LINHA SO' (fim do CSS: vence as regras antigas): EFEITOS/MASTER/BLACKOUT nao podem pular de
+     lugar no show. Cede espaco primeiro o que so' informa: nome da fonte de audio, rotulos, chip de saude
+     OK (vira bolinha, nome no hover; com PROBLEMA continua com nome) e, por ultimo, a marca. */
+  @media (max-width: 2100px) { #tm .src, #tempo small { display: none; } }
+  @media (max-width: 1800px) { #master-wrap .fader { width: 116px; }
+    .hc:not(.warn):not(.crit):not(.open) { font-size: 0; gap: 0; padding: 0 5px; } .hc:not(.warn):not(.crit):not(.open) .v { display: none; } }
+  @media (max-width: 1600px) { #tempo .key span { display: none; } nav#tabs button { padding: 0 9px; } #top { gap: 6px 10px; } }
+  @media (max-width: 1450px) { #brand { display: none; } #master-wrap .fader { width: 106px; } #master-wrap .f-lb, #master-wrap .f-val { font-size: 10.5px; } #master-wrap .f-lb { left: 7px; } #master-wrap .f-val { right: 7px; } #tm .amp { width: 30px; } #blk-btn kbd { display: none; } }
 </style>
 
 <header id="top">
@@ -750,6 +773,11 @@
     <span class="bands" id="tm-bands"></span>
     <span class="src" id="tm-src">—</span>
   </span>
+  <span id="tempo" title="ritmo e tom da música (ritmo.py) — os 4 pontos = o compasso; clique abre a aba Áudio">
+    <b class="num" id="tp-bpm">—</b><small>BPM</small><span class="dots" id="tp-dots"><i></i><i></i><i></i><i></i></span>
+    <span class="key" id="tp-key"><i id="tp-sw"></i><span id="tp-kname">tom…</span></span>
+  </span>
+  <button class="btn sm" id="tap-btn" data-midi="tap" title="TAP: bata no tempo (4 toques); o 1º toque é o “1” do compasso · dá pra mapear no MIDI">TAP</button>
   <span class="grow"></span>
   <span id="health"><span id="h-chips" style="display:contents"></span><div id="hpop" hidden></div></span>
   <button class="btn sm" id="midi-btn" title="controlador MIDI: mapear knobs físicos"><span class="dot"></span>MIDI</button>
@@ -764,7 +792,12 @@
   <section id="palco">
     <div class="palco-grid">
       <div class="panel scenes-p">
-        <div class="ph"><b>Scenes</b><span class="grow"></span><span class="hint" id="scene-trans"></span>
+        <div class="ph"><b>Scenes</b><span class="grow"></span>
+          <label class="hint" title="a troca espera o tempo da música (precisa de BPM: detectado ou TAP)">troca <select class="inp sm" id="tp-quant">
+            <option value="">na hora</option><option value="beat">na batida</option><option value="bar">no compasso</option></select></label>
+          <label class="hint" title="duração da transição em batidas (segue o BPM) — ou o tempo fixo do arquivo .glsl">dura <select class="inp sm" id="tp-beats">
+            <option value="0">o do arquivo</option><option value="1">1 batida</option><option value="2">2 batidas</option><option value="4">1 compasso</option><option value="8">2 compassos</option><option value="16">4 compassos</option></select></label>
+          <span class="hint" id="scene-trans"></span>
           <button class="btn sm" id="sgrade-btn" title="imagem da scene inteira (temperatura, luz, cor) — guardada em cada scene">◐ imagem</button>
           <button class="btn sm ed" id="reload-lists" title="recarregar listas (fontes, mídia, efeitos, scenes)">↻</button></div>
         <div class="scenes" id="scenes"></div>
@@ -818,6 +851,15 @@
       <div class="cols" id="cols"></div>
     </div>
     <div class="audio-bottom">
+      <div class="panel"><div class="ph"><b>Tempo e tom</b><span class="hint">BPM pelos ataques da música (ou TAP) · tom por cromagrama (Krumhansl) · cor do tom pela teoria das cores</span></div>
+        <div class="tp-panel">
+          <div class="tp-big"><b class="num" id="tp-bpm2">—</b><small>BPM</small><span class="hint" id="tp-mode"></span>
+            <button class="btn sm" id="tp-auto" title="volta pro BPM detectado (larga o TAP)">automático</button></div>
+          <div class="tp-big"><i class="tp-sw2" id="tp-sw2"></i><b id="tp-kname2">—</b><span class="hint" id="tp-kconf"></span></div>
+          <label class="hint">cor do tom <span class="seg" id="tp-colors"><button data-v="quintas" title="posição no círculo das quintas = matiz: tons vizinhos têm cores vizinhas; o relativo menor tem a cor do maior, mais escura">círculo das quintas</button><button data-v="scriabin" title="a tabela de cores do Scriabin (Prometheus, 1910)">Scriabin</button></span></label>
+        </div>
+        <div class="hint" style="margin-top:8px">nos efeitos: <span class="mono">u_bpm · u_beat · u_bar · u_key_hue · u_key_minor · u_key_conf</span> — efeito pronto: Sortidos › Tonalidade</div>
+      </div>
       <div class="panel"><div class="ph"><b>Mais ajustes</b><span class="hint">grava no tuning.py · marca no arco = valor ao abrir (duplo-clique volta)</span></div>
         <div class="kgroups" id="knobgroups"></div></div>
       <div class="panel"><div class="ph"><b>Canais por instrumento</b><span class="grow"></span><button class="btn sm ed" id="add-chan">+ canal</button></div>
@@ -3763,6 +3805,7 @@ function process(stateOnly){
   renderMixer();   // em qualquer aba: registra os controles da mesa pro MIDI (so' refaz se a estrutura mudou)
   if (stateOnly) return;
   renderTop(d);
+  renderTempo(d.tempo);
   const tab = curTab;
   if (tab === 'palco'){ syncMixer(); syncModLive(d.audio); if (activeDrag !== 'rect') renderCanvas(); }
   else if (tab === 'audio'){
@@ -3850,7 +3893,8 @@ function renderLz(){
     const num = (k, w, lo, hi) => h('input', { class: 'inp sm num', type: 'number', min: lo, max: hi, value: f[k] ?? '', style: `width:${w}px`, title: k,
       onchange: e => { const v = parseInt(e.target.value); if (Number.isFinite(v)) f[k] = v; else delete f[k]; lzSend(); } });
     const bs = (f.mod || {}).b || [];
-    const bands = h('div', { class: 'chips' }, h('span', { class: 'hint', text: '♪' }), ...MOD_BANDS.map(([b]) => chip(lzBand[b] || b, bs.includes(b), 'brilho pelo som (várias = a mais forte)', () => {
+    const bands = h('div', { class: 'chips' }, chip((f.tom ? '☑' : '☐') + ' tom', !!f.tom, 'cor do TOM da música (teoria das cores) no lugar da cor da zona', () => {
+      if (f.tom) delete f.tom; else f.tom = 1; lzSend(); renderLz(); }), h('span', { class: 'hint', text: '♪' }), ...MOD_BANDS.map(([b]) => chip(lzBand[b] || b, bs.includes(b), 'brilho pelo som (várias = a mais forte)', () => {
       const l = bs.includes(b) ? bs.filter(x => x !== b) : bs.concat([b]);
       if (l.length) f.mod = Object.assign({ lo: 0.2, hi: 1 }, f.mod || {}, { b: l }); else delete f.mod; lzSend(); renderLz(); })));
     const row = h('div', { class: 'lz-row' + (i === lzSel ? ' sel' : ''), onclick: () => { if (lzSel !== i){ lzSel = i; renderLz(); } } },
@@ -3883,6 +3927,39 @@ function syncLz(L){
     const sw = $(`#lz-list .lz-sw[data-i="${i}"]`), pin = $('#lz-pins').children[i], col = `rgb(${c[0]},${c[1]},${c[2]})`;
     if (sw) sw.style.background = col; if (pin) pin.style.setProperty('--c', col);
   });
+}
+
+// =====================================================================================
+// RITMO E TOM (ritmo.py): indicador no topo (BPM, compasso, tom), TAP, troca quantizada, cor do tom
+// =====================================================================================
+let tpCfg = { quant: '', beats: 0, colors: 'quintas' }, tpTouched = -1e9;
+function tap(){ post('/tap').catch(() => {}); const b = $('#tap-btn'); b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 120); }
+$('#tap-btn').onclick = tap;
+reg('tap', { kind: 'trig', fire: tap, label: 'TAP (tempo)', el: $('#tap-btn') });
+$('#tempo').onclick = () => showTab('audio');
+$('#tp-auto').onclick = () => post('/tempo', { auto: 1 }).catch(() => {});
+const tpSend = o => { tpTouched = now(); Object.assign(tpCfg, o); post('/tempo', o).catch(e => toast('tempo: ' + e, 'err')); };
+$('#tp-quant').onchange = e => tpSend({ quant: e.target.value });
+$('#tp-beats').onchange = e => tpSend({ beats: +e.target.value });
+$$('#tp-colors button').forEach(b => b.onclick = () => { tpSend({ colors: b.dataset.v }); syncTempoCfg(); });
+function syncTempoCfg(){
+  if (document.activeElement !== $('#tp-quant')) $('#tp-quant').value = tpCfg.quant || '';
+  if (document.activeElement !== $('#tp-beats')) $('#tp-beats').value = String(tpCfg.beats || 0);
+  $$('#tp-colors button').forEach(b => b.classList.toggle('on', b.dataset.v === tpCfg.colors));
+}
+function renderTempo(t){
+  if (!t) return;
+  if (t.cfg && now() - tpTouched > TOUCH_MS && JSON.stringify(t.cfg) !== JSON.stringify(tpCfg)){ tpCfg = Object.assign({}, t.cfg); syncTempoCfg(); }
+  const bpm = t.bpm ? String(Math.round(t.bpm)) : '—', col = t.key_rgb ? rgbStr(t.key_rgb) : '', kn = t.key || 'tom…';
+  $('#tp-bpm').textContent = bpm; $('#tp-bpm2').textContent = t.bpm ? t.bpm.toFixed(1) : '—';
+  $('#tempo').classList.toggle('manual', !!t.manual);
+  $('#tp-mode').textContent = t.manual ? 'pelo TAP' : (t.bpm ? `detectado · confiança ${Math.round((t.conf || 0) * 100)}%` : 'ouvindo…');
+  $('#tp-auto').hidden = !t.manual;
+  const beat = t.bpm ? Math.floor((t.bar || 0) * 4) % 4 : -1;
+  [...$('#tp-dots').children].forEach((d, i) => { d.classList.toggle('on', i === beat); d.classList.toggle('one', i === 0); });
+  $('#tp-kname').textContent = kn; $('#tp-kname2').textContent = t.key || '—';
+  $('#tp-kconf').textContent = t.key ? `confiança ${Math.round((t.key_conf || 0) * 100)}%` : 'ouvindo…';
+  for (const id of ['#tp-sw', '#tp-sw2']) $(id).style.background = t.key ? col : '';
 }
 
 let lastT = 0;
