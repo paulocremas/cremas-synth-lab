@@ -193,6 +193,20 @@ TEMPO_QUANTS = ('', 'beat', 'bar')        # troca de cena: na hora / na proxima 
 KEY_COLOR_MODES = ('quintas', 'scriabin')  # cor do tom: circulo das quintas / tabela do Scriabin (ritmo.key_rgb)
 
 
+def set_macros(v, save=False, tuning_path=None):
+    """MACROS: 4 faders 0..1 (Palco) -> state['m1'..'m4'] (o native le no _mod_value, como uma faixa de
+    som). save=True grava tuning.MACROS (soltar o fader). Devolve a lista normalizada."""
+    vals = [round(max(0.0, min(1.0, float(x))), 3) for x in (list(v) + [0, 0, 0, 0])[:4]]
+    if _state is not None:
+        for i, x in enumerate(vals):
+            _state[f'm{i + 1}'] = x
+    if save:
+        _write_var('MACROS', vals, 'MACROS m1..m4 (faders no Palco; fonte do ♪ nos knobs/luzes)', tuning_path)
+    elif _tuning is not None:
+        _tuning.MACROS = vals
+    return vals
+
+
 def set_tempo_cfg(cfg, tuning_path=None):
     """Ritmo/tom (dash): {'quant': '' | 'beat' | 'bar', 'beats': 0..32 (duracao da transicao em batidas;
     0 = o ms do .glsl), 'colors': 'quintas' | 'scriabin'} -> SCENE_QUANT / TRANS_BEATS / KEY_COLORS. So'
@@ -843,7 +857,8 @@ def _norm_rect(r):
 
 
 # fontes de som de um knob com ♪ (= chaves do state no native: as 8 faixas + o kick), ordem do espectro
-MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick')
+MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
+               'm1', 'm2', 'm3', 'm4')   # m1..m4 = MACROS (faders no Palco): a mesma faixa lo->hi, movida a mao/MIDI
 
 
 def _norm_mod1(v):
@@ -2004,7 +2019,8 @@ def _payload():
         'lights': {'cfg': getattr(_tuning, 'LIGHTS', None) or {'on': 0, 'fixtures': []},   # luzes.py (painel: depois)
                    'live': _state.get('lights_live', []),
                    'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
-        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3)),   # ritmo.py: BPM, TAP, tom, compasso
+        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3)),
+        'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)   # ritmo.py: BPM, TAP, tom, compasso
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
@@ -2178,6 +2194,14 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 b = json.loads(raw.decode())
                 out = set_band_ranges(b.get('overlap'), b['ranges'], enabled=b.get('enabled'))
+                self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/macros':   # {v: [4 x 0..1], save}
+            try:
+                b = json.loads(raw.decode())
+                out = set_macros(b['v'], save=bool(b.get('save')))
                 self._send(200, 'application/json', json.dumps(out).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
@@ -2814,6 +2838,9 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
          'color': [255, 1, 2], 'mod': {'b': ['air']}}]}, lg
     assert set_lights(lg, p)['fps'] == 60 and open(p).read().count('LIGHTS = ') == 1
     assert set_lights({'on': 0}, p)['fixtures'] == [] and open(p).read().count('LIGHTS = ') == 1
+    assert set_macros([2, -1, '0.5'], save=True, tuning_path=p) == [1.0, 0.0, 0.5, 0.0]
+    ns = {}; exec(open(p).read(), ns); assert ns['MACROS'] == [1.0, 0.0, 0.5, 0.0], 'macros gravados'
+    assert _norm_mod1({'b': ['m2', 'air', 'nada']}) == {'b': ['air', 'm2']}, 'macro = fonte do ♪'
     set_tempo_cfg({'quant': 'bar', 'beats': 99, 'colors': 'scriabin'}, p)
     ns = {}; exec(open(p).read(), ns)
     assert (ns['SCENE_QUANT'], ns['TRANS_BEATS'], ns['KEY_COLORS']) == ('bar', 32, 'scriabin'), 'tempo: gravado no tuning.py'

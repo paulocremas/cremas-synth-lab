@@ -3015,6 +3015,8 @@ def main():
         state['overlays'] = dash_server._norm_overlays(getattr(tuning, 'OVERLAYS', []))
     if 'bindings' not in state:
         state['bindings'] = dash_server._norm_bindings(getattr(tuning, 'BINDINGS', {}))
+    for i, x in enumerate((list(getattr(tuning, 'MACROS', None) or []) + [0.0] * 4)[:4]):   # faders M1..M4
+        state[f'm{i + 1}'] = float(x)
 
     uniforms = {}
     sim_want = [False]   # algum shader no ar le u_texture_smoke/_fumaca (frame anterior) -> roda a sim
@@ -4118,6 +4120,7 @@ def _selfcheck():
     assert abs(_mod_value(0.3, {'b': ['subbass'], 'lo': 0.2, 'hi': 0.6}, lv) - 0.4) < 1e-9, '♪ = lo + (hi-lo) * nivel'
     assert abs(_mod_value(0.3, {'b': ['subbass', 'air'], 'lo': 1.0, 'hi': 0.0}, lv) - 0.1) < 1e-9, '♪ mais forte vale; hi<lo inverte'
     assert abs(_mod_value(0.5, {'b': ['kick']}, lv) - 0.5) < 1e-9, '♪ formato velho = do knob ate 1'
+    assert abs(_mod_value(0.0, {'b': ['m1'], 'lo': 0.2, 'hi': 0.8}, {'m1': 0.5}) - 0.5) < 1e-9, 'macro = fonte do ♪'
     print('native_synth mod self-check ok')
     rng = np.random.default_rng(1)
     fa, fb = (rng.integers(0, 256, FRAME_SIZE, dtype=np.uint8) for _ in range(2))

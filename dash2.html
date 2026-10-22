@@ -41,7 +41,8 @@
     qualquer aba) · saude (S) · MIDI (P/C) · editar/palco (S: trava a estrutura no show) · EFEITOS
     (P: intensidade de todos os efeitos num gesto) · MASTER + BLACKOUT (P/S: brilho da sala, saida
     preta de emergencia).
-  - Palco: cenas (P) + transicao de entrada (P) · ◐ imagem da cena (P: cor por cena) · mesa/canvas
+  - Palco: macros M1-M4 (P: um gesto mexe varios knobs, cada um na sua faixa — intensidade de um "look"
+    inteiro; MIDI) · cenas (P) + transicao de entrada (P) · ◐ imagem da cena (P: cor por cena) · mesa/canvas
     (P: o que esta' no ar, opacidade, ordem, onde) · monitor Saida (S: o PROGRAMA = o que o publico
     ve, olhar sem virar pro telao) · inspetor (P: knobs do efeito da fonte selecionada, ♪, kick) ·
     atalhos (C) · ↻ listas (C).
@@ -182,6 +183,9 @@
   .tp-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
   .tp-big { display: flex; align-items: center; gap: 8px; } .tp-big b { font-size: 26px; } .tp-big small { color: var(--tx3); }
   .tp-sw2 { width: 26px; height: 26px; border-radius: 6px; }
+  .macros { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .macros .fader { height: 30px; }
+  .side .macro-p { padding: 10px 12px; } .side .macro-p .ph { margin-bottom: 8px; padding-bottom: 6px; }
+  #palco .macro-p { --tick: var(--midi); }
   #master-wrap .fader { width: 150px; height: 34px; }
   .fader.fxamt .f-fill { background: linear-gradient(90deg, #3a2410, #ff9f4a); opacity: .5; }
   #blk-btn { position: relative; min-height: 34px; padding: 0 12px; border-radius: var(--r2); border: 1px solid #55282b; background: var(--bad-d);
@@ -826,6 +830,8 @@
           <div class="ph"><b>Saída</b><span class="grow"></span><span class="hint num" id="mon-fps"></span></div>
           <div class="mon" id="mon-palco"><canvas id="mon-out"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div>
         </div>
+        <div class="panel macro-p"><div class="ph"><b>Macros</b><span class="hint">um fader mexe vários knobs: no ♪ do knob, marque M1–M4 e ajuste a faixa</span></div>
+          <div class="macros" id="macros"></div></div>
         <div class="panel insp-p" id="inspector"></div>
       </div>
     </div>
@@ -2676,7 +2682,8 @@ function addSourceEl(strips){
 // INSPETOR: a fonte selecionada (previa viva) + o efeito escolhido (abas da pilha, opacidade,
 // mistura e knobs em grade de 4 — slots dev:0 = opacidade, dev:1..N = forcas do // fx:)
 const MOD_BANDS = [['subbass', 'sub'], ['lowmid', 'lowmid'], ['midrange', 'mid'], ['highmid', 'highmid'], ['presence', 'presence'],
-  ['treble_hi', 'treble'], ['brilho', 'brilliance'], ['air', 'air'], ['kick', 'kick']];   // = dash_server.MOD_SOURCES
+  ['treble_hi', 'treble'], ['brilho', 'brilliance'], ['air', 'air'], ['kick', 'kick'],
+  ['m1', 'M1'], ['m2', 'M2'], ['m3', 'M3'], ['m4', 'M4']];   // = dash_server.MOD_SOURCES (M1..M4 = macros)
 // FAIXA de um knob com ♪: trilho com 2 pontas (min = som baixo, max = som alto; pode inverter) e o
 // marcador vivo (onde o som esta' agora). get() -> [lo, hi]; set(lo, hi) no arrasto; io = KNOB_BIND.
 function rangeCtl(o){
@@ -2704,7 +2711,7 @@ function syncModLive(a){
   if (!modLive.length || !a) return;
   const lv = {}; for (const r of a.bands || []) lv[r.name] = r.final || 0;
   for (const m of modLive){
-    const l = Math.min(1, Math.max(0, ...m.bands.map(b => b === 'kick' ? (a.kick || {}).final || 0 : lv[MOD_NAME[b]] || 0)));
+    const l = Math.min(1, Math.max(0, ...m.bands.map(b => b === 'kick' ? (a.kick || {}).final || 0 : /^m\d$/.test(b) ? macroV[+b[1] - 1] || 0 : lv[MOD_NAME[b]] || 0)));
     const [lo, hi] = m.lohi(); m.el._live(lo + (hi - lo) * l);
   }
 }
@@ -2793,7 +2800,7 @@ function renderInspector(){
     for (const n of names.filter(n => mods[n])){
       const bs = mods[n].b || [];
       const row = h('div', { class: 'chips modrow' }, h('span', { class: 'gt', text: '♪ ' + n }));
-      for (const [b, t] of MOD_BANDS) row.append(chip(t, bs.includes(b), b === 'kick' ? 'batida (pula e decai)' : 'faixa que mexe o knob (várias = a mais forte vale)',
+      for (const [b, t] of MOD_BANDS) row.append(chip(t, bs.includes(b), b === 'kick' ? 'batida (pula e decai)' : /^m\d$/.test(b) ? `macro: o fader ${t} no Palco move este knob na faixa dele` : 'faixa que mexe o knob (várias = a mais forte vale)',
         () => editMod(m => { const l = m[n].b || []; m[n] = Object.assign({}, m[n], { b: l.includes(b) ? l.filter(x => x !== b) : l.concat([b]) }); if (!m[n].b.length) delete m[n]; })));
       sec.append(row);
     }
@@ -3802,6 +3809,7 @@ function process(stateOnly){
     lastScreens = d.screens; if (scrSel >= lastScreens.length) scrSel = -1; stgView = null; renderStage(true); renderStageList(); renderCanvas(); renderScrGrade(); }
   syncKnobs(d.knobs); syncDyn(d.band_tweaks);
   if (d.inputs && d.inputs.audio && now() - selTouched.audio >= TOUCH_MS){ const s = $('#sel-audio'); if (s.value !== d.inputs.audio && [...s.options].some(o => o.value === d.inputs.audio)) s.value = d.inputs.audio; }
+  syncMacros(d.macros);   // em qualquer aba: o MIDI (soft takeover) le macroV
   renderMixer();   // em qualquer aba: registra os controles da mesa pro MIDI (so' refaz se a estrutura mudou)
   if (stateOnly) return;
   renderTop(d);
@@ -3960,6 +3968,23 @@ function renderTempo(t){
   $('#tp-kname').textContent = kn; $('#tp-kname2').textContent = t.key || '—';
   $('#tp-kconf').textContent = t.key ? `confiança ${Math.round((t.key_conf || 0) * 100)}%` : 'ouvindo…';
   for (const id of ['#tp-sw', '#tp-sw2']) $(id).style.background = t.key ? col : '';
+}
+
+// =====================================================================================
+// MACROS M1..M4: fonte do ♪ (dash_server.MOD_SOURCES m1..m4) — um fader move todo knob ligado a ele
+// dentro da faixa daquele knob. Live 25 Hz, grava ao soltar; MIDI learn pelo id (macro:N).
+// =====================================================================================
+let macroV = [0, 0, 0, 0], macroTouched = -1e9, macroT = null;
+const macroSend = save => { macroTouched = now(); clearTimeout(macroT); macroT = null; post('/macros', { v: macroV, save }).catch(() => {}); };
+const IO_MACRO = { touch(){ macroTouched = now(); }, live(){ macroTouched = now(); if (!macroT) macroT = setTimeout(() => { macroT = null; macroSend(false); }, 40); },
+  commit: () => macroSend(true) };
+const macroEls = [0, 1, 2, 3].map(i => fader({ id: 'macro:' + (i + 1), label: 'M' + (i + 1), mlabel: 'macro M' + (i + 1), dflt: 0, io: IO_MACRO,
+  get: () => macroV[i], set: v => { macroV[i] = Math.round(v * 1000) / 1000; },
+  title: `macro M${i + 1} — move todo knob que tem M${i + 1} marcado no ♪, dentro da faixa dele · MIDI learn` }));
+$('#macros').append(...macroEls);
+function syncMacros(v){
+  if (!v || now() - macroTouched < TOUCH_MS) return;
+  macroV = v.slice(0, 4); macroEls.forEach((el, i) => { if (activeDrag !== 'macro:' + (i + 1)) el._show(macroV[i]); });
 }
 
 let lastT = 0;
