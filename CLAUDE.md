@@ -31,7 +31,11 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - Sync entre abas = guard por TEMPO (`TOUCH_MS`), não foco. Campo "travado" → olhar isso.
 - Set ativo **é** o estado vivo e auto-salva (`save_active_scene`); troca = `request_scene` → aplicada no fim
   do frame GL (`apply_scene(defer=True)`: memória já, disco em `_persist_scene` numa thread — gravar no
-  loop custava 10–17 ms = frame perdido na transição) + transição.
+  loop custava 10–17 ms = frame perdido na transição) + transição VIVA: `render_mix` desenha a cena nova
+  (`lt['out']`) e a que sai (`lt['old']`, dados em `scene_tr['old']`, fontes abertas via `state['scene_from']`);
+  na transição a suavização dura o tempo dela (morph: efeito comum às duas cenas anda do valor antigo ao novo).
+- Dash: todo elemento tem motivo (P palco / S segurança / C montagem) listado no topo do `dash2.html`;
+  estrutural (adicionar/tirar) leva `.ed` (some no modo palco).
 - Ao vivo: knobs/opacidades/intensidade passam por `_smooth` no native (`PARAM_SMOOTH_MS`); som (♪/kick) e
   master/blackout NÃO. Intensidade dos efeitos = `OUTPUT_GRADE.fxamt` (fader EFEITOS, × opacidade de todo efeito).
 - Luzes: `src/luzes.py` (Art-Net, detector ArtPoll/WLED, mapeamento por câmera `scan`) + aba Luzes; `LIGHTS`.

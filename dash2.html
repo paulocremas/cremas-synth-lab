@@ -33,6 +33,28 @@
     persistirem (HOLD) — alarme que pisca por 1 frame cansa e passa a ser ignorado.
   - cores fixas: verde = no ar/ativo, laranja = selecionado, azul = MIDI, vermelho = blackout/erro.
     Fundo cinza-escuro (nao preto puro), texto nao-branco (halation). Sem CDN: roda offline.
+
+  POR QUE CADA ELEMENTO EXISTE. Regra: so' fica o que serve a (P) PALCO = muda o que o publico ve/sente
+  ao vivo, (S) SEGURANCA = evita ou revela falha no show, ou (C) MONTAGEM = configura o equipamento
+  (some no modo palco: .ed). Display so' fica se leva a uma decisao. Elemento novo entra nesta lista.
+  - Topo: medidor de audio #tm (S: a musica comanda tudo — sem audio os efeitos morrem; visivel em
+    qualquer aba) · saude (S) · MIDI (P/C) · editar/palco (S: trava a estrutura no show) · EFEITOS
+    (P: intensidade de todos os efeitos num gesto) · MASTER + BLACKOUT (P/S: brilho da sala, saida
+    preta de emergencia).
+  - Palco: cenas (P) + transicao de entrada (P) · ◐ imagem da cena (P: cor por cena) · mesa/canvas
+    (P: o que esta' no ar, opacidade, ordem, onde) · monitor Saida (S: o PROGRAMA = o que o publico
+    ve, olhar sem virar pro telao) · inspetor (P: knobs do efeito da fonte selecionada, ♪, kick) ·
+    atalhos (C) · ↻ listas (C).
+  - Audio: fonte (C) · espectro com as faixas (C: onde cada faixa corta) · colunas por faixa (S: o
+    medidor mostra o que cada faixa entrega; P: on/off tira a faixa dos efeitos) · Mais ajustes e
+    canais por instrumento (C).
+  - Imagem: entrada x saida analisadas (S: camera estourada/escura ANTES do show; estudo de sinal —
+    objetivo do projeto). Nao e' tela de show.
+  - Saida: janela/monitor/fps (C/S: queda de fps = travada no telao) · monitor grande (C: calibrar
+    cor vendo o resultado) · telas do palco + pixel map (C) · calibracao do telao e por tela (C).
+  - Luzes: rede, mapear, mapa, aparelhos (C) · "seguindo a saida" (P).
+  - Biblioteca (C). Tirados: link "v1" (sem uso ao vivo; a v1 segue em /), aviso "Luzes: aba
+    Luzes" na Saida (repetia a aba).
 -->
 <style>
   :root {
@@ -734,7 +756,6 @@
   <button class="btn sm" id="mode-btn" title="Palco = só controles de performance (nada se apaga sem querer). Editar = estrutura: adicionar/remover/reordenar, Biblioteca.">✎ editar</button>
   <span id="master-wrap"></span>
   <button id="blk-btn" data-midi="blackout" title="blackout: saída preta (tecla .) — de novo volta ao master de antes">BLACKOUT<kbd>.</kbd></button>
-  <a class="btn sm" href="/" title="dash antigo (v1)">v1</a>
 </header>
 
 <div id="hframe"></div>
@@ -745,7 +766,7 @@
       <div class="panel scenes-p">
         <div class="ph"><b>Scenes</b><span class="grow"></span><span class="hint" id="scene-trans"></span>
           <button class="btn sm" id="sgrade-btn" title="imagem da scene inteira (temperatura, luz, cor) — guardada em cada scene">◐ imagem</button>
-          <button class="btn sm" id="reload-lists" title="recarregar listas (fontes, mídia, efeitos, scenes)">↻</button></div>
+          <button class="btn sm ed" id="reload-lists" title="recarregar listas (fontes, mídia, efeitos, scenes)">↻</button></div>
         <div class="scenes" id="scenes"></div>
         <div id="sgrade-box" hidden>
           <div class="ph"><b>Imagem da scene</b><span class="hint" id="sgrade-name"></span><span class="hint">na mistura inteira, antes da transição e da calibração · centro = neutro · duplo-clique zera</span><span class="grow"></span>
@@ -786,7 +807,7 @@
     <div class="panel">
       <div class="ph"><b>Áudio</b>
         <select class="inp sm" id="sel-audio" title="fonte de áudio (PulseAudio)"></select>
-        <button class="btn sm" id="reload-inputs" title="recarregar lista">↻</button>
+        <button class="btn sm ed" id="reload-inputs" title="recarregar lista">↻</button>
         <span id="audio-media" class="hint" hidden></span>
         <span class="grow"></span>
         <label class="chk"><input type="checkbox" id="bands-cb" checked> faixas ativas</label>
@@ -828,7 +849,6 @@
         <div class="fpsgraph"><canvas id="fps-graph"></canvas><span class="hint num" id="fps-stats"></span></div>
         <p class="hint">60 deixa o movimento dos efeitos e transições liso; câmera e vídeo seguem no fps deles (frame repetido não é reenviado pra GPU). Se o número real ficar abaixo do alvo, volte pra 30.</p>
         <div id="outinfo"></div>
-        <p class="hint" style="margin-top:12px">Luzes de palco e fitas LED (Art-Net / WLED): aba <b>Luzes</b>.</p>
       </div>
       <div class="panel mon-p"><div class="ph"><b>Monitor</b><span class="hint">o que está indo pro telão · ~15 quadros/s</span></div>
         <div class="mon"><canvas id="mon-out2"></canvas><span class="mon-blk">BLACKOUT</span><span class="mon-wait">aguardando a saída…</span></div></div>
@@ -2310,7 +2330,7 @@ function renderScenes(){
       else if (e.key === 'Escape'){ sceneAdding = false; sceneSig = ''; renderScenes(); }
     };
     bar.append(inp); setTimeout(() => inp.focus(), 0);
-  } else bar.append(h('button', { class: 'pad add', text: '+ scene', title: 'cria uma scene com o estado atual e entra nela',
+  } else bar.append(h('button', { class: 'pad add ed', text: '+ scene', title: 'cria uma scene com o estado atual e entra nela',
     onclick: () => { sceneAdding = true; sceneSig = ''; renderScenes(); } }));
   const tr = $('#scene-trans'); tr.innerHTML = '';
   const cur = lastScenes.find(x => x.name === activeScene);
@@ -2489,7 +2509,7 @@ function renderMixer(){
   box.classList.toggle('fxmode', mixMode === 'fx');
   strips.forEach((o, i) => box.append(stripEl(o, i)));
   box.append(addSourceEl(strips));
-  if (!strips.length) box.prepend(h('div', { class: 'empty', style: 'padding:20px', text: 'Mesa vazia — escolha uma fonte →' }));
+  if (!strips.length) box.prepend(h('div', { class: 'empty', style: 'padding:20px', text: perform ? 'Mesa vazia — ✎ editar (no topo) pra adicionar fontes' : 'Mesa vazia — escolha uma fonte →' }));
   renderInspector(); renderKeys(); paintMidiMarks(); renderCanvas();
 }
 function stripEl(o, i){
@@ -2558,7 +2578,7 @@ function stripEl(o, i){
   if (!st.length) fb.append(h('div', { class: 'empty', text: 'sem efeitos — imagem crua' }));
   const groups = {};   // um grupo por set (presets/<set>/), image.frag em "base"
   for (const f of lastShaderList) (groups[(f.match(/^presets\/([^/]+)\//) || [])[1] || 'base'] ||= []).push(f);
-  const add = h('select', { class: 'inp addsel' }, h('option', { value: '', text: '+ efeito…' }),
+  const add = h('select', { class: 'inp addsel ed' }, h('option', { value: '', text: '+ efeito…' }),
     Object.entries(groups).map(([g, fs]) => h('optgroup', { label: g }, fs.map(f => h('option', { value: f, text: fxName(f) })))));
   add.onchange = () => {
     if (!add.value) return;
@@ -2599,7 +2619,7 @@ function addSourceEl(strips){
   const have = new Set(strips.map(o => o.file));
   const items = lastVideoInputs.filter(x => x.kind !== 'media').map(x => [x.id, (VIDEO_ICON[x.kind] || '•') + ' ' + x.name])
     .concat(lastMedia.map(m => [m.file, (m.kind === 'video' ? '🎬 ' : '🖼 ') + m.name])).map(([k, l]) => [k, have.has(k) ? l + '  (de novo)' : l]);
-  const sel = h('select', { class: 'inp addsel' }, h('option', { value: '', text: '+ fonte…' }), items.map(([k, l]) => h('option', { value: k, text: l })));
+  const sel = h('select', { class: 'inp addsel ed' }, h('option', { value: '', text: '+ fonte…' }), items.map(([k, l]) => h('option', { value: k, text: l })));
   sel.onchange = () => {
     const k = sel.value; if (!k) return;
     const same = lastOverlays.filter(o => o.file === k);

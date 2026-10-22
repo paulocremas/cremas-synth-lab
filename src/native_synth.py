@@ -1152,15 +1152,17 @@ def _chkey(o):
     return f"{o.get('file', '')}#{d}" if d else o.get('file', '')
 
 
-def _overlay_items(chans=False):
+def _overlay_items(chans=False, scene=None):
     """[(item de MEDIA | id de fonte viva, opacidade)] das camadas validas, de baixo pra cima.
     So' as disponiveis no set ativo (state['pool']['sources']; ausente = todas). chans=True
-    acrescenta a chave do canal (a mesma fonte pode vir 2x, cada canal com a sua pilha)."""
+    acrescenta a chave do canal (a mesma fonte pode vir 2x, cada canal com a sua pilha).
+    scene = {overlays, pool} de OUTRA cena (a que sai numa transicao); None = a ativa."""
     ms = getattr(tuning, 'MEDIA_SET', 'default')
     by_file = {m.get('file', ''): m for m in getattr(tuning, 'MEDIA', [])}
-    avail = (state.get('pool') or {}).get('sources')
+    sc = scene if scene is not None else state
+    avail = (sc.get('pool') or {}).get('sources')
     out = []
-    for o in state.get('overlays') or []:
+    for o in sc.get('overlays') or []:
         if o.get('off') or (avail is not None and o.get('file') not in avail):
             continue
         ck = (_chkey(o),) if chans else ()
@@ -1179,7 +1181,8 @@ def _sync_overlays():
     win = (FIT_W, FIT_H)
     want = {}
     apath = _audio_media()
-    for m, _ in _overlay_items():
+    fr = state.get('scene_from')          # cena que SAI numa transicao: as fontes dela seguem abertas
+    for m, _ in _overlay_items() + (_overlay_items(scene=fr) if fr else []):
         if _is_live(m):
             want[m] = _ovl[m]['v'] if m in _ovl and _ovl[m]['v'].get('fit') == _live_fit(m) \
                 else _video_from_id(m)
@@ -1227,13 +1230,15 @@ def _stale_sources():
 _alpha_now = {}   # chave do canal -> alpha do frame atual (np.uint8[FRAME_SIZE], replicado em RGB) | None
 
 
-def _source_frames():
+def _source_frames(scene=None, alpha=None):
     """[(chave, opacidade, frame)] das fontes MARCADAS com frame pronto, de baixo pra cima.
     chave = a do CANAL (OVERLAYS/BINDINGS: id da fonte viva ou file da midia, '#N' se repetida).
-    Deixa em _alpha_now a transparencia de cada canal (imagem com alpha; None = opaca)."""
+    Deixa em _alpha_now (ou no dict `alpha`) a transparencia de cada canal (imagem com alpha; None =
+    opaca). scene = outra cena ({overlays, pool}: a que sai numa transicao)."""
     out = []
-    _alpha_now.clear()
-    for m, a, ck in _overlay_items(chans=True):
+    alpha = _alpha_now if alpha is None else alpha
+    alpha.clear()
+    for m, a, ck in _overlay_items(chans=True, scene=scene):
         if a <= 0:
             continue
         if _is_live(m):
@@ -1246,7 +1251,7 @@ def _source_frames():
             f = _overlay_frame(m)
             if f is not None:
                 out.append((ck, a, f))
-                _alpha_now[ck] = _overlay_alpha(m)
+                alpha[ck] = _overlay_alpha(m)
     return out
 
 
@@ -2840,11 +2845,12 @@ def build_output_map_program():
 
 
 def make_layer_targets(w, h):
-    """1 FBO + 8 texturas do tamanho da MISTURA (a janela; com telao, o canvas do palco): out[0]/out[1]
+    """1 FBO + 9 texturas do tamanho da MISTURA (a janela; com telao, o canvas do palco): out[0]/out[1]
     (a saida acumulada, ping-pong), src[0]/src[1] (o resultado da fonte da vez, ping-pong), layer (o
-    shader da vez), from (a imagem final do set que SAI, pra transicao de set) e canvas (a imagem final
-    do palco antes do OUTPUT_MAP; linear: o bloco reamostra). Recriado quando o tamanho muda (main)."""
-    texs = glGenTextures(8)
+    shader da vez), canvas (a imagem final do palco antes do OUTPUT_MAP; linear: o bloco reamostra) e
+    old[0]/old[1] (a mistura da cena que SAI, desenhada viva durante a transicao). Recriado quando o
+    tamanho muda (main)."""
+    texs = glGenTextures(9)
     for t in texs:
         glBindTexture(GL_TEXTURE_2D, t)
         filt = GL_LINEAR if t == texs[7] else GL_NEAREST
@@ -2854,7 +2860,7 @@ def make_layer_targets(w, h):
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
     return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
-            'src': [texs[2], texs[3]], 'layer': texs[4], 'from': texs[5],
+            'src': [texs[2], texs[3]], 'layer': texs[4], 'old': [texs[5], texs[8]],
             'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
             'canvas': texs[7]}
 
@@ -3042,15 +3048,15 @@ def main():
         if not ltargets[0] or ltargets[0]['size'] != (CMP_W, CMP_H):
             if ltargets[0]:
                 glDeleteFramebuffers(1, [ltargets[0]['fbo']])
-                glDeleteTextures([t for k in ('out', 'src') for t in ltargets[0][k]] +
-                                 [ltargets[0][k] for k in ('layer', 'from', 'mask', 'canvas')])
+                glDeleteTextures([t for k in ('out', 'src', 'old') for t in ltargets[0][k]] +
+                                 [ltargets[0][k] for k in ('layer', 'mask', 'canvas')])
             ltargets[0] = make_layer_targets(CMP_W, CMP_H)
         return ltargets[0]
 
     # troca de SET (dash_server.request_scene / tecla -> state['scene_pending']): aplicada no FIM
-    # de um frame — a tela ainda tem a imagem final do set que sai, copiada pra ltargets 'from'.
-    # Nos frames seguintes o set novo desenha no FBO e o ultimo passe mistura from -> novo com o
-    # .glsl de entrada do set (scene_tr). Transicao 'none'/sumida = corte seco.
+    # de um frame. Durante a transicao (scene_tr) as DUAS cenas sao desenhadas vivas (render_mix: a
+    # nova em lt['out'], a que sai em lt['old'] com os dados guardados em scene_tr['old']) e o ultimo
+    # passe mistura as duas com o .glsl de entrada do set. Transicao 'none'/sumida = corte seco.
     scene_tr = None
 
     # --- passe de TRANSIÇÃO: programa proprio por arquivo transitions/*.glsl (cache por mtime;
@@ -3250,7 +3256,8 @@ def main():
             lt_pv.update(fbo=None, tex=None, wh=None)
             pbos.clear()                 # PBOs das previas idem
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
-            scene_tr = None              # o snapshot (ltargets 'from') era do contexto velho
+            scene_tr = None              # as texturas da transicao eram do contexto velho
+            state.pop('scene_from', None)
             state['output'].update(mode=out_mode, window_w=WIN_W, window_h=WIN_H, pos=list(out_pos),
                                     monitor=out_cfg['monitor'], fullscreen=out_cfg['fullscreen'])
 
@@ -3418,6 +3425,8 @@ def main():
         sm_dt = now_t - sm_last[0]
         sm_last[0] = now_t
         tau = max(0.0, float(getattr(tuning, 'PARAM_SMOOTH_MS', 80) or 0)) / 1000.0
+        if scene_tr:   # MORPH: na transicao os parametros da cena nova andam do valor antigo ao novo nela toda
+            tau = max(tau, scene_tr['ms'] / 3000.0)    # (~95% do caminho no fim: 3 constantes de tempo)
         k_sm = 1.0 if tau <= 0 else 1.0 - math.exp(-max(0.0, sm_dt) / tau)
         if frame_n % 300 == 0:   # chave que sumiu (efeito tirado, cena trocada) nao fica pra sempre
             for k_ in [k_ for k_, e_ in sm_store.items() if frame_n - e_[1] > 300]:
@@ -3445,9 +3454,10 @@ def main():
         # pilha (state['bindings'][fonte]): a fonte crua -> cada shader marcado desenha com ela de
         # u_texture_0 (forcas u_fx_* daquele par fonte/shader) e mistura por cima (opacidade +
         # modo, LAYER_BLEND_SRC) -> o resultado entra na saida com a opacidade + modo da fonte. Saida
-        # comeca preta. No fim: saida -> tela (copia, ou transicao de set misturando com 'from').
+        # comeca preta. No fim: saida -> tela (copia, ou transicao de set misturando com a que sai).
         if scene_tr and time.perf_counter() - scene_tr['t0'] >= scene_tr['ms'] / 1000.0:
             scene_tr = None
+            state.pop('scene_from', None)               # fontes so' da cena que saiu podem fechar
         lt = layer_targets()
 
         def blend_into(dst, base, layer, a, mode, flip=0, mask=0, rect=FULL_UV, clip=FULL_UV, scr=(), mth=(0.0, 1.0)):
@@ -3471,14 +3481,6 @@ def main():
             glBindTexture(GL_TEXTURE_2D, layer)
             glDrawArrays(GL_TRIANGLES, 0, 3)
 
-        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['out'][0], 0)
-        glClear(GL_COLOR_BUFFER_BIT)
-        oi = 0
-        bindings = state.get('bindings') or {}
-        sh_avail = (state.get('pool') or {}).get('shaders')   # disponiveis no set (None = todos)
-        src_blend = {_chkey(o): o.get('blend') for o in state.get('overlays') or []}
-        src_rect = {_chkey(o): o.get('rect') for o in state.get('overlays') or []}
         cbox = FULL_UV if omap else _canvas_box(WIN_W, WIN_H, FIT_W, FIT_H)   # canvas encaixado na janela (barras fora; telao: a mistura e' o canvas)
         scr_uv = _blend_scr(scr_rects)                  # telas (forma livre): fora delas fica preto
         poly_sig = [sh[4] for sh in scr_rects]          # poligonos -> u_poly (so' re-sobe se mudou)
@@ -3495,12 +3497,21 @@ def main():
             poly_tex[1] = poly_sig
         glActiveTexture(GL_TEXTURE0 + POLY_UNIT)
         glBindTexture(GL_TEXTURE_2D, poly_tex[0])
-        for k in [k for k in src_tex if k not in {x[0] for x in src_frames}]:
+        # TRANSICAO VIVA: a cena que SAI (scene_tr['old'] = overlays/bindings/pool/grade dela) continua
+        # sendo desenhada, com as fontes dela ainda abertas (state['scene_from'] -> _sync_overlays) —
+        # a transicao mistura DUAS imagens em movimento, nao uma foto congelada.
+        old = scene_tr.get('old') if scene_tr else None
+        old_alpha = {}
+        old_frames = _source_frames(old, old_alpha) if old else []
+        keep = {x[0] for x in src_frames} | {x[0] for x in old_frames}
+        for k in [k for k in src_tex if k not in keep]:
             glDeleteTextures([src_tex.pop(k)[0]])       # canal saiu da saida: libera a textura
             e = pbos.pop('fx:' + k, None)                # e os PBOs da previa com efeitos dele
             if e:
                 glDeleteBuffers(2, e[0])
-        for key, src_a, frame in src_frames:
+
+        def src_texture(key, frame):
+            """textura da fonte crua do canal (1 por chave; so' re-sobe se o frame e' OUTRO objeto)."""
             glActiveTexture(GL_TEXTURE0)                 # a fonte crua -> u_texture_0 dos shaders
             st_ = src_tex.get(key)
             if st_ is None:
@@ -3516,134 +3527,155 @@ def main():
                 if st_[1] is not frame:
                     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, frame)
                     st_[1] = frame
-            ftex = st_[0]
-            si = 0
-            blend_into(lt['src'][0], ftex, ftex, 1.0, 0, flip=1)
-            b = bindings.get(key) or {}
-            # ASSUNTO: pilha com region (ou previa da mascara aberta) -> pede a mascara dessa fonte
-            bk = re.sub(r'#\d+$', '', key)
-            if any(o.get('region') for o in b.get('shaders') or []) or \
-                    time.time() - (state.get('mask_want') or {}).get(key, 0) < 1.5:
-                subject_want[bk] = (time.time(), frame)
-            sjm, sjt = subject_mask.get(bk), subj_tex.get(bk)
-            if sjm is not None and (sjt is None or sjt[1] is not sjm):
-                if sjt is None:
-                    sjt = subj_tex[bk] = [glGenTextures(1), None]
-                glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
-                glBindTexture(GL_TEXTURE_2D, sjt[0])
-                for pn, pv in ((GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE), (GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE),
-                               (GL_TEXTURE_MIN_FILTER, GL_LINEAR), (GL_TEXTURE_MAG_FILTER, GL_LINEAR)):
-                    glTexParameteri(GL_TEXTURE_2D, pn, pv)
-                glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SUBJECT_DET, SUBJECT_DET, 0, GL_RGB, GL_UNSIGNED_BYTE,
-                             np.repeat(sjm[..., None], 3, axis=2))
-                sjt[1] = sjm
-            elif sjm is None:
-                sjt = None
-            for oj, o in enumerate(b.get('shaders') or []):
-                a = min(1.0, float(o.get('opacity', 0)))
-                if o.get('off') or (sh_avail is not None and o['file'] not in sh_avail):
-                    a = 0
-                rg = o.get('region')
-                if rg == 'subject' and sjt is None:     # sem mascara (ainda): assunto vazio
-                    a = 0
-                sk = ('fx', key, oj, o['file'])         # suavizacao: liga/desliga/opacidade viram fade curto
-                a = smv(sk, a * fx_amt, 0.0)
-                if o.get('kick'):                       # kick no efeito: opacidade x kick (batida = 1, decai ate 0)
-                    a *= state['kick']
-                h = layer_program(o['file']) if a > 0.002 else None
-                if not h:
-                    continue
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
-                use_program(h)
-                set_uniforms(o['fx'] if isinstance(o.get('fx'), dict)   # forcas da ENTRADA (mesmo .frag pode vir 2x)
-                             else (b.get('fx') or {}).get(o['file']) or {}, o.get('mod'), sk)
-                if uniforms['eyes'] >= 0:                   # shader usa olhos -> pede deteccao dessa fonte
-                    eyes_want[key] = (time.time(), frame)
-                    ey = (state.get('eyes') or {}).get(key) or (0.0, 0.0, 0.0, 0.0, 0.0)
-                    glUniform4f(uniforms['eyes'], *ey[:4])
-                    glUniform1f(uniforms['eyes_on'], ey[4])
-                glActiveTexture(GL_TEXTURE0)
-                glBindTexture(GL_TEXTURE_2D, ftex)
-                glClear(GL_COLOR_BUFFER_BIT)
-                glDrawArrays(GL_TRIANGLES, 0, 3)
-                mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
-                um = 0
-                if rg and sjt is not None:              # so' dentro (2) / fora (3) do assunto
+            return st_[0]
+
+        def render_mix(pair, sc, frames, alpha, live):
+            """MISTURA de uma cena -> uma das texturas de `pair` (ping-pong), que e' devolvida: cada fonte
+            pela pilha dela, a imagem da cena e a calibracao por tela. sc = {overlays, bindings, pool,
+            grade}. live=False = a cena que SAI numa transicao: valores crus (sem suavizacao), sem previas."""
+            sv = smv if live else (lambda key, v, start=None: v)
+            glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pair[0], 0)
+            glClear(GL_COLOR_BUFFER_BIT)
+            oi = 0
+            bindings = sc.get('bindings') or {}
+            sh_avail = (sc.get('pool') or {}).get('shaders')   # disponiveis no set (None = todos)
+            src_blend = {_chkey(o): o.get('blend') for o in sc.get('overlays') or []}
+            src_rect = {_chkey(o): o.get('rect') for o in sc.get('overlays') or []}
+            for key, src_a, frame in frames:
+                ftex = src_texture(key, frame)
+                si = 0
+                blend_into(lt['src'][0], ftex, ftex, 1.0, 0, flip=1)
+                b = bindings.get(key) or {}
+                # ASSUNTO: pilha com region (ou previa da mascara aberta) -> pede a mascara dessa fonte
+                bk = re.sub(r'#\d+$', '', key)
+                if any(o.get('region') for o in b.get('shaders') or []) or \
+                        time.time() - (state.get('mask_want') or {}).get(key, 0) < 1.5:
+                    subject_want[bk] = (time.time(), frame)
+                sjm, sjt = subject_mask.get(bk), subj_tex.get(bk)
+                if sjm is not None and (sjt is None or sjt[1] is not sjm):
+                    if sjt is None:
+                        sjt = subj_tex[bk] = [glGenTextures(1), None]
                     glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
                     glBindTexture(GL_TEXTURE_2D, sjt[0])
-                    um = 2 if rg == 'subject' else 3
-                blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode, mask=um, mth=_subject_params(b))
-                si = 1 - si
-            fx_want = state.get('fx_want') or {}
-            if time.time() - fx_want.get(key, 0) < 1.5 and time.perf_counter() - fx_pv['t'].get(key, 0) >= 1.0 / FX_PV_HZ:
-                fx_pv['t'][key] = time.perf_counter()
-                try:
-                    pw = min(FX_PV_W, CMP_W)
-                    ph = max(2, int(round(pw * CMP_H / max(1, CMP_W))))
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
-                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['src'][si], 0)
-                    a = pv_grab(fx_pv, 'fx:' + key, (0, 0, CMP_W, CMP_H), pw, ph)
-                    if a is not None:
-                        state.setdefault('fx_small', {})[key] = (a.tobytes(), a.shape[1], a.shape[0])
-                except Exception as e:                  # sem blit: fica sem previa com efeito (o dash cai na crua)
-                    if not fx_pv.get('warned'):
-                        print('previa com efeitos indisponivel ->', e)
-                        fx_pv['warned'] = True
+                    for pn, pv in ((GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE), (GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE),
+                                   (GL_TEXTURE_MIN_FILTER, GL_LINEAR), (GL_TEXTURE_MAG_FILTER, GL_LINEAR)):
+                        glTexParameteri(GL_TEXTURE_2D, pn, pv)
+                    glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SUBJECT_DET, SUBJECT_DET, 0, GL_RGB, GL_UNSIGNED_BYTE,
+                                 np.repeat(sjm[..., None], 3, axis=2))
+                    sjt[1] = sjm
+                elif sjm is None:
+                    sjt = None
+                for oj, o in enumerate(b.get('shaders') or []):
+                    a = min(1.0, float(o.get('opacity', 0)))
+                    if o.get('off') or (sh_avail is not None and o['file'] not in sh_avail):
+                        a = 0
+                    rg = o.get('region')
+                    if rg == 'subject' and sjt is None:     # sem mascara (ainda): assunto vazio
+                        a = 0
+                    sk = ('fx', key, oj, o['file']) if live else None   # suavizacao: liga/desliga/opacidade viram fade
+                    a = sv(sk, a * fx_amt, 0.0)
+                    if o.get('kick'):                       # kick no efeito: opacidade x kick (batida = 1, decai ate 0)
+                        a *= state['kick']
+                    h = layer_program(o['file']) if a > 0.002 else None
+                    if not h:
+                        continue
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
+                    use_program(h)
+                    set_uniforms(o['fx'] if isinstance(o.get('fx'), dict)   # forcas da ENTRADA (mesmo .frag pode vir 2x)
+                                 else (b.get('fx') or {}).get(o['file']) or {}, o.get('mod'), sk)
+                    if uniforms['eyes'] >= 0:                   # shader usa olhos -> pede deteccao dessa fonte
+                        eyes_want[key] = (time.time(), frame)
+                        ey = (state.get('eyes') or {}).get(key) or (0.0, 0.0, 0.0, 0.0, 0.0)
+                        glUniform4f(uniforms['eyes'], *ey[:4])
+                        glUniform1f(uniforms['eyes_on'], ey[4])
+                    glActiveTexture(GL_TEXTURE0)
+                    glBindTexture(GL_TEXTURE_2D, ftex)
+                    glClear(GL_COLOR_BUFFER_BIT)
+                    glDrawArrays(GL_TRIANGLES, 0, 3)
+                    mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
+                    um = 0
+                    if rg and sjt is not None:              # so' dentro (2) / fora (3) do assunto
+                        glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
+                        glBindTexture(GL_TEXTURE_2D, sjt[0])
+                        um = 2 if rg == 'subject' else 3
+                    blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode, mask=um, mth=_subject_params(b))
+                    si = 1 - si
+                fx_want = state.get('fx_want') or {}
+                if live and time.time() - fx_want.get(key, 0) < 1.5 and time.perf_counter() - fx_pv['t'].get(key, 0) >= 1.0 / FX_PV_HZ:
+                    fx_pv['t'][key] = time.perf_counter()
+                    try:
+                        pw = min(FX_PV_W, CMP_W)
+                        ph = max(2, int(round(pw * CMP_H / max(1, CMP_W))))
+                        glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['src'][si], 0)
+                        a = pv_grab(fx_pv, 'fx:' + key, (0, 0, CMP_W, CMP_H), pw, ph)
+                        if a is not None:
+                            state.setdefault('fx_small', {})[key] = (a.tobytes(), a.shape[1], a.shape[0])
+                    except Exception as e:                  # sem blit: fica sem previa com efeito (o dash cai na crua)
+                        if not fx_pv.get('warned'):
+                            print('previa com efeitos indisponivel ->', e)
+                            fx_pv['warned'] = True
+                    glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                sm = src_blend.get(key)                     # modo da FONTE sobre as de baixo (normal = cobre)
+                sm = dash_server.LAYER_BLENDS.index(sm) if sm in dash_server.LAYER_BLENDS else 0
+                al = alpha.get(key)                         # imagem com transparencia: so' onde e' opaca
+                if al is not None:
+                    glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
+                    glBindTexture(GL_TEXTURE_2D, lt['mask'])
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, al)
+                blend_into(pair[1 - oi], pair[oi], lt['src'][si], sv(('src', key) if live else None, min(1.0, src_a), 0.0), sm,
+                           mask=int(al is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
+                oi = 1 - oi
+            # IMAGEM DA CENA (campo 'grade' do set; knobs no Palco do v2): o mesmo calibrar.frag na MISTURA
+            # da cena -> antes da transicao (cada cena cruza com a sua) e da calibracao do telao. Neutro = sem passe.
+            sg = sc.get('grade') or {}
+            sfx = (sg.get('fx') or {}) if sg.get('on', 1) else {}
+            sgh = layer_program(dash_server.GRADE_FRAG) if sfx else None
+            if sgh and any(abs(float(sfx.get(n, d)) - d) > 1e-4 for n, d in sgh[3].items()):
                 glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
-            sm = src_blend.get(key)                     # modo da FONTE sobre as de baixo (normal = cobre)
-            sm = dash_server.LAYER_BLENDS.index(sm) if sm in dash_server.LAYER_BLENDS else 0
-            al = _alpha_now.get(key)                    # imagem com transparencia: so' onde e' opaca
-            if al is not None:
-                glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
-                glBindTexture(GL_TEXTURE_2D, lt['mask'])
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, al)
-            blend_into(lt['out'][1 - oi], lt['out'][oi], lt['src'][si], smv(('src', key), min(1.0, src_a), 0.0), sm,
-                       mask=int(al is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
-            oi = 1 - oi
-        # IMAGEM DA CENA (tuning.SCENE_GRADE = campo 'grade' do set ativo; knobs no Palco do v2):
-        # o mesmo calibrar.frag, mas na MISTURA da cena -> vem antes da transicao (o `from` ja
-        # sai ajustado, cada cena cruza com o seu) e da calibracao do telao. Neutro = sem passe.
-        sg = getattr(tuning, 'SCENE_GRADE', None) or {}
-        sfx = (sg.get('fx') or {}) if sg.get('on', 1) else {}
-        sgh = layer_program(dash_server.GRADE_FRAG) if sfx else None
-        if sgh and any(abs(float(sfx.get(n, d)) - d) > 1e-4 for n, d in sgh[3].items()):
-            glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['out'][1 - oi], 0)
-            use_program(sgh)
-            set_uniforms(sfx, sk=('sg',))
-            glUniform1i(uniforms['test'], 0)
-            glUniform1f(uniforms['dim'], 0.0)
-            glActiveTexture(GL_TEXTURE0)
-            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
-            glClear(GL_COLOR_BUFFER_BIT)
-            glDrawArrays(GL_TRIANGLES, 0, 3)
-            oi = 1 - oi
-        # CALIBRACAO POR TELA (SCREENS[i]['grade'], dash v2 > Saida): igualar paineis diferentes.
-        # calibrar.frag na mistura inteira -> 'layer', e o blend so' deixa passar DENTRO da tela i
-        # (forma livre). As telas antes dela vao pra longe (sa.xy = 1e6) so' pra manter o indice i =
-        # a linha dela no u_poly. Antes da transicao (fixa por tela, os 2 lados ja' saem calibrados).
-        if scr_rects:
-            for i, t in enumerate(_valid_screens(scr_)):
-                tfx = t[0].get('grade') or {}
-                th = layer_program(dash_server.GRADE_FRAG) if tfx else None
-                if not th or i >= len(scr_uv):
-                    continue
-                glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
-                use_program(th)
-                set_uniforms(tfx, sk=('scr', i))
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pair[1 - oi], 0)
+                use_program(sgh)
+                set_uniforms(sfx, sk=('sg',) if live else None)
                 glUniform1i(uniforms['test'], 0)
                 glUniform1f(uniforms['dim'], 0.0)
                 glActiveTexture(GL_TEXTURE0)
-                glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+                glBindTexture(GL_TEXTURE_2D, pair[oi])
                 glClear(GL_COLOR_BUFFER_BIT)
                 glDrawArrays(GL_TRIANGLES, 0, 3)
-                far = ((1e6, 1e6, 1.0, 0.0), (0.0, 1.0, 0.0, 0.0))
-                blend_into(lt['out'][1 - oi], lt['out'][oi], lt['layer'], 1.0, 0, clip=cbox, scr=[far] * i + [scr_uv[i]])
                 oi = 1 - oi
+            # CALIBRACAO POR TELA (SCREENS[i]['grade'], dash v2 > Saida): igualar paineis diferentes.
+            # calibrar.frag na mistura inteira -> 'layer', e o blend so' deixa passar DENTRO da tela i
+            # (forma livre). As telas antes dela vao pra longe (sa.xy = 1e6) so' pra manter o indice i =
+            # a linha dela no u_poly. Antes da transicao (fixa por tela, os 2 lados ja' saem calibrados).
+            if scr_rects:
+                for i, t in enumerate(_valid_screens(scr_)):
+                    tfx = t[0].get('grade') or {}
+                    th = layer_program(dash_server.GRADE_FRAG) if tfx else None
+                    if not th or i >= len(scr_uv):
+                        continue
+                    glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
+                    use_program(th)
+                    set_uniforms(tfx, sk=('scr', i) if live else None)
+                    glUniform1i(uniforms['test'], 0)
+                    glUniform1f(uniforms['dim'], 0.0)
+                    glActiveTexture(GL_TEXTURE0)
+                    glBindTexture(GL_TEXTURE_2D, pair[oi])
+                    glClear(GL_COLOR_BUFFER_BIT)
+                    glDrawArrays(GL_TRIANGLES, 0, 3)
+                    far = ((1e6, 1e6, 1.0, 0.0), (0.0, 1.0, 0.0, 0.0))
+                    blend_into(pair[1 - oi], pair[oi], lt['layer'], 1.0, 0, clip=cbox, scr=[far] * i + [scr_uv[i]])
+                    oi = 1 - oi
+            return pair[oi]
+
+        mixed = render_mix(lt['out'], {'overlays': state.get('overlays'), 'bindings': state.get('bindings'),
+                                       'pool': state.get('pool'), 'grade': getattr(tuning, 'SCENE_GRADE', None)},
+                           src_frames, _alpha_now, True)
+        mixed_from = render_mix(lt['old'], old, old_frames, old_alpha, False) if old else None
         # CALIBRACAO DA SAIDA (tuning.OUTPUT_GRADE, shaders/calibrar.frag): ligada e fora do
         # neutro (ou no padrao de teste) -> a imagem final (copia ou transicao) vai pra textura
         # `final` e o calibrar.frag a desenha na tela. Neutro = caminho de sempre, sem passe extra.
@@ -3661,7 +3693,7 @@ def main():
                                                      for n, d in gh[3].items())):
             gh = None
         # calibrada: a transicao fica em textura e a calibracao desenha na tela. `final` = a imagem
-        # ANTES da calibracao (vira o 'from' da proxima transicao).
+        # ANTES da calibracao.
         # com telao, "a tela" desses passes e' a textura `canvas` (o palco pronto) e o OUTPUT_MAP a
         # desenha no raster no fim
         def to_screen():
@@ -3671,14 +3703,14 @@ def main():
             else:
                 glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
-        final = lt['out'][oi]
+        final = mixed
         if scene_tr and gh:
             glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
             final = lt['layer']
         else:
             to_screen()
-        if scene_tr:                                    # transicao de set: from -> saida nova
+        if scene_tr:                                    # transicao de set: a cena que sai (VIVA) -> a nova
             use_trans_program(scene_tr['prog'])
             glUniform2f(tuni['res'], CMP_W, CMP_H)
             glUniform1f(tuni['progress'], min(1.0, (time.perf_counter() - scene_tr['t0'])
@@ -3686,9 +3718,9 @@ def main():
             glUniform1i(tuni['from'], LAYER_BLEND_UNIT_BASE)
             glUniform1i(tuni['to'], LAYER_BLEND_UNIT_LAYER)
             glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
-            glBindTexture(GL_TEXTURE_2D, lt['from'])
+            glBindTexture(GL_TEXTURE_2D, mixed_from if mixed_from is not None else mixed)
             glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_LAYER)
-            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+            glBindTexture(GL_TEXTURE_2D, mixed)
             glClear(GL_COLOR_BUFFER_BIT)
             glDrawArrays(GL_TRIANGLES, 0, 3)
         elif not gh:                                    # copia (modo 0, a=1) a saida pra tela
@@ -3703,9 +3735,9 @@ def main():
             glUniform4f(blend_u['u_clip'], *FULL_UV)
             glUniform1i(blend_u['u_nscr'], 0)
             glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
-            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+            glBindTexture(GL_TEXTURE_2D, mixed)
             glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_LAYER)
-            glBindTexture(GL_TEXTURE_2D, lt['out'][oi])
+            glBindTexture(GL_TEXTURE_2D, mixed)
             glDrawArrays(GL_TRIANGLES, 0, 3)
         if gh:                                          # final -> calibrar.frag -> tela
             to_screen()
@@ -3840,17 +3872,11 @@ def main():
 
         pend = state.pop('scene_pending', None)
         if pend:
-            if pend.get('transition'):                  # guarda a imagem final que SAI
-                lt = layer_targets()
-                if gh or omap:                          # calibrada: guarda a de ANTES da calibracao
-                    glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # (senao a transicao calibra 2x;
-                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                           final if gh else lt['canvas'], 0)   # telao: o palco, nao o raster
-                glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_BASE)
-                glBindTexture(GL_TEXTURE_2D, lt['from'])
-                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, CMP_W, CMP_H)
-                glActiveTexture(GL_TEXTURE0)
-                glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            # a cena que SAI segue viva na transicao (render_mix com os dados dela + fontes abertas).
+            # ponytail: trocar NO MEIO de uma transicao larga a cena que ja' saia (corte nela); encadear
+            # 3 cenas = guardar uma lista de 'old' em vez de uma
+            old_sc = {'overlays': state.get('overlays'), 'bindings': state.get('bindings'), 'pool': state.get('pool'),
+                      'grade': getattr(tuning, 'SCENE_GRADE', None)} if pend.get('transition') else None
             try:
                 dash_server.apply_scene(pend['name'], defer=True)   # memoria agora; disco numa thread (sem perder frame)
                 print('set ->', pend['name'])
@@ -3860,7 +3886,9 @@ def main():
                 tpath, tms = _resolve_transition(dash_server.scene_transition_name(pend['name'])) \
                     if pend.get('transition') else (None, 0)
                 prog_t = trans_program(tpath) if tpath else None
-                scene_tr = {'prog': prog_t, 'ms': tms, 't0': time.perf_counter()} if prog_t else None
+                scene_tr = {'prog': prog_t, 'ms': tms, 't0': time.perf_counter(), 'old': old_sc} if prog_t and old_sc else None
+                if scene_tr:
+                    state['scene_from'] = old_sc        # _sync_overlays mantem as fontes dela abertas
 
         pygame.display.flip()
         try:
