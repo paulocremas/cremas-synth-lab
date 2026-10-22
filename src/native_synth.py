@@ -866,6 +866,24 @@ def _mod_value(v, m, levels):
     return lo + (hi - lo) * min(1.0, max(levels.get(b, 0.0) for b in m['b']))
 
 
+AUTO_LO, AUTO_HI = 0.04, 0.92   # auto-nivel: pra onde vao os percentis 2% e 98% da luminancia da fonte
+AUTO_GAIN = (0.6, 3.0)          # teto do ganho (escuro demais nao vira ruido gritando; claro demais desce)
+
+
+def _auto_levels(frame, w, h, prev=None, k=1.0):
+    """AUTO-NIVEL de uma fonte crua (np.uint8 rgb24 w x h): (ganho, deslocamento) que leva os percentis
+    2%/98% da luminancia pra AUTO_LO/AUTO_HI — camera trocada / luz do palco mudou = a imagem que entra
+    nos efeitos continua na mesma faixa. k = quanto anda do anterior `prev` pro novo (suavizacao)."""
+    a = np.asarray(frame, np.uint8).reshape(h, w, 3)[::16, ::16].astype(np.float32) / 255.0
+    lum = a[..., 0] * 0.299 + a[..., 1] * 0.587 + a[..., 2] * 0.114
+    lo, hi = np.percentile(lum, (2, 98))
+    g = min(AUTO_GAIN[1], max(AUTO_GAIN[0], (AUTO_HI - AUTO_LO) / max(1e-3, hi - lo)))
+    new = (g, AUTO_LO - lo * g)
+    if prev is None:
+        return new
+    return tuple(p + (n - p) * k for p, n in zip(prev, new))
+
+
 class Limiter:
     """PROTECAO DA SAIDA (tuning.LIMITS = {'on', 'bright', 'flash'}): ganho 0..1 que o loop GL aplica no
     MASTER. step(t, luma) a cada frame com a luminancia MEDIA da saida ja' limitada (0..1); a conta usa
@@ -2806,6 +2824,7 @@ uniform vec4 u_clip;   // o CANVAS na janela: fora dele a camada nao aparece (ba
 uniform int u_nscr;    // telas do palco: com telas, a camada so' aparece DENTRO delas (forma livre)
 uniform vec4 u_sa[16];
 uniform vec4 u_sb[16];
+uniform vec2 u_lv;     // AUTO-NIVEL da fonte crua (u_flip = 1): l * ganho + deslocamento (padrao 1, 0)
 """ + POLY_GLSL + """
 void main() {
     vec2 uv = gl_FragCoord.xy / u_res;
@@ -2832,6 +2851,7 @@ void main() {
     }
     vec3 b = texture2D(u_base, uv).rgb;
     vec3 l = texture2D(u_layer, u_flip == 1 ? vec2(lu.x, 1.0 - lu.y) : lu).rgb;
+    if (u_flip == 1) l = clamp(l * u_lv.x + u_lv.y, 0.0, 1.0);
     vec3 m = l;
     if (u_mode == 1) m = min(b + l, 1.0);
     else if (u_mode == 2) m = 1.0 - (1.0 - b) * (1.0 - l);
@@ -2848,7 +2868,8 @@ FULL_UV = (0.0, 0.0, 1.0, 1.0)
 def build_layer_blend_program():
     p = build_program(LAYER_BLEND_SRC)
     _use_basic(p)
-    u = _locs(p, 'u_res', 'u_base', 'u_layer', 'u_a', 'u_mode', 'u_flip', 'u_mask', 'u_use_mask', 'u_mth', 'u_rect', 'u_clip', 'u_nscr', 'u_sa', 'u_sb', 'u_poly')
+    u = _locs(p, 'u_res', 'u_base', 'u_layer', 'u_a', 'u_mode', 'u_flip', 'u_mask', 'u_use_mask', 'u_mth', 'u_rect', 'u_clip', 'u_nscr', 'u_sa', 'u_sb', 'u_poly', 'u_lv')
+    glUniform2f(u['u_lv'], 1.0, 0.0)
     glUniform1i(u['u_base'], LAYER_BLEND_UNIT_BASE)
     glUniform1i(u['u_poly'], POLY_UNIT)
     glUniform1i(u['u_layer'], LAYER_BLEND_UNIT_LAYER)
@@ -3171,6 +3192,7 @@ def main():
     prev_frame_buf = [state['frame'].copy()]  # frame de 1 iteracao atras, pra detectar movimento
     tex_fresh = [False]   # `tex`/`tex_prev` tem a mistura atual (a sim parada nao as atualiza)
     sm_store, sm_last = {}, [0.0]   # suavizacao dos parametros (_smooth): valores atuais + relogio
+    auto_lv = {}                    # auto-nivel por canal: [(ganho, deslocamento), frame que gerou]
 
     if capture_region and 'id' in capture_region:
         threading.Thread(target=window_capture_thread, args=(capture_region['id'],), daemon=True).start()
@@ -3534,9 +3556,10 @@ def main():
             state.pop('scene_from', None)               # fontes so' da cena que saiu podem fechar
         lt = layer_targets()
 
-        def blend_into(dst, base, layer, a, mode, flip=0, mask=0, rect=FULL_UV, clip=FULL_UV, scr=(), mth=(0.0, 1.0)):
+        def blend_into(dst, base, layer, a, mode, flip=0, mask=0, rect=FULL_UV, clip=FULL_UV, scr=(), mth=(0.0, 1.0), lv=(1.0, 0.0)):
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0)
             _use_basic(blend_prog)
+            glUniform2f(blend_u['u_lv'], *lv)
             glUniform2f(blend_u['u_mth'], *mth)
             glUniform2f(blend_u['u_res'], CMP_W, CMP_H)
             glUniform4f(blend_u['u_rect'], *rect)
@@ -3616,10 +3639,17 @@ def main():
             sh_avail = (sc.get('pool') or {}).get('shaders')   # disponiveis no set (None = todos)
             src_blend = {_chkey(o): o.get('blend') for o in sc.get('overlays') or []}
             src_rect = {_chkey(o): o.get('rect') for o in sc.get('overlays') or []}
+            src_auto = {_chkey(o) for o in sc.get('overlays') or [] if o.get('auto')}
             for key, src_a, frame in frames:
                 ftex = src_texture(key, frame)
                 si = 0
-                blend_into(lt['src'][0], ftex, ftex, 1.0, 0, flip=1)
+                lv = (1.0, 0.0)
+                if key in src_auto:                     # AUTO-NIVEL: recalcula so' com frame NOVO (~30 Hz), ~1.5 s de suavizacao
+                    e = auto_lv.get(key)
+                    if e is None or e[1] is not frame:
+                        auto_lv[key] = e = [_auto_levels(frame, WIDTH, HEIGHT, e[0] if e else None, 0.03), frame]
+                    lv = e[0]
+                blend_into(lt['src'][0], ftex, ftex, 1.0, 0, flip=1, lv=lv)
                 b = bindings.get(key) or {}
                 # ASSUNTO: pilha com region (ou previa da mascara aberta) -> pede a mascara dessa fonte
                 bk = re.sub(r'#\d+$', '', key)
@@ -4219,6 +4249,17 @@ def _selfcheck():
         g = L.step(f / 60, 0.9 * L.g, bright=0.6)
     assert L.why == 'brilho' and abs(0.9 * g - 0.6) < 0.03, (L.why, g)
     print('native_synth limiter self-check ok')
+    # auto-nivel: imagem escura (faixa 0.1..0.3) e clara (0.6..0.95) saem na MESMA faixa depois do ajuste
+    for lo_, hi_ in ((0.15, 0.45), (0.6, 0.95)):
+        ramp = np.tile(np.linspace(lo_, hi_, 640), (480, 1))       # degrade na horizontal, 640x480
+        fr = (np.repeat(ramp[..., None], 3, 2) * 255).astype(np.uint8)
+        g_, o_ = _auto_levels(fr, 640, 480)
+        a2, b2 = lo_ * g_ + o_, hi_ * g_ + o_                         # pontas: um pouco alem de LO/HI (percentis 2/98)
+        assert abs(a2 - AUTO_LO) < 0.05 and abs(b2 - AUTO_HI) < 0.05, (lo_, hi_, a2, b2)
+    assert _auto_levels(fr, 640, 480, (1.0, 0.0), 0.0) == (1.0, 0.0), 'k=0 = fica onde estava'
+    dark = (np.full((480, 640, 3), 0.1) * 255).astype(np.uint8); dark[:, ::2] += 20
+    assert _auto_levels(dark, 640, 480)[0] == AUTO_GAIN[1], 'quase preto: ganho para no teto (ruido nao grita)'
+    print('native_synth auto-levels self-check ok')
 
 
 if __name__ == '__main__':

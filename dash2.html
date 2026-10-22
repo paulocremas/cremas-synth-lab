@@ -43,7 +43,8 @@
     preta de emergencia).
   - Palco: macros M1-M4 (P: um gesto mexe varios knobs, cada um na sua faixa — intensidade de um "look"
     inteiro; MIDI) · cenas (P) + transicao de entrada (P) · ◐ imagem da cena (P: cor por cena) · mesa/canvas
-    (P: o que esta' no ar, opacidade, ordem, onde) · monitor Saida (S: o PROGRAMA = o que o publico
+    (P: o que esta' no ar, opacidade, ordem, onde; "auto" = auto-nivel da fonte, S: camera/luz trocada
+    nao estoura os efeitos) · monitor Saida (S: o PROGRAMA = o que o publico
     ve, olhar sem virar pro telao) · inspetor (P: knobs do efeito da fonte selecionada, ♪, kick) ·
     atalhos (C) · ↻ listas (C).
   - Audio: fonte (C) · espectro com as faixas (C: onde cada faixa corta) · colunas por faixa (S: o
@@ -2613,6 +2614,9 @@ function stripEl(o, i){
   chips.append(chip('preencher', filled, 'estica pra cobrir a saída (desligado: encaixa inteira, com margens)', () => {
     if (info.media){ const m = med(); if (m){ m.fit = filled ? 'fit' : 'fill'; sendMedia(); } } else setSourceFit(o.file, filled ? 'fit' : 'fill');
     remix();
+  }));
+  chips.append(chip('auto', !!o.auto, 'auto-nível: mantém a imagem desta fonte na mesma faixa de brilho (troca de câmera, luz do palco mudou) — antes dos efeitos', () => {
+    const x = cur(); if (!x) return; if (x.auto) delete x.auto; else x.auto = 1; sendOverlays(true); remix();
   }));
   if (info.video){
     const m = med() || {};

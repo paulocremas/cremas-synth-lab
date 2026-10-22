@@ -915,6 +915,8 @@ def _norm_overlays(items, dedupe=True):
             o['region'] = it['region']
         if it.get('kick'):  # item da pilha so' na batida: opacidade x kick (native; kick 0 = nem desenha)
             o['kick'] = 1
+        if it.get('auto'):  # fonte com AUTO-NIVEL (native _auto_levels: faixa estavel na troca de camera/luz)
+            o['auto'] = 1
         if it.get('audio') and not aud:   # 🔊 video = fonte de audio no lugar do PulseAudio (so' 1)
             o['audio'], aud = 1, True
         if isinstance(it.get('fx'), dict):   # forcas desta entrada da pilha (ausente = fx[shader] da fonte)
