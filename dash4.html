@@ -2366,8 +2366,11 @@ function computeZones(spec){
       const jj = it.classList.contains('grp') ? lastJ(it) : j;
       if (spec.kind === 'move' && spec.key === key && spec.js.includes(jj)) return;
       const b = it.getBoundingClientRect();
-      add({ type: 'branch', key, j: jj, side: 'below', x: b.left + b.width / 2, y: b.bottom + 18, w: b.width, h: 24, label: 'ramo' });
-      if (ri === 0) add({ type: 'branch', key, j: jj, side: 'above', x: b.left + b.width / 2, y: b.top - 18, w: b.width, h: 24, label: 'ramo' });
+      // ramo ABAIXO = atras da mae; ACIMA = na frente. Entre duas fileiras cada zona fica colada na SUA peca (12 px), senao
+      // o "abaixo" de uma e o "acima" da outra caem no mesmo ponto; o rotulo diz o que acontece
+      const gap = ri === 0 ? 18 : 12, bh = ri === 0 ? 24 : 20;
+      add({ type: 'branch', key, j: jj, side: 'below', x: b.left + b.width / 2, y: b.bottom + 12, w: b.width, h: 20, label: 'ramo atrás' });
+      add({ type: 'branch', key, j: jj, side: 'above', x: b.left + b.width / 2, y: b.top - gap, w: b.width, h: bh, label: 'ramo na frente' });
     });
   });
   return Z;
