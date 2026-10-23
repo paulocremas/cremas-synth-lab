@@ -32,7 +32,8 @@
     tamanho e desenho com a fonte e o sistema (testado no Chrome headless).
   - DESCOBRIR SEM MEDO: previa antes de soltar, miniatura viva de cada passo da fileira selecionada, VARIACOES
     (4 mutacoes fora do ar; "distancia" = quanto se afastam: perto = knobs, longe = tambem troca peca do mesmo tipo,
-    insere, inverte vizinhas, tira (mutateShape; peca lida por ramo/B e de grupo intocadas); escolher uma = nascem 4 em volta dela; estrela =
+    insere, inverte vizinhas, tira (mutateShape; peca lida por ramo/B e de grupo intocadas); Shift+clique em duas =
+    CRUZAR (crossItems: mesma peca no mesmo lugar = knobs entre os pais); escolher uma = nascem 4 em volta dela; estrela =
     guardar achado = cena nova), sortear, desfazer por cena e o Limiter seguram qualquer acaso.
   - MODULADOR COMO PECA: LFO (seno/triangulo/serra/quadrada/acaso, em batidas), SOM (faixas/kick), MACRO M1-M4 —
     arrasta e solta num knob; o knob vira uma faixa min->max que o sinal percorre.
@@ -311,6 +312,7 @@
   #try-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   #try-grid .mon { cursor: pointer; border: 1px solid var(--line2); }
   #try-grid .mon:hover { border-color: var(--sel); }
+  #try-grid .mon.pick { border: 2px solid var(--sel); }
   #ctl-p { flex: none; }
   .kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px 4px; }
   .kcell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; border-radius: 8px; padding: 2px 0 4px; }
@@ -2478,9 +2480,13 @@ function mutate(key, dist){
 // ESTRUTURA (Synplant: quanto mais longe, mais muda): troca uma peca por outra do MESMO tipo, insere uma, inverte
 // duas vizinhas, tira uma. Intocaveis: peca que alguem le (ramo/entrada B: o id) e de grupo. A troca mantem o `in` (antiga
 // continua lendo a fonte crua); variacao e' pedida e Ctrl+Z volta.
-function mutateShape(sh, dist){
+function readIds(){   // ids de modulos que alguem le: fileira-ramo '@id' ou entrada B '@id'
   const read = new Set(); for (const o of lastOverlays) if (isTapKey(String(o.file))) read.add(String(o.file).slice(1));
   for (const st of Object.values(lastBindings || {})) for (const x of (st || {}).shaders || []) for (const r of x.ins || []) if (isTapKey(String(r))) read.add(String(r).slice(1));
+  return read;
+}
+function mutateShape(sh, dist){
+  const read = readIds();
   const free = x => !x.grp && !(x.id && read.has(x.id));
   const pool = lastShaderList.filter(f => f.startsWith('presets/') && !f.includes('/atomos/'));
   const pick = l => l[Math.floor(Math.random() * l.length)];
@@ -2507,11 +2513,36 @@ function newVariants(){
 function renderVarGrid(){
   const g = $('#try-grid'); g.innerHTML = '';
   variants.list.forEach((v, i) => {
-    const cv = h('canvas'), m = h('div', { class: 'mon', title: 'usar esta variação (vai pro ar) — e nascem 4 novas em volta dela' }, cv, h('div', { class: 'wait', text: '…' }));
-    m.onclick = () => adoptVariant(i);
+    const cv = h('canvas'), m = h('div', { class: 'mon' + (variants.pick === i ? ' pick' : ''), title: 'clique: usar esta variação (vai pro ar) e nascem 4 em volta dela · Shift+clique em duas: cruzar' }, cv, h('div', { class: 'wait', text: '…' }));
+    m.onclick = e => {
+      if (!e.shiftKey) return adoptVariant(i);
+      if (variants.pick == null || variants.pick === i){ variants.pick = variants.pick === i ? null : i; renderVarGrid(); return toast(variants.pick == null ? 'cruzar: cancelado' : 'cruzar: agora Shift+clique na outra'); }
+      crossVariants(variants.pick, i);
+    };
     addPreview(cv, '/frame?which=try&src=' + i, 6);
     g.append(m);
   });
+}
+// CRUZAR (Synplant: filho de duas sementes): mesma peca no mesmo lugar = knobs num ponto entre os dois pais; posicao
+// diferente = a peca de um ou de outro; tamanho de um dos dois. Peca que alguem le (ramo/B) nunca some: senao, filho = A.
+function crossItems(A, B){
+  const len = Math.random() < 0.5 ? A.length : B.length, out = [];
+  for (let j = 0; j < len; j++){
+    const a = A[j], b = B[j], pa = a && b ? (Math.random() < 0.5 ? a : b) : a || b;
+    const c = JSON.parse(JSON.stringify(pa));
+    if (a && b && a.file === b.file){ const t = Math.random(); c.fx = Object.assign({}, a.fx || {}, b.fx || {});
+      for (const n of Object.keys(c.fx)) if (typeof (a.fx || {})[n] === 'number' && typeof (b.fx || {})[n] === 'number') c.fx[n] = Math.round((a.fx[n] * (1 - t) + b.fx[n] * t) * 1000) / 1000; }
+    out.push(c);
+  }
+  const read = readIds(), need = stackOf(variants.key).map(x => x.id).filter(id => id && read.has(id));
+  return need.every(id => out.some(x => x.id === id)) ? out : JSON.parse(JSON.stringify(A));
+}
+function crossVariants(i, k){
+  const A = variants.list[i].shaders, B = variants.list[k].shaders, mask = variants.list[i].mask;
+  variants.pick = null;
+  variants.list = [0, 1, 2, 3].map(() => ({ shaders: crossItems(A, B), mask }));
+  post('/try', { key: variants.key, variants: variants.list }).catch(() => {});
+  renderVarGrid(); renderNext(); toast('4 filhas das duas — clique numa pra usar');
 }
 function adoptVariant(i){
   if (!variants) return;
