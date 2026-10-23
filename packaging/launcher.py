@@ -45,17 +45,12 @@ def _user_copy(bundle, home):
         dst = os.path.join(home, rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copyfile(os.path.join(bundle, rel), dst)
+    files = []
     for rel in DATA:
         src = os.path.join(bundle, rel)
-        if os.path.isfile(src):
-            files = [(src, os.path.join(home, rel))]
-        else:
-            files = [(os.path.join(d, f), os.path.join(home, rel, os.path.relpath(os.path.join(d, f), src)))
-                     for d, _, fs in os.walk(src) for f in fs]
-        for s, d in files:
-            if not os.path.exists(d):
-                os.makedirs(os.path.dirname(d), exist_ok=True)
-                shutil.copyfile(s, d)
+        files += [(src, rel)] if os.path.isfile(src) else \
+            [(os.path.join(d, f), os.path.relpath(os.path.join(d, f), bundle)) for d, _, fs in os.walk(src) for f in fs]
+    updater.sync_data(files, home)   # entregue e intocado atualiza; editado/apagado pelo usuario fica como esta'
     os.makedirs(os.path.join(home, 'media'), exist_ok=True)
 
 

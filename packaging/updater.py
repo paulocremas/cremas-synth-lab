@@ -14,9 +14,11 @@ pelo build (packaging/build.sh). Quem esta numa beta tambem ve as betas novas; v
 ve finais. PRISMA_NO_UPDATE=1 desliga. Sem VERSION (rodando do repo) nao checa. Usa so' a
 stdlib + pygame (ja vai no binario) pra janela.
 """
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -238,6 +240,35 @@ def maybe_update(here, exe):
         return False
 
 
+def sync_data(files, home):
+    """Dados que o app ENTREGA (shaders, transicoes, modelos) -> pasta do usuario, sem pisar no que e' dele.
+    files = [(origem, relativo)]. O registro .entregue.json guarda o hash do que foi entregue: arquivo
+    igual ao entregue = intocado -> recebe a versao nova; editado -> fica; apagado pelo usuario -> nao volta;
+    novo -> chega. ponytail: instalacao antiga (sem registro) so' ganha os arquivos novos nessa 1a vez."""
+    reg_p = os.path.join(home, '.entregue.json')
+    try:
+        with open(reg_p, encoding='utf-8') as f:
+            reg = json.load(f)
+    except (OSError, ValueError):
+        reg = {}
+    h = lambda p: hashlib.sha1(open(p, 'rb').read()).hexdigest()
+    out = {}
+    for src, rel in files:
+        dst, new, old = os.path.join(home, rel), h(src), reg.get(rel)
+        if not os.path.exists(dst):
+            if old is not None:             # entregue antes e sumiu = o usuario apagou
+                out[rel] = old
+                continue
+        elif old is None or new == old or h(dst) != old:
+            out[rel] = old or new            # dele (sem registro / editado) ou ja' atual
+            continue
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(src, dst)
+        out[rel] = new
+    with open(reg_p, 'w', encoding='utf-8') as f:
+        json.dump(out, f, indent=0, sort_keys=True)
+
+
 if __name__ == '__main__':  # self-check (roda: python packaging/updater.py)
     assert parse_ver('v0.3.1') == (0, 3, 1, 0, 0) and parse_ver('1.2') == (1, 2, 0, 0, 0) and parse_ver('abc1234') is None
     assert is_newer('v0.1.0-beta.4', 'v0.1.0-beta.3') and is_newer('v0.1.0-beta.10', 'v0.1.0-beta.9')
@@ -255,4 +286,20 @@ if __name__ == '__main__':  # self-check (roda: python packaging/updater.py)
     assert pick_release(rels, 'v0.3.0-beta.2') is None and pick_release([], 'v0.1.0') is None
     s = swap_script(42, r'C:\t\PRISMA', r'C:\Users\é\PRISMA', 'prisma.exe')
     assert '/MIR' in s and '/XD "' in s and 'dados' in s and 'PID eq 42' in s and s.endswith('\r\n')
+    with tempfile.TemporaryDirectory() as t:   # sync_data: novo chega, intocado atualiza, editado fica, apagado nao volta
+        b, u = os.path.join(t, 'b'), os.path.join(t, 'u'); os.makedirs(b)
+        w = lambda p, x: (os.makedirs(os.path.dirname(p), exist_ok=True), open(p, 'w').write(x))
+        r = lambda p: open(p).read()
+        for n in 'abcd':
+            w(os.path.join(b, n), n + '1')
+        fs = [(os.path.join(b, n), os.path.join('sh', n)) for n in 'abcd']
+        w(os.path.join(u, 'sh', 'a'), 'meu')                  # instalacao antiga: ja' existia, sem registro
+        sync_data(fs, u)
+        assert r(os.path.join(u, 'sh', 'a')) == 'meu' and r(os.path.join(u, 'sh', 'b')) == 'b1'
+        w(os.path.join(u, 'sh', 'c'), 'editado'); os.remove(os.path.join(u, 'sh', 'd'))
+        for n in 'abcd':
+            w(os.path.join(b, n), n + '2')                   # versao nova do app
+        sync_data(fs, u)
+        assert r(os.path.join(u, 'sh', 'a')) == 'meu' and r(os.path.join(u, 'sh', 'b')) == 'b2'
+        assert r(os.path.join(u, 'sh', 'c')) == 'editado' and not os.path.exists(os.path.join(u, 'sh', 'd'))
     print('updater self-check ok')

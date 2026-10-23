@@ -14,7 +14,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
   direto. Windows só testado no CI (sem GPU: o smoke para no 1º OpenGL); 1º teste real pendente.
 - **App `prisma`** (PyInstaller, `packaging/launcher.py`) roda uma CÓPIA na pasta de dados (`~/.local/share/prisma/` |
   `%LOCALAPPDATA%\prisma` | `<pasta>/dados` com `portable.txt`), recopiando `src/*.py` (menos `tuning.py`) e
-  `dash*.html` a cada abertura. Quer código novo no app já → copiar pra `dist/prisma/` **e** a pasta de dados
+  `dash*.html` a cada abertura; dados entregues (`shaders/`, `transitions/`, `models/`) via `updater.sync_data` +
+  `.entregue.json`: intocado atualiza, editado fica, apagado pelo usuário não volta. Quer código novo no app já → copiar pra `dist/prisma/` **e** a pasta de dados
   (`packaging/build.sh` atualiza o launcher velho do `dist/`).
 - **Release**: tag `vX.Y.Z` → `.github/workflows/release.yml` (`.deb`, `.exe` `packaging/prisma.iss`, zip portátil);
   tag com `-` = pré. `packaging/updater.py` compara `VERSION` com a última Release. Publicado: `v0.1.0-beta.2`
@@ -88,7 +89,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
   Equipamento (editores da v3 refeitos). Patch = fileiras (topo = frente) + RAMO: fileira com `file: '@<id>'` lê a
   saída do módulo `id` (`tap_tex`; abaixo da mãe = quadro anterior); módulo lido por alguém roda mesmo a 0%/off
   (`_graph_wants` → `need`); `ins: ['@id']` = entrada B lê o módulo (`_ins_tex`). Item: `id`, `pub`, `grp`/`gname` (grupo; biblioteca `shaders/grupos/*.json`, `/groups`).
-  LFO = fonte `'lfo'` do ♪ com `mod[k].lfo = {f, r (batidas), ph}` (`dash_data.lfo`, fase de `ritmo.Tempo.pos`).
+  LFO = fonte `'lfo'` do ♪ com `mod[k].lfo = {f, r (batidas), ph}` (`dash_data.lfo`, fase de `ritmo.Tempo.pos`); `luz`/`mov` = brilho e movimento da imagem de entrada
+  (`dash_data.img_mod_levels`, ~14 Hz).
   Prévias v4: `/frame?which=steps&src=` (miniatura de cada passo, empilhadas) e `which=try&src=i` (`POST /try`
   = variantes fora do ar, renderizadas em `lt['cue']` quando não há cue).
 - Prévias v2: `/frame?which=out|sel|comp|src|fx|mask` (`_preview_frame`; `out_want`/`fx_want` = só enquanto pedidas).

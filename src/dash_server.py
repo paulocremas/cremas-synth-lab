@@ -892,6 +892,7 @@ def _norm_rect(r):
 # fontes de som de um knob com ♪ (= chaves do state no native: as 8 faixas + o kick), ordem do espectro
 MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
                'm1', 'm2', 'm3', 'm4',   # m1..m4 = MACROS (faders no Palco): a mesma faixa lo->hi, movida a mao/MIDI
+               'luz', 'mov',              # IMAGEM de entrada: brilho e movimento (dash_data.img_mod_levels)
                'lfo')                     # OSCILADOR no tempo da musica (dash v4: modulador como peca); forma em 'lfo'
 
 

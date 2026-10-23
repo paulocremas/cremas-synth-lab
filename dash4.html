@@ -1882,8 +1882,10 @@ const LFO_RATES = [[0.25, '¼ batida'], [0.5, '½ batida'], [1, '1 batida'], [2,
 function modSrcText(m){
   const b = m.b || [];
   return b.map(x => x === 'lfo' ? 'LFO ' + ((LFO_SHAPES.find(s => s[0] === (m.lfo || {}).f) || ['', 'seno'])[1]) + ' · ' + ((LFO_RATES.find(r => r[0] === (m.lfo || {}).r) || [0, ((m.lfo || {}).r || 4) + ' batidas'])[1])
-    : (MACROS.find(q => q[0] === x) || MOD_BANDS.find(q => q[0] === x) || [x, x])[1]).join(' + ');
+    : (MACROS.find(q => q[0] === x) || MOD_BANDS.find(q => q[0] === x) || IMG_MODS.map(([k, t]) => [k, 'imagem: ' + t]).find(q => q[0] === x) || [x, x])[1]).join(' + ');
 }
+const IMG_MODS = [['luz', 'luz'], ['mov', 'movimento']];   // = dash_data.IMG_MODS: a imagem de ENTRADA mexe o knob
+let imgLv = { luz: 0, mov: 0 };
 const MOD_NAME = { subbass: 'Sub-bass', lowmid: 'Low-mid', midrange: 'Midrange', highmid: 'High-mid', presence: 'Presence', treble_hi: 'Treble', brilho: 'Brilliance', air: 'Air' };
 const lfoNow = (p, bp) => { p = p || {}; const c = bp / Math.max(1 / 16, p.r || 4) + (p.ph || 0), x = c - Math.floor(c), f = p.f || 'sin';   // = dash_data.lfo
   if (f === 'tri') return 1 - Math.abs(2 * x - 1); if (f === 'saw') return x; if (f === 'sq') return x < 0.5 ? 1 : 0;
@@ -1892,7 +1894,7 @@ const lfoNow = (p, bp) => { p = p || {}; const c = bp / Math.max(1 / 16, p.r || 
 function modLevel(m, a){   // nivel 0..1 do sinal que move o knob AGORA (= native _mod_value: a fonte mais forte)
   const lv = {}; for (const r of (a || {}).bands || []) lv[r.name] = r.final || 0;
   return Math.min(1, Math.max(0, ...(m.b || []).map(b => b === 'lfo' ? lfoNow(m.lfo, beatPos()) : b === 'kick' ? ((a || {}).kick || {}).final || 0
-    : /^m\d$/.test(b) ? macroV[+b[1] - 1] || 0 : lv[MOD_NAME[b]] || 0)));
+    : /^m\d$/.test(b) ? macroV[+b[1] - 1] || 0 : b in imgLv ? imgLv[b] : lv[MOD_NAME[b]] || 0)));
 }
 function pubList(){   // knobs publicados da cena, na ordem do patch
   const out = [];
@@ -2098,6 +2100,7 @@ function modEditor(key, j, n, md){
     box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'ciclo' }), rs, ph));
   }
   box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'som' }), h('div', { class: 'chips' }, MOD_BANDS.map(([x, t]) => h('button', { class: 'chip' + (has(x) ? ' on' : ''), text: t, onclick: () => flip(x) })))));
+  box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'imagem' }), h('div', { class: 'chips' }, IMG_MODS.map(([x, t]) => h('button', { class: 'chip' + (has(x) ? ' on' : ''), text: t, onclick: () => flip(x) })))));
   box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'macro' }), h('div', { class: 'chips' }, MACROS.map(([x, t]) => h('button', { class: 'chip' + (has(x) ? ' on' : ''), text: t, onclick: () => flip(x) })))));
   box.append(h('div', { class: 'hint', text: 'várias fontes = vale a mais forte · o knob vira a faixa mín→máx (arraste as pontas no knob)' }));
   return box;
@@ -2232,6 +2235,8 @@ function ctlItems(){
     { name: 'Som: grave', icon: 'som', spec: { kind: 'som', b: ['subbass', 'lowmid'] }, desc: 'o grave da música mexe o knob' },
     { name: 'Som: kick', icon: 'som', spec: { kind: 'som', b: ['kick'] }, desc: 'pula na batida e decai' },
     { name: 'Som: agudo', icon: 'som', spec: { kind: 'som', b: ['treble_hi', 'brilho'] }, desc: 'o agudo mexe o knob' },
+    { name: 'Imagem: luz', icon: 'olho', spec: { kind: 'som', b: ['luz'] }, desc: 'o brilho da imagem de entrada mexe o knob' },
+    { name: 'Imagem: movimento', icon: 'olho', spec: { kind: 'som', b: ['mov'] }, desc: 'o que se mexe na frente da câmera mexe o knob' },
     ...MACROS.map(([m, t]) => ({ name: 'Macro ' + t, icon: 'macro', spec: { kind: 'som', b: [m] }, desc: 'o fader ' + t + ' (direita, embaixo) mexe o knob' }))];
 }
 function renderPalette(){
@@ -4477,6 +4482,7 @@ function process(stateOnly){
   const d = JSON.parse(rawD); rawD = null;
   if (htmlMtime !== null && d.html4_mtime !== htmlMtime){ location.reload(); return; }
   htmlMtime = d.html4_mtime;
+  if (d.image) for (const g of d.image.grids || []){ const k = { BRILHO: 'luz', MOVIMENTO: 'mov' }[g.name]; if (k) imgLv[k] = imgLv[k] * 0.5 + Math.min(1, Math.max(0, g.total || 0)) * 0.5; }   // = native
   if (d.bindings && now() - bindTouched >= TOUCH_MS && !drag) lastBindings = d.bindings;
   if (d.selected !== undefined && now() - selTouched.src >= TOUCH_MS && d.selected !== lastSelected){
     lastSelected = d.selected; if (d.selected && d.selected !== sel.key) sel = { key: d.selected, j: -1 };

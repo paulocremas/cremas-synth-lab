@@ -53,6 +53,15 @@ def parse_meta(src):
 
 
 # MODULADOR LFO (dash v4: peca de controle que se solta num knob; mod[knob] = {b: ['lfo'], lo, hi, lfo: {f, r, ph}})
+IMG_MODS = (('luz', 'BRILHO'), ('mov', 'MOVIMENTO'))   # fonte de modulacao -> grid da analise da imagem de entrada
+
+
+def img_mod_levels(image):
+    """Analise da imagem de entrada (image_dash_data) -> {'luz', 'mov'} 0..1 pros knobs modulados pela IMAGEM."""
+    tot = {g.get('name'): g.get('total', 0.0) for g in (image or {}).get('grids') or ()}
+    return {k: max(0.0, min(1.0, float(tot.get(g, 0.0)))) for k, g in IMG_MODS}
+
+
 LFO_SHAPES = ('sin', 'tri', 'saw', 'sq', 'rnd')
 
 
@@ -389,4 +398,6 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     pk = [{'pw': 256, 'ph': 1024}, {'pw': 1024, 'ph': 256}, {'pw': 256, 'ph': 1024}]
     assert pack_raster(pk, 1920, 1080) == [] and [(t['ox'], t['oy']) for t in pk] == [(0, 0), (512, 0), (256, 0)], pk
     assert [t['pw'] for t in pack_raster([{'pw': 2000, 'ph': 10}, {'pw': 10, 'ph': 10}], 1920, 1080)] == [2000]
+    assert img_mod_levels({'grids': [{'name': 'BRILHO', 'total': 0.4}, {'name': 'MOVIMENTO', 'total': 1.3}]}) == {'luz': 0.4, 'mov': 1.0}
+    assert img_mod_levels(None) == {'luz': 0.0, 'mov': 0.0}
     print('dash_data self-check ok')

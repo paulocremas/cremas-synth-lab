@@ -2518,6 +2518,8 @@ def audio_thread(device):
                                                      state.get('frame_comp', state['frame']), WIDTH, HEIGHT, state['dominant'],
                                                      html_img['peaks'], html_img['prev_val'],
                                                      html_img['prev_mean'])
+                    for k_, v_ in dash_data.img_mod_levels(state['image']).items():   # knob modulado pela IMAGEM
+                        state[k_] = state.get(k_, 0.0) * 0.5 + v_ * 0.5          # ponytail: ~14 Hz, meia suavizacao
     finally:
         for q in (proc, listen):
             if q:
@@ -4434,6 +4436,7 @@ def _selfcheck():
     assert near(_mod_value(0.0, {'b': ['lfo'], 'lo': 0.2, 'hi': 0.6, 'lfo': {'f': 'saw', 'r': 4}}, {'bpos': 2.0}), 0.4), 'lfo: serra no meio'
     assert near(_mod_value(0.0, {'b': ['lfo', 'kick'], 'lo': 0, 'hi': 1, 'lfo': {'f': 'sq', 'r': 4}}, {'bpos': 3.0, 'kick': 0.7}), 0.7), \
         'lfo + kick: vale o mais forte'
+    assert near(_mod_value(0.0, {'b': ['mov'], 'lo': 0.0, 'hi': 0.5}, {'mov': 0.6}), 0.3), 'imagem (mov) = fonte do ♪'
     print('native_synth mod self-check ok')
     # --- dash v4: quem le quem (ramo, entrada B, feedback) ---
     bnd = {'cam': {'shaders': [{'file': 'a.frag', 'id': 'k1'}, {'file': 'b.frag', 'id': 'k2', 'ins': ['fb']}]},
