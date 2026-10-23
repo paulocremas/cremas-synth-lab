@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.7, layer, on_kick=0, on_sub=1, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: distorcao
 // SORTIDOS · ZoomBlur. Borrão de velocidade saindo do centro (dobra espacial). base/forca = borrão parado/no disparo.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais
 // forte vale; nenhuma = volume geral). layer = 0 só original, 1 só efeito.

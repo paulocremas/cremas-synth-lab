@@ -2,6 +2,14 @@
 
 Ideias combinadas e ainda não feitas. Ao começar uma, mover pro código/commit e tirar daqui.
 
+## v4 — patch (feito na v4: ligação por zona, ramos, LFO/som/macro como peça, variações, prévia por passo, grupos, publicados no Show, custo por fileira)
+- Abrir a v4 como dash principal quando aprovada: `_open_dash_window(url + '/v4')` no `dash_server` (hoje abre /v3).
+- Modulador por IMAGEM (brilho/movimento de um módulo ou fonte → knob) — hoje só LFO, som e macros.
+- Ramo ACIMA de módulo que não está na fileira do topo (hoje só a de cima aceita ramo na frente).
+- Variações com mutação de ESTRUTURA (trocar/inserir peças), não só knobs; e cruzar duas variações (Synplant).
+- Teste em tela de toque de verdade (alvos já ≥ 44 px no Show) e com controlador MIDI físico na v4.
+- App instalado não recopia `shaders/` (átomos e `shaders/grupos/` novos não chegam lá sozinhos).
+
 ## Canvas / telas — o que falta
 Feito: telas do palco físico (`tuning.SCREENS`, metros + pixels, editor na aba Saída) cujo contorno
 é o canvas; fontes posicionadas nele (`OVERLAYS[i].rect`, vista Canvas da mesa no Palco, com prévia

@@ -1,4 +1,5 @@
 // fx: base=0.2, forca=0.8, limiar=0.6, raio=0.4, layer, on_kick=0, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=1, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: luz
 // SORTIDOS · Brilho. Bloom: o que é claro vaza luz em volta. base/forca = brilho parado/no disparo;
 // limiar = a partir de que claridade vaza; raio = tamanho do halo.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

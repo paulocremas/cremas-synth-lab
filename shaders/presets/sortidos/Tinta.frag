@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.8, matiz=0, giro=0.2, soma=0.3, layer, on_kick=1, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: cor
 // SORTIDOS · Tinta. Banho de cor no disparo. base = quanto tinge parado; forca = quanto o nível soma;
 // matiz = a cor; giro = a cor gira sozinha; soma = 0 multiplica (tinge) … 1 soma (acende).
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

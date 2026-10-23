@@ -31,10 +31,13 @@ _HERE = os.path.dirname(os.path.abspath(__file__))          # src/
 _ROOT = os.path.dirname(_HERE)                              # raiz do repo
 _HTML = os.path.join(_ROOT, 'dash.html')
 _HTML2 = os.path.join(_ROOT, 'dash2.html')                   # v2 (ao vivo), servido em /v2
+_HTML3 = os.path.join(_ROOT, 'dash3.html')                   # v3 (modulos encadeados), servido em /v3
+_HTML4 = os.path.join(_ROOT, 'dash4.html')                   # v4 (canvas de fluxo: pecas, ramos, moduladores), /v4
 _FAVICON = os.path.join(_ROOT, 'favicon.png')  # copia do de paulocremas.github.io
 _SHADERS = os.path.join(_ROOT, 'shaders')                   # image.frag + presets/*.frag
 _MEDIA = os.path.join(_ROOT, 'media')                       # galeria da aba Visuais (imgs/videos)
 _TRANS = os.path.join(_ROOT, 'transitions')                 # galeria "Transições": *.glsl
+_GROUPS = os.path.join(_SHADERS, 'grupos')                  # ATOMOS COMPOSTOS (dash v4): <nome>.json = {desc, items}
 _DEFAULT_TUNING = os.path.join(_HERE, 'tuning.py')
 
 # knobs "ao vivo" — os fixos que controlam a DINAMICA (ver explicacao no README/CLAUDE.md).
@@ -332,6 +335,18 @@ def _shader_manifests(names, defaults=False):
         except OSError:
             d = {}
         out[rel] = d if defaults else list(d)
+    return out
+
+
+def _shader_meta(names):
+    """{caminho: {cat, ins, desc}} — o modulo na v3 (dash_data.parse_meta)."""
+    out = {}
+    for rel in names:
+        try:
+            with open(os.path.join(_SHADERS, rel), encoding='utf-8', errors='replace') as f:
+                out[rel] = dash_data.parse_meta(f.read(4000))
+        except OSError:
+            out[rel] = dash_data.parse_meta('')
     return out
 
 
@@ -876,7 +891,8 @@ def _norm_rect(r):
 
 # fontes de som de um knob com ♪ (= chaves do state no native: as 8 faixas + o kick), ordem do espectro
 MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
-               'm1', 'm2', 'm3', 'm4')   # m1..m4 = MACROS (faders no Palco): a mesma faixa lo->hi, movida a mao/MIDI
+               'm1', 'm2', 'm3', 'm4',   # m1..m4 = MACROS (faders no Palco): a mesma faixa lo->hi, movida a mao/MIDI
+               'lfo')                     # OSCILADOR no tempo da musica (dash v4: modulador como peca); forma em 'lfo'
 
 
 def _norm_mod1(v):
@@ -890,6 +906,11 @@ def _norm_mod1(v):
             d[k] = round(max(0.0, min(1.0, float(v[k]))), 3)
         except (KeyError, TypeError, ValueError):
             pass
+    if 'lfo' in d['b']:   # forma do LFO (dash_data.lfo): f, r = batidas por ciclo (1/16..64), ph = fase 0..1
+        q = v.get('lfo') if isinstance(v.get('lfo'), dict) else {}
+        num = lambda k, lo, hi, df: round(max(lo, min(hi, float(q[k]))), 4) if isinstance(q.get(k), (int, float)) else df
+        d['lfo'] = {'f': q.get('f') if q.get('f') in dash_data.LFO_SHAPES else 'sin',
+                    'r': num('r', 1 / 16, 64.0, 4.0), 'ph': num('ph', 0.0, 1.0, 0.0)}
     return d if d['b'] else None
 
 
@@ -915,6 +936,21 @@ def _norm_overlays(items, dedupe=True):
             o['region'] = it['region']
         if it.get('kick'):  # item da pilha so' na batida: opacidade x kick (native; kick 0 = nem desenha)
             o['kick'] = 1
+        if it.get('in') == 'chain':   # MODULO encadeado: le o resultado dos de antes (ausente = a fonte crua, pilha antiga)
+            o['in'] = 'chain'
+        ins = [str(r) for r in it.get('ins') or () if r and '..' not in str(r)][:2] if isinstance(it.get('ins'), list) else []
+        if ins:             # outras raias -> u_texture_1/2 ('fb' = a propria, 1 frame atras; '@id' = saida do modulo id)
+            o['ins'] = ins
+        if re.fullmatch(r'[A-Za-z0-9_-]{1,24}', str(it.get('id') or '')):   # id ESTAVEL do modulo (dash v4): ramo e entrada '@id'
+            o['id'] = str(it['id'])
+        pub = [n for n in it.get('pub') or () if isinstance(n, str) and re.fullmatch(r'[A-Za-z0-9_]{1,32}', n)][:16] \
+            if isinstance(it.get('pub'), list) else []
+        if pub:             # knobs PUBLICADOS (dash v4): o modo Show so mostra estes
+            o['pub'] = pub
+        if re.fullmatch(r'[A-Za-z0-9_-]{1,24}', str(it.get('grp') or '')):   # GRUPO (atomo composto): itens seguidos
+            o['grp'] = str(it['grp'])                                         # com o mesmo grp = 1 peca no dash
+            if it.get('gname'):
+                o['gname'] = str(it['gname'])[:40]
         if it.get('auto'):  # fonte com AUTO-NIVEL (native _auto_levels: faixa estavel na troca de camera/luz)
             o['auto'] = 1
         if it.get('audio') and not aud:   # 🔊 video = fonte de audio no lugar do PulseAudio (so' 1)
@@ -1140,6 +1176,10 @@ def select_source(key):
     """Seleciona a fonte (clique no nome): a lista de efeitos passa a ser a dela, e a captura/
     analise (aba Source Image) segue ela. NAO muda a saida — so o que esta marcado conta."""
     key = str(key or '')
+    if key.startswith('@'):   # fileira que nasce da saida de um modulo (dash v4): nada pra capturar
+        if _state is not None:
+            _state['selected'] = key
+        return key
     ident = _input_of_source_key(_base_key(key))   # canal repetido ('file#2') captura a fonte dele
     if not ident:
         raise ValueError(f'fonte desconhecida: {key!r}')
@@ -2061,6 +2101,46 @@ def _read_knobs():
     return {k['name']: getattr(_tuning, k['name']) for k in KNOBS}
 
 
+def set_try(key, variants):
+    """PREVIA FORA DO AR (dash v4: soltar com previa, mutacao): ate 4 versoes da pilha de UM canal, que o
+    native desenha alternando (lt['cue']) e devolve em /frame?which=try&src=<i>. A saida nao muda. [] = para."""
+    vs = [_norm_bindings({'k': v}).get('k') for v in variants or () if isinstance(v, dict)][:4]
+    if _state is not None:
+        _state['try'] = {'key': str(key or ''), 'v': vs, 't': time.time()} if vs and key else None
+    return len(vs)
+
+
+def _list_groups(gdir=None):
+    """Biblioteca de ATOMOS COMPOSTOS: [{name, desc, items}] (items = pilha normalizada, sem grp)."""
+    out = []
+    for f in sorted(glob.glob(os.path.join(gdir or _GROUPS, '*.json'))):
+        try:
+            with open(f, encoding='utf-8') as fh:
+                g = json.load(fh)
+            items = _norm_overlays(g.get('items'), dedupe=False)
+        except (OSError, ValueError, TypeError, AttributeError):
+            continue
+        if items:
+            out.append({'name': os.path.splitext(os.path.basename(f))[0], 'desc': str(g.get('desc') or '')[:200], 'items': items})
+    return out
+
+
+def save_group(name, items, desc='', gdir=None):
+    """Grava um grupo (varios modulos -> 1 peca, com os knobs publicados) em shaders/grupos/<nome>.json."""
+    name, d = _slugify(str(name or '')), gdir or _GROUPS
+    clean = [{k: v for k, v in o.items() if k not in ('grp', 'gname')} for o in _norm_overlays(items, dedupe=False)]
+    if not clean:
+        raise ValueError('grupo vazio')
+    os.makedirs(d, exist_ok=True)
+    _write_atomic(os.path.join(d, name + '.json'), json.dumps({'desc': str(desc or '')[:200], 'items': clean},
+                                                             ensure_ascii=False, indent=1))
+    return name
+
+
+def delete_group(name, gdir=None):
+    os.remove(os.path.join(gdir or _GROUPS, _slugify(str(name or '')) + '.json'))
+
+
 def _payload():
     return {
         'audio': _state.get('audio_dash', {}),   # kick / bands / spectrum — ver dash_data.audio_dash_data
@@ -2124,6 +2204,8 @@ def _payload():
                         for p in _state.get('bounce_busy', [])],
         'html_mtime': os.path.getmtime(_HTML),   # cliente recarrega a aba quando muda
         'html2_mtime': os.path.getmtime(_HTML2) if os.path.exists(_HTML2) else 0,   # idem, v2
+        'html3_mtime': os.path.getmtime(_HTML3) if os.path.exists(_HTML3) else 0,   # idem, v3
+        'html4_mtime': os.path.getmtime(_HTML4) if os.path.exists(_HTML4) else 0,   # idem, v4
     }
 
 
@@ -2151,6 +2233,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, 'text/html; charset=utf-8', open(_HTML, 'rb').read())
         elif path in ('/v2', '/dash2.html'):
             self._send(200, 'text/html; charset=utf-8', open(_HTML2, 'rb').read())
+        elif path in ('/v3', '/dash3.html'):
+            self._send(200, 'text/html; charset=utf-8', open(_HTML3, 'rb').read())
+        elif path in ('/v4', '/dash4.html'):
+            self._send(200, 'text/html; charset=utf-8', open(_HTML4, 'rb').read())
+        elif path == '/groups':   # atomos compostos (dash v4)
+            self._send(200, 'application/json', json.dumps({'list': _list_groups()}).encode())
         elif path in ('/favicon.png', '/favicon.ico'):  # navegador tambem sonda /favicon.ico
             try:
                 self._send(200, 'image/png', open(_FAVICON, 'rb').read())
@@ -2198,6 +2286,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, 'application/json', json.dumps(
                 {'list': al, 'manifests': _shader_manifests(al),
                  'fxDefaults': _shader_manifests(al, defaults=True),
+                 'meta': _shader_meta(al),
                  'keys': _read_keys_for('SHADER_KEYS', s),
                  'set': s, 'sets': _list_shader_sets()}).encode())
         elif path == '/media':
@@ -2259,6 +2348,24 @@ class _Handler(BaseHTTPRequestHandler):
                 out = take_cue() if b.get('take') else set_cue(b.get('name'), int(b.get('step') or 0))
                 self._send(200, 'application/json', json.dumps({'cue': _state.get('scene_cue') or '', 'went': out if b.get('take') else ''}).encode())
             except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/try':   # {key, variants: [{shaders}]} — previa fora do ar (dash v4); variants [] para
+            try:
+                b = json.loads(raw.decode())
+                self._send(200, 'application/json', json.dumps({'n': set_try(b.get('key'), b.get('variants'))}).encode())
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path in ('/group-save', '/group-del'):   # {name, items, desc} | {name}
+            try:
+                b = json.loads(raw.decode())
+                if path == '/group-save':
+                    save_group(b['name'], b['items'], b.get('desc', ''))
+                else:
+                    delete_group(b['name'])
+                self._send(200, 'application/json', json.dumps({'list': _list_groups()}).encode())
+            except (KeyError, ValueError, TypeError, AttributeError, OSError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
         if path == '/limits':   # {on, flash, bright}
@@ -2746,7 +2853,7 @@ def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mod
     url = f'http://127.0.0.1:{port}'
     print(f'dash: {url}  (tabs Audio/Image no header, ou ?panel=audio | ?panel=image p/ popup)')
     if open_browser:
-        _open_dash_window(url + '/v2')   # v2 (palco) e' o dash principal; v1 segue em /
+        _open_dash_window(url + '/v3')   # v3 (modulos) e' o dash principal; v2 segue em /v2, v1 em /
 
 
 # navegadores com --app/--user-data-dir (familia Chromium), na ordem de preferencia
@@ -2849,6 +2956,38 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert [o.get('kick') for o in _norm_overlays([{'file': 'x.frag', 'kick': True}, {'file': 'y.frag', 'kick': 0}],
                                                  dedupe=False)] == [1, None], 'kick do item da pilha = 1 ou ausente'
     assert rg['cam']['mask'] == {'th': 1.0, 'soft': 0.1}, 'mascara do assunto: so th/soft, 0..1'
+    ch = _norm_overlays([{'file': 'x.frag', 'in': 'chain', 'ins': ['fb', 'cam#2', '../x', 'a', 'b']},
+                         {'file': 'y.frag', 'in': 'src', 'ins': 'fb'}], dedupe=False)
+    assert [(o.get('in'), o.get('ins')) for o in ch] == [('chain', ['fb', 'cam#2']), (None, None)], 'entradas do modulo'
+    v4 = _norm_overlays([{'file': 'x.frag', 'id': 'k7', 'pub': ['forca', 'x y', 3, 'matiz'], 'grp': 'g1', 'gname': 'Neon',
+                          'ins': ['@k2'], 'mod': {'forca': {'b': ['lfo', 'kick'], 'lfo': {'f': 'tri', 'r': 999, 'ph': '0.5'}}}},
+                         {'file': 'y.frag', 'id': 'bad id!', 'grp': '../g', 'pub': 'forca'}], dedupe=False)
+    assert (v4[0]['id'], v4[0]['pub'], v4[0]['grp'], v4[0]['gname'], v4[0]['ins']) == ('k7', ['forca', 'matiz'], 'g1', 'Neon', ['@k2']), v4[0]
+    assert v4[0]['mod']['forca'] == {'b': ['kick', 'lfo'], 'lfo': {'f': 'tri', 'r': 64.0, 'ph': 0.0}}, 'lfo: forma valida, r no teto, fase texto = padrao'
+    assert not ({'id', 'grp', 'pub', 'gname'} & set(v4[1])), 'id/grp invalidos e pub que nao e lista somem'
+    assert _norm_overlays([{'file': '@k7', 'opacity': 0.5}, {'file': '@k7', 'dup': 2}]) == \
+        [{'file': '@k7', 'opacity': 0.5}, {'file': '@k7', 'opacity': 1.0, 'dup': 2}], 'fileira que nasce de um modulo (ramo)'
+    _st0 = _state
+    _state = {}
+    assert set_try('cam', [{'shaders': [{'file': 'x.frag', 'fx': {'a': 2}}]}, 'lixo', {'shaders': []}] * 3) == 4
+    assert _state['try']['key'] == 'cam' and _state['try']['v'][0]['shaders'][0]['fx'] == {'a': 1.0} and len(_state['try']['v']) == 4
+    assert set_try('cam', []) == 0 and _state['try'] is None, 'lista vazia para a previa'
+    assert select_source('@k7') == '@k7' and _state['selected'] == '@k7', 'ramo: selecionar nao abre captura'
+    _state = _st0
+    gd = tempfile.mkdtemp()
+    assert save_group('Neon sujo!', [{'file': 'x.frag', 'grp': 'g1', 'gname': 'N', 'pub': ['forca']}, {'file': 'y.frag'}], 'contorno + cor', gd) == 'Neonsujo'
+    gl = _list_groups(gd)
+    assert gl == [{'name': 'Neonsujo', 'desc': 'contorno + cor', 'items': [{'file': 'x.frag', 'opacity': 1.0, 'pub': ['forca']},
+                                                                            {'file': 'y.frag', 'opacity': 1.0}]}], gl
+    open(os.path.join(gd, 'quebrado.json'), 'w').write('{nao e json')
+    assert [g['name'] for g in _list_groups(gd)] == ['Neonsujo'], 'json quebrado e pulado'
+    delete_group('Neonsujo', gd)
+    assert _list_groups(gd) == []
+    try:
+        save_group('x', [], '', gd)
+        raise AssertionError('grupo vazio devia falhar')
+    except ValueError:
+        pass
     assert _norm_overlays([{'file': 'a.png', 'opacity': 1, 'off': True}, {'file': 'b.png', 'off': 0}]) == \
         [{'file': 'a.png', 'opacity': 1.0, 'off': 1}, {'file': 'b.png', 'opacity': 1.0}], 'off (desligada) se perdeu'
     assert [o.get('audio') for o in _norm_overlays([{'file': 'a.mp4', 'audio': 1}, {'file': 'b.mp4', 'audio': True},

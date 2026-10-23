@@ -1,4 +1,5 @@
 // fx: base=0.3, forca=0.7, linhas=0.5, rolagem=0.3, cor=0.5, layer, on_kick=1, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: textura
 // SORTIDOS · VHS. Fita VHS: linhas, rasgos horizontais e cor borrada. base/forca = estrago parado/no disparo;
 // linhas = densidade das linhas; rolagem = velocidade dos rasgos; cor = sangramento de cor.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

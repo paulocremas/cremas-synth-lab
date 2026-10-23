@@ -386,6 +386,7 @@ state = {'frame': np.zeros(FRAME_SIZE, dtype=np.uint8), 'amp': 0.0, 'bass': 0.0,
          # ritmo.py: u_bpm, posicao na batida/compasso (0..1, calculada no render) e o TOM (matiz da cor
          # do tom, menor 0/1, confianca 0..1)
          'bpm': 0.0, 'beat': 0.0, 'bar': 0.0, 'key_hue': 0.0, 'key_minor': 0.0, 'key_conf': 0.0,
+         'bpos': 0.0,   # batidas desde o '1', continuo (relogio dos LFOs do dash v4; sem tempo = 120 BPM)
          # faixas finas de mixagem (Sub-bass..Air) — controlam u_subbass..u_air no shader
          'subbass': 0.0, 'lowmid': 0.0, 'midrange': 0.0, 'highmid': 0.0, 'presence': 0.0,
          'treble_hi': 0.0, 'brilho': 0.0, 'air': 0.0, 'spectrum': [], 'image': {}, 'out_image': {}, 'bounce_busy': [],
@@ -863,7 +864,8 @@ def _mod_value(v, m, levels):
     if not m or not m.get('b'):
         return v
     lo, hi = m.get('lo', v), m.get('hi', 1.0)
-    return lo + (hi - lo) * min(1.0, max(levels.get(b, 0.0) for b in m['b']))
+    lv = lambda b: dash_data.lfo(m.get('lfo'), levels.get('bpos', 0.0)) if b == 'lfo' else levels.get(b, 0.0)
+    return lo + (hi - lo) * min(1.0, max(lv(b) for b in m['b']))
 
 
 AUTO_LO, AUTO_HI = 0.04, 0.92   # auto-nivel: pra onde vao os percentis 2% e 98% da luminancia da fonte
@@ -1213,6 +1215,53 @@ def _chkey(o):
     return f"{o.get('file', '')}#{d}" if d else o.get('file', '')
 
 
+def _ins_tex(r, key, lane_out, tap_tex, dflt):
+    """Textura de uma entrada B/C: '@id' = saida do modulo id (tap), 'fb' = a propria raia 1 frame atras,
+    outra raia = a saida dela; sem ligacao / ainda sem saida guardada = dflt (a fonte)."""
+    if r and r.startswith('@'):
+        return tap_tex.get(r[1:], dflt)
+    return lane_out.get(key if r == 'fb' else r, dflt)
+
+
+def _graph_wants(bindings, overlays):
+    """O que precisa RODAR ou ficar GUARDADO porque alguem le (dash v4: ramo, entrada B, feedback).
+    -> (lanes, taps, need): lanes = canais cuja SAIDA alguem le ('ins' = outra raia; 'fb' = a propria) ->
+    lane_out; taps = ids de modulos cuja saida alguem le (fileira '@id' no ar, 'ins' '@id') -> tap_tex;
+    need = canais lidos por OUTRO ou com um tap dentro: rodam mesmo a 0% ou desligados (sem ir pra saida)."""
+    rows = [_chkey(o) for o in overlays or []]
+    src_of = {_chkey(o): str(o['file'])[1:] for o in overlays or [] if str(o.get('file') or '').startswith('@')}
+    row_of, lanes, taps, need = {}, set(), set(), set()
+    for k in rows:
+        for o in ((bindings or {}).get(k) or {}).get('shaders') or []:
+            if o.get('id'):
+                row_of[o['id']] = k
+            if o.get('off'):
+                continue
+            for r in o.get('ins') or ():
+                if r == 'fb':
+                    lanes.add(k)
+                elif r.startswith('@'):
+                    taps.add(r[1:])
+                elif r != 'src':
+                    lanes.add(r)
+                    need.add(r)
+    vis = {_chkey(o) for o in overlays or [] if not o.get('off') and float(o.get('opacity', 1.0) or 0) > 0}
+    grow = True
+    while grow:   # fileira '@' que roda -> o tap dela; tap -> a fileira que tem o modulo (que entao roda)
+        grow = False
+        for k in vis | need:
+            t = src_of.get(k)
+            if t and t not in taps:
+                taps.add(t)
+                grow = True
+        for t in taps:
+            r = row_of.get(t)
+            if r and r not in need:
+                need.add(r)
+                grow = True
+    return lanes, taps, need
+
+
 def _overlay_items(chans=False, scene=None):
     """[(item de MEDIA | id de fonte viva, opacidade)] das camadas validas, de baixo pra cima.
     So' as disponiveis no set ativo (state['pool']['sources']; ausente = todas). chans=True
@@ -1222,18 +1271,22 @@ def _overlay_items(chans=False, scene=None):
     by_file = {m.get('file', ''): m for m in getattr(tuning, 'MEDIA', [])}
     sc = scene if scene is not None else state
     avail = (sc.get('pool') or {}).get('sources')
+    need = _graph_wants(sc.get('bindings'), sc.get('overlays'))[2]
     out = []
     for o in sc.get('overlays') or []:
-        if o.get('off') or (avail is not None and o.get('file') not in avail):
+        f = o.get('file') or ''
+        on = not o.get('off') and (avail is None or f in avail or f.startswith('@'))
+        if not on and _chkey(o) not in need:   # desligada mas lida por outra (ramo/entrada B): roda a 0%
             continue
+        a = float(o.get('opacity', 1.0)) if on else 0.0
         ck = (_chkey(o),) if chans else ()
-        if _is_live(o.get('file')):
-            out.append((o['file'], float(o.get('opacity', 1.0))) + ck)
+        if _is_live(f) or f.startswith('@'):   # '@id' = fileira que nasce da saida do modulo id (dash v4)
+            out.append((f, a) + ck)
             continue
-        m = by_file.get(o.get('file', ''))
+        m = by_file.get(f)
         if m and _media_set_of(m.get('file', '')) == ms and \
                 os.path.isfile(os.path.join(MEDIA_DIR, m.get('file', ''))):
-            out.append((m, float(o.get('opacity', 1.0))) + ck)
+            out.append((m, a) + ck)
     return out
 
 
@@ -1245,6 +1298,8 @@ def _sync_overlays():
     fr = state.get('scene_from')          # cena que SAI numa transicao: as fontes dela seguem abertas
     cu = state.get('scene_cue_sc')        # PROXIMA cena (preview): as fontes dela ja' abrem (aquecimento)
     for m, _ in _overlay_items() + (_overlay_items(scene=fr) if fr else []) + (_overlay_items(scene=cu) if cu else []):
+        if isinstance(m, str) and m.startswith('@'):   # ramo: le um modulo, nao abre nada
+            continue
         if _is_live(m):
             want[m] = _ovl[m]['v'] if m in _ovl and _ovl[m]['v'].get('fit') == _live_fit(m) \
                 else _video_from_id(m)
@@ -1279,7 +1334,7 @@ def _stale_sources():
     camera desplugada, ffmpeg morto. Imagem parada nao entra (nao tem leitor)."""
     now, out = time.monotonic(), []
     for m, a, _ in _overlay_items(chans=True):
-        if a <= 0:
+        if a <= 0 or (isinstance(m, str) and m.startswith('@')):
             continue
         e = _ovl.get(m) if _is_live(m) else (_pool.get(_media_v(m)['path']) or _ovl.get(_media_v(m)['path']))
         if e and 'v' in e and now - e.get('t', now) > SRC_STALE_S:
@@ -1300,8 +1355,13 @@ def _source_frames(scene=None, alpha=None):
     out = []
     alpha = _alpha_now if alpha is None else alpha
     alpha.clear()
+    sc = scene if scene is not None else state
+    need = _graph_wants(sc.get('bindings'), sc.get('overlays'))[2]
     for m, a, ck in _overlay_items(chans=True, scene=scene):
-        if a <= 0:
+        if a <= 0 and ck not in need:          # a 0% so' roda quem outro le (ramo, entrada B)
+            continue
+        if isinstance(m, str) and m.startswith('@'):   # ramo: o "frame" e' a textura do tap (loop GL)
+            out.append((ck, a, None))
             continue
         if _is_live(m):
             e = _ovl.get(m)
@@ -1323,6 +1383,23 @@ def _preview_frame(which, key='', max_w=320):
     so' enquanto alguem pede — ver state['out_want']), 'sel' = a fonte selecionada (state['frame']),
     'src' = um canal da mesa (key: fonte viva ou arquivo de midia, '#N' ignorado).
     Devolve (bytes rgb24, w, h) | None."""
+    if which == 'steps':                       # dash v4: o sinal DEPOIS de cada modulo do canal key (empilhadas)
+        state['steps_want'] = (key, time.time())
+        st = state.get('steps_small') or {}
+        if st.get('key') != key or not st.get('img'):
+            return None
+        w, h = next(iter(st['img'].values()))[1:]
+        blank = bytes(w * h * 3)
+        return b''.join(x[0] if x and x[1:] == (w, h) else blank for x in (st['img'].get(j) for j in range(st['n']))), w, h * st['n']
+    if which == 'try':                         # dash v4: previa FORA DO AR da versao key (0..3) de um canal
+        tr = state.get('try')
+        if not tr:
+            return None
+        tr['t'] = time.time()                  # quem le mantem a previa viva
+        try:
+            return (state.get('try_small') or {}).get(int(key or 0))
+        except ValueError:
+            return None
     if which == 'cue':                         # PREVIEW da proxima cena (loop GL, so' enquanto pedida)
         state['cue_want'] = time.time()
         return state.get('cue_small') if state.get('scene_cue_sc') else None
@@ -1384,6 +1461,7 @@ def _composite(frames):
     pra analise de imagem / fumaca / cor dominante. A SAIDA e' feita na GPU (ver main).
     A ULTIMA fonte opaca (opacidade 1, sem alpha) cobre as de baixo: comeca dela — com 1 fonte so'
     devolve o proprio frame (era ~3 ms por frame novo pra dar o mesmo resultado)."""
+    frames = [x for x in frames if x[2] is not None]   # ramo ('@id') so' existe na GPU
     base, rest = None, frames
     for i, (k, a, f) in enumerate(frames):
         if a >= 1.0 and _alpha_now.get(k) is None:
@@ -2720,8 +2798,12 @@ def _prog_locs(prog, manifest):
     u['fx'] = [(n, l, d) for n, d in manifest.items() if (l := g('u_fx_' + n)) >= 0]
     smoke, fumaca = g('u_texture_smoke'), g('u_texture_fumaca')
     u['sim'] = smoke >= 0 or fumaca >= 0     # so' quem le roda a sim de fluido/fumaca (main)
+    # ENTRADAS do modulo (item com in: 'chain'): u_texture_0 = a corrente; u_texture_1/2 = outras raias
+    # (item 'ins'); u_texture_src = a fonte crua do canal, sempre
+    u['ins'] = [g(f'u_texture_{i + 1}') for i in range(len(INS_UNITS))]
+    u['src'] = g('u_texture_src')
     glUseProgram(prog)
-    for l, unit in ((g('u_texture_0'), 0), (smoke, 3), (fumaca, 4)):
+    for l, unit in ((g('u_texture_0'), 0), (smoke, 3), (fumaca, 4), (u['src'], SRC_UNIT), *zip(u['ins'], INS_UNITS)):
         if l >= 0:
             glUniform1i(l, unit)
     return u
@@ -2924,6 +3006,7 @@ void main() {
 }
 """
 OUTPUT_MAP_UNIT = 9   # u_canvas (a textura `canvas` dos layer targets)
+INS_UNITS, SRC_UNIT = (10, 11), 12   # u_texture_1/2 (outras raias) e u_texture_src (fonte crua) dos modulos
 
 
 def build_output_map_program():
@@ -2942,10 +3025,10 @@ def make_layer_targets(w, h):
     old[0]/old[1] (a mistura da cena que SAI, desenhada viva durante a transicao) e cue[0]/cue[1] (a
     PROXIMA cena, so' quando a previa dela e' pedida). Recriado quando o
     tamanho muda (main)."""
-    texs = glGenTextures(11)
+    texs = glGenTextures(12)
     for t in texs:
         glBindTexture(GL_TEXTURE_2D, t)
-        filt = GL_LINEAR if t == texs[7] else GL_NEAREST
+        filt = GL_LINEAR if t in (texs[7], texs[11]) else GL_NEAREST
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filt)
@@ -2954,7 +3037,8 @@ def make_layer_targets(w, h):
     return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
             'src': [texs[2], texs[3]], 'layer': texs[4], 'old': [texs[5], texs[8]], 'cue': [texs[9], texs[10]],
             'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
-            'canvas': texs[7]}
+            'canvas': texs[7],
+            'chain': texs[11]}   # a CORRENTE virada topo->baixo (como os presets leem u_texture_0)
 
 
 def build_fumaca_program():
@@ -3137,13 +3221,22 @@ def main():
     map_prog, map_u = build_output_map_program()
     ltargets = [None]   # make_layer_targets(...) sob demanda (camada ativa ou transicao de set)
     poly_tex = [None, None]   # textura dos poligonos das telas (_poly_tex) + o que ela tem
+    lane_out = {}   # canal -> saida da raia (topo->baixo), so' das que algum modulo le ('ins'; 'fb' = a propria)
+    tap_tex = {}    # id do modulo -> saida dele (topo->baixo), so' dos que alguem le (ramo '@id', 'ins' '@id'; dash v4)
+    live_taps = [set()]   # taps que a cena AO VIVO pede (o resto e' apagado no fim do frame)
 
     def layer_targets():
         if not ltargets[0] or ltargets[0]['size'] != (CMP_W, CMP_H):
             if ltargets[0]:
                 glDeleteFramebuffers(1, [ltargets[0]['fbo']])
                 glDeleteTextures([t for k in ('out', 'src', 'old', 'cue') for t in ltargets[0][k]] +
-                                 [ltargets[0][k] for k in ('layer', 'mask', 'canvas')])
+                                 [ltargets[0][k] for k in ('layer', 'mask', 'canvas', 'chain')])
+            if lane_out:
+                glDeleteTextures(list(lane_out.values()))
+                lane_out.clear()
+            if tap_tex:
+                glDeleteTextures(list(tap_tex.values()))
+                tap_tex.clear()
             ltargets[0] = make_layer_targets(CMP_W, CMP_H)
         return ltargets[0]
 
@@ -3243,6 +3336,9 @@ def main():
     lt_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0, 'prev': {}, 'tx': None}
     lim_pv = {'fbo': None, 'tex': None, 'wh': None}   # PROTECAO: leitura minuscula da saida (Limiter)
     cue_pv = {'fbo': None, 'tex': None, 'wh': None}   # PREVIEW da proxima cena (/frame?which=cue)
+    step_pv = {'fbo': None, 'tex': None, 'wh': None, 't': 0.0}   # dash v4: miniatura de cada modulo do canal pedido
+    try_pv = {'fbo': None, 'tex': None, 'wh': None, 'i': 0}      # dash v4: previa FORA DO AR (versoes de um canal)
+    STEP_PV_HZ, STEP_PV_W = 8, 160
     limiter, lim_g = Limiter(), [1.0]
     # previa de cada FONTE JA COM OS EFEITOS (canvas do Palco v2: GET /frame?which=fx): a textura
     # da fonte depois da pilha (lt['src']) reduzida por blit, so' das pedidas (state['fx_want'])
@@ -3348,12 +3444,16 @@ def main():
             ltargets[0] = None           # FBO/texturas das camadas eram do contexto velho
             poly_tex[:] = [None, None]   # idem a dos poligonos
             src_tex.clear()              # texturas por fonte idem (sem glDelete: o contexto ja foi)
+            lane_out.clear()
+            tap_tex.clear()
             out_pv.update(fbo=None, tex=None, wh=None)   # FBO da previa da saida idem (nome velho = textura de outro)
             cv_pv.update(fbo=None, tex=None, wh=None)
             fx_pv.update(fbo=None, tex=None, wh=None)
             lt_pv.update(fbo=None, tex=None, wh=None)
             lim_pv.update(fbo=None, tex=None, wh=None)
             cue_pv.update(fbo=None, tex=None, wh=None)
+            step_pv.update(fbo=None, tex=None, wh=None)
+            try_pv.update(fbo=None, tex=None, wh=None)
             pbos.clear()                 # PBOs das previas idem
             comp_last[0] = None          # forca re-subir a mistura na `tex` nova
             scene_tr = None              # as texturas da transicao eram do contexto velho
@@ -3522,6 +3622,8 @@ def main():
         tp_ = state.get('tempo_obj')            # posicao na batida/compasso NESTE frame (lisa, sem degrau do audio)
         if tp_:
             state['beat'], state['bar'] = tp_.phase(time.monotonic())
+        bp_ = tp_.pos(time.monotonic()) if tp_ else None
+        state['bpos'] = bp_ if bp_ is not None else now_t * 2.0   # relogio dos LFOs: sem tempo detectado, 120 BPM
         # SUAVIZACAO (tuning.PARAM_SMOOTH_MS, ~80 ms): knobs, opacidades, liga/desliga e intensidade
         # deslizam ate o valor novo em vez de pular. O som (♪/kick) NAO passa por aqui (ja' tem attack/
         # release proprio; suavizar de novo so' atrasaria a reacao). Master/blackout tambem nao (seguranca).
@@ -3618,6 +3720,8 @@ def main():
             e = pbos.pop('fx:' + k, None)                # e os PBOs da previa com efeitos dele
             if e:
                 glDeleteBuffers(2, e[0])
+        for k in [k for k in lane_out if k not in keep]:
+            glDeleteTextures([lane_out.pop(k)])
 
         def src_texture(key, frame):
             """textura da fonte crua do canal (1 por chave; so' re-sobe se o frame e' OUTRO objeto)."""
@@ -3638,6 +3742,17 @@ def main():
                     st_[1] = frame
             return st_[0]
 
+        def copy_flip(store, k, tex):
+            """saida (orientacao GL) -> store[k], virada topo->baixo como a fonte crua (quem le e' um shader)."""
+            if k not in store:
+                store[k] = t = glGenTextures(1)
+                glBindTexture(GL_TEXTURE_2D, t)
+                for pn, pv in ((GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE), (GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE),
+                               (GL_TEXTURE_MIN_FILTER, GL_LINEAR), (GL_TEXTURE_MAG_FILTER, GL_LINEAR)):
+                    glTexParameteri(GL_TEXTURE_2D, pn, pv)
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, CMP_W, CMP_H, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
+            blend_into(store[k], tex, tex, 1.0, 0, flip=1)
+
         def render_mix(pair, sc, frames, alpha, live):
             """MISTURA de uma cena -> uma das texturas de `pair` (ping-pong), que e' devolvida: cada fonte
             pela pilha dela, a imagem da cena e a calibracao por tela. sc = {overlays, bindings, pool,
@@ -3652,11 +3767,41 @@ def main():
             src_blend = {_chkey(o): o.get('blend') for o in sc.get('overlays') or []}
             src_rect = {_chkey(o): o.get('rect') for o in sc.get('overlays') or []}
             src_auto = {_chkey(o) for o in sc.get('overlays') or [] if o.get('auto')}
+            # raias que algum modulo le (ins): a saida delas fica guardada (lane_out); modulos que alguem le (ramo
+            # '@id', ins '@id'): a saida deles fica em tap_tex. Lida mais acima na mesa / 'fb' (a propria) = a do
+            # frame anterior — o atraso de 1 frame do feedback (LocalIn/LocalOut)
+            lane_want, tap_want, _ = _graph_wants(bindings, sc.get('overlays')) if live else (set(), set(), set())
+            if live:
+                live_taps[0] = tap_want
+            sw = state.get('steps_want')            # dash v4: miniatura de cada modulo desse canal (so' enquanto pedida)
+            step_key = sw[0] if live and sw and time.time() - sw[1] < 1.5 and \
+                time.perf_counter() - step_pv['t'] >= 1.0 / STEP_PV_HZ else None
+
+            def after_module(key, oj, o, tex):
+                """depois de cada modulo (rodou ou nao): guarda o tap (ramo) e a miniatura do passo (dash v4)."""
+                if live and o.get('id') in tap_want:
+                    copy_flip(tap_tex, o['id'], tex)
+                if key == step_key:
+                    pw = min(STEP_PV_W, CMP_W)
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0)
+                    a_ = pv_grab(step_pv, f'st:{oj}', (0, 0, CMP_W, CMP_H), pw, max(2, int(round(pw * CMP_H / max(1, CMP_W)))))
+                    if a_ is not None:
+                        steps_img[oj] = (a_.tobytes(), a_.shape[1], a_.shape[0])
+                    glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+
             for key, src_a, frame in frames:
-                ftex = src_texture(key, frame)
+                if frame is None:                       # RAMO (fileira '@id'): a fonte e' a saida do modulo id
+                    ftex = tap_tex.get(re.sub(r'#\d+$', '', key)[1:])
+                    if not ftex:                        # o modulo ainda nao rodou (ou sumiu): fica de fora
+                        continue
+                else:
+                    ftex = src_texture(key, frame)
                 si = 0
                 lv = (1.0, 0.0)
-                if key in src_auto:                     # AUTO-NIVEL: recalcula so' com frame NOVO (~30 Hz), ~1.5 s de suavizacao
+                steps_img = dict((state.get('steps_small') or {}).get('img') or {}) \
+                    if key == step_key and (state.get('steps_small') or {}).get('key') == key else {}
+                if key in src_auto and frame is not None:   # AUTO-NIVEL: recalcula so' com frame NOVO (~30 Hz), ~1.5 s de suavizacao
                     e = auto_lv.get(key)
                     if e is None or e[1] is not frame:
                         auto_lv[key] = e = [_auto_levels(frame, WIDTH, HEIGHT, e[0] if e else None, 0.03), frame]
@@ -3665,8 +3810,8 @@ def main():
                 b = bindings.get(key) or {}
                 # ASSUNTO: pilha com region (ou previa da mascara aberta) -> pede a mascara dessa fonte
                 bk = re.sub(r'#\d+$', '', key)
-                if any(o.get('region') for o in b.get('shaders') or []) or \
-                        time.time() - (state.get('mask_want') or {}).get(key, 0) < 1.5:
+                if frame is not None and (any(o.get('region') for o in b.get('shaders') or []) or
+                                          time.time() - (state.get('mask_want') or {}).get(key, 0) < 1.5):
                     subject_want[bk] = (time.time(), frame)
                 sjm, sjt = subject_mask.get(bk), subj_tex.get(bk)
                 if sjm is not None and (sjt is None or sjt[1] is not sjm):
@@ -3695,19 +3840,33 @@ def main():
                     if o.get('kick'):                       # kick no efeito: opacidade x kick (batida = 1, decai ate 0)
                         a *= state['kick']
                     h = layer_program(o['file']) if a > 0.002 else None
-                    if not h:
+                    if not h:                               # nao desenha: a corrente passa direto (o tap tambem)
+                        after_module(key, oj, o, lt['src'][si])
                         continue
+                    chain = o.get('in') == 'chain'          # modulo ENCADEADO: le o resultado dos de antes
+                    if chain:                               # (sem 'in' = pilha antiga: le a fonte crua)
+                        blend_into(lt['chain'], lt['src'][si], lt['src'][si], 1.0, 0, flip=1)
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
                     use_program(h)
                     set_uniforms(o['fx'] if isinstance(o.get('fx'), dict)   # forcas da ENTRADA (mesmo .frag pode vir 2x)
                                  else (b.get('fx') or {}).get(o['file']) or {}, o.get('mod'), sk)
                     if uniforms['eyes'] >= 0:                   # shader usa olhos -> pede deteccao dessa fonte
-                        eyes_want[key] = (time.time(), frame)
+                        if frame is not None:
+                            eyes_want[key] = (time.time(), frame)
                         ey = (state.get('eyes') or {}).get(key) or (0.0, 0.0, 0.0, 0.0, 0.0)
                         glUniform4f(uniforms['eyes'], *ey[:4])
                         glUniform1f(uniforms['eyes_on'], ey[4])
+                    ins = o.get('ins') or ()
+                    for i, (unit, loc) in enumerate(zip(INS_UNITS, uniforms['ins'])):
+                        if loc >= 0:                        # sem ligacao / raia sem saida guardada ainda = a fonte
+                            r = ins[i] if i < len(ins) else None
+                            glActiveTexture(GL_TEXTURE0 + unit)
+                            glBindTexture(GL_TEXTURE_2D, _ins_tex(r, key, lane_out, tap_tex, ftex))
+                    if uniforms['src'] >= 0:
+                        glActiveTexture(GL_TEXTURE0 + SRC_UNIT)
+                        glBindTexture(GL_TEXTURE_2D, ftex)
                     glActiveTexture(GL_TEXTURE0)
-                    glBindTexture(GL_TEXTURE_2D, ftex)
+                    glBindTexture(GL_TEXTURE_2D, lt['chain'] if chain else ftex)
                     glClear(GL_COLOR_BUFFER_BIT)
                     glDrawArrays(GL_TRIANGLES, 0, 3)
                     mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
@@ -3718,6 +3877,12 @@ def main():
                         um = 2 if rg == 'subject' else 3
                     blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode, mask=um, mth=_subject_params(b))
                     si = 1 - si
+                    after_module(key, oj, o, lt['src'][si])
+                if key == step_key:
+                    state['steps_small'] = {'key': key, 'n': len(b.get('shaders') or []), 'img': steps_img}
+                    step_pv['t'] = time.perf_counter()
+                if key in lane_want:                        # saida da raia, virada topo->baixo, pra quem le (ins)
+                    copy_flip(lane_out, key, lt['src'][si])
                 fx_want = state.get('fx_want') or {}
                 if live and time.time() - fx_want.get(key, 0) < 1.5 and time.perf_counter() - fx_pv['t'].get(key, 0) >= 1.0 / FX_PV_HZ:
                     fx_pv['t'][key] = time.perf_counter()
@@ -3743,9 +3908,11 @@ def main():
                     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
                     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
                     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, al)
-                blend_into(pair[1 - oi], pair[oi], lt['src'][si], sv(('src', key) if live else None, min(1.0, src_a), 0.0), sm,
-                           mask=int(al is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
-                oi = 1 - oi
+                a_out = sv(('src', key) if live else None, min(1.0, src_a), 0.0)
+                if a_out > 0.002:                           # a 0% (so' lida por outra fileira) nao entra na saida
+                    blend_into(pair[1 - oi], pair[oi], lt['src'][si], a_out, sm,
+                               mask=int(al is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
+                    oi = 1 - oi
             # IMAGEM DA CENA (campo 'grade' do set; knobs no Palco do v2): o mesmo calibrar.frag na MISTURA
             # da cena -> antes da transicao (cada cena cruza com a sua) e da calibracao do telao. Neutro = sem passe.
             sg = sc.get('grade') or {}
@@ -3791,6 +3958,8 @@ def main():
         mixed = render_mix(lt['out'], {'overlays': state.get('overlays'), 'bindings': state.get('bindings'),
                                        'pool': state.get('pool'), 'grade': getattr(tuning, 'SCENE_GRADE', None)},
                            src_frames, _alpha_now, True)
+        for t_ in [t_ for t_ in tap_tex if t_ not in live_taps[0]]:   # modulo que ninguem mais le: solta o tap
+            glDeleteTextures([tap_tex.pop(t_)])
         mixed_from = render_mix(lt['old'], old, old_frames, old_alpha, False) if old else None
         if cue:
             try:
@@ -3806,6 +3975,32 @@ def main():
                     print('previa da proxima cena ->', e)
                     cue_pv['err'] = str(e)
             glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+        # PREVIA FORA DO AR (dash v4, POST /try): versoes da pilha de UM canal, uma por frame (rodizio), no par
+        # lt['cue'] (fora dos frames da previa da proxima cena); a saida nao muda. So' enquanto alguem le.
+        tr = state.get('try')
+        if tr and tr.get('v') and time.time() - tr.get('t', 0) < 1.5:
+            if not cue:
+                try:
+                    i = try_pv['i'] = (try_pv['i'] + 1) % len(tr['v'])
+                    row = next((o for o in state.get('overlays') or [] if _chkey(o) == tr['key']), None)
+                    if row:
+                        tsc = {'overlays': [dict({k: v for k, v in row.items() if k not in ('rect', 'blend', 'off')}, opacity=1.0)],
+                               'bindings': dict(state.get('bindings') or {}, **{tr['key']: tr['v'][i]}), 'pool': None, 'grade': None}
+                        t_alpha = {}
+                        ttex = render_mix(lt['cue'], tsc, _source_frames(tsc, t_alpha), t_alpha, False)
+                        glBindFramebuffer(GL_READ_FRAMEBUFFER, lt['fbo'])
+                        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ttex, 0)
+                        pw = min(FX_PV_W, CMP_W)
+                        a = pv_grab(try_pv, f'try:{i}', (0, 0, CMP_W, CMP_H), pw, max(2, int(round(pw * CMP_H / max(1, CMP_W)))))
+                        if a is not None:
+                            state.setdefault('try_small', {})[i] = (a.tobytes(), a.shape[1], a.shape[0])
+                except Exception as e:
+                    if try_pv.get('err') != str(e):
+                        print('previa fora do ar ->', e)
+                        try_pv['err'] = str(e)
+                glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+        elif state.get('try_small'):
+            state.pop('try_small', None)
         # CALIBRACAO DA SAIDA (tuning.OUTPUT_GRADE, shaders/calibrar.frag): ligada e fora do
         # neutro (ou no padrao de teste) -> a imagem final (copia ou transicao) vai pra textura
         # `final` e o calibrar.frag a desenha na tela. Neutro = caminho de sempre, sem passe extra.
@@ -4235,7 +4430,49 @@ def _selfcheck():
     assert abs(_mod_value(0.3, {'b': ['subbass', 'air'], 'lo': 1.0, 'hi': 0.0}, lv) - 0.1) < 1e-9, '♪ mais forte vale; hi<lo inverte'
     assert abs(_mod_value(0.5, {'b': ['kick']}, lv) - 0.5) < 1e-9, '♪ formato velho = do knob ate 1'
     assert abs(_mod_value(0.0, {'b': ['m1'], 'lo': 0.2, 'hi': 0.8}, {'m1': 0.5}) - 0.5) < 1e-9, 'macro = fonte do ♪'
+    near = lambda a, b: abs(a - b) < 1e-9
+    assert near(_mod_value(0.0, {'b': ['lfo'], 'lo': 0.2, 'hi': 0.6, 'lfo': {'f': 'saw', 'r': 4}}, {'bpos': 2.0}), 0.4), 'lfo: serra no meio'
+    assert near(_mod_value(0.0, {'b': ['lfo', 'kick'], 'lo': 0, 'hi': 1, 'lfo': {'f': 'sq', 'r': 4}}, {'bpos': 3.0, 'kick': 0.7}), 0.7), \
+        'lfo + kick: vale o mais forte'
     print('native_synth mod self-check ok')
+    # --- dash v4: quem le quem (ramo, entrada B, feedback) ---
+    bnd = {'cam': {'shaders': [{'file': 'a.frag', 'id': 'k1'}, {'file': 'b.frag', 'id': 'k2', 'ins': ['fb']}]},
+           'vid': {'shaders': [{'file': 'm.frag', 'ins': ['cam', '@k1']}]},
+           '@k2': {'shaders': [{'file': 'c.frag'}]}}
+    gw = _graph_wants(bnd, [{'file': 'cam', 'opacity': 1.0}, {'file': '@k2', 'opacity': 0.5}])
+    assert gw == ({'cam'}, {'k2'}, {'cam'}), gw
+    assert _graph_wants(bnd, [{'file': 'cam', 'opacity': 0.0}, {'file': '@k2', 'opacity': 0.7}]) == ({'cam'}, {'k2'}, {'cam'}), \
+        'ramo no ar: a fileira mae roda mesmo a 0%'
+    assert _graph_wants(bnd, [{'file': 'cam', 'opacity': 1}, {'file': '@k2', 'opacity': 0}]) == ({'cam'}, set(), set()), \
+        'ramo a 0% que ninguem le: sem tap'
+    assert _graph_wants(bnd, [{'file': 'cam', 'off': 1}, {'file': 'vid'}]) == ({'cam'}, {'k1'}, {'cam'}), \
+        'entrada B (raia + tap) faz a desligada rodar'
+    assert _graph_wants({}, []) == (set(), set(), set())
+    _f0 = state.get('frame')
+    _ovl['webcam:/dev/video9'] = {'frame': np.full(FRAME_SIZE, 200, np.uint8)}
+    state['bindings'] = {'webcam:/dev/video9': {'shaders': [{'file': 'a.frag', 'id': 'k1'}]}}
+    state['overlays'] = [{'file': 'webcam:/dev/video9', 'opacity': 0.0}, {'file': '@k1', 'opacity': 1.0}]
+    sf = _source_frames()
+    assert [(k, a, f is None) for k, a, f in sf] == [('webcam:/dev/video9', 0.0, False), ('@k1', 1.0, True)], sf
+    assert int(_composite(sf).max()) == 0, 'a 0% e o ramo (so GPU) nao entram na mistura da CPU'
+    state['overlays'] = [{'file': 'webcam:/dev/video9', 'opacity': 1.0, 'off': 1}, {'file': '@k1', 'opacity': 1.0, 'dup': 2}]
+    assert [(m, a, k) for m, a, k in _overlay_items(chans=True)] == [('webcam:/dev/video9', 0.0, 'webcam:/dev/video9'),
+                                                                     ('@k1', 1.0, '@k1#2')], 'desligada mas lida: entra a 0%'
+    assert _stale_sources() == [], 'ramo nao e fonte parada'
+    state['overlays'] = [{'file': '@k1', 'opacity': 1.0}]
+    assert [k for k, _, _ in _source_frames()] == ['@k1'], 'ramo cuja mae nem esta na mesa: o loop GL pula (sem tap)'
+    _ovl.pop('webcam:/dev/video9')
+    state['overlays'], state['bindings'], state['frame'] = [], {}, _f0
+    # miniaturas por passo (empilhadas, buraco = preto) e previa fora do ar
+    state['steps_small'] = {'key': 'cam', 'n': 3, 'img': {0: (b'\x01' * 12, 2, 2), 2: (b'\x02' * 12, 2, 2)}}
+    assert _preview_frame('steps', 'cam') == (b'\x01' * 12 + bytes(12) + b'\x02' * 12, 2, 6) and state['steps_want'][0] == 'cam'
+    assert _preview_frame('steps', 'vid') is None
+    state['try'], state['try_small'] = {'key': 'cam', 'v': [{}, {}], 't': 0.0}, {1: (b'xyz', 1, 1)}
+    assert _preview_frame('try', '1') == (b'xyz', 1, 1) and state['try']['t'] > 0 and _preview_frame('try', '0') is None
+    state.pop('try'), state.pop('try_small'), state.pop('steps_small'), state.pop('steps_want')
+    assert _ins_tex('@m1', 'cam', {'cam': 1}, {'m1': 7}, 0) == 7 and _ins_tex('@x', 'cam', {}, {}, 0) == 0
+    assert _ins_tex('fb', 'cam', {'cam': 1}, {}, 0) == 1 and _ins_tex('vid', 'cam', {'vid': 2}, {}, 0) == 2 and _ins_tex(None, 'cam', {}, {}, 9) == 9
+    print('native_synth graph (v4) self-check ok')
     rng = np.random.default_rng(1)
     fa, fb = (rng.integers(0, 256, FRAME_SIZE, dtype=np.uint8) for _ in range(2))
 

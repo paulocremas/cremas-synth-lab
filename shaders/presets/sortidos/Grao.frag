@@ -1,4 +1,5 @@
 // fx: base=0.2, forca=0.6, tamanho=0.2, cor=0, layer, on_kick=0, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=1, on_treble=0, on_brilliance=0, on_air=0
+// cat: textura
 // SORTIDOS · Grao. Grão de filme. base/forca = grão parado/no disparo; tamanho = grão fino … grosso (1…8 px);
 // cor = 0 grão cinza … 1 grão colorido.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

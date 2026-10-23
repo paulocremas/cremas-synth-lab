@@ -1,4 +1,5 @@
 // fx: wave, flow, rgbsplit, channels, scanlines, grain, vignette, grayscale, layer, paleta=0
+// cat: distorcao
 // ^ manifest lido por dash_data.parse_fx_manifest: cada nome vira o uniform u_fx_<nome>
 //   (0..1, 1.0 = cheio) e um potenciometro na aba "Efeitos" do dash. Multiplica a
 //   intensidade do efeito correspondente lah embaixo.

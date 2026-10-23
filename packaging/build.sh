@@ -26,7 +26,7 @@ fi
 D=$DIST/prisma
 mkdir -p "$D/src"
 cp src/*.py "$D/src/"
-cp dash.html dash2.html favicon.png "$D/"
+cp dash.html dash2.html dash3.html dash4.html favicon.png "$D/"
 cp -r shaders transitions models "$D/"
 mkdir -p "$D/media"   # midia do usuario fica na pasta de dados, nao aqui
 if [ -n "$WIN" ] && [ -n "$FFMPEG_DIR" ]; then

@@ -37,6 +37,45 @@ def parse_fx_defaults(src):
         out[n.strip()] = v
     return out
 
+def parse_meta(src):
+    """Modulo (dash v3): {cat, ins, desc} do cabecalho — "// cat: cor", "// in: fb, src" (entradas
+    padrao ao inserir: u_texture_1/2) e a 1a linha de comentario livre ("// SET · Nome. desc" -> desc)."""
+    src = src or ''
+    m = re.search(r'(?m)^//\s*cat:\s*(\S+)', src)
+    i = re.search(r'(?m)^//\s*in:\s*(.+)$', src)
+    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in):)\s*(.+)$', src)
+    desc = d.group(1).strip() if d else ''
+    if '·' in desc:   # "SORTIDOS · Contorno. Contornos em neon." -> "Contornos em neon."
+        desc = desc.split('·', 1)[1].strip().partition('. ')[2] or desc
+    return {'cat': m.group(1) if m else '', 'ins': [s.strip() for s in i.group(1).split(',') if s.strip()][:2] if i else [],
+            'desc': desc}
+
+
+
+# MODULADOR LFO (dash v4: peca de controle que se solta num knob; mod[knob] = {b: ['lfo'], lo, hi, lfo: {f, r, ph}})
+LFO_SHAPES = ('sin', 'tri', 'saw', 'sq', 'rnd')
+
+
+def lfo(p, bpos):
+    """Valor 0..1 de um LFO no TEMPO da musica. p = {f: forma (LFO_SHAPES), r: batidas por ciclo, ph: fase
+    0..1}; bpos = batidas desde um '1' (continuo; sem tempo detectado o native conta a 120 BPM). sin/tri
+    comecam em 0 no '1'; sq = metade ligado; rnd = acaso suave (um valor novo por ciclo, deslizando do anterior)."""
+    p = p or {}
+    c = bpos / max(1 / 16, float(p.get('r') or 4)) + float(p.get('ph') or 0)
+    x, f = c % 1.0, p.get('f', 'sin')
+    if f == 'tri':
+        return 1.0 - abs(2.0 * x - 1.0)
+    if f == 'saw':
+        return x
+    if f == 'sq':
+        return 1.0 if x < 0.5 else 0.0
+    if f == 'rnd':
+        h = lambda k: (math.sin(k * 12.9898 + 78.233) * 43758.5453) % 1.0
+        a, b = h(math.floor(c)), h(math.floor(c) + 1)
+        return a + (b - a) * (0.5 - 0.5 * math.cos(math.pi * x))
+    return 0.5 - 0.5 * math.cos(2.0 * math.pi * x)
+
+
 # espelha FREQ_BANDS (native_synth.py) pro lado web/JSON — nome, [lo, hi] default, cor.
 _FREQ_BANDS = [
     ('Sub-bass', 20, 250, (30, 140, 255)), ('Low-mid', 250, 500, (0, 200, 255)),
@@ -283,6 +322,17 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert parse_fx_manifest('nada aqui') == [] and parse_fx_manifest('') == []
     assert parse_fx_manifest('// fx: a=0.5, b') == ['a', 'b']
     assert parse_fx_defaults('// fx: a=0.5, b, c=2, d=x') == {'a': 0.5, 'b': 1.0, 'c': 1.0, 'd': 1.0}
+    assert parse_meta('// fx: a\n// cat: tempo\n// in: fb, src, x\n// ATOMOS · Feedback. Rastro. Mais.\n') == \
+        {'cat': 'tempo', 'ins': ['fb', 'src'], 'desc': 'Rastro. Mais.'}
+    assert parse_meta('// fx: a\n// so texto\n') == {'cat': '', 'ins': [], 'desc': 'so texto'}
+    near = lambda a, b: abs(a - b) < 1e-9
+    assert near(lfo({'f': 'sin', 'r': 4}, 0), 0) and near(lfo({'f': 'sin', 'r': 4}, 2), 1) and near(lfo({'r': 4}, 4), 0), 'sin: 0 no 1, cheio no meio'
+    assert near(lfo({'f': 'tri', 'r': 2}, 1), 1) and near(lfo({'f': 'saw', 'r': 4}, 1), 0.25), 'tri e serra'
+    assert lfo({'f': 'sq', 'r': 4}, 1) == 1.0 and lfo({'f': 'sq', 'r': 4}, 3) == 0.0, 'quadrada: metade ligada'
+    assert near(lfo({'f': 'saw', 'r': 4, 'ph': 0.5}, 0), 0.5), 'fase desloca o ciclo'
+    rs = [lfo({'f': 'rnd', 'r': 1}, k / 8) for k in range(64)]
+    assert all(0 <= v <= 1 for v in rs) and max(rs) - min(rs) > 0.2 and max(abs(a - b) for a, b in zip(rs, rs[1:])) < 0.5, 'acaso: 0..1, suave'
+    assert near(lfo({'f': 'rnd', 'r': 2}, 6), lfo({'f': 'rnd', 'r': 2}, 6.0)) and lfo(None, 1) == lfo({'f': 'sin', 'r': 4}, 1), 'deterministico; padrao = seno de 4 batidas'
 
     freqs = np.fft.rfftfreq(1024, d=1 / 44100)
     spec = np.full(len(freqs), 0.01)

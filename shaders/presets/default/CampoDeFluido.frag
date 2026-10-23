@@ -1,4 +1,5 @@
 // fx: silhueta, layer
+// cat: gerador
 // Efeito ISOLADO (um por arquivo — misturar vem depois). Este é o EFEITO 7 "silhueta" do
 // Caos.frag isolado — não confundir com Silhueta.frag, que é um SNAPSHOT histórico (a versão
 // inteira de antes, quando essa mesma simulação era usada como fumaça e ficou parecendo uma

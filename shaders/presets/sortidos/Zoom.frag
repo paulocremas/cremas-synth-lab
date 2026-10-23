@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.5, giro=0.5, layer, on_kick=0, on_sub=1, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: geometria
 // SORTIDOS · Zoom. Zoom que pulsa com o disparo. base/forca = zoom parado/no disparo (até 60%);
 // giro = gira junto (0.5 = não gira; abaixo/acima = sentido).
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

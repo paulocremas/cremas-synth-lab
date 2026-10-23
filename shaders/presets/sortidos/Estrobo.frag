@@ -1,4 +1,5 @@
 // fx: forca=1, limiar=0.5, cor=0, matiz=0, inverter=0, layer, on_kick=1, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: luz
 // SORTIDOS · Estrobo. Pisca no disparo, só quando o nível passa do limiar. cor = 0 branco … 1 a cor do matiz;
 // inverter = 0 clarão … 1 inverte a imagem.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

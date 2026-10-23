@@ -1,4 +1,5 @@
 // fx: base=0.3, forca=0.6, harmonia=0.5, brilho=0.5, layer, on_kick=0, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: cor
 // SORTIDOS · Tonalidade. Pinta a imagem com uma PALETA HARMONICA tirada do TOM da musica (ritmo.py):
 // a cor do tom (circulo das quintas ou Scriabin, aba Audio) vai nos meios-tons; as sombras e as luzes
 // ganham a cor HARMONICA dela — harmonia 0 = analoga (vizinha), 0.5 = complementar (oposta),

@@ -1,4 +1,5 @@
 // fx: liquid, colorvibe, particles, smoke, aura, pulse, layer
+// cat: forma
 // ^ manifest lido por dash_data.parse_fx_manifest: cada nome vira o uniform u_fx_<nome>
 //   (0..1, 1.0 = cheio) e um potenciometro na aba "Visuals" do dash.
 //   SNAPSHOT salvo à parte (pedido do usuário): aqui "smoke" usa a simulação de fluido de

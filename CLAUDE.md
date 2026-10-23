@@ -76,6 +76,21 @@ Cada ferramenta isolada, depois comparar, só então compor.
   (`u_use_mask` 2/3, `smoothstep(u_mth)`); máscara = `subject_thread` (U²-Net-p `models/u2netp.onnx` via `cv2.dnn`,
   192 px ~110 ms) por fonte base, só sob demanda (`subject_want`); limiar/borda em `BINDINGS[canal].mask`.
   Dash: região no inspetor, ◐ assunto no Canvas (`which=mask`). `cv2` precisa estar no `.venv` (requirements).
+- **v3** (`dash3.html`, `/v3`; nasceu da v2): abas Show (= `perform`, estrutura travada) e Montar; mesmo grid nas duas.
+  Mesa = raias de MÓDULOS: item da pilha com `in: 'chain'` lê a corrente (sem `in` = legado, fonte crua — cenas
+  velhas não mudam); `ins` = entrada B (`u_texture_1/2`: outra raia, `'fb'` = ela mesma 1 frame atrás, `'src'`).
+  Shaders leem textura TOPO→BAIXO: a corrente passa por cópia virada (`lt['chain']`); saída de raia lida por
+  alguém fica em `lane_out` (topo→baixo). Unidades 10/11 (`INS_UNITS`), 12 (`u_texture_src`). Cabeçalho do
+  `.frag`: `// cat:` (glifo na paleta) e `// in:` (ins padrão) → `dash_data.parse_meta` → `/shaders` `meta`.
+  Átomos em `shaders/presets/atomos/`. ↶ desfazer (por cena) e 🛟 socorro só no dash.
+- **v4** (`dash4.html`, `/v4`, do zero; decisões no topo do arquivo + doc de design): 3 colunas fixas (Cenas/Peças |
+  Patch | Programa, Próxima/GO, Controles, Macros), Show = só knobs publicados (`pub` no item), gavetas Socorro e
+  Equipamento (editores da v3 refeitos). Patch = fileiras (topo = frente) + RAMO: fileira com `file: '@<id>'` lê a
+  saída do módulo `id` (`tap_tex`; abaixo da mãe = quadro anterior); módulo lido por alguém roda mesmo a 0%/off
+  (`_graph_wants` → `need`); `ins: ['@id']` = entrada B lê o módulo (`_ins_tex`). Item: `id`, `pub`, `grp`/`gname` (grupo; biblioteca `shaders/grupos/*.json`, `/groups`).
+  LFO = fonte `'lfo'` do ♪ com `mod[k].lfo = {f, r (batidas), ph}` (`dash_data.lfo`, fase de `ritmo.Tempo.pos`).
+  Prévias v4: `/frame?which=steps&src=` (miniatura de cada passo, empilhadas) e `which=try&src=i` (`POST /try`
+  = variantes fora do ar, renderizadas em `lt['cue']` quando não há cue).
 - Prévias v2: `/frame?which=out|sel|comp|src|fx|mask` (`_preview_frame`; `out_want`/`fx_want` = só enquanto pedidas).
 - Dash v2: decisões no comentário do topo do `dash2.html`. Faixas na ordem do ESPECTRO (`specOrder`/
   `_clamp_ranges`; v1 ainda por índice). localStorage `mixKeys`/`fxPick` compartilhado com a v1.

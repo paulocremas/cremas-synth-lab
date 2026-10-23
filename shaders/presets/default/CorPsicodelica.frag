@@ -1,4 +1,5 @@
 // fx: colorvibe, layer
+// cat: cor
 // Efeito ISOLADO (um por arquivo — misturar vem depois). Gira o matiz da imagem aos poucos
 // (satura + roda a roda de cores) e tinge com um "plasma" clássico (soma de senos em
 // posição+tempo) — só que cada canal de cor do plasma é literalmente pilotado por uma faixa

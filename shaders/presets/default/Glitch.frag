@@ -1,4 +1,5 @@
 // fx: sens=0.4, blocos=0.7, rasgo=0.6, espelho=0, pixel=0.3, poster=0.3, neon=0.3, inverte=0, layer=0.85
+// cat: distorcao
 // Doideira digital, primo do image.frag: tudo reage ao áudio. Sliders:
 //   blocos  = no kick, blocos da tela pulam pro lado (datamosh fake)
 //   rasgo   = faixas horizontais escorregam com o grave (VHS rasgando)

@@ -1,4 +1,5 @@
 // fx: vel=0.5, salto=0.5, zoom=0.3, layer, on_kick=1, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: geometria
 // SORTIDOS · Girar. Gira a imagem. vel = rotação contínua (0.5 parado; abaixo/acima = sentido); salto = o
 // nível dá um tranco (até 90°); zoom = aproxima pra esconder os cantos.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

@@ -1,4 +1,5 @@
 // fx: particles, layer
+// cat: gerador
 // Efeito ISOLADO (um por arquivo — misturar vem depois). Pontinhos coloridos flutuando por
 // cima da cena — ADITIVO, então não mexe na UV de leitura da imagem (o fundo nunca fica
 // escondido por causa deles). Busca nas 9 células vizinhas (3x3) pra cada partícula poder

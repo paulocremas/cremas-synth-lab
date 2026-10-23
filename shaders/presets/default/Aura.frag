@@ -1,4 +1,5 @@
 // fx: aura, layer
+// cat: luz
 // Efeito ISOLADO (um por arquivo — misturar vem depois). Halo radial aditivo, metade na cor
 // mais comum do frame (u_dominant, calculada no Python) e metade arco-íris girando sozinho.
 

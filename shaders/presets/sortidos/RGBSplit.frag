@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.6, angulo=0, giro=0, layer, on_kick=0, on_sub=1, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: distorcao
 // SORTIDOS · RGBSplit. Separa vermelho e azul (aberração cromática). base/forca = distância parada/no disparo
 // (até 3% da tela); angulo = direção; giro = a direção gira sozinha.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

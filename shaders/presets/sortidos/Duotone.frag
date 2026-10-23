@@ -1,4 +1,5 @@
 // fx: matiz1=0.6, matiz2=0.05, giro=0, salto=0.5, contraste=0.5, layer, on_kick=0, on_sub=1, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: cor
 // SORTIDOS · Duotone. Pinta a imagem com 2 cores (sombra → luz). matiz1 = cor da sombra; matiz2 = cor da luz;
 // giro = as duas giram sozinhas; salto = o nível gira as duas; contraste = mais duro.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.6, freq=0.4, vel=0.5, layer, on_kick=0, on_sub=1, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: distorcao
 // SORTIDOS · Gota. Ondas que saem do centro (pedra na água). base/forca = força parada/no disparo;
 // freq = anéis mais juntos; vel = velocidade dos anéis.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

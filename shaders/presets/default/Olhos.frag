@@ -1,4 +1,5 @@
 // fx: raio=0.5, borda=0.3, preencher=0, pulso=0.3, layer
+// cat: forma
 // Efeito ISOLADO: um círculo em cima de cada olho. Os olhos vêm do Python (eyes_thread, YuNet)
 // por fonte: u_eyes = (esq.x, esq.y, dir.x, dir.y) em uv 0..1 com origem EM CIMA (= `st` daqui),
 // u_eyes_on = 0..1 (some devagar quando perde o rosto). Raio proporcional à distância entre os

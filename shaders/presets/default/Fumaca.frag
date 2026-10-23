@@ -1,4 +1,5 @@
 // fx: smoke, layer
+// cat: gerador
 // Efeito ISOLADO (pedido do usuário: cada efeito no seu próprio arquivo, pra estudar um de
 // cada vez — misturar vem depois, em outro preset). Reescrito com pesquisa de verdade sobre
 // como fumaça é feita em GLSL: a técnica clássica pra fogo/fumaça/fluido 2D barato não é

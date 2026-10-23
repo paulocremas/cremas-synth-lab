@@ -1,4 +1,5 @@
 // fx: liquid, layer
+// cat: distorcao
 // Efeito ISOLADO (um por arquivo — misturar vem depois). Ondula a leitura da imagem como
 // água: ruído suave (value noise) em vez de seno puro, porque ruído FLUI e seno só "vibra"
 // no lugar. 2 camadas de ruído em escalas/velocidades diferentes = mais orgânico que 1 só.

@@ -1,4 +1,5 @@
 // fx: liquid, colorvibe, particles, smoke, silhueta, aura, pulse, layer
+// cat: distorcao
 // ^ manifest lido por dash_data.parse_fx_manifest: cada nome vira o uniform u_fx_<nome>
 //   (0..1, 1.0 = cheio) e um potenciometro na aba "Visuals" do dash.
 //   v3: mais movimento (a VELOCIDADE dos efeitos agora reage a musica, nao so a

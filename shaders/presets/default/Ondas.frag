@@ -1,4 +1,5 @@
 // fx: aneis, foco, zoom, torcao, cor, flash, layer
+// cat: gerador
 // Efeito de brincar: cada uma das 8 faixas vira um anel concêntrico (Sub-bass no centro → Air
 // na borda) que acende com a energia dela. Sliders:
 //   aneis  = força dos anéis           foco  = qual faixa fica em destaque (0 = Sub-bass … 1 = Air)

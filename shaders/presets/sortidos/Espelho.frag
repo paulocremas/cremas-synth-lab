@@ -1,4 +1,5 @@
 // fx: modo=0, base=0, forca=0.5, layer, on_kick=0, on_sub=1, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: geometria
 // SORTIDOS · Espelho. Espelha a imagem. modo = 0 esquerda↔direita, 0.5 cima↔baixo, 1 os quatro;
 // base/forca = o eixo do espelho anda parado/no disparo (até 25% da tela).
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

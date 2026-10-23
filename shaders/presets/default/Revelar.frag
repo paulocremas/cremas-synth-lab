@@ -1,4 +1,5 @@
 // fx: temperatura=0.5, matiz=0.5, exposicao=0.5, contraste=0.5, realces=0.5, sombras=0.5, brancos=0.5, pretos=0.5, claridade=0.5, neblina=0.5, vibracao=0.5, saturacao=0.5
+// cat: cor
 // Efeito ISOLADO, sem áudio: o painel "Básico" do Lightroom, um knob por controle. Todo knob
 // nasce em 0.5 = neutro (a imagem sai igual); 0 = -100 do Lightroom, 1 = +100. Duplo-clique
 // no knob volta pro 0.5. A ordem das etapas segue a do Lightroom: balanço de branco ->

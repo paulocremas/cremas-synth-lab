@@ -1,4 +1,5 @@
 // fx: pulse, layer
+// cat: luz
 // Efeito ISOLADO (um por arquivo — misturar vem depois). Clarão colorido na batida + uma
 // onda de choque que se expande sozinha: o truque é usar o próprio decaimento do u_kick
 // (pula pra 1 no hit, cai sozinho) como "tempo desde a batida" — o raio do anel cresce E o

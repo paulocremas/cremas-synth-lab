@@ -1,4 +1,5 @@
 // fx: base=0.1, forca=0.6, freq=0.3, vel=0.4, direcao=0, layer, on_kick=0, on_sub=0, on_lowmid=1, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: distorcao
 // SORTIDOS · Ondular. Ondula a imagem como bandeira. base/forca = altura da onda parada/no disparo (até 5%);
 // freq = quantas ondas (2…42); vel = velocidade; direcao = 0 deita, 1 em pé.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

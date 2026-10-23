@@ -1,4 +1,5 @@
 // fx: grade=1, cor=0.6, varredura=1, layer
+// cat: gerador
 // PADRÃO DE TESTE pro pixel map / telão (ver tools/telao_sim.py). Não é efeito: troca a imagem
 // por referências que DENUNCIAM erro de mapeamento — com a fonte cobrindo o canvas inteiro
 // (rect padrão), cada linha/diagonal tem que atravessar as telas reta e contínua; degrau = ox/oy

@@ -1,4 +1,5 @@
 // fx: vel=0.3, salto=0.5, sat=0.5, layer, on_kick=0, on_sub=1, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: cor
 // SORTIDOS · CicloDeCor. Gira o matiz da imagem. vel = giro contínuo (0 parado … 1 = meia volta/s);
 // salto = quanto o nível empurra o matiz (até meia volta); sat = 0 cinza, 0.5 igual, 1 dobra.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

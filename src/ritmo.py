@@ -112,6 +112,12 @@ class Tempo:
         b = (t - self.t0) * self.bpm / 60.0
         return b % 1.0, (b % beats_per_bar) / beats_per_bar
 
+    def pos(self, t):
+        """Batidas desde o '1' de referencia, CONTINUO (None sem tempo): o relogio dos LFOs (dash v4)."""
+        if not self.bpm or self.t0 is None:
+            return None
+        return (t - self.t0) * self.bpm / 60.0
+
     def next_boundary(self, t, unit):
         """Instante da proxima batida ('beat') ou do proximo '1' ('bar') a partir de t (None sem tempo)."""
         if not self.bpm or self.t0 is None or unit not in ('beat', 'bar'):
@@ -217,6 +223,7 @@ if __name__ == '__main__':   # self-check: python src/ritmo.py
     for i in range(4):
         tt.tap(50.0 + i * 0.6)
     assert abs(tt.bpm - 100) < 0.01 and tt.manual and abs(tt.phase(50.0)[1]) < 1e-6 and abs(tt.phase(50.6)[1] - 0.25) < 1e-6
+    assert abs(tt.pos(50.6) - 1.0) < 1e-6 and abs(tt.pos(53.0) - 5.0) < 1e-6 and Tempo(fps).pos(1.0) is None, 'pos = batidas continuas'
     tt.tap(60.0)                                               # pausa > 2 s: sequencia nova
     assert tt.taps == [60.0]
     # TOM: progressao I-IV-V-I em Sol maior / i-iv-v-i em Mi menor (notas puras somadas)

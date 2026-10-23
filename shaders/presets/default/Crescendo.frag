@@ -1,4 +1,5 @@
 // fx: sens=0.4, cor=0.8, espelho=0.7, ecos=0.7, giro=0.6, flash=0.3, layer=1.0
+// cat: tempo
 // INCREMENTAL: começa quase limpo e vai empilhando camadas enquanto a música segura energia;
 // no break (som cai) desmonta em ~1.5 s. Lê duas memórias que o Python guarda pro shader:
 //   u_build (0..1) = crescendo: sobe ~20 s com o som acima da média recente, cai rápido no break

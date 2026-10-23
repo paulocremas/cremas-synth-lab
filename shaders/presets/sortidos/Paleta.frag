@@ -1,4 +1,5 @@
 // fx: freq=0.3, vel=0.2, salto=0.5, tom=0, forma=0.5, layer, on_kick=0, on_sub=0, on_lowmid=0, on_mid=1, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: cor
 // SORTIDOS · Paleta. Troca as cores por uma paleta cíclica pelo brilho (gradient map). freq = quantas voltas
 // de cor do escuro ao claro (1…8); vel = a paleta corre sozinha; salto = o nível empurra a paleta;
 // tom = cor de partida; forma = 0 cor chapada … 1 mantém a luz/sombra da imagem.

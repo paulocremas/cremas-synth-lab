@@ -1,4 +1,5 @@
 // fx: base=0.3, forca=0.7, matiz=0.5, giro=0.2, fundo=0.5, layer, on_kick=0, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=1, on_brilliance=0, on_air=0
+// cat: forma
 // SORTIDOS · Contorno. Contornos em neon. base/forca = força parada/no disparo; matiz = a cor; giro = a cor gira
 // sozinha; fundo = 0 imagem inteira atrás … 1 só os contornos no preto.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

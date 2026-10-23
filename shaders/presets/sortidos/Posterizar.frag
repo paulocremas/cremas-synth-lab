@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.7, niveis=0.2, layer, on_kick=0, on_sub=0, on_lowmid=0, on_mid=1, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: cor
 // SORTIDOS · Posterizar. Corta as cores em degraus (cartaz). base/forca = quanto corta parado/no disparo;
 // niveis = degraus no máximo (2…16).
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

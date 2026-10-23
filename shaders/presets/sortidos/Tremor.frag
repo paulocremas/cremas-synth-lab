@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.5, vel=0.5, layer, on_kick=1, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: geometria
 // SORTIDOS · Tremor. Treme a imagem (câmera na mão). base/forca = tremor parado/no disparo (até 8% da tela);
 // vel = quantos saltos por segundo (4…44).
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

@@ -1,4 +1,5 @@
 // fx: lados=0.3, giro=0.2, salto=0.5, zoom=0.5, layer, on_kick=0, on_sub=0, on_lowmid=1, on_mid=0, on_highmid=0, on_presence=0, on_treble=0, on_brilliance=0, on_air=0
+// cat: geometria
 // SORTIDOS · Caleidoscopio. Caleidoscópio. lados = 2…16 fatias; giro = rotação contínua; salto = o nível gira de
 // supetão (até meia volta); zoom = aproxima/afasta.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais

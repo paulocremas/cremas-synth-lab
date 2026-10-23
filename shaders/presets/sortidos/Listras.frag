@@ -1,4 +1,5 @@
 // fx: base=0, forca=0.7, freq=0.3, vel=0.3, angulo=0, salto=0.5, layer, on_kick=0, on_sub=0, on_lowmid=0, on_mid=0, on_highmid=0, on_presence=0, on_treble=1, on_brilliance=0, on_air=0
+// cat: textura
 // SORTIDOS · Listras. Listras coloridas correndo por cima. base/forca = presença parada/no disparo;
 // freq = quantas listras (2…60); vel = velocidade; angulo = direção (0…180°); salto = o nível troca as cores.
 // Caixas no dash: on_kick = só junto com o kick; on_<faixa> = faixas que disparam (várias = a mais
