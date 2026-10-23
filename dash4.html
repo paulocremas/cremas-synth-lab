@@ -31,7 +31,8 @@
     (ponto/contorno/texto junto). TIPO = SILHUETA em SVG inline: simbolo de fonte (◐ ◑ ⏸) e emoji mudam de
     tamanho e desenho com a fonte e o sistema (testado no Chrome headless).
   - DESCOBRIR SEM MEDO: previa antes de soltar, miniatura viva de cada passo da fileira selecionada, VARIACOES
-    (4 mutacoes fora do ar; "distancia" = quanto se afastam; escolher uma = nascem 4 em volta dela; estrela =
+    (4 mutacoes fora do ar; "distancia" = quanto se afastam: perto = knobs, longe = tambem troca peca do mesmo tipo,
+    insere, inverte vizinhas, tira (mutateShape; peca lida por ramo/B e de grupo intocadas); escolher uma = nascem 4 em volta dela; estrela =
     guardar achado = cena nova), sortear, desfazer por cena e o Limiter seguram qualquer acaso.
   - MODULADOR COMO PECA: LFO (seno/triangulo/serra/quadrada/acaso, em batidas), SOM (faixas/kick), MACRO M1-M4 —
     arrasta e solta num knob; o knob vira uma faixa min->max que o sinal percorre.
@@ -300,7 +301,7 @@
   .mon .lim { position: absolute; right: 8px; top: 8px; display: none; background: var(--warn); color: #231a00; font: 800 10px var(--sans); letter-spacing: .06em; padding: 3px 8px; border-radius: 5px; }
   .mon .lim.on { display: block; }
   #pgm-meta { font: 11.5px var(--mono); color: var(--tx3); }
-  #next-p .mon { width: 46%; flex: none; border: 1px dashed var(--sel); }
+  #next-box .mon { width: 46%; flex: none; border: 1px dashed var(--sel); }
   #next-side { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   #next-name { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #go { flex: 1; min-height: 56px; font-size: 18px; font-weight: 900; letter-spacing: .1em; border-radius: 9px; border: 1px solid var(--live);
@@ -2468,7 +2469,25 @@ function mutate(key, dist){
     if (Math.random() < dist * 0.3){ const b = LAYER_BLENDS[Math.floor(Math.random() * LAYER_BLENDS.length)][0]; if (b === 'normal') delete s.blend; else s.blend = b; }
     for (const t of togglesOf(s.file)) if (Math.random() < dist * 0.15) s.fx[t] = (s.fx[t] ?? fxDefault(s.file, t)) >= 0.5 ? 0 : 1;
   }
+  mutateShape(sh, dist);
   return { shaders: sh, mask: (binding(key) || {}).mask };
+}
+// ESTRUTURA (Synplant: quanto mais longe, mais muda): troca uma peca por outra do MESMO tipo, insere uma, inverte
+// duas vizinhas, tira uma. Intocaveis: peca que alguem le (ramo/entrada B: o id) e de grupo. A troca mantem o `in` (antiga
+// continua lendo a fonte crua); variacao e' pedida e Ctrl+Z volta.
+function mutateShape(sh, dist){
+  const read = new Set(); for (const o of lastOverlays) if (isTapKey(String(o.file))) read.add(String(o.file).slice(1));
+  for (const st of Object.values(lastBindings || {})) for (const x of (st || {}).shaders || []) for (const r of x.ins || []) if (isTapKey(String(r))) read.add(String(r).slice(1));
+  const free = x => !x.grp && !(x.id && read.has(x.id));
+  const pool = lastShaderList.filter(f => f.startsWith('presets/') && !f.includes('/atomos/'));
+  const pick = l => l[Math.floor(Math.random() * l.length)];
+  const fresh = f => ({ file: f, opacity: 1, in: 'chain', fx: {} });
+  const idx = () => sh.map((x, j) => free(x) ? j : -1).filter(j => j >= 0);
+  if (Math.random() < dist * 0.35){ const j = pick(idx()); if (j !== undefined){ const same = pool.filter(f => catOf(f) === catOf(sh[j].file) && f !== sh[j].file);
+    if (same.length) sh[j] = Object.assign(fresh(pick(same)), { opacity: sh[j].opacity ?? 1, in: sh[j].in, ...(sh[j].id ? { id: sh[j].id } : {}) }); } }
+  if (Math.random() < dist * 0.25 && sh.length < 8 && pool.length) sh.splice(Math.floor(Math.random() * (sh.length + 1)), 0, fresh(pick(pool)));
+  if (Math.random() < dist * 0.2){ const l = idx().filter(j => j + 1 < sh.length && free(sh[j + 1])); const j = pick(l); if (j !== undefined) [sh[j], sh[j + 1]] = [sh[j + 1], sh[j]]; }
+  if (Math.random() < dist * 0.15 && sh.length > 1){ const j = pick(idx()); if (j !== undefined) sh.splice(j, 1); }
 }
 function openVariants(){
   if (!sel.key || !stackOf(sel.key).length) return toast('selecione uma fileira com módulos', 'err');
