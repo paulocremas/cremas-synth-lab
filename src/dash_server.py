@@ -85,7 +85,7 @@ def _write_atomic(path, text):
     fsync antes do replace: PC que cai (driver de video, energia) logo depois deixava o tuning.py
     do tamanho certo mas cheio de bytes nulos (Windows/NTFS) -> app nao abria."""
     tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
-    with open(tmp, 'w') as f:
+    with open(tmp, 'w', encoding='utf-8') as f:
         f.write(text)
         f.flush()
         os.fsync(f.fileno())
@@ -103,7 +103,7 @@ def set_knob(name, value, tuning_path=None):
     literal = str(int(round(value))) if spec.get('int') else str(round(value, 4))
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         new, n = re.subn(rf'(?m)^({re.escape(name)} = )[-\d.eE+]+', rf'\g<1>{literal}', src)
         if n != 1:
             raise KeyError(f'{name}: {n} ocorrencias em {path} (esperava 1)')
@@ -144,7 +144,7 @@ def set_band_ranges(overlap, ranges, tuning_path=None, enabled=None):
     block = f'FREQ_BAND_HZ = [\n{body}\n]'
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n1 = re.subn(r'(?m)^HZ_OVERLAP = [01]', f'HZ_OVERLAP = {overlap}', src)
         src, n2 = re.subn(r'(?ms)^FREQ_BAND_HZ = \[.*?^\]', block, src)
         if n1 != 1 or n2 != 1:
@@ -173,7 +173,7 @@ def _write_var(name, value, comment, tuning_path=None):
     line = f'{name} = ' + json.dumps(value, ensure_ascii=False)
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(rf'(?m)^{re.escape(name)} = .*$', lambda _m: line, src)
         if n == 0:
             src = src.rstrip('\n') + f'\n\n# {comment}\n' + line + '\n'
@@ -267,7 +267,7 @@ def set_band_tweaks(tweaks, tuning_path=None):
     out = {}
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         for key, (lo, hi) in _BAND_TWEAK_CLAMP.items():
             if key not in tweaks:
                 continue
@@ -365,7 +365,7 @@ def set_shader(name, tuning_path=None):
         raise KeyError(f'shader desconhecido: {name!r}')
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         new, n = re.subn(r'(?m)^(SHADER = )"[^"]*"', rf'\g<1>"{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: SHADER x{n} (esperava 1)')
@@ -381,7 +381,7 @@ def set_active_shader_set(name, tuning_path=None):
         raise ValueError(f'set de shader desconhecido: {name!r}')
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?m)^SHADER_SET = "[^"]*"', f'SHADER_SET = "{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: SHADER_SET x{n} (esperava 1)')
@@ -519,7 +519,7 @@ def _write_keys(block, nested, tuning_path=None):
     text = f'{block} = ' + json.dumps(clean, indent=4)
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(rf'(?ms)^{block} = \{{.*?^\}}', text, src)
         if n != 1:
             raise KeyError(f'tuning.py: {block} x{n} (esperava 1)')
@@ -666,7 +666,7 @@ def _write_media(allm, tuning_path=None):
     block = f'MEDIA = [\n{body}\n]' if clean else 'MEDIA = [\n]'
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?ms)^MEDIA = \[.*?^\]', block, src)
         if n != 1:
             raise KeyError(f'tuning.py: MEDIA x{n} (esperava 1)')
@@ -981,7 +981,7 @@ def _set_layers(key, var, items, save, tuning_path, comment, live=True):
         block = f'{var} = [\n{body}\n]' if clean else f'{var} = [\n]'
         path = tuning_path or _cfg['tuning_path']
         with _knob_lock:
-            src = open(path).read()
+            src = open(path, encoding='utf-8').read()
             src, n = re.subn(rf'(?ms)^{var} = \[.*?^\]', block, src)
             if n == 0:
                 src = src.rstrip('\n') + f'\n\n# {comment}\n' + block + '\n'
@@ -1073,7 +1073,7 @@ def set_bindings(b, save=False, tuning_path=None, live=True):
         block = f'BINDINGS = {{\n{body}\n}}' if clean else 'BINDINGS = {\n}'
         path = tuning_path or _cfg['tuning_path']
         with _knob_lock:
-            src = open(path).read()
+            src = open(path, encoding='utf-8').read()
             src, n = re.subn(r'(?ms)^BINDINGS = \{.*?^\}', lambda _: block, src)
             if n == 0:
                 src = src.rstrip('\n') + ('\n\n# fonte/midia -> shaders dela (+ forca dos efeitos), dash aba'
@@ -1159,7 +1159,7 @@ def set_source_fit(key, fit, tuning_path=None):
     block = f'SOURCE_FIT = {{\n{body}\n}}' if cur else 'SOURCE_FIT = {\n}'
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?ms)^SOURCE_FIT = \{.*?^\}', lambda _: block, src)
         if n == 0:
             src = src.rstrip('\n') + ('\n\n# camera/tela: "fit" = encaixa com margens (ausente = estica pra'
@@ -1290,7 +1290,7 @@ def _write_scenes(scenes, active=None, tuning_path=None):
     block = f'SCENES = [\n{body}\n]' if scenes else 'SCENES = [\n]'
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?ms)^SCENES = \[.*?^\]', lambda _: block, src)
         if n == 0:
             src = src.rstrip('\n') + ('\n\n# SETS (cenas) da aba Visuals: fonte + camadas + shader + camadas'
@@ -1552,7 +1552,7 @@ def set_active_media_set(name, tuning_path=None, media_dir=None):
         raise ValueError(f'set de midia desconhecido: {name!r}')
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?m)^MEDIA_SET = "[^"]*"', f'MEDIA_SET = "{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: MEDIA_SET x{n} (esperava 1)')
@@ -1647,7 +1647,7 @@ def set_transition_default(name, tuning_path=None, trans_dir=None):
         raise ValueError(f'transicao desconhecida: {name!r}')
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?m)^TRANSITION_DEFAULT = "[^"]*"', f'TRANSITION_DEFAULT = "{name}"', src)
         if n != 1:
             raise KeyError(f'tuning.py: TRANSITION_DEFAULT x{n} (esperava 1)')
@@ -1665,7 +1665,7 @@ def new_transition(name, trans_dir=None):
     p = os.path.join(d, fname)
     if os.path.exists(p):
         raise ValueError(f'ja existe: {fname}')
-    open(p, 'w').write(_NEW_TRANS)
+    open(p, 'w', encoding='utf-8').write(_NEW_TRANS)
     return fname
 
 
@@ -1736,7 +1736,7 @@ def new_shader(name, tuning_path=None, presets_dir=None):
     path = os.path.join(d, slug + '.frag')
     if os.path.exists(path):
         raise ValueError(f'ja existe: {slug}.frag nesse set')
-    open(path, 'w').write(_NEW_FRAG)
+    open(path, 'w', encoding='utf-8').write(_NEW_FRAG)
     rel = ('presets/' if presets_dir else f'presets/{setname}/') + slug + '.frag'
     if presets_dir is None:
         set_shader(rel, tuning_path)
@@ -1752,7 +1752,7 @@ def set_fx(fx, tuning_path=None):
     block = f'FX = {{\n{body}\n}}' if clean else 'FX = {\n}'
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?ms)^FX = \{.*?^\}', block, src)
         if n != 1:
             raise KeyError(f'tuning.py: FX x{n} (esperava 1)')
@@ -1773,7 +1773,7 @@ def set_output_fps(fps, tuning_path=None):
         _tuning.OUTPUT_FPS = fps
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?m)^OUTPUT_FPS = \d+', f'OUTPUT_FPS = {fps}', src)
         if n == 0:
             src = src.rstrip('\n') + ('\n\n# fps da janela de saida (dash v2 > Saida). A 60 o movimento dos shaders'
@@ -1839,7 +1839,7 @@ def set_screens(items, save=True, tuning_path=None):
         block = f'SCREENS = [\n{body}\n]' if clean else 'SCREENS = [\n]'
         path = tuning_path or _cfg['tuning_path']
         with _knob_lock:
-            src = open(path).read()
+            src = open(path, encoding='utf-8').read()
             src, n = re.subn(r'(?ms)^SCREENS = \[.*?^\]', lambda m: block, src)
             if n == 0:
                 src = src.rstrip('\n') + ('\n\n# telas do palco fisico (dash v2 > Saida): metros (x, y, w, h; origem em cima'
@@ -1860,7 +1860,7 @@ def set_pixel_map(pm, tuning_path=None):
     line = 'PIXEL_MAP = ' + json.dumps(out)
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?m)^PIXEL_MAP = \{.*\}$', lambda _: line, src)
         if n == 0:
             src = src.rstrip('\n') + ('\n\n# pixel map da saida (dash v2 > Saida): o canvas vira o raster w x h do'
@@ -1972,7 +1972,7 @@ def set_out_analysis(enabled, tuning_path=None):
     enabled = 1 if enabled else 0
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?m)^OUT_ANALYSIS_ENABLED = [01]', f'OUT_ANALYSIS_ENABLED = {enabled}', src)
         if n != 1:
             raise KeyError(f'tuning.py: OUT_ANALYSIS_ENABLED x{n} (esperava 1)')
@@ -2036,7 +2036,7 @@ def set_scene_grade(grade, save=True, tuning_path=None, autosave=True):
         block = 'SCENE_GRADE = ' + json.dumps(out, indent=4, sort_keys=True)
         path = tuning_path or _cfg['tuning_path']
         with _knob_lock:
-            src = open(path).read()
+            src = open(path, encoding='utf-8').read()
             src, n = re.subn(r'(?ms)^SCENE_GRADE = \{.*?^\}', lambda _: block, src)
             if n == 0:
                 src = src.rstrip('\n') + ('\n\n# imagem da CENA ativa (calibrar.frag na mistura, antes da transicao);'
@@ -2066,7 +2066,7 @@ def set_output_grade(grade, save=True, tuning_path=None):
         block = 'OUTPUT_GRADE = ' + json.dumps(out, indent=4, sort_keys=True)
         path = tuning_path or _cfg['tuning_path']
         with _knob_lock:
-            src = open(path).read()
+            src = open(path, encoding='utf-8').read()
             src, n = re.subn(r'(?ms)^OUTPUT_GRADE = \{.*?^\}', lambda _: block, src)
             if n == 0:
                 src = src.rstrip('\n') + ('\n\n# calibracao da saida (telao): shaders/calibrar.frag, knobs na'
@@ -2088,7 +2088,7 @@ def set_channels(channels, tuning_path=None):
     block = f'CHANNELS = [\n{body}\n]' if ch else 'CHANNELS = [\n]'
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
-        src = open(path).read()
+        src = open(path, encoding='utf-8').read()
         src, n = re.subn(r'(?ms)^CHANNELS = \[.*?^\]', block, src)
         if n != 1:
             raise KeyError(f'tuning.py: CHANNELS x{n} (esperava 1)')
@@ -2782,7 +2782,7 @@ def _migrate_to_scenes(tuning_path=None, media_dir=None, shaders_dir=None):
         for f in sorted(glob.glob(os.path.join(pdir, d, '*.frag'))):
             b = os.path.basename(f)
             dest = os.path.join(pdir, 'default', b)
-            if os.path.exists(dest) and open(dest).read() == open(f).read():
+            if os.path.exists(dest) and open(dest, encoding='utf-8').read() == open(f, encoding='utf-8').read():
                 os.remove(f)
             else:
                 if os.path.exists(dest):
@@ -2867,7 +2867,7 @@ def _no_translate(prof):
     ele sobrescreve o arquivo."""
     path = os.path.join(prof, 'Default', 'Preferences')
     try:
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             prefs = json.load(f)
     except (OSError, ValueError):
         prefs = {}
@@ -2876,7 +2876,7 @@ def _no_translate(prof):
     prefs.setdefault('translate', {})['enabled'] = False
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             json.dump(prefs, f)
     except OSError:
         pass
@@ -2941,7 +2941,7 @@ def _open_dash_window(url):
 if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_server.py)
     import tempfile
     p = tempfile.mktemp(suffix='.py')
-    open(p, 'w').write('KICK_THRESHOLD = 1.5      # grave cru passa X vezes a media\n'
+    open(p, 'w', encoding='utf-8').write('KICK_THRESHOLD = 1.5      # grave cru passa X vezes a media\n'
                        'MID_TREBLE_HZ = 4000\n')
     assert set_knob('KICK_THRESHOLD', 2.0, p) == 2.0
     assert _norm_overlays([{'file': 'a.png'}, {'file': 'a.png', 'dup': 2}, {'file': 'a.png'}]) == \
@@ -2980,7 +2980,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     gl = _list_groups(gd)
     assert gl == [{'name': 'Neonsujo', 'desc': 'contorno + cor', 'items': [{'file': 'x.frag', 'opacity': 1.0, 'pub': ['forca']},
                                                                             {'file': 'y.frag', 'opacity': 1.0}]}], gl
-    open(os.path.join(gd, 'quebrado.json'), 'w').write('{nao e json')
+    open(os.path.join(gd, 'quebrado.json'), 'w', encoding='utf-8').write('{nao e json')
     assert [g['name'] for g in _list_groups(gd)] == ['Neonsujo'], 'json quebrado e pulado'
     delete_group('Neonsujo', gd)
     assert _list_groups(gd) == []
@@ -3000,12 +3000,12 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     sg = _norm_screens([{'name': 'a', 'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 10, 'ph': 10, 'grade': {'gama': 0.7, 'x y': 1}},
                         {'name': 'b', 'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 10, 'ph': 10, 'grade': {'gama': 0.7}}])
     assert 'grade' not in sg[0] and sg[1]['grade'].get('gama') == 0.7, 'calibracao por tela: knob invalido zera, valido passa'
-    txt = open(p).read()
+    txt = open(p, encoding='utf-8').read()
     assert 'KICK_THRESHOLD = 2.0 ' in txt, txt
     assert '# grave cru passa X vezes a media' in txt, 'comentario perdido'
     assert set_knob('KICK_THRESHOLD', 99, p) == _SPEC['KICK_THRESHOLD']['max'], 'sem clamp'
     set_knob('MID_TREBLE_HZ', 3000.4, p)
-    assert 'MID_TREBLE_HZ = 3000\n' in open(p).read(), 'int knob deve ficar inteiro'
+    assert 'MID_TREBLE_HZ = 3000\n' in open(p, encoding='utf-8').read(), 'int knob deve ficar inteiro'
     try:
         set_knob('NOPE', 1, p)
         assert False, 'aceitou nome desconhecido'
@@ -3031,24 +3031,24 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     ov = _clamp_ranges(1, [[39, 469], [200, 500]] + default[2:])
     assert ov[0] == [39, 469] and ov[1] == [200, 500], ov
     # escrita no arquivo
-    open(p, 'w').write('HZ_OVERLAP = 0\nBANDS_ENABLED = 1\nFREQ_BAND_HZ = [\n    [20, 250],  # Sub-bass\n]\n')
+    open(p, 'w', encoding='utf-8').write('HZ_OVERLAP = 0\nBANDS_ENABLED = 1\nFREQ_BAND_HZ = [\n    [20, 250],  # Sub-bass\n]\n')
     out = set_band_ranges(1, [[39, 469], [200, 500]] + default[2:], p, enabled=0)
-    txt = open(p).read()
+    txt = open(p, encoding='utf-8').read()
     assert out['overlap'] == 1 and out['enabled'] == 0 and 'HZ_OVERLAP = 1' in txt, txt
     assert 'BANDS_ENABLED = 0' in txt, txt
     assert '[39, 469],  # Sub-bass' in txt and '[200, 500],  # Low-mid' in txt, txt
     assert txt.count('FREQ_BAND_HZ = [') == 1 and txt.rstrip().endswith(']'), txt
     out2 = set_band_ranges(1, default, p)  # enabled=None (default) -> nao mexe na linha
-    assert 'enabled' not in out2 and 'BANDS_ENABLED = 0' in open(p).read(), out2
+    assert 'enabled' not in out2 and 'BANDS_ENABLED = 0' in open(p, encoding='utf-8').read(), out2
     lg = _norm_lights({'on': True, 'fps': 999, 'fixtures': [{'ch': 'DRGB?', 'addr': 0, 'count': 60, 'mod': {'b': ['air', 'x']},
                                                             'zone': [0, 0, 2, 1], 'color': [300, 1, 2]}, 'lixo', {'addr': 'x'}]})
     assert lg == {'on': 1, 'host': '255.255.255.255', 'fps': 60, 'fixtures': [
         {'name': 'luz 1', 'ch': 'drgb', 'uni': 0, 'addr': 1, 'count': 60, 'zone': [0.0, 0.0, 1.0, 1.0],
          'color': [255, 1, 2], 'mod': {'b': ['air']}}]}, lg
-    assert set_lights(lg, p)['fps'] == 60 and open(p).read().count('LIGHTS = ') == 1
-    assert set_lights({'on': 0}, p)['fixtures'] == [] and open(p).read().count('LIGHTS = ') == 1
+    assert set_lights(lg, p)['fps'] == 60 and open(p, encoding='utf-8').read().count('LIGHTS = ') == 1
+    assert set_lights({'on': 0}, p)['fixtures'] == [] and open(p, encoding='utf-8').read().count('LIGHTS = ') == 1
     assert set_macros([2, -1, '0.5'], save=True, tuning_path=p) == [1.0, 0.0, 0.5, 0.0]
-    ns = {}; exec(open(p).read(), ns); assert ns['MACROS'] == [1.0, 0.0, 0.5, 0.0], 'macros gravados'
+    ns = {}; exec(open(p, encoding='utf-8').read(), ns); assert ns['MACROS'] == [1.0, 0.0, 0.5, 0.0], 'macros gravados'
     assert _norm_mod1({'b': ['m2', 'air', 'nada']}) == {'b': ['air', 'm2']}, 'macro = fonte do ♪'
     assert set_limits({'bright': 0.05, 'flash': 0}, p) == {'on': 1, 'flash': 0, 'bright': 0.2}, 'teto minimo 0.2'
     st_cue = globals()['_state']
@@ -3061,53 +3061,53 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
         assert set_cue('') == '' and 'scene_cue' not in _state, 'limpar'
     globals()['_state'] = st_cue
     set_tempo_cfg({'quant': 'bar', 'beats': 99, 'colors': 'scriabin'}, p)
-    ns = {}; exec(open(p).read(), ns)
+    ns = {}; exec(open(p, encoding='utf-8').read(), ns)
     assert (ns['SCENE_QUANT'], ns['TRANS_BEATS'], ns['KEY_COLORS']) == ('bar', 32, 'scriabin'), 'tempo: gravado no tuning.py'
     try:
         set_tempo_cfg({'quant': 'compasso'}, p); raise AssertionError('quant invalido devia falhar')
     except ValueError:
         pass
     assert set_bands_off(['Air', 'lixo', 'kick'], p) == ['kick', 'Air'], 'faixas desligadas: validas, ordem fixa'
-    assert set_bands_off(['Sub-bass'], p) == ['Sub-bass'] and open(p).read().count('BANDS_OFF = ') == 1, \
+    assert set_bands_off(['Sub-bass'], p) == ['Sub-bass'] and open(p, encoding='utf-8').read().count('BANDS_OFF = ') == 1, \
         'sem a linha: cria no fim; com ela: reescreve'
 
     # --- channels: lista de tamanho livre, sem slot fixo ---
-    open(p, 'w').write('CHANNELS = [\n    {"name": "kick", "src": "", "output": ""},\n]\n')
+    open(p, 'w', encoding='utf-8').write('CHANNELS = [\n    {"name": "kick", "src": "", "output": ""},\n]\n')
     outc = set_channels([{'name': 'bumbo', 'src': 'alsa_input.foo.monitor', 'output': 'kick'}], p)
-    txt = open(p).read()
+    txt = open(p, encoding='utf-8').read()
     assert outc == [{'name': 'bumbo', 'src': 'alsa_input.foo.monitor', 'output': 'kick'}], outc
     assert '"bumbo"' in txt and '"alsa_input.foo.monitor"' in txt and '"output": "kick"' in txt, txt
     assert txt.count('CHANNELS = [') == 1 and txt.rstrip().endswith(']'), txt
     outc2 = set_channels([], p)  # lista vazia -> volta a nao ter canal nenhum, sem erro
-    assert outc2 == [] and 'CHANNELS = [\n]' in open(p).read(), (outc2, open(p).read())
+    assert outc2 == [] and 'CHANNELS = [\n]' in open(p, encoding='utf-8').read(), (outc2, open(p, encoding='utf-8').read())
     outc3 = set_channels([{'name': 'a', 'src': '', 'output': ''}], p)  # reescreve de novo, sem sobra
     assert len(outc3) == 1, outc3
 
     # --- toggle Output Image ---
-    open(p, 'w').write('OUT_ANALYSIS_ENABLED = 0\n')
+    open(p, 'w', encoding='utf-8').write('OUT_ANALYSIS_ENABLED = 0\n')
     assert set_out_analysis(1, p) == 1
-    assert 'OUT_ANALYSIS_ENABLED = 1' in open(p).read()
+    assert 'OUT_ANALYSIS_ENABLED = 1' in open(p, encoding='utf-8').read()
     assert set_out_analysis(0, p) == 0
-    assert 'OUT_ANALYSIS_ENABLED = 0' in open(p).read()
+    assert 'OUT_ANALYSIS_ENABLED = 0' in open(p, encoding='utf-8').read()
 
     # --- shader select + potenciometros de efeito ---
-    open(p, 'w').write('SHADER = "image.frag"\nFX = {\n}\n')
-    assert set_shader('image.frag', p) == 'image.frag' and 'SHADER = "image.frag"' in open(p).read()
+    open(p, 'w', encoding='utf-8').write('SHADER = "image.frag"\nFX = {\n}\n')
+    assert set_shader('image.frag', p) == 'image.frag' and 'SHADER = "image.frag"' in open(p, encoding='utf-8').read()
     try:
         set_shader('../tuning.py', p); assert False, 'aceitou path traversal / nome desconhecido'
     except KeyError:
         pass
     outf = set_fx({'grain': 0.5, 'wave': 2.0, 'vig': -1.0}, p)  # clamp 0..1
     assert outf == {'grain': 0.5, 'wave': 1.0, 'vig': 0.0}, outf
-    txt = open(p).read()
+    txt = open(p, encoding='utf-8').read()
     assert '"grain": 0.5' in txt and txt.count('FX = {') == 1 and txt.rstrip().endswith('}'), txt
-    assert set_fx({}, p) == {} and 'FX = {\n}' in open(p).read()  # vazio -> bloco vazio, sem erro
+    assert set_fx({}, p) == {} and 'FX = {\n}' in open(p, encoding='utf-8').read()  # vazio -> bloco vazio, sem erro
 
     # --- new_shader: slug sanitizado, template, sem duplicar (dir temp) ---
     import shutil
     pd = tempfile.mkdtemp()
     assert new_shader('  My Cool FX!! ', p, pd) == 'presets/MyCoolFX.frag'
-    assert '// fx: tint' in open(os.path.join(pd, 'MyCoolFX.frag')).read()
+    assert '// fx: tint' in open(os.path.join(pd, 'MyCoolFX.frag'), encoding='utf-8').read()
     assert new_shader('../../etc/x', p, pd) == 'presets/etcx.frag'  # traversal -> so o basename
     try:
         new_shader('MyCoolFX', p, pd); assert False, 'aceitou nome duplicado'
@@ -3140,7 +3140,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     # --- *_KEYS por set: {set: {alvo: tecla}}, dedup POR set, migra flat antigo ---
     import types as _t
     globals()['_tuning'] = _t.SimpleNamespace(SHADER_KEYS={})
-    open(p, 'w').write('SHADER_KEYS = {\n}\n')
+    open(p, 'w', encoding='utf-8').write('SHADER_KEYS = {\n}\n')
     k = _write_keys('SHADER_KEYS', {'default': {'image.frag': 'J', 'a': 'j', 'b': 'k'},
                                     'show1': {'c': 'j'}}, p)
     assert k == {'default': {'image.frag': 'j', 'b': 'k'}, 'show1': {'c': 'j'}}, k  # 'a'='j' dup DENTRO do default; 'j' de novo ok em show1
@@ -3149,18 +3149,18 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     # migracao: um dict flat antigo vira {"default": flat}
     _tuning.SHADER_KEYS = {'image.frag': '1', 'x': '2'}
     assert _read_keys('SHADER_KEYS') == {'default': {'image.frag': '1', 'x': '2'}}
-    txt = open(p).read()
+    txt = open(p, encoding='utf-8').read()
     assert txt.count('SHADER_KEYS = {') == 1 and '"show1"' in txt and txt.rstrip().endswith('}'), txt
     globals()['_tuning'] = None
 
     # --- band tweaks: 3 listas de 8, clamp, lista ausente intocada, alinhamento+comentario ---
-    open(p, 'w').write(
+    open(p, 'w', encoding='utf-8').write(
         'BAND_SMOOTHING  = [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95]  # RELEASE por faixa\n'
         'BAND_ATTACK     = [0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]\n'
         'BAND_PEAK_DECAY = [0.999, 0.999, 0.999, 0.999, 0.999, 0.999, 0.999, 0.999]\n')
     outt = set_band_tweaks({'BAND_SMOOTHING': [2.0] + [0.7] * 7, 'BAND_ATTACK': [0.5] * 8}, p)
     assert outt['BAND_SMOOTHING'][0] == 0.99 and outt['BAND_SMOOTHING'][1] == 0.7, outt   # clamp no teto
-    txt = open(p).read()
+    txt = open(p, encoding='utf-8').read()
     assert 'BAND_SMOOTHING  = [0.99, 0.7,' in txt and '# RELEASE por faixa' in txt, txt   # alinhamento + comentario
     assert 'BAND_ATTACK     = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]' in txt, txt
     assert 'BAND_PEAK_DECAY = [0.999,' in txt, 'lista ausente do dict foi mexida'
@@ -3175,17 +3175,17 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     shd, mdd = tempfile.mkdtemp(), tempfile.mkdtemp()
     globals()['_SHADERS'], globals()['_MEDIA'] = shd, mdd
     os.makedirs(os.path.join(shd, 'presets'))
-    open(os.path.join(shd, 'image.frag'), 'w').write('void main(){}')
-    open(os.path.join(shd, 'presets', 'Loose.frag'), 'w').write('// fx: a\n')   # solto = era "default"
+    open(os.path.join(shd, 'image.frag'), 'w', encoding='utf-8').write('void main(){}')
+    open(os.path.join(shd, 'presets', 'Loose.frag'), 'w', encoding='utf-8').write('// fx: a\n')   # solto = era "default"
     open(os.path.join(mdd, 'pic.png'), 'wb').write(b'x')                        # solto = era "default"
-    open(p, 'w').write('SHADER = "presets/Loose.frag"\nSHADER_SET = "default"\n'
+    open(p, 'w', encoding='utf-8').write('SHADER = "presets/Loose.frag"\nSHADER_SET = "default"\n'
                        'SHADER_KEYS = {\n    "default": {\n        "presets/Loose.frag": "2"\n    }\n}\n'
                        'MEDIA = [\n    {"name": "pic", "file": "pic.png", "kind": "image", "fit": "fill"},\n]\n'
                        'MEDIA_SET = "default"\nMEDIA_KEYS = {\n}\n')
     _tuning = types.SimpleNamespace()
     def _sync():
         ns = {}
-        exec(compile(open(p).read(), p, 'exec'), ns)
+        exec(compile(open(p, encoding='utf-8').read(), p, 'exec'), ns)
         for a in ('SHADER', 'SHADER_SET', 'SHADER_KEYS', 'MEDIA', 'MEDIA_SET', 'MEDIA_KEYS'):
             if a in ns:
                 setattr(_tuning, a, ns[a])
@@ -3201,7 +3201,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     _migrate_default_to_folder(p)   # idempotente: 2a vez nao muda nada nem explode
     assert _tuning.SHADER == 'presets/default/Loose.frag'
 
-    open(os.path.join(shd, 'presets', 'default', 'S.frag'), 'w').write('// x\n')
+    open(os.path.join(shd, 'presets', 'default', 'S.frag'), 'w', encoding='utf-8').write('// x\n')
     delete_shader_set('default', p); _sync()          # esvazia; a pasta fica, segue ativo
     assert os.path.isdir(os.path.join(shd, 'presets', 'default'))
     assert not glob.glob(os.path.join(shd, 'presets', 'default', '*.frag')), 'default nao esvaziou'
@@ -3214,13 +3214,13 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     _tuning = types.SimpleNamespace(MEDIA=[], MEDIA_KEYS={}, MEDIA_SET='default')
     def _sync():
         ns = {}
-        exec(compile(open(p).read(), p, 'exec'), ns)
+        exec(compile(open(p, encoding='utf-8').read(), p, 'exec'), ns)
         for a in ('MEDIA', 'MEDIA_KEYS', 'MEDIA_SET'):
             if a in ns:
                 setattr(_tuning, a, ns[a])
     globals()['_tuning'] = _tuning
     md = tempfile.mkdtemp()   # faz as vezes de media/
-    open(p, 'w').write('MEDIA = [\n]\nMEDIA_SET = "default"\nMEDIA_KEYS = {\n}\n')
+    open(p, 'w', encoding='utf-8').write('MEDIA = [\n]\nMEDIA_SET = "default"\nMEDIA_KEYS = {\n}\n')
     e1 = add_media('Minha Foto.PNG', data=b'x', tuning_path=p, media_dir=md); _sync()
     assert e1 == {'name': 'MinhaFoto', 'file': 'default/MinhaFoto.png', 'kind': 'image', 'fit': 'fill',
                   'transition': '', 'set': 'default'}, e1
@@ -3260,33 +3260,33 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     out = set_media([{'name': 'outro', 'file': 'Show1/outro.png', 'bounce': True},
                      {'name': 'clip', 'file': 'Show1/clip.mov', 'bounce': True}], None, p, md); _sync()
     assert 'bounce' not in out[0] and out[1]['bounce'], out
-    ns = {}; exec(open(p).read(), ns)
+    ns = {}; exec(open(p, encoding='utf-8').read(), ns)
     assert [m.get('bounce') for m in ns['MEDIA'] if m['file'].startswith('Show1/')] == [None, 1], ns['MEDIA']
     assert _read_media('Show1', md)[1]['bounce'] is True
     set_media([{'name': 'outro', 'file': 'Show1/outro.png'}, {'name': 'clip', 'file': 'Show1/clip.mov'}], None, p, md); _sync()
     assert all('bounce' not in m for m in _read_media('Show1', md))
     # camadas: normaliza (clamp, sem duplicata), grava (acrescenta o bloco se o tuning.py e antigo),
     # segue o arquivo ao renomear e some ao apagar
-    assert 'OVERLAYS' not in open(p).read()
+    assert 'OVERLAYS' not in open(p, encoding='utf-8').read()
     set_overlays([{'file': 'Show1/outro.png', 'opacity': 2}, {'file': 'Show1/clip.mov', 'opacity': 0.3},
                   {'file': 'Show1/outro.png'}], save=True, tuning_path=p); _sync()
-    ns = {}; exec(open(p).read(), ns)
+    ns = {}; exec(open(p, encoding='utf-8').read(), ns)
     assert ns['OVERLAYS'] == [{'file': 'Show1/outro.png', 'opacity': 1.0},
                               {'file': 'Show1/clip.mov', 'opacity': 0.3}], ns['OVERLAYS']
     set_overlays([{'file': 'Show1/clip.mov', 'opacity': 0.5}], tuning_path=p)   # so ao vivo
     assert _state['overlays'] == [{'file': 'Show1/clip.mov', 'opacity': 0.5}]
-    assert 'Show1/outro.png' in open(p).read(), 'ao vivo nao devia gravar'
+    assert 'Show1/outro.png' in open(p, encoding='utf-8').read(), 'ao vivo nao devia gravar'
     set_overlays(ns['OVERLAYS'], save=True, tuning_path=p); _sync()
     set_media([{'name': 'outro', 'file': 'Show1/outro.png'}, {'name': 'clip2', 'file': 'Show1/clip.mov'}], None, p, md); _sync()
     assert [o['file'] for o in _current_overlays()] == ['Show1/outro.png', 'Show1/clip2.mov'], _current_overlays()
     delete_media('clip2', None, p, md); _sync()
     assert [o['file'] for o in _current_overlays()] == ['Show1/outro.png']
-    assert 'clip2' not in open(p).read().split('OVERLAYS = [')[1]
+    assert 'clip2' not in open(p, encoding='utf-8').read().split('OVERLAYS = [')[1]
     set_overlays([], save=True, tuning_path=p); _sync(); _state.pop('overlays', None)
     # camadas de SHADER: mesmo mecanismo, bloco proprio (SHADER_LAYERS); remap renomeia/tira
     set_shader_layers([{'file': 'presets/default/a.frag', 'opacity': 0.4},
                        {'file': '../x.frag'}, {'file': 'image.frag', 'opacity': -1}], save=True, tuning_path=p); _sync()
-    ns = {}; exec(open(p).read(), ns)
+    ns = {}; exec(open(p, encoding='utf-8').read(), ns)
     assert ns['SHADER_LAYERS'] == [{'file': 'presets/default/a.frag', 'opacity': 0.4},
                                    {'file': 'image.frag', 'opacity': 0.0}], ns['SHADER_LAYERS']
     assert ns['OVERLAYS'] == [], 'camada de shader nao pode mexer nas de midia'
@@ -3319,12 +3319,12 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     td = tempfile.mkdtemp()
     globals()['_tuning'] = _tt.SimpleNamespace(MEDIA=[
         {'name': 'v', 'file': 'default/v.mp4', 'kind': 'video', 'fit': 'fill', 'transition': 'fx.glsl'}])
-    open(p, 'w').write('TRANSITION_DEFAULT = "none"\nMEDIA = [\n]\n')
+    open(p, 'w', encoding='utf-8').write('TRANSITION_DEFAULT = "none"\nMEDIA = [\n]\n')
     assert new_transition(' My Fade!! ', td) == 'MyFade.glsl' and os.path.isfile(os.path.join(td, 'MyFade.glsl'))
-    open(os.path.join(td, 'fx.glsl'), 'w').write('// x\n')
+    open(os.path.join(td, 'fx.glsl'), 'w', encoding='utf-8').write('// x\n')
     assert _list_transitions(td) == ['MyFade.glsl', 'fx.glsl']
     assert set_transition_default('MyFade.glsl', p, td) == 'MyFade.glsl'
-    assert 'TRANSITION_DEFAULT = "MyFade.glsl"' in open(p).read()
+    assert 'TRANSITION_DEFAULT = "MyFade.glsl"' in open(p, encoding='utf-8').read()
     try:
         set_transition_default('nope.glsl', p, td); assert False, 'aceitou transicao inexistente'
     except ValueError:
@@ -3351,9 +3351,9 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
                      ('shaders/presets/show/a.frag', 'B'), ('shaders/presets/show/b.frag', 'b'),
                      ('media/default/v.mp4', 'v'), ('media/prn/v.mp4', 'v'), ('media/prn/w.png', 'w'),
                      ('transitions/fade.glsl', 'f')):
-        open(os.path.join(root, rel), 'w').write(txt)
+        open(os.path.join(root, rel), 'w', encoding='utf-8').write(txt)
     p2 = tempfile.mktemp(suffix='.py')
-    open(p2, 'w').write('SHADER = "presets/show/b.frag"\nSHADER_SET = "show"\nMEDIA_SET = "prn"\n'
+    open(p2, 'w', encoding='utf-8').write('SHADER = "presets/show/b.frag"\nSHADER_SET = "show"\nMEDIA_SET = "prn"\n'
                         'TRANSITION_DEFAULT = "none"\nFX = {\n}\nMEDIA = [\n]\n')
     globals()['_tuning'] = _ts.SimpleNamespace(
         SHADER='presets/show/b.frag', SHADER_SET='show', MEDIA_SET='prn', TRANSITION_DEFAULT='none', FX={},
@@ -3371,7 +3371,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert sorted(os.listdir(_MEDIA)) == ['default'] and sorted(os.listdir(os.path.join(_MEDIA, 'default'))) == ['v.mp4', 'w.png']
     assert sorted(os.listdir(os.path.join(_SHADERS, 'presets'))) == ['default']
     assert sorted(os.listdir(os.path.join(_SHADERS, 'presets', 'default'))) == ['a-show.frag', 'a.frag', 'b.frag']
-    ns = {}; exec(open(p2).read(), ns)
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns)
     assert [(m['name'], m['file']) for m in ns['MEDIA']] == [('v', 'default/v.mp4'), ('w', 'default/w.png')], ns['MEDIA']
     assert ns['SHADER'] == 'presets/default/b.frag' and ns['SHADER_SET'] == 'default' and ns['MEDIA_SET'] == 'default'
     assert ns['OVERLAYS'] == [{'file': 'default/w.png', 'opacity': 0.5}], ns['OVERLAYS']
@@ -3402,27 +3402,27 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert 'webcam:/dev/video0' in _find_scene('prn')['bindings'], 'relacao de fonte desmarcada devia ser lembrada'
     assert _find_scene('default')['bindings']['default/w.png']['fx']['presets/default/b.frag'] == {'tint': 0.5}
     # calibracao da saida: so' knob fora do padrao vai pro bloco; save=False nao grava
-    open(os.path.join(_SHADERS, GRADE_FRAG), 'w').write('// fx: gama=0.5, vermelho=0.5, x\n')
+    open(os.path.join(_SHADERS, GRADE_FRAG), 'w', encoding='utf-8').write('// fx: gama=0.5, vermelho=0.5, x\n')
     assert output_grade_defaults() == {'gama': 0.5, 'vermelho': 0.5, 'x': 1.0}
     g = set_output_grade({'on': 1, 'test': 1, 'fx': {'gama': 0.7, 'vermelho': 0.5}}, tuning_path=p2)
     assert g == {'on': 1, 'test': 1, 'fx': {'gama': 0.7}}, g
-    ns = {}; exec(open(p2).read(), ns); assert ns['OUTPUT_GRADE'] == g, ns['OUTPUT_GRADE']
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns); assert ns['OUTPUT_GRADE'] == g, ns['OUTPUT_GRADE']
     set_output_grade({'on': 0, 'fx': {'gama': 0.2}}, save=False, tuning_path=p2)
     assert _tuning.OUTPUT_GRADE['fx'] == {'gama': 0.2}
-    ns = {}; exec(open(p2).read(), ns); assert ns['OUTPUT_GRADE'] == g
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns); assert ns['OUTPUT_GRADE'] == g
     set_output_grade({'on': 1, 'fx': {}}, tuning_path=p2)
-    ns = {}; exec(open(p2).read(), ns); assert ns['OUTPUT_GRADE'] == {'on': 1, 'test': 0, 'fx': {}}
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns); assert ns['OUTPUT_GRADE'] == {'on': 1, 'test': 0, 'fx': {}}
     assert set_output_fps(60, tuning_path=p2) == 60 and _tuning.OUTPUT_FPS == 60   # fps da saida (v2)
-    set_output_fps(30, tuning_path=p2); assert open(p2).read().count('OUTPUT_FPS = 30') == 1
+    set_output_fps(30, tuning_path=p2); assert open(p2, encoding='utf-8').read().count('OUTPUT_FPS = 30') == 1
     # telas do palco: normaliza, grava o bloco 1x, save=False so' patcha
     t = set_screens([{'name': 'coluna', 'x': 0, 'y': 1, 'w': 1, 'h': 4, 'pw': 256, 'ph': 1024},
                      {'x': 'ruim'}, {'x': 3, 'y': 1, 'w': 0, 'h': 4, 'pw': 0, 'ph': 1024}], tuning_path=p2)
     assert t == [{'name': 'coluna', 'x': 0.0, 'y': 1.0, 'w': 1.0, 'h': 4.0, 'pw': 256, 'ph': 1024},
                  {'name': 'tela 3', 'x': 3.0, 'y': 1.0, 'w': 0.05, 'h': 4.0, 'pw': 1, 'ph': 1024}] == _tuning.SCREENS, t
-    ns = {}; exec(open(p2).read(), ns); assert ns['SCREENS'] == t
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns); assert ns['SCREENS'] == t
     set_screens(t[:1], save=False, tuning_path=p2); assert len(_tuning.SCREENS) == 1
     set_screens([], tuning_path=p2)
-    ns = {}; exec(open(p2).read(), ns); assert ns['SCREENS'] == [] and open(p2).read().count('SCREENS =') == 1
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns); assert ns['SCREENS'] == [] and open(p2, encoding='utf-8').read().count('SCREENS =') == 1
     t = set_screens([{'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': -3},
                      {'x': 0, 'y': 0, 'w': 1, 'h': 1, 'pw': 9, 'ph': 9, 'ox': 5, 'oy': None}], save=False)
     assert (t[0]['ox'], t[0]['oy']) == (5, 0) and 'ox' not in t[1], t   # ox/oy: os 2 ou nenhum
@@ -3436,8 +3436,8 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert 'rot' not in t[1] and 'poly' not in t[1], t
     assert set_pixel_map({'on': True, 'w': 3840, 'h': '2160'}, tuning_path=p2) == {'on': 1, 'w': 3840, 'h': 2160}
     set_pixel_map({'on': 0, 'w': 1920, 'h': 1080}, tuning_path=p2)
-    ns = {}; exec(open(p2).read(), ns); assert ns['PIXEL_MAP'] == {'on': 0, 'w': 1920, 'h': 1080}
-    assert open(p2).read().count('PIXEL_MAP =') == 1 and _tuning.PIXEL_MAP['on'] == 0
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns); assert ns['PIXEL_MAP'] == {'on': 0, 'w': 1920, 'h': 1080}
+    assert open(p2, encoding='utf-8').read().count('PIXEL_MAP =') == 1 and _tuning.PIXEL_MAP['on'] == 0
     # detectar telao: liga a saida conectada-desligada a direita da principal; so' a principal = erro
     vo0, dash_data.VIRTUAL_OUTPUTS = dash_data.VIRTUAL_OUTPUTS, os.path.join(os.path.dirname(p2), 'sem-simulador.json')   # simulador aberto nao conta
     xr = {'q': 'HDMI-0 connected primary 1366x768+0+0 (x) 1mm x 1mm\n   1366x768 60.00*+\n'
@@ -3472,13 +3472,13 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     g = set_output_grade({'on': 0, 'master': 0.25, 'fx': {}}, tuning_path=p2)   # master (v2)
     assert g == {'on': 0, 'test': 0, 'fx': {}, 'master': 0.25} and _current_output_grade() == g, g
     assert set_output_grade({'on': 1, 'master': 1, 'fx': {}}, tuning_path=p2) == {'on': 1, 'test': 0, 'fx': {}}
-    assert open(p2).read().count('OUTPUT_GRADE =') == 1
+    assert open(p2, encoding='utf-8').read().count('OUTPUT_GRADE =') == 1
     # imagem da CENA: vai pro set ativo (campo grade), volta ao trocar de set, neutra = sem campo
     act = _active_scene_name()
     other = next(sc['name'] for sc in _read_scenes() if sc['name'] != act)
     g = set_scene_grade({'on': 1, 'fx': {'gama': 0.8, 'vermelho': 0.5}}, tuning_path=p2)
     assert g == {'on': 1, 'fx': {'gama': 0.8}} and _find_scene(act)['grade'] == g, _find_scene(act)
-    ns = {}; exec(open(p2).read(), ns); assert ns['SCENE_GRADE'] == g
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns); assert ns['SCENE_GRADE'] == g
     apply_scene(other, tuning_path=p2)
     assert _current_scene_grade() == {'on': 1, 'fx': {}} and 'grade' not in _find_scene(other)
     apply_scene(act, tuning_path=p2)
@@ -3488,17 +3488,17 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     apply_scene(act, tuning_path=p2, defer=True)
     assert _active_scene_name() == act and _current_scene_grade() == g, 'defer: estado vivo ja trocado'
     _persist['thr'].join(5)
-    ns = {}; exec(open(p2).read(), ns)
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns)
     assert ns['SCENE'] == act and ns['SCENE_GRADE'] == g, 'defer: a ultima troca e a que fica gravada'
     g2 = set_output_grade({'on': 1, 'fxamt': 0.4, 'fx': {}}, tuning_path=p2)
     assert g2['fxamt'] == 0.4 and 'fxamt' not in set_output_grade({'on': 1, 'fxamt': 1, 'fx': {}}, tuning_path=p2)
     set_scene_grade({'on': 1, 'fx': {}}, tuning_path=p2)
-    assert 'grade' not in _find_scene(act) and open(p2).read().count('SCENE_GRADE =') == 1
+    assert 'grade' not in _find_scene(act) and open(p2, encoding='utf-8').read().count('SCENE_GRADE =') == 1
     # preencher/encaixar de camera/tela: bloco SOURCE_FIT so com os 'fit'; a capturada respawna
     st['video_id'] = 'webcam:/dev/video0'
     assert set_source_fit('webcam:/dev/video0', 'fit', p2) == 'fit' and calls[-1] == 'webcam:/dev/video0'
     set_source_fit('screen:HDMI-1', 'fit', p2)
-    ns = {}; exec(open(p2).read(), ns)
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns)
     assert ns['SOURCE_FIT'] == {'screen:HDMI-1': 'fit', 'webcam:/dev/video0': 'fit'}, ns['SOURCE_FIT']
     set_source_fit('screen:HDMI-1', 'fill', p2)
     assert _tuning.SOURCE_FIT == {'webcam:/dev/video0': 'fit'}
@@ -3559,7 +3559,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
         delete_scene('default', p2); assert False, 'apagou o ultimo set'
     except ValueError:
         pass
-    ns = {}; exec(open(p2).read(), ns)               # o tuning.py continua Python valido
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns)               # o tuning.py continua Python valido
     assert [sc['name'] for sc in ns['SCENES']] == ['default'] and ns['SCENE'] == 'default'
     globals().update(_SHADERS=_g0[0], _MEDIA=_g0[1], _TRANS=_g0[2], _tuning=None, _state={})
     _cfg['on_set_input'] = _g0[3]

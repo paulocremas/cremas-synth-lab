@@ -225,7 +225,7 @@ def maybe_update(here, exe):
     if os.environ.get('PRISMA_NO_UPDATE'):
         return False
     try:
-        with open(os.path.join(here, 'VERSION')) as fh:
+        with open(os.path.join(here, 'VERSION'), encoding='utf-8') as fh:
             current = fh.read().strip()
     except OSError:
         return False
@@ -288,8 +288,8 @@ if __name__ == '__main__':  # self-check (roda: python packaging/updater.py)
     assert '/MIR' in s and '/XD "' in s and 'dados' in s and 'PID eq 42' in s and s.endswith('\r\n')
     with tempfile.TemporaryDirectory() as t:   # sync_data: novo chega, intocado atualiza, editado fica, apagado nao volta
         b, u = os.path.join(t, 'b'), os.path.join(t, 'u'); os.makedirs(b)
-        w = lambda p, x: (os.makedirs(os.path.dirname(p), exist_ok=True), open(p, 'w').write(x))
-        r = lambda p: open(p).read()
+        w = lambda p, x: (os.makedirs(os.path.dirname(p), exist_ok=True), open(p, 'w', encoding='utf-8').write(x))
+        r = lambda p: open(p, encoding='utf-8').read()
         for n in 'abcd':
             w(os.path.join(b, n), n + '1')
         fs = [(os.path.join(b, n), os.path.join('sh', n)) for n in 'abcd']

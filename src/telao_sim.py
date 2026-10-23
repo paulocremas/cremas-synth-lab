@@ -246,13 +246,13 @@ class Announce:
     def set(self, w, h):
         out = {'name': self.name, 'w': w, 'h': h, 'label': fmt_label(w, h)}   # só o "todo", como o EDID
         tmp = self.path + '.tmp'
-        with open(tmp, 'w') as f:
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump({'pid': os.getpid(), 'outputs': [out]}, f)
         os.replace(tmp, self.path)
 
     def clear(self):
         try:
-            with open(self.path) as f:
+            with open(self.path, encoding='utf-8') as f:
                 if json.load(f).get('pid') != os.getpid():
                     return                    # outro simulador assumiu: não é meu
             os.remove(self.path)
@@ -346,7 +346,7 @@ class Wall:
     def __init__(self, path):
         self.path, self.screens, self.fmt = path, [], None
         try:
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 d = json.load(f)
             self.screens = [t for t in d.get('telas') or [] if isinstance(t, dict)]
             self.fmt = parse_fmt('%sx%s' % tuple(d['formato'])) if d.get('formato') else None
@@ -358,7 +358,7 @@ class Wall:
         out = dash_data.pack_raster(self.screens, *fmt)
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         tmp = self.path + '.tmp'
-        with open(tmp, 'w') as f:
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump({'formato': list(fmt), 'telas': self.screens}, f, ensure_ascii=False, indent=1)
         os.replace(tmp, self.path)
         return out

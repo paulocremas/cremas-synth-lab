@@ -203,7 +203,7 @@ def virtual_outputs(screen_w, path=None, alive=_pid_alive):
     """Saidas do telao virtual no formato do parse_xrandr (+ virtual=True), a direita da tela X
     (x = screen_w). [] sem simulador aberto."""
     try:
-        with open(path or VIRTUAL_OUTPUTS) as f:
+        with open(path or VIRTUAL_OUTPUTS, encoding='utf-8') as f:
             d = json.load(f)
     except (OSError, ValueError):
         return []
@@ -380,7 +380,7 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert pick_led_output(o + v)['name'] == 'HDMI-1'             # real ganha
     assert xrandr_screen_w(xr) == 3286
     vp = os.path.join(tempfile.gettempdir(), 'prisma-vo-test.json')
-    json.dump({'pid': 1, 'outputs': [{'name': 'SIM-1', 'w': 3840, 'h': 2160, 'label': '4K'}, {'w': 'x'}]}, open(vp, 'w'))
+    json.dump({'pid': 1, 'outputs': [{'name': 'SIM-1', 'w': 3840, 'h': 2160, 'label': '4K'}, {'w': 'x'}]}, open(vp, 'w', encoding='utf-8'))
     vo = virtual_outputs(1366, vp, alive=lambda p: True)
     assert len(vo) == 1 and vo[0]['x'] == 1366 and vo[0]['pref'] == [3840, 2160] and vo[0]['virtual'], vo
     assert virtual_outputs(1366, vp, alive=lambda p: False) == []

@@ -112,7 +112,7 @@ def _transition_ms(path):
         return 400
     if key not in _trans_ms_cache:
         try:
-            head = open(path).read(2000)
+            head = open(path, encoding='utf-8').read(2000)
         except OSError:
             head = ''
         m = re.search(r'//\s*ms:\s*(\d+)', head)
@@ -3202,7 +3202,7 @@ def main():
         if layer_bad.get(lp) == mt:
             return None
         try:
-            with open(lp) as lf:
+            with open(lp, encoding='utf-8') as lf:
                 src = lf.read()
             prog = build_program(src)
         except (RuntimeError, OSError) as e:
@@ -3269,7 +3269,7 @@ def main():
         if hit and hit[0] == mt:
             return hit[1]
         try:
-            with open(tpath) as tf:
+            with open(tpath, encoding='utf-8') as tf:
                 prog = build_program(_wrap_transition(tf.read()))
         except (RuntimeError, OSError) as e:
             print('erro na transicao', os.path.basename(tpath), '->\n', e)
@@ -4352,7 +4352,7 @@ def _selfcheck():
     assert 'getFromColor' in w and 'getToColor' in w and 'void main' in w, w
     global TRANS_DIR
     _td0, TRANS_DIR = TRANS_DIR, tempfile.mkdtemp()
-    open(os.path.join(TRANS_DIR, 'fade.glsl'), 'w').write('// ms: 250\nvec4 transition(vec2 uv){return vec4(0.0);}\n')
+    open(os.path.join(TRANS_DIR, 'fade.glsl'), 'w', encoding='utf-8').write('// ms: 250\nvec4 transition(vec2 uv){return vec4(0.0);}\n')
     assert _transition_ms(os.path.join(TRANS_DIR, 'fade.glsl')) == 250
     _tk = {k: getattr(tuning, k, None) for k in ('MEDIA', 'MEDIA_SET', 'TRANSITION_DEFAULT')}
     assert _resolve_transition('fade.glsl')[1] == 250
