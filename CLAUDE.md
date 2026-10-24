@@ -88,6 +88,7 @@ Cada ferramenta isolada, depois comparar, só então compor.
   `on_*`/`layer`), knobs 0..1 de vocabulário comum (o 1º = PRINCIPAL, o botão grande da peça), alfa = cobertura (a camada
   da peça é RGBA e o blend usa). MODIFICADOR PARALELO: átomo solto EM CIMA de uma peça age só na saída
   dela (`post: [ids]` → pilha `~post` da cena, `_post_items`; mesmo id em várias peças = um só, com fio). ↶ desfazer (por cena) e 🛟 socorro só no dash.
+- **v5 planejada** (`PROMPT_V5.md`): canvas de camadas de átomos (caixas + fios + nó de saída), máscara por camada.
 - **v4** (`dash4.html`, `/v4`, do zero; decisões no topo do arquivo + doc de design): 3 colunas fixas (Cenas/Peças |
   Patch | Programa, Próxima/GO, Controles, Macros), Show = só knobs publicados (`pub` no item), gavetas Socorro e
   Equipamento (editores da v3 refeitos). Patch = fileiras (topo = frente) + RAMO: fileira com `file: '@<id>'` lê a
