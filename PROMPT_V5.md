@@ -31,6 +31,12 @@ no topo do `dash4.html` e o documento de design da v4 (link na memória `v4-desi
 - **v4** (`dash4.html`): 3 colunas, fileiras + zonas de soltura, variações (mutação + cruzar), grupos, publicados no
   Show, Socorro, Equipamento (todos os editores). Funciona, mas **ainda está poluída**.
 
+## Princípio que manda em tudo: MINIMALISMO
+A razão de atomizar é deixar **ver e controlar fácil**. Cada átomo tem só regulagem simples e essencial: o knob
+PRINCIPAL + no máximo 2 detalhes (o padrão já cobra: `ATOM_MAX_KNOBS = 3`). Se precisa de mais, são dois átomos.
+Na tela isso vira: dentro da caixa, cada átomo mostra **só o principal**; detalhes só ao abrir aquele átomo.
+Nada de painel lotado: se um controle não é essencial pro show, ele não aparece até ser pedido.
+
 ## A ideia (minha) — e as decisões já tomadas
 Fluxo de **camadas de átomos** num canvas:
 ```

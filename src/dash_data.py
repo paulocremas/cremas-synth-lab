@@ -55,6 +55,7 @@ def parse_meta(src):
 
 # PADRAO ATOMO (shaders/ATOMO.md): o que um .frag de shaders/presets/atomos/ pode e nao pode
 ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador')
+ATOM_MAX_KNOBS = 3   # minimalismo: o principal + ate' 2 detalhes essenciais; mais que isso = dividir em atomos
 ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
 
 
@@ -63,6 +64,8 @@ def atom_problems(src):
     src = src or ''
     out, fx, meta = [], parse_fx_defaults(src), parse_meta(src)
     code = re.sub(r'//[^\n]*', '', src)
+    if len(fx) > ATOM_MAX_KNOBS:
+        out.append(f'{len(fx)} knobs: atomo tem no maximo {ATOM_MAX_KNOBS} (o principal + 2 detalhes); o resto e\' outro atomo')
     if meta['cat'] not in ATOM_CATS:
         out.append(f"// cat: '{meta['cat']}' nao e' um tipo de atomo ({', '.join(ATOM_CATS)})")
     if not re.search(r'(?m)^//\s*ATOMOS\s*·\s*\S', src):
@@ -439,6 +442,7 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert atom_problems(ok) == [], atom_problems(ok)
     bad = '// fx: layer, z\n// cat: luzes\nuniform float u_bass, u_fx_layer;\nuniform sampler2D u_texture_1;\nvoid main(){ gl_FragColor = vec4(u_bass * u_fx_layer); }\n'
     pr = ' | '.join(atom_problems(bad))
+    assert any('no maximo' in x for x in atom_problems('// fx: a, b, c, d\n' + ok))
     for frag in ("cat: 'luzes'", 'ATOMOS', 'u_bass', 'knob proibido layer', 'knob z', 'sem "// in:"'):
         assert frag in pr, (frag, pr)
     for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shaders', 'presets', 'atomos', '*.frag'))):

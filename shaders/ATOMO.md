@@ -25,7 +25,9 @@ Um verbo por arquivo: Tingir, Contornar, Desfocar, Espelhar. Se o efeito precisa
 - **Proibido `layer`** (misturar com o original): quem faz isso é a **opacidade** da peça e o modo de
   mistura. Knob que repete a opacidade só confunde.
 
-## 4. Knobs
+## 4. Knobs — poucos e essenciais
+- **No máximo 3**: o principal + até 2 detalhes de regulagem simples. O átomo existe pra deixar a visão e o
+  controle fáceis; knob a mais é sinal de que são dois átomos (cor do rastro do Feedback = um Matiz em paralelo).
 - O **1º knob do `// fx:` é o PRINCIPAL**: o efeito em si (quanto ondula, quanto pinta, quantas fatias). Ele é
   o botão grande da peça; a opacidade vira um knob de apoio. Átomo sem knob: o principal é a opacidade.
 - Todos 0..1. Knob de dois lados (girar, deslocar, mais/menos) tem **0.5 = neutro**.
