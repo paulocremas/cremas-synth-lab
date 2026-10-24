@@ -1223,6 +1223,13 @@ def _ins_tex(r, key, lane_out, tap_tex, dflt):
     return lane_out.get(key if r == 'fb' else r, dflt)
 
 
+def _post_items(o, bindings):
+    """MODIFICADORES PARALELOS da peca o: ids em o['post'] -> itens da pilha dash_server.POST_KEY, na ordem,
+    so' os ligados. O mesmo id em varias pecas = UM modificador (mesmos knobs) atendendo todas."""
+    store = {x.get('id'): x for x in ((bindings or {}).get(dash_server.POST_KEY) or {}).get('shaders') or () if x.get('id')}
+    return [store[i] for i in o.get('post') or () if i in store and not store[i].get('off')]
+
+
 def _graph_wants(bindings, overlays):
     """O que precisa RODAR ou ficar GUARDADO porque alguem le (dash v4: ramo, entrada B, feedback).
     -> (lanes, taps, need): lanes = canais cuja SAIDA alguem le ('ins' = outra raia; 'fb' = a propria) ->
@@ -3029,7 +3036,7 @@ def make_layer_targets(w, h):
     old[0]/old[1] (a mistura da cena que SAI, desenhada viva durante a transicao) e cue[0]/cue[1] (a
     PROXIMA cena, so' quando a previa dela e' pedida). Recriado quando o
     tamanho muda (main)."""
-    texs = glGenTextures(12)
+    texs = glGenTextures(13)
     for t in texs:
         glBindTexture(GL_TEXTURE_2D, t)
         filt = GL_LINEAR if t in (texs[7], texs[11]) else GL_NEAREST
@@ -3037,13 +3044,14 @@ def make_layer_targets(w, h):
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filt)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt)
-        rgba = t == texs[4]   # 'layer' = saida da peca: o ALFA dela e' cobertura (padrao ATOMO: traco/gerador)
+        rgba = t in (texs[4], texs[12])   # 'layer' = saida da peca: o ALFA dela e' cobertura (padrao ATOMO: traco/gerador)
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA if rgba else GL_RGB, w, h, 0, GL_RGBA if rgba else GL_RGB, GL_UNSIGNED_BYTE, None)
     return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
             'src': [texs[2], texs[3]], 'layer': texs[4], 'old': [texs[5], texs[8]], 'cue': [texs[9], texs[10]],
             'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
             'canvas': texs[7],
-            'chain': texs[11]}   # a CORRENTE virada topo->baixo (como os presets leem u_texture_0)
+            'chain': texs[11],   # a CORRENTE virada topo->baixo (como os presets leem u_texture_0)
+            'layer2': texs[12]}  # par da 'layer' pros MODIFICADORES PARALELOS (_post_items)
 
 
 def build_fumaca_program():
@@ -3235,7 +3243,7 @@ def main():
             if ltargets[0]:
                 glDeleteFramebuffers(1, [ltargets[0]['fbo']])
                 glDeleteTextures([t for k in ('out', 'src', 'old', 'cue') for t in ltargets[0][k]] +
-                                 [ltargets[0][k] for k in ('layer', 'mask', 'canvas', 'chain')])
+                                 [ltargets[0][k] for k in ('layer', 'layer2', 'mask', 'canvas', 'chain')])
             if lane_out:
                 glDeleteTextures(list(lane_out.values()))
                 lane_out.clear()
@@ -3875,13 +3883,35 @@ def main():
                     glBindTexture(GL_TEXTURE_2D, lt['chain'] if chain else ftex)
                     glClear(GL_COLOR_BUFFER_BIT)
                     glDrawArrays(GL_TRIANGLES, 0, 3)
+                    cur_l = lt['layer']
+                    for pm in _post_items(o, bindings):   # MODIFICADOR PARALELO: age so' na saida DESTA peca
+                        ph = layer_program(pm['file'])
+                        if not ph:
+                            continue
+                        alt = lt['layer2'] if cur_l == lt['layer'] else lt['layer']
+                        lw_, lh_ = lt['size']
+                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # 1) camada (com o ALFA do efeito) -> alt
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cur_l, 0)
+                        glBindTexture(GL_TEXTURE_2D, alt)
+                        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, lw_, lh_)
+                        blend_into(lt['chain'], cur_l, cur_l, 1.0, 0, flip=1)   # 2) a cor dela topo->baixo (como o atomo le)
+                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # 3) o modificador pinta SO' a cor; o alfa fica o do efeito
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, alt, 0)
+                        use_program(ph)
+                        set_uniforms(pm.get('fx') or {}, pm.get('mod'), ('post', key, oj, pm.get('id')) if live else None)
+                        glActiveTexture(GL_TEXTURE0)
+                        glBindTexture(GL_TEXTURE_2D, lt['chain'])
+                        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE)
+                        glDrawArrays(GL_TRIANGLES, 0, 3)
+                        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)
+                        cur_l = alt
                     mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
                     um = 0
                     if rg and sjt is not None:              # so' dentro (2) / fora (3) do assunto
                         glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
                         glBindTexture(GL_TEXTURE_2D, sjt[0])
                         um = 2 if rg == 'subject' else 3
-                    blend_into(lt['src'][1 - si], lt['src'][si], lt['layer'], a, mode, mask=um, mth=_subject_params(b))
+                    blend_into(lt['src'][1 - si], lt['src'][si], cur_l, a, mode, mask=um, mth=_subject_params(b))
                     si = 1 - si
                     after_module(key, oj, o, lt['src'][si])
                 if key == step_key:
@@ -4485,6 +4515,9 @@ def _selfcheck():
     state.pop('try'), state.pop('try_small'), state.pop('steps_small'), state.pop('steps_want')
     assert _ins_tex('@m1', 'cam', {'cam': 1}, {'m1': 7}, 0) == 7 and _ins_tex('@x', 'cam', {}, {}, 0) == 0
     assert _ins_tex('fb', 'cam', {'cam': 1}, {}, 0) == 1 and _ins_tex('vid', 'cam', {'vid': 2}, {}, 0) == 2 and _ins_tex(None, 'cam', {}, {}, 9) == 9
+    pb = {dash_server.POST_KEY: {'shaders': [{'file': 'M.frag', 'id': 'm1'}, {'file': 'N.frag', 'id': 'm2', 'off': 1}]}}
+    assert [x['id'] for x in _post_items({'post': ['m2', 'm1', 'zz']}, pb)] == ['m1'], 'post: ligados, na ordem, id que sumiu sai'
+    assert _post_items({}, pb) == [] and _post_items({'post': ['m1']}, {}) == []
     print('native_synth graph (v4) self-check ok')
     rng = np.random.default_rng(1)
     fa, fb = (rng.integers(0, 256, FRAME_SIZE, dtype=np.uint8) for _ in range(2))

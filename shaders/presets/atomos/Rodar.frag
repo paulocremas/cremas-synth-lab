@@ -1,4 +1,4 @@
-// fx: zoom=0.5, giro=0.5, velocidade=0.5
+// fx: giro=0.5, zoom=0.5, velocidade=0.5
 // cat: geometria
 // ATOMOS · Rodar. Aproxima e gira a imagem em volta do centro. zoom: 0.5 = igual; giro = ângulo fixo;
 // velocidade = gira sozinho (0.5 = parado; abaixo/acima = um sentido/outro).

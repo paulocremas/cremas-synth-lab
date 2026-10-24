@@ -37,6 +37,10 @@
     guardar achado = cena nova), sortear, desfazer por cena e o Limiter seguram qualquer acaso.
   - MODULADOR COMO PECA: LFO (seno/triangulo/serra/quadrada/acaso, em batidas), SOM (faixas/kick), MACRO M1-M4 —
     arrasta e solta num knob; o knob vira uma faixa min->max que o sinal percorre.
+  - MODIFICADOR PARALELO (2026-10-24): atomo solto EM CIMA de uma peca vira etiqueta embaixo dela e age
+    so' na saida dela (pilha POST_KEY '~post', a peca guarda post: [ids]); arrastar a etiqueta ate outra peca
+    = o MESMO modificador nela tambem (fio pontilhado). Na cadeia = age em tudo antes; em paralelo = so' nela.
+  - BOTAO PRINCIPAL: o knob grande da peca e' o 1o do // fx: do atomo (o efeito em si); opacidade = apoio.
   - GRUPO (atomo composto): pecas seguidas viram uma (knobs = os publicados dentro), vao pra biblioteca
     (shaders/grupos/*.json) e voltam como peca.
   POR QUE CADA ELEMENTO EXISTE: (P) palco, (S) seguranca, (C) montagem. Topo: modo (S: trava), musica (P/S),
@@ -222,6 +226,7 @@
   #wires .br { stroke: var(--tx3); }
   #wires .br.on { stroke: var(--live); }
   #wires .bi { stroke: var(--midi); stroke-dasharray: 5 4; }
+  #wires .pw { stroke: var(--tx3); stroke-width: 1.5; stroke-dasharray: 2 3; }   /* o MESMO modificador paralelo em 2+ pecas */
   .row { position: relative; display: flex; align-items: center; min-height: 104px; padding: 4px 0; border-radius: 12px; }
   .row.sel { background: linear-gradient(90deg, rgba(255,157,82,.06), transparent 70%); }
   .row.off .pc, .row.off .wire { opacity: .45; }
@@ -237,6 +242,13 @@
   .pc .th canvas { opacity: 0; } .pc .th canvas.ok { opacity: 1; }
   .pc .nm { height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 12px; color: var(--tx2); }
   .pc .nm span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pc .posts { display: flex; flex-direction: column; gap: 3px; padding: 0 5px 6px; }
+  .pchip { display: flex; align-items: center; gap: 4px; min-height: 22px; font-size: 11px; padding: 1px 7px; border-radius: 11px; border: 1px dashed var(--line2);
+           background: var(--s1); color: var(--tx2); cursor: grab; touch-action: none; }
+  .pchip span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pchip b { font: 600 9px var(--mono); color: var(--tx3); }
+  .pchip.sel { border: 1px solid var(--sel); color: var(--tx); }
+  .pchip.off { opacity: .45; }
   .pc.sel { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel); }
   .pc.sel .nm { color: var(--tx); }
   .pc.off .th::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(45deg, rgba(0,0,0,.55) 0 6px, transparent 6px 12px); }
@@ -1441,6 +1453,36 @@ const knobsOf = file => (lastManifests[file] || []).filter(n => !n.startsWith('o
 const togglesOf = file => (lastManifests[file] || []).filter(n => n.startsWith('on_'));
 function newModule(file){ const m = { file, opacity: 1, fx: {}, in: 'chain', id: rid() }, ins = metaOf(file).ins; if (ins.length) m.ins = ins.slice(); return m; }
 const ensureId = s => s.id || (s.id = rid());
+// MODIFICADOR PARALELO: atomo pendurado numa peca, age SO' na saida dela (native _post_items). Mora na pilha
+// POST_KEY (fora da mistura); a peca guarda os ids em `post`. O mesmo id em varias pecas = UM modificador (fios).
+const POST_KEY = '~post';
+const postStore = () => stackOf(POST_KEY);
+const postOf = s => (s.post || []).map(id => postStore().find(x => x.id === id)).filter(Boolean);
+function postUsers(id){ const out = []; for (const o of rowsVisible()){ const k = chKey(o); stackOf(k).forEach((s, j) => { if ((s.post || []).includes(id)) out.push({ key: k, j, s }); }); } return out; }
+function gcPost(){   // modificador sem peca some; id que sumiu sai das pecas
+  const b = binding(POST_KEY), used = new Set();
+  for (const [k, v] of Object.entries(lastBindings)) if (k !== POST_KEY) for (const s of v.shaders || []) (s.post || []).forEach(i => used.add(i));
+  if (b) b.shaders = b.shaders.filter(x => used.has(x.id));
+  const have = new Set(postStore().map(x => x.id));
+  for (const [k, v] of Object.entries(lastBindings)) if (k !== POST_KEY) for (const s of v.shaders || []) if (s.post){ s.post = s.post.filter(i => have.has(i)); if (!s.post.length) delete s.post; }
+}
+function attachPost(key, j, file){
+  const s = stackOf(key)[j]; if (!s) return;
+  const m = newModule(file); delete m.in; delete m.ins;
+  binding(POST_KEY, true).shaders.push(m); s.post = (s.post || []).concat([m.id]);
+  sendBindings(true); setSel(POST_KEY, postStore().length - 1);
+  toast(`${fxName(file)} só em ${fxName(s.file)} — arraste a etiqueta até outra peça pra ela também usar`);
+}
+function linkPost(id, key, j){
+  const s = stackOf(key)[j]; if (!s || (s.post || []).includes(id)) return;
+  s.post = (s.post || []).concat([id]); sendBindings(true); patchSig = ''; ctlSig = ''; renderPatch(); renderCtl();
+  toast('o mesmo modificador agora também em ' + fxName(s.file));
+}
+function unlinkPost(id, key, j){
+  const s = stackOf(key)[j]; if (!s) return;
+  s.post = (s.post || []).filter(x => x !== id); if (!s.post.length) delete s.post;
+  sendBindings(true); patchSig = ''; ctlSig = ''; renderPatch(); renderCtl();
+}
 function findModule(id){
   for (const [k, b] of Object.entries(lastBindings)){ const j = (b.shaders || []).findIndex(s => s.id === id); if (j >= 0) return { key: k, j, s: b.shaders[j] }; }
   return null;
@@ -1473,7 +1515,7 @@ function partsOf(key){
 }
 
 // envio (ao vivo 25 Hz; grava ao soltar) + DESFAZER por cena (logica da v3)
-function sendBindings(save){ if (save) pushUndo(); bindTouched = now(); clearTimeout(bindT); bindT = null; post('/bindings', { bindings: lastBindings, save }).catch(() => {}); }
+function sendBindings(save){ if (save){ gcPost(); pushUndo(); } bindTouched = now(); clearTimeout(bindT); bindT = null; post('/bindings', { bindings: lastBindings, save }).catch(() => {}); }
 function sendBindingsLive(){ bindTouched = now(); if (!bindT) bindT = setTimeout(() => { bindT = null; sendBindings(false); }, 40); }
 function sendOverlays(save){ if (save) pushUndo(); mediaTouched = now(); clearTimeout(ovlT); ovlT = null; post('/overlays', { overlays: lastOverlays, save }).catch(() => {}); }
 function sendOverlaysLive(){ mediaTouched = now(); if (!ovlT) ovlT = setTimeout(() => { ovlT = null; sendOverlays(false); }, 40); }
@@ -1630,7 +1672,7 @@ let patchSig = '', rowEls = {}, sel = LS.get('v4sel', { key: '', j: -1 }), pickR
 const WIRES = $('#wires');
 function setSel(key, j, quiet){
   sel = { key, j: j ?? -1 }; LS.set('v4sel', sel); pickRange = null;
-  if (key && key !== lastSelected) selectSource(key);
+  if (key && key !== lastSelected && key !== POST_KEY) selectSource(key);
   patchSig = ''; ctlSig = ''; renderPatch(); renderCtl(); revealSel();
 }
 function revealSel(){   // a peca escolhida nunca fica escondida embaixo do fim de fileira (que gruda na direita)
@@ -1651,6 +1693,7 @@ function renderPatch(){
   const sig = JSON.stringify([mode, rows.map(o => [chKey(o), o.off || 0, o.blend || '']),
     rows.map(o => stackOf(chKey(o)).map(s => [s.file, s.off || 0, s.in || '', s.ins || [], s.grp || '', s.gname || '', s.id || '', (s.pub || []).length,
       Object.entries(s.mod || {}).map(([n, m]) => [n, (m.b || []).join(), (m.lfo || {}).f || '', (m.lfo || {}).r || 0])])),
+    rows.map(o => stackOf(chKey(o)).map(s => s.post || [])), postStore().map(x => [x.id, x.file, x.off || 0]),
     sel, pickRange, [...openGroups], lastMedia.length, lastVideoInputs.length, Object.keys(lastMeta).length, lastShaderList.length]);
   if (sig === patchSig){ syncPatch(); return; }
   patchSig = sig;
@@ -1729,8 +1772,19 @@ function modCard(key, j, part, selRow){
     el.append(port);
   }
   if (s.grp) el.append(h('span', { class: 'bdg', style: 'position:absolute;left:4px;bottom:32px', title: 'parte do grupo ' + (s.gname || '') }, icon('grupo')));
+  const ps = postOf(s);
+  if (ps.length) el.append(h('div', { class: 'posts' }, ps.map(p => postChip(p))));
   el.onclick = e => { e.stopPropagation(); if (e.shiftKey && !isShow()) return extendPick(key, j); setSel(key, j); };
   if (!isShow()) el.onpointerdown = e => cardPointerDown(e, key, j, el);
+  return el;
+}
+function postChip(p){   // etiqueta do MODIFICADOR PARALELO embaixo da peca: clique = controles; arrastar ate outra peca = liga nela
+  const idx = postStore().indexOf(p), n = postUsers(p.id).length, c = catOf(p.file);
+  const el = h('span', { class: 'pchip' + (sel.key === POST_KEY && sel.j === idx ? ' sel' : '') + (p.off ? ' off' : ''), 'data-post': p.id,
+    title: `${fxName(p.file)}: só nesta peça${n > 1 ? ` (e em mais ${n - 1}, pelo fio)` : ''} — clique: controles · arraste até outra peça: ela também usa` },
+    icon(catIcon(c), 'sm'), h('span', { text: fxName(p.file) }), n > 1 ? h('b', { text: '×' + n }) : null);
+  el.onclick = e => { e.stopPropagation(); setSel(POST_KEY, idx); };
+  el.onpointerdown = e => { e.stopPropagation(); if (isShow()) return; startDrag(e, { kind: 'postlink', id: p.id, label: fxName(p.file), icon: catIcon(c), click: () => setSel(POST_KEY, idx) }); };
   return el;
 }
 function grpCard(key, part){
@@ -1801,9 +1855,20 @@ function alignBranches(){
     sp.style.width = Math.max(0, sp.offsetWidth + (a.left + a.width / 2) - (b.left + b.width / 2)) + 'px';
   }
 }
+function drawPostWires(){   // o MESMO modificador paralelo em varias pecas: fio pontilhado ligando as etiquetas
+  const box = $('#rows'); if (!box) return;
+  const R = box.getBoundingClientRect(), by = {};
+  for (const c of box.querySelectorAll('.pchip')) (by[c.dataset.post] = by[c.dataset.post] || []).push(c.getBoundingClientRect());
+  for (const rs of Object.values(by)) for (let i = 1; i < rs.length; i++){
+    const a = rs[i - 1], b = rs[i], x0 = a.left + a.width / 2 - R.left, y0 = a.bottom - R.top, x1 = b.left + b.width / 2 - R.left, y1 = b.bottom - R.top, yb = Math.max(y0, y1) + 18;
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', `M${x0} ${y0}C${x0} ${yb} ${x1} ${yb} ${x1} ${y1}`); p.setAttribute('class', 'pw'); WIRES.append(p);
+  }
+}
 // fios gerados: RAMO (da peca-mae ate a fileira que nasce dela) e ENTRADA B (de quem e' lido ate a porta B)
 function drawWires(){
   const box = $('#rows'); if (!box || !WIRES.isConnected) return;
+  queueMicrotask(drawPostWires);
   const R = box.getBoundingClientRect(), W = box.scrollWidth, H = box.scrollHeight;
   WIRES.setAttribute('width', W); WIRES.setAttribute('height', H); WIRES.setAttribute('viewBox', `0 0 ${W} ${H}`);
   WIRES.innerHTML = '';
@@ -1946,9 +2011,23 @@ function renderCtl(){
   if (isShow()) return renderShowCtl(box);
   $('#ctl-lbl').textContent = 'Controles'; $('#ctl-hint').textContent = '';
   if (pr) return renderPickCtl(box, pr);
-  if (!sel.key || !lastOverlays.some(o => chKey(o) === sel.key)){ box.append(h('div', { class: 'empty', text: 'clique numa peça do patch pra ver e mexer nos controles dela' })); return; }
+  if (!sel.key || (sel.key !== POST_KEY && !lastOverlays.some(o => chKey(o) === sel.key)) || (sel.key === POST_KEY && !s)){ box.append(h('div', { class: 'empty', text: 'clique numa peça do patch pra ver e mexer nos controles dela' })); return; }
   if (sel.j < 0 || !s) return renderSrcCtl(box, sel.key);
+  if (sel.key === POST_KEY) return renderPostCtl(box, sel.j, s);
   renderModCtl(box, sel.key, sel.j, s);
+}
+function renderPostCtl(box, j, s){   // MODIFICADOR PARALELO: knobs dele + em que pecas ele age (fios)
+  const file = s.file, users = postUsers(s.id), set = fn => { fn(s); sendBindings(true); patchSig = ''; ctlSig = ''; renderPatch(); renderCtl(); };
+  box.append(h('div', { class: 'ihead' }, icon(catIcon(catOf(file))), h('b', { text: fxName(file) }), h('span', { class: 'hint', text: 'paralelo · só nas peças abaixo' }), h('span', { class: 'grow' }),
+    h('button', { class: 'ib' + (s.off ? '' : ' on'), title: s.off ? 'desligado (clique liga)' : 'ligado (clique desliga)', onclick: () => set(x => { if (x.off) delete x.off; else x.off = 1; }) }, icon('power')),
+    h('button', { class: 'ib del', title: 'tirar este modificador de todas as peças', onclick: () => { removeModules(POST_KEY, [j]); setSel(users[0] ? users[0].key : '', users[0] ? users[0].j : -1); } }, icon('lixo'))));
+  if (metaOf(file).desc) box.append(h('div', { class: 'idesc', text: metaOf(file).desc }));
+  box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'age em' }), h('div', { class: 'chips' }, users.map(u =>
+    h('button', { class: 'chip on', title: 'tirar desta peça', onclick: () => unlinkPost(s.id, u.key, u.j) }, fxName(u.s.file) + ' ×')))));
+  box.append(h('div', { class: 'hint', text: 'arraste a etiqueta dele (embaixo da peça) até outra peça: ela passa a usar o mesmo, com os mesmos knobs' }));
+  const main = mainKnob(s);
+  if (main !== 'opacity') box.append(h('div', { class: 'irow' }, knobCell(POST_KEY, j, s, main, 0, 56)));
+  knobSection(box, POST_KEY, j, s);
 }
 function renderShowCtl(box){
   const pubs = pubList();
@@ -2042,9 +2121,8 @@ function renderModCtl(box, key, j, s){
         h('button', { class: 'btn sm', text: 'desagrupar', onclick: () => ungroup(key, g) })),
       h('div', { class: 'kgrid' }, stackOf(key).map((x, jj) => [x, jj]).filter(([x]) => x.grp === g).flatMap(([x, jj]) => (x.pub || []).map(n => h('div', { class: 'kcell' }, pieceCtl(key, jj, n, 0, 48)))))));
   }
-  const op = h('div', { class: 'kcell' + ((s.pub || []).includes('opacity') ? ' pub' : ''), 'data-k': key, 'data-j': j }, pieceCtl(key, j, 'opacity', 0, 48),
-    h('div', { class: 'kb' }, h('button', { class: (s.pub || []).includes('opacity') ? 'on' : '', title: 'publicar no Show', onclick: () => togglePub(key, j, 'opacity') },
-      icon((s.pub || []).includes('opacity') ? 'estrela-on' : 'estrela', 'sm'))));
+  // BOTAO PRINCIPAL = o efeito em si (atomo: o 1o knob do // fx:); a opacidade vira um knob de apoio na grade
+  const op = knobCell(key, j, s, mainKnob(s), 0, 56);
   const blendRow = h('div', { class: 'chips' }, LAYER_BLENDS.map(([v, t]) => h('button', { class: 'chip' + ((s.blend || 'normal') === v ? ' pick' : ''), text: t,
     title: 'como esta peça mistura com o que vem antes', onclick: () => set(x => { if (v === 'normal') delete x.blend; else x.blend = v; }) })));
   box.append(h('div', { class: 'irow', style: 'align-items:flex-start' }, op, h('div', { style: 'flex:1;display:flex;flex-direction:column;gap:6px' }, blendRow,
@@ -2070,17 +2148,23 @@ function renderModCtl(box, key, j, s){
     tg.append(h('button', { class: 'chip' + (on ? ' on' : ''), text: n.slice(3), title: n === 'on_kick' ? 'só dispara junto com o kick' : 'faixa que dispara o efeito (várias = a mais forte)',
       onclick: () => set(x => setFxVal(key, x, n, fxVal(key, x, n) >= 0.5 ? 0 : 1)) })); }
   if (tg.children.length) box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'dispara' }), tg));
-  if (!names.length){ box.append(h('div', { class: 'empty', text: 'este módulo não tem knobs (// fx: no .frag)' })); return; }
+  knobSection(box, key, j, s);
+}
+function knobCell(key, j, s, n, slot, size){   // knob + publicar (estrela) + modular (som/LFO/macro)
+  const pub = (s.pub || []).includes(n), md = (s.mod || {})[n];
+  return h('div', { class: 'kcell' + (slot ? '' : ' main') + (pub ? ' pub' : ''), 'data-k': key, 'data-j': j, ...(n !== 'opacity' ? { 'data-knob': n } : {}) }, pieceCtl(key, j, n, slot, size),
+    h('div', { class: 'kb' },
+      h('button', { class: pub ? 'on' : '', title: pub ? 'publicado: aparece no Show (clique tira)' : 'publicar no Show', onclick: () => togglePub(key, j, n) }, icon(pub ? 'estrela-on' : 'estrela', 'sm')),
+      n === 'opacity' ? null : h('button', { class: 'mod' + (md ? ' on' : ''), title: md ? 'modulado por ' + modSrcText(md) + ' — clique edita' : 'modular: o som, um LFO ou uma macro mexe este knob (ou arraste um modulador da biblioteca até aqui)',
+        onclick: () => { modOpen = modOpen === `${key}|${j}|${n}` ? '' : `${key}|${j}|${n}`;
+          if (!md && modOpen) applyModulator(key, j, n, { kind: 'lfo', f: 'sin', r: 4 }); else { ctlSig = ''; renderCtl(); } } }, icon(md ? ((md.b || []).includes('lfo') ? (md.lfo || {}).f || 'sin' : 'som') : 'sin', 'sm'))));
+}
+const mainKnob = s => metaOf(s.file).atom && knobsOf(s.file).length ? knobsOf(s.file)[0] : 'opacity';
+function knobSection(box, key, j, s){
+  const main = mainKnob(s), names = knobsOf(s.file).filter(n => n !== main).concat(main !== 'opacity' ? ['opacity'] : []);
+  if (!names.length){ box.append(h('div', { class: 'empty', text: 'sem outros knobs' })); return; }
   const grid = h('div', { class: 'kgrid' });
-  names.forEach((n, i) => {
-    const pub = (s.pub || []).includes(n), md = (s.mod || {})[n];
-    grid.append(h('div', { class: 'kcell' + (pub ? ' pub' : ''), 'data-k': key, 'data-j': j, 'data-knob': n }, pieceCtl(key, j, n, i + 1, 48),
-      h('div', { class: 'kb' },
-        h('button', { class: pub ? 'on' : '', title: pub ? 'publicado: aparece no Show (clique tira)' : 'publicar no Show', onclick: () => togglePub(key, j, n) }, icon(pub ? 'estrela-on' : 'estrela', 'sm')),
-        h('button', { class: 'mod' + (md ? ' on' : ''), title: md ? 'modulado por ' + modSrcText(md) + ' — clique edita' : 'modular: o som, um LFO ou uma macro mexe este knob (ou arraste um modulador da biblioteca até aqui)',
-          onclick: () => { modOpen = modOpen === `${key}|${j}|${n}` ? '' : `${key}|${j}|${n}`;
-            if (!md && modOpen) applyModulator(key, j, n, { kind: 'lfo', f: 'sin', r: 4 }); else { ctlSig = ''; renderCtl(); } } }, icon(md ? ((md.b || []).includes('lfo') ? (md.lfo || {}).f || 'sin' : 'som') : 'sin', 'sm')))));
-  });
+  names.forEach((n, i) => grid.append(knobCell(key, j, s, n, i + 1, 48)));
   box.append(h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Knobs' }), grid));
   const [mk, mj, mn] = modOpen.split('|');
   if (mk === key && +mj === j && (s.mod || {})[mn]) box.append(modEditor(key, j, mn, s.mod[mn]));
@@ -2347,6 +2431,11 @@ function computeZones(spec){
       const b = c.getBoundingClientRect(); add({ type: 'knob', key: c.dataset.k, j, n, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width + 8, h: b.height + 8, label: n }); });
     return Z;
   }
+  if (spec.kind === 'postlink'){   // etiqueta de modificador: em cima de outra peca = ela tambem usa o mesmo
+    $$('.pc[data-j]', box).forEach(c => { const j = +c.dataset.j, s = j >= 0 && stackOf(c.dataset.k)[j]; if (!s || c.classList.contains('grp') || (s.post || []).includes(spec.id)) return;
+      const b = c.getBoundingClientRect(); add({ type: 'post', key: c.dataset.k, j, x: b.left + b.width / 2, y: b.top + b.height * 0.42, w: b.width * 0.7, h: b.height * 0.5, label: 'usar aqui também' }); });
+    return Z;
+  }
   if (spec.kind === 'port'){   // entrada B: outra fileira (a saida dela) ou um modulo (a saida dele = tap)
     rows.forEach(r => { const k = r.dataset.key; if (k === spec.key) return; const o = r.querySelector('.rout'); if (!o) return; const b = o.getBoundingClientRect();
       add({ type: 'bsrc', ref: k, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width + 10, h: b.height + 10, label: '' }); });
@@ -2371,6 +2460,8 @@ function computeZones(spec){
       const b = it.getBoundingClientRect();
       // ramo ABAIXO = atras da mae; ACIMA = na frente. Entre duas fileiras cada zona fica colada na SUA peca (12 px), senao
       // o "abaixo" de uma e o "acima" da outra caem no mesmo ponto; o rotulo diz o que acontece
+      if (spec.kind === 'mod' && !it.classList.contains('grp'))   // EM CIMA da peca = modificador paralelo: age so' nela
+        add({ type: 'post', key, j: jj, x: b.left + b.width / 2, y: b.top + b.height * 0.42, w: b.width * 0.6, h: b.height * 0.45, label: 'só nesta peça' });
       const gap = ri === 0 ? 18 : 12, bh = ri === 0 ? 24 : 20;
       add({ type: 'branch', key, j: jj, side: 'below', x: b.left + b.width / 2, y: b.bottom + 12, w: b.width, h: 20, label: 'ramo atrás' });
       add({ type: 'branch', key, j: jj, side: 'above', x: b.left + b.width / 2, y: b.top - gap, w: b.width, h: bh, label: 'ramo na frente' });
@@ -2444,6 +2535,8 @@ function dragDrop(ev){
     if (z.type === 'ins') return moveModules(sp.key, sp.js, z.key, z.at);
     if (z.type === 'branch') return moveModules(sp.key, sp.js, null, null, z);
   }
+  if (sp.kind === 'postlink' && z.type === 'post') return linkPost(sp.id, z.key, z.j);
+  if (sp.kind === 'mod' && z.type === 'post') return attachPost(z.key, z.j, sp.file);
   if (sp.kind === 'mod' || sp.kind === 'grp'){
     const items = prepItems(itemsOf(sp), z.key, ev.clientY);
     if (z.type === 'ins') return insertItems(z.key, z.at, items);

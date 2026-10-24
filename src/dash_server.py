@@ -949,6 +949,10 @@ def _norm_overlays(items, dedupe=True):
             if isinstance(it.get('pub'), list) else []
         if pub:             # knobs PUBLICADOS (dash v4): o modo Show so mostra estes
             o['pub'] = pub
+        post = [x for x in it.get('post') or () if isinstance(x, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,24}', x)][:8] \
+            if isinstance(it.get('post'), list) else []
+        if post:            # MODIFICADORES PARALELOS (ids na pilha POST_KEY): agem so' na saida DESTA peca
+            o['post'] = list(dict.fromkeys(post))
         if re.fullmatch(r'[A-Za-z0-9_-]{1,24}', str(it.get('grp') or '')):   # GRUPO (atomo composto): itens seguidos
             o['grp'] = str(it['grp'])                                         # com o mesmo grp = 1 peca no dash
             if it.get('gname'):
@@ -1043,6 +1047,9 @@ def _remap_shader_layers(mapping, tuning_path=None):
 # (forca de cada efeito DAQUELE shader NAQUELA fonte). Chave da fonte = a mesma de OVERLAYS:
 # 'webcam:/dev/videoN' | 'screen:<monitor>' | arquivo de midia ('default/x.mp4'). Fica lembrado
 # mesmo com a fonte desmarcada. Vivo em _state['bindings'].
+POST_KEY = '~post'   # pilha dos modificadores paralelos da cena (fora da mistura; itens com id, lidos por 'post')
+
+
 def _norm_bindings(b):
     out = {}
     for key, v in dict(b or {}).items():
@@ -2971,6 +2978,9 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert [o.get('kick') for o in _norm_overlays([{'file': 'x.frag', 'kick': True}, {'file': 'y.frag', 'kick': 0}],
                                                  dedupe=False)] == [1, None], 'kick do item da pilha = 1 ou ausente'
     assert rg['cam']['mask'] == {'th': 1.0, 'soft': 0.1}, 'mascara do assunto: so th/soft, 0..1'
+    pb = _norm_bindings({POST_KEY: {'shaders': [{'file': 'presets/atomos/Matiz.frag', 'id': 'm1'}]},
+                         'cam': {'shaders': [{'file': 'a.frag', 'post': ['m1', 'm1', 'x y', 3, 'm2']}]}})
+    assert pb[POST_KEY]['shaders'][0]['id'] == 'm1' and pb['cam']['shaders'][0]['post'] == ['m1', 'm2'], pb
     ch = _norm_overlays([{'file': 'x.frag', 'in': 'chain', 'ins': ['fb', 'cam#2', '../x', 'a', 'b']},
                          {'file': 'y.frag', 'in': 'src', 'ins': 'fb'}], dedupe=False)
     assert [(o.get('in'), o.get('ins')) for o in ch] == [('chain', ['fb', 'cam#2']), ('src', None)], 'entradas do modulo'

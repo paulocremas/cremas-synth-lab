@@ -85,7 +85,9 @@ Cada ferramenta isolada, depois comparar, só então compor.
   `.frag`: `// cat:` (glifo na paleta) e `// in:` (ins padrão) → `dash_data.parse_meta` → `/shaders` `meta`.
   Átomos em `shaders/presets/atomos/` seguem o PADRÃO ÁTOMO (`shaders/ATOMO.md`, conferido por
   `dash_data.atom_problems` no selfcheck): um verbo, só imagem + relógio (som = modulador no knob, sem
-  `on_*`/`layer`), knobs 0..1 de vocabulário comum, alfa = cobertura (a camada da peça é RGBA e o blend usa). ↶ desfazer (por cena) e 🛟 socorro só no dash.
+  `on_*`/`layer`), knobs 0..1 de vocabulário comum (o 1º = PRINCIPAL, o botão grande da peça), alfa = cobertura (a camada
+  da peça é RGBA e o blend usa). MODIFICADOR PARALELO: átomo solto EM CIMA de uma peça age só na saída
+  dela (`post: [ids]` → pilha `~post` da cena, `_post_items`; mesmo id em várias peças = um só, com fio). ↶ desfazer (por cena) e 🛟 socorro só no dash.
 - **v4** (`dash4.html`, `/v4`, do zero; decisões no topo do arquivo + doc de design): 3 colunas fixas (Cenas/Peças |
   Patch | Programa, Próxima/GO, Controles, Macros), Show = só knobs publicados (`pub` no item), gavetas Socorro e
   Equipamento (editores da v3 refeitos). Patch = fileiras (topo = frente) + RAMO: fileira com `file: '@<id>'` lê a

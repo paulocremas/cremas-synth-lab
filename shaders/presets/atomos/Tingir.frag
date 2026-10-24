@@ -1,4 +1,4 @@
-// fx: matiz=0.6, forca=0.8
+// fx: forca=0.8, matiz=0.6
 // cat: cor
 // ATOMOS · Tingir. Pinta a imagem de UMA cor, guardando o claro e o escuro (duotone de uma cor só).
 // matiz = a cor; forca = quanto da cor original some.

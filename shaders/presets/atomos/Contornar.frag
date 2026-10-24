@@ -1,7 +1,7 @@
 // fx: limiar=0.15, borda=0.5
 // cat: forma
 // ATOMOS · Contornar. Desenha SÓ as linhas das bordas, brancas, por cima do que vem antes (alfa = linha).
-// Um Tingir depois pinta tudo; pra pintar só as linhas, ponha os dois num ramo em modo tela.
+// Um Tingir depois pinta tudo; pra pintar só as linhas, solte o Tingir EM CIMA do Contornar (paralelo).
 // limiar = a partir de que diferença vira linha; borda = linha dura (0) ou macia (1).
 #ifdef GL_ES
 precision mediump float;
