@@ -937,8 +937,8 @@ def _norm_overlays(items, dedupe=True):
             o['region'] = it['region']
         if it.get('kick'):  # item da pilha so' na batida: opacidade x kick (native; kick 0 = nem desenha)
             o['kick'] = 1
-        if it.get('in') == 'chain':   # MODULO encadeado: le o resultado dos de antes (ausente = a fonte crua, pilha antiga)
-            o['in'] = 'chain'
+        if it.get('in') in ('chain', 'src'):   # 'src' = le a fonte crua; ausente/'chain' = le o resultado dos de antes
+            o['in'] = it['in']
         ins = [str(r) for r in it.get('ins') or () if r and '..' not in str(r)][:2] if isinstance(it.get('ins'), list) else []
         if ins:             # outras raias -> u_texture_1/2 ('fb' = a propria, 1 frame atras; '@id' = saida do modulo id)
             o['ins'] = ins
@@ -1110,8 +1110,21 @@ def _remap_live_bindings(files=None, shaders=None, tuning_path=None):
         set_bindings(new, save=True, tuning_path=tuning_path)
 
 
+_media_cache = {'t': 0.0, 'of': None, 'dir': None, 'v': []}
+
+
+def media_items(media_dir=None):
+    """A biblioteca como o dash a mostra: tuning.MEDIA + arquivo solto na pasta de um set (_read_media).
+    Native e selecao usam ESTA lista — com a crua, midia solta posta na mesa sumia da mistura e nao
+    selecionava. Cache 1 s (o native chama varias vezes por frame); MEDIA regravado invalida na hora."""
+    cur, now = getattr(_tuning, 'MEDIA', []), time.monotonic()
+    if _media_cache['of'] is not cur or _media_cache['dir'] != media_dir or now - _media_cache['t'] > 1.0:
+        _media_cache.update(t=now, of=cur, dir=media_dir, v=_read_media(media_dir=media_dir))
+    return _media_cache['v']
+
+
 def _media_by(field, value):
-    return next((m for m in getattr(_tuning, 'MEDIA', []) if m.get(field) == value), None)
+    return next((m for m in media_items() if m.get(field) == value), None)
 
 
 def _source_key_of_input(ident):
@@ -2959,7 +2972,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert rg['cam']['mask'] == {'th': 1.0, 'soft': 0.1}, 'mascara do assunto: so th/soft, 0..1'
     ch = _norm_overlays([{'file': 'x.frag', 'in': 'chain', 'ins': ['fb', 'cam#2', '../x', 'a', 'b']},
                          {'file': 'y.frag', 'in': 'src', 'ins': 'fb'}], dedupe=False)
-    assert [(o.get('in'), o.get('ins')) for o in ch] == [('chain', ['fb', 'cam#2']), (None, None)], 'entradas do modulo'
+    assert [(o.get('in'), o.get('ins')) for o in ch] == [('chain', ['fb', 'cam#2']), ('src', None)], 'entradas do modulo'
     v4 = _norm_overlays([{'file': 'x.frag', 'id': 'k7', 'pub': ['forca', 'x y', 3, 'matiz'], 'grp': 'g1', 'gname': 'Neon',
                           'ins': ['@k2'], 'mod': {'forca': {'b': ['lfo', 'kick'], 'lfo': {'f': 'tri', 'r': 999, 'ph': '0.5'}}}},
                          {'file': 'y.frag', 'id': 'bad id!', 'grp': '../g', 'pub': 'forca'}], dedupe=False)

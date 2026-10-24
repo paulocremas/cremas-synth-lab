@@ -212,13 +212,14 @@ VIDEO_POOL_MAX = 4
 
 # SETS (cenas) da aba Visuals: fonte + camadas + shader + camadas de shader + forca dos efeitos (dash, sub-aba Sets)
 SCENES = [
-    {"name": "default", "key": "", "transition": "", "selected": "webcam:/dev/video0#2", "sources": [{"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2}], "bindings": {"webcam:/dev/video0": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "region": "bg", "fx": {"temperatura": 0.0, "matiz": 1.0, "exposicao": 0.0, "contraste": 0.0, "realces": 0.5, "sombras": 0.0, "brancos": 0.0, "pretos": 1.0, "claridade": 0.0, "neblina": 0.0, "vibracao": 1.0, "saturacao": 1.0}}, {"file": "image.frag", "opacity": 1.0, "region": "bg", "fx": {}}], "fx": {}}, "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}}, "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}}, "webcam:/dev/video0#2": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"]}, "matiz": {"b": ["subbass"]}, "sombras": {"b": ["subbass"]}}}, {"file": "image.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/default/Crescendo.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/sortidos/CicloDeCor.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/sortidos/Ondular.frag", "opacity": 1.0, "fx": {}, "mod": {"forca": {"b": ["subbass"]}}}, {"file": "presets/sortidos/Contorno.frag", "opacity": 1.0, "fx": {"forca": 0.946, "layer": 0.817, "matiz": 0.0, "on_brilliance": 0.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0}}}], "fx": {}}}},
+    {"name": "default", "key": "", "transition": "", "selected": "webcam:/dev/video0#2", "sources": [{"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2, "off": 1}, {"file": "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_1080p.mp4", "opacity": 1.0, "rect": [0.0, 0.0, 0.8018, 0.8102]}], "bindings": {"webcam:/dev/video0": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "region": "bg", "fx": {"temperatura": 0.0, "matiz": 1.0, "exposicao": 0.0, "contraste": 0.0, "realces": 0.5, "sombras": 0.0, "brancos": 0.0, "pretos": 1.0, "claridade": 0.0, "neblina": 0.0, "vibracao": 1.0, "saturacao": 1.0}}, {"file": "image.frag", "opacity": 1.0, "region": "bg", "fx": {}}], "fx": {}}, "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}}, "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}}, "webcam:/dev/video0#2": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"]}, "matiz": {"b": ["subbass"]}, "sombras": {"b": ["subbass"]}}}, {"file": "image.frag", "opacity": 1.0, "fx": {"grayscale": 1.0}}, {"file": "presets/default/Crescendo.frag", "opacity": 0.475, "fx": {}}, {"file": "presets/sortidos/CicloDeCor.frag", "opacity": 0.208, "fx": {}}, {"file": "presets/sortidos/Ondular.frag", "opacity": 0.914, "fx": {"forca": 0.408, "base": 0.221, "layer": 0.937}, "mod": {"forca": {"b": ["subbass"], "lo": 0.408, "hi": 1.0}}}, {"file": "presets/sortidos/Contorno.frag", "opacity": 0.584, "fx": {"forca": 0.946, "layer": 0.721, "matiz": 0.5, "on_brilliance": 0.0, "base": 1.0, "giro": 0.0, "fundo": 1.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0}}}], "fx": {}}}, "grade": {"on": 1, "fx": {"azul": 0.613, "contraste": 0.383, "exposicao": 0.858}}},
 ]
 SCENE = "default"
 
 # camadas de midia por cima da fonte (dash, aba Visuals)
 OVERLAYS = [
-    {"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2},
+    {"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2, "off": 1},
+    {"file": "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_1080p.mp4", "opacity": 1.0, "rect": [0.0, 0.0, 0.8018, 0.8102]},
 ]
 
 # fonte/midia -> shaders dela (+ forca dos efeitos), dash aba Visuals > Sets
@@ -226,12 +227,16 @@ BINDINGS = {
     "webcam:/dev/video0": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "region": "bg", "fx": {"temperatura": 0.0, "matiz": 1.0, "exposicao": 0.0, "contraste": 0.0, "realces": 0.5, "sombras": 0.0, "brancos": 0.0, "pretos": 1.0, "claridade": 0.0, "neblina": 0.0, "vibracao": 1.0, "saturacao": 1.0}}, {"file": "image.frag", "opacity": 1.0, "region": "bg", "fx": {}}], "fx": {}},
     "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}},
     "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}},
-    "webcam:/dev/video0#2": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"]}, "matiz": {"b": ["subbass"]}, "sombras": {"b": ["subbass"]}}}, {"file": "image.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/default/Crescendo.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/sortidos/CicloDeCor.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/sortidos/Ondular.frag", "opacity": 1.0, "fx": {}, "mod": {"forca": {"b": ["subbass"]}}}, {"file": "presets/sortidos/Contorno.frag", "opacity": 1.0, "fx": {"forca": 0.946, "layer": 0.817, "matiz": 0.0, "on_brilliance": 0.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0}}}], "fx": {}},
+    "webcam:/dev/video0#2": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"]}, "matiz": {"b": ["subbass"]}, "sombras": {"b": ["subbass"]}}}, {"file": "image.frag", "opacity": 1.0, "fx": {"grayscale": 1.0}}, {"file": "presets/default/Crescendo.frag", "opacity": 0.475, "fx": {}}, {"file": "presets/sortidos/CicloDeCor.frag", "opacity": 0.208, "fx": {}}, {"file": "presets/sortidos/Ondular.frag", "opacity": 0.914, "fx": {"forca": 0.408, "base": 0.221, "layer": 0.937}, "mod": {"forca": {"b": ["subbass"], "lo": 0.408, "hi": 1.0}}}, {"file": "presets/sortidos/Contorno.frag", "opacity": 0.584, "fx": {"forca": 0.946, "layer": 0.721, "matiz": 0.5, "on_brilliance": 0.0, "base": 1.0, "giro": 0.0, "fundo": 1.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0}}}], "fx": {}},
 }
 
 # imagem da CENA ativa (calibrar.frag na mistura, antes da transicao); copia do campo "grade" do set ativo
 SCENE_GRADE = {
-    "fx": {},
+    "fx": {
+        "azul": 0.613,
+        "contraste": 0.383,
+        "exposicao": 0.858
+    },
     "on": 1
 }
 
@@ -308,3 +313,9 @@ OUTPUT_GRADE = {
 
 # cor do tom da musica: "quintas" (circulo das quintas) | "scriabin"
 KEY_COLORS = "scriabin"
+
+# troca de cena quantizada: "" na hora | "beat" proxima batida | "bar" proximo compasso
+SCENE_QUANT = ""
+
+# MACROS m1..m4 (faders no Palco; fonte do ♪ nos knobs/luzes)
+MACROS = [0.0, 0.0, 0.0, 0.0]

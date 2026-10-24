@@ -78,8 +78,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
   192 px ~110 ms) por fonte base, só sob demanda (`subject_want`); limiar/borda em `BINDINGS[canal].mask`.
   Dash: região no inspetor, ◐ assunto no Canvas (`which=mask`). `cv2` precisa estar no `.venv` (requirements).
 - **v3** (`dash3.html`, `/v3`; nasceu da v2): abas Show (= `perform`, estrutura travada) e Montar; mesmo grid nas duas.
-  Mesa = raias de MÓDULOS: item da pilha com `in: 'chain'` lê a corrente (sem `in` = legado, fonte crua — cenas
-  velhas não mudam); `ins` = entrada B (`u_texture_1/2`: outra raia, `'fb'` = ela mesma 1 frame atrás, `'src'`).
+  Mesa = raias de MÓDULOS: item da pilha lê a corrente (`in` ausente ou `'chain'`; só `in: 'src'` lê a fonte
+  crua — desde 2026-10-24: antes, sem `in` = crua e a última peça cobria as outras); `ins` = entrada B (`u_texture_1/2`: outra raia, `'fb'` = ela mesma 1 frame atrás, `'src'`).
   Shaders leem textura TOPO→BAIXO: a corrente passa por cópia virada (`lt['chain']`); saída de raia lida por
   alguém fica em `lane_out` (topo→baixo). Unidades 10/11 (`INS_UNITS`), 12 (`u_texture_src`). Cabeçalho do
   `.frag`: `// cat:` (glifo na paleta) e `// in:` (ins padrão) → `dash_data.parse_meta` → `/shaders` `meta`.

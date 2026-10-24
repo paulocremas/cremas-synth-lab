@@ -16,8 +16,8 @@
     esquerda vira a PALETA de módulos. As outras abas (Áudio…Biblioteca) = montagem do equipamento.
     Não há mais botão editar/palco: a aba É o modo.
   - MÓDULOS (atômicos): cada raia = fonte → módulo → módulo → … (in: 'chain' = lê o resultado dos
-    de antes; a cor DEPOIS do contorno pinta o contorno). Módulo velho (sem 'in') lê a fonte crua e
-    aparece com a seta ↷. Entrada B (u_texture_1, 'ins'): outra raia, 'fb' = ela mesma 1 frame atrás
+    de antes; a cor DEPOIS do contorno pinta o contorno). Desde 2026-10-24 sem 'in' também lê a
+    corrente (a última peça cobria as outras); 'in: src' = lê a fonte crua, seta ↷. Entrada B (u_texture_1, 'ins'): outra raia, 'fb' = ela mesma 1 frame atrás
     (feedback), 'src' = a fonte crua. Arrastar da paleta pra raia insere ali; arrastar módulo entre
     raias move. Categoria por glifo (◑ cor, ☀ luz, ◇ forma…) — não por cor: as cores são do estado.
   - DESCOBRIR SEM MEDO: 🎲 sorteia os knobs do módulo; ↶ desfazer (Ctrl+Z, 50 passos, por cena)
@@ -2868,7 +2868,7 @@ function laneEl(o, i){
   return el;
 }
 function modEl(key, s, j, picked, info){
-  const live = !s.off && inPool('shaders', s.file), c = catOf(s.file), chained = s.in === 'chain';
+  const live = !s.off && inPool('shaders', s.file), c = catOf(s.file), chained = s.in !== 'src';
   const arrow = h('span', { class: 'arrow' + (chained ? '' : ' raw'), text: chained ? '' : '↷',
     title: chained ? 'recebe o resultado do que vem antes' : 'lê a FONTE CRUA, não o que vem antes (módulo antigo) — inspetor › entrada' });
   const m = h('div', { class: 'mod' + (picked ? ' picked' : '') + (live ? '' : ' off'), title: (metaOf(s.file).desc || '') + '\n' + s.file });
@@ -2989,9 +2989,9 @@ function renderInspector(){
   // ENTRADA do modulo: a corrente (o que vem antes) ou a fonte crua; + a entrada B (u_texture_1) se o
   // .frag declara (// in:) ou ja' tem uma ligada
   const ein = h('div', { class: 'blendseg', style: 'margin-top:6px' }, h('span', { class: 'gt', text: 'entrada' }));
-  for (const [v, t, tt] of [['chain', '→ o que vem antes', 'lê o resultado dos módulos anteriores da raia'], ['', '↷ fonte crua', 'lê a fonte direto (ignora os anteriores)']])
-    ein.append(chip(t, false, tt, () => { const x = cur(); if (!x) return; if (v) x.in = v; else delete x.in; sendBindings(true); remix(); },
-      (s.in || '') === v ? 'pick' : ''));
+  for (const [v, t, tt] of [['chain', '→ o que vem antes', 'lê o resultado dos módulos anteriores da raia'], ['src', '↷ fonte crua', 'lê a fonte direto (ignora os anteriores)']])
+    ein.append(chip(t, false, tt, () => { const x = cur(); if (!x) return; x.in = v; sendBindings(true); remix(); },
+      (s.in === 'src' ? 'src' : 'chain') === v ? 'pick' : ''));
   sec.append(ein);
   if (metaOf(file).ins.length || (s.ins || []).length){
     const bsel = h('select', { class: 'inp sm', title: 'imagem B deste módulo (a que entorta, mascara ou mistura)' });

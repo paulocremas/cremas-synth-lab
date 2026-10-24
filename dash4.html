@@ -1642,7 +1642,7 @@ function selectSource(key){ lastSelected = key; selTouched.src = now(); post('/s
 function selModule(){ const s = stackOf(sel.key)[sel.j]; return sel.j >= 0 && s ? s : null; }
 function costOf(key){   // passes de GPU por quadro (native render_mix): fonte 1 + entrada no programa 1, modulo 2 (+1 se le a corrente)
   let n = 2;
-  for (const s of stackOf(key)) if (!s.off && (s.opacity ?? 1) > 0.002) n += s.in === 'chain' ? 3 : 2;
+  for (const s of stackOf(key)) if (!s.off && (s.opacity ?? 1) > 0.002) n += s.in !== 'src' ? 3 : 2;
   return n;
 }
 function renderPatch(){
@@ -1711,9 +1711,9 @@ function modBadge(m){
 function modCard(key, j, part, selRow){
   const s = part.s || stackOf(key)[j], c = catOf(s.file);
   const isSel = sel.key === key && sel.j === j, picked = pickRange && pickRange.key === key && j >= pickRange.a && j <= pickRange.b;
-  const el = h('div', { class: 'pc' + (s.off ? ' off' : '') + (s.in === 'chain' ? '' : ' raw') + (isSel ? ' sel' : '') + (picked ? ' sel' : ''),
+  const el = h('div', { class: 'pc' + (s.off ? ' off' : '') + (s.in === 'src' ? ' raw' : '') + (isSel ? ' sel' : '') + (picked ? ' sel' : ''),
     'data-k': key, 'data-j': String(j),
-    title: fxName(s.file) + (metaOf(s.file).desc ? ' — ' + metaOf(s.file).desc : '') + (s.in === 'chain' ? '' : '\n(lê a FONTE CRUA, não o que vem antes: módulo antigo — Controles › entrada)') });
+    title: fxName(s.file) + (metaOf(s.file).desc ? ' — ' + metaOf(s.file).desc : '') + (s.in === 'src' ? '\n(lê a FONTE CRUA, não o que vem antes — Controles › entrada)' : '') });
   const th = h('div', { class: 'th' }, icon(catIcon(c), 'lg'));
   if (selRow) th.append(h('canvas', { 'data-step': String(j) }));
   const bd = h('div', { class: 'badges' });
@@ -2050,8 +2050,8 @@ function renderModCtl(box, key, j, s){
   box.append(h('div', { class: 'irow', style: 'align-items:flex-start' }, op, h('div', { style: 'flex:1;display:flex;flex-direction:column;gap:6px' }, blendRow,
     h('div', { class: 'chips' }, REGIONS.map(([v, t]) => h('button', { class: 'chip' + ((s.region || '') === v ? ' pick' : ''), text: t,
       title: v ? 'só onde a máscara do assunto acha a pessoa/objeto (ou o contrário)' : 'a imagem toda', onclick: () => set(x => { if (v) x.region = v; else delete x.region; }) }))),
-    h('div', { class: 'chips' }, [['chain', 'lê o que vem antes'], ['', 'lê a fonte crua']].map(([v, t]) => h('button', { class: 'chip' + ((s.in || '') === v ? ' pick' : ''), text: t,
-      title: v ? 'a corrente: o resultado dos módulos anteriores' : 'ignora os anteriores (como os módulos antigos)', onclick: () => set(x => { if (v) x.in = v; else delete x.in; }) }))))));
+    h('div', { class: 'chips' }, [['chain', 'lê o que vem antes'], ['src', 'lê a fonte crua']].map(([v, t]) => h('button', { class: 'chip' + ((s.in === 'src' ? 'src' : 'chain') === v ? ' pick' : ''), text: t,
+      title: v === 'chain' ? 'a corrente: o resultado dos módulos anteriores' : 'ignora os anteriores: lê a fonte direto', onclick: () => set(x => { x.in = v; }) }))))));
   if (m.ins.length || (s.ins || []).length){
     const bsel = h('select', { class: 'inp sm', title: 'a imagem B deste módulo (a que mistura, mascara ou entorta)' });
     const opts = [['src', 'a fonte crua desta fileira'], ['fb', 'esta fileira, 1 quadro atrás (feedback)'],

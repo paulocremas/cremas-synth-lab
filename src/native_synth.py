@@ -1114,7 +1114,7 @@ def prewarm_media():
     """Thread daemon no start: decodifica toda imagem da galeria pro _still_cache (1a troca ja
     instantanea) e aquece _probe_dims dos videos — senao o 1o _sync_pool trava o video_thread
     num ffprobe frio por video, e o 1o video da sessao congela ate esquentar."""
-    for m in getattr(tuning, 'MEDIA', []):
+    for m in dash_server.media_items(MEDIA_DIR):
         p = os.path.join(MEDIA_DIR, m.get('file', ''))
         if not os.path.isfile(p):
             continue
@@ -1163,7 +1163,7 @@ def _desired_pool():
     ms = getattr(tuning, 'MEDIA_SET', 'default')
     cap = max(0, int(getattr(tuning, 'VIDEO_POOL_MAX', 4)))
     keys = getattr(tuning, 'MEDIA_KEYS', {}).get(ms, {})
-    items = [m for m in getattr(tuning, 'MEDIA', [])
+    items = [m for m in dash_server.media_items(MEDIA_DIR)
              if m.get('kind') == 'video' and _media_set_of(m.get('file', '')) == ms]
     items.sort(key=lambda m: m.get('name', '') not in keys)  # False (com tecla) antes de True
     out = []
@@ -1268,7 +1268,7 @@ def _overlay_items(chans=False, scene=None):
     acrescenta a chave do canal (a mesma fonte pode vir 2x, cada canal com a sua pilha).
     scene = {overlays, pool} de OUTRA cena (a que sai numa transicao); None = a ativa."""
     ms = getattr(tuning, 'MEDIA_SET', 'default')
-    by_file = {m.get('file', ''): m for m in getattr(tuning, 'MEDIA', [])}
+    by_file = {m.get('file', ''): m for m in dash_server.media_items(MEDIA_DIR)}
     sc = scene if scene is not None else state
     avail = (sc.get('pool') or {}).get('sources')
     need = _graph_wants(sc.get('bindings'), sc.get('overlays'))[2]
@@ -1436,7 +1436,7 @@ def _preview_frame(which, key='', max_w=320):
             e = _ovl.get(base)
             f = e['frame'] if e else (state.get('frame') if base == state.get('video_id') else None)
         else:
-            m = next((x for x in getattr(tuning, 'MEDIA', []) if x.get('file') == base), None)
+            m = next((x for x in dash_server.media_items(MEDIA_DIR) if x.get('file') == base), None)
             try:
                 f = _overlay_frame(m) if m else None
             except (KeyError, TypeError, ValueError):
@@ -1546,7 +1546,7 @@ def video_thread(mode, region=None, device=None):
             sig = (getattr(tuning, 'MEDIA_SET', 'default'), (FIT_W, FIT_H),
                    getattr(tuning, 'VIDEO_POOL', 0), getattr(tuning, 'VIDEO_POOL_MAX', 4),
                    tuple((m.get('file', ''), m.get('fit'), bool(m.get('bounce')))
-                         for m in getattr(tuning, 'MEDIA', []) if m.get('kind') == 'video'))
+                         for m in dash_server.media_items(MEDIA_DIR) if m.get('kind') == 'video'))
             if sig != pool_sig:
                 pool_sig = sig
                 _sync_pool()
@@ -2059,7 +2059,7 @@ def _list_video_inputs():
                         'name': f"tela {m['name']} {m['w']}x{m['h']}" + (' *' if m['primary'] else '')})
     except Exception:
         pass
-    if getattr(tuning, 'MEDIA', []):   # UMA fonte generica; qual item toca sai da aba Visuals
+    if dash_server.media_items(MEDIA_DIR):   # UMA fonte generica; qual item toca sai da aba Visuals
         res.append({'kind': 'media', 'id': 'media', 'name': 'Media'})
     return res
 
@@ -2113,7 +2113,7 @@ def _audio_media():
             continue
         if o.get('off') or (avail is not None and o.get('file') not in avail):
             return None
-        m = next((x for x in getattr(tuning, 'MEDIA', []) if x.get('file') == o.get('file')), None)
+        m = next((x for x in dash_server.media_items(MEDIA_DIR) if x.get('file') == o.get('file')), None)
         if not m or m.get('kind') != 'video' or m.get('bounce'):
             return None
         p = os.path.join(MEDIA_DIR, m.get('file', ''))
@@ -2123,7 +2123,7 @@ def _audio_media():
 
 def _media_entry(name):
     """item de MEDIA por nome — prefere o do set ativo (nomes so sao unicos DENTRO do set)."""
-    items = getattr(tuning, 'MEDIA', [])
+    items = dash_server.media_items(MEDIA_DIR)
     ms = getattr(tuning, 'MEDIA_SET', 'default')
     return (next((m for m in items if m.get('name') == name and _media_set_of(m.get('file', '')) == ms), None)
             or next((m for m in items if m.get('name') == name), None))
@@ -2144,7 +2144,7 @@ def _video_from_id(ident):
         dev = rest or plat.default_cam()
         return {'mode': 'webcam', 'device': dev, 'region': None, 'fit': _live_fit('webcam:' + dev)}
     if kind == 'media':
-        media = getattr(tuning, 'MEDIA', [])
+        media = dash_server.media_items(MEDIA_DIR)
         if rest:
             m = _media_entry(rest)
         else:  # generico: mantem o item de midia atual, senao o 1o da galeria
@@ -3845,7 +3845,8 @@ def main():
                     if not h:                               # nao desenha: a corrente passa direto (o tap tambem)
                         after_module(key, oj, o, lt['src'][si])
                         continue
-                    chain = o.get('in') == 'chain'          # modulo ENCADEADO: le o resultado dos de antes
+                    chain = o.get('in') != 'src'           # le o resultado dos de antes; so' 'src' le a fonte crua (antes: sem 'in' = crua,
+                                                            # e a ultima peca cobria todas)
                     if chain:                               # (sem 'in' = pilha antiga: le a fonte crua)
                         blend_into(lt['chain'], lt['src'][si], lt['src'][si], 1.0, 0, flip=1)
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
@@ -4342,6 +4343,12 @@ def _selfcheck():
     assert got == ['c.mp4', 'a.mp4', 'b.mp4'], got   # tecla 1o, resto em ordem, cap 3
     tuning.VIDEO_POOL = 0
     assert _desired_pool() == [], 'VIDEO_POOL=0 nao esvaziou o pool'
+    open(os.path.join(MEDIA_DIR, 'S1', 'solta.mp4'), 'wb').write(b'')   # na pasta, fora de MEDIA (como a galeria mostra)
+    _ov, _pl = state.get('overlays'), state.get('pool')
+    state['overlays'], state['pool'] = [{'file': 'S1/solta.mp4', 'opacity': 1.0}], None
+    it = _overlay_items()
+    assert it and it[0][0]['kind'] == 'video', ('midia solta posta na mesa tem que entrar na mistura', it)
+    state['overlays'], state['pool'] = _ov, _pl
     for k, val in _keep.items():
         setattr(tuning, k, val) if val is not None else delattr(tuning, k)
     MEDIA_DIR = _md0
