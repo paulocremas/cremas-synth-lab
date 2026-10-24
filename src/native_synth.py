@@ -1741,7 +1741,10 @@ def band_tweak_maps():
     return release, attack, peakdecay
 
 
-def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay):
+BAND_LONG_DECAY = 0.99995   # pico de LONGO prazo por faixa (~5 min de meia-vida a ~43 chunks/s)
+
+
+def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay, band_long=None):
     """Pra cada (nome, lo, hi) em `bands` (de freq_bands()): magnitude bruta (fallback de bin
     mais proximo pra faixa mais estreita que a resolucao da FFT) e nivel relativo ao PICO
     RECENTE DA PROPRIA banda — nao ao pico entre as bandas. Isso importa porque uma banda
@@ -1758,7 +1761,12 @@ def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay):
             mid = (lo + min(hi, freqs[-1])) / 2  # `hi` pode ser infinito (ultima banda)
             mag = spectrum[np.argmin(np.abs(freqs - mid))]
         band_peaks[name] = max(mag, band_peaks[name] * peak_decay[name], 1e-6)
-        out.append((name, mag, min(1.0, mag / band_peaks[name])))
+        ceil = band_peaks[name]
+        if band_long is not None:   # PISO: o teto nunca cai abaixo de BAND_FLOOR do pico de longo prazo — senao,
+            # minutos sem agudo e o teto do Air desce ate o CHIADO dele, que passa a acender como se tocasse
+            band_long[name] = max(mag, band_long.get(name, 1e-6) * BAND_LONG_DECAY, 1e-6)
+            ceil = max(ceil, getattr(tuning, 'BAND_FLOOR', 0.25) * band_long[name])
+        out.append((name, mag, min(1.0, mag / ceil)))
     return out
 
 
@@ -2254,6 +2262,7 @@ def audio_thread(device):
     smooth = {'amp': 0.0, 'bass': 0.0, 'mid': 0.0, 'treble': 0.0, **{k: 0.0 for k in FREQ_BAND_UNIFORM.values()}}
     smoothing_used = dict(smooth)  # ultimo smoothing (attack ou release) aplicado em cada chave
     band_peaks = {name: 1e-6 for name, _, _ in fine_bands}  # auto-gain: teto recente de cada banda
+    band_long = {}   # pico de longo prazo (piso do teto: faixa vazia nao amplifica o proprio ruido)
     kick_baseline = 0.0
     kick_env = 0.0
     kick_decay_dynamic = tuning.KICK_DECAY  # ate a 1a batida ter intervalo medido, usa o fixo
@@ -2313,6 +2322,7 @@ def audio_thread(device):
                 cur_media = media
                 for k in band_peaks:  # auto-gain nao herda o teto da fonte anterior
                     band_peaks[k] = 1e-6
+                band_long.clear()
                 kick_baseline = 0.0
                 if media:
                     if proc:
@@ -2440,7 +2450,7 @@ def audio_thread(device):
             # porque agora controlam uniforms de verdade (u_subbass..u_air). "level" ja
             # vem 0..1 (relativo ao pico ENTRE as 8 bandas, auto-calibrado, sem escala
             # manual por banda) — so falta suavizar igual as outras.
-            named_levels = named_band_levels(spectrum, freqs, fine_bands, band_peaks, band_peakdecay)
+            named_levels = named_band_levels(spectrum, freqs, fine_bands, band_peaks, band_peakdecay, band_long)
             # faixas DESLIGADAS no dash (botao na coluna, tuning.BANDS_OFF: nomes + 'kick') = 0 pro shader/♪
             off = {FREQ_BAND_UNIFORM.get(n, n) for n in getattr(tuning, 'BANDS_OFF', None) or ()}
             for name, _, level in named_levels:
@@ -4477,6 +4487,17 @@ def _selfcheck():
     assert near(_mod_value(0.0, {'b': ['lfo', 'kick'], 'lo': 0, 'hi': 1, 'lfo': {'f': 'sq', 'r': 4}}, {'bpos': 3.0, 'kick': 0.7}), 0.7), \
         'lfo + kick: vale o mais forte'
     assert near(_mod_value(0.0, {'b': ['mov'], 'lo': 0.0, 'hi': 0.5}, {'mov': 0.6}), 0.3), 'imagem (mov) = fonte do ♪'
+    fq, bd, dc = np.array([100.0, 10000.0]), [('Air', 5000.0, 20000.0)], {'Air': 0.999}
+    pk, lg = {'Air': 1e-6}, {}
+    for _ in range(200):
+        named_band_levels(np.array([0.0, 1.0]), fq, bd, pk, dc, lg)          # agudo de verdade
+    for _ in range(13000):                                                    # ~5 min so' de chiado
+        lv_air = named_band_levels(np.array([0.0, 0.02]), fq, bd, pk, dc, lg)[0][2]
+    assert lv_air < 0.3, ('faixa vazia nao pode acender com o proprio chiado', lv_air)
+    pk2 = {'Air': 1e-6}
+    for _ in range(13000):
+        lv_old = named_band_levels(np.array([0.0, 0.02]), fq, bd, pk2, dc)[0][2]
+    assert lv_old > 0.9, 'sem piso (chamada antiga) = o comportamento de antes'
     print('native_synth mod self-check ok')
     # --- dash v4: quem le quem (ramo, entrada B, feedback) ---
     bnd = {'cam': {'shaders': [{'file': 'a.frag', 'id': 'k1'}, {'file': 'b.frag', 'id': 'k2', 'ins': ['fb']}]},

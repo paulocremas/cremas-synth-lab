@@ -103,6 +103,10 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - Elemento recriado a cada SSE perde clique/pointer capture — atualizar no lugar.
 - Classe no `body` não pode colidir com classe de componente (blackout = `body.blackout`, não `.blk`).
 
+- Faixas de áudio: nível = magnitude / teto da PRÓPRIA faixa (`named_band_levels`); o teto nunca cai abaixo de
+  `BAND_FLOOR` (0.25, `getattr` no tuning) × o pico de LONGO prazo dela (`BAND_LONG_DECAY`) — sem esse piso,
+  faixa sem som amplificava o próprio chiado até acender.
+
 ## Testes
 `.venv/bin/python src/dash_server.py` e `.venv/bin/python src/native_synth.py --selfcheck` (+ `src/plat.py`,
 `src/dash_data.py`, `src/telao_sim.py --selfcheck`, `packaging/updater.py`, `packaging/check_imports.py` — o CI roda
