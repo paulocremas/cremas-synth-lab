@@ -4,6 +4,7 @@ Fonte unica de verdade do dash de audio: o audio_thread chama audio_dash_data() 
 o dict em state['audio_dash']; tanto o dash de terminal quanto o payload HTTP so renderizam
 esse mesmo dict. Sem import de native_synth (evita circular) — so numpy.
 """
+import glob
 import json
 import math
 import os
@@ -50,6 +51,40 @@ def parse_meta(src):
     return {'cat': m.group(1) if m else '', 'ins': [s.strip() for s in i.group(1).split(',') if s.strip()][:2] if i else [],
             'desc': desc}
 
+
+
+# PADRAO ATOMO (shaders/ATOMO.md): o que um .frag de shaders/presets/atomos/ pode e nao pode
+ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador')
+ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
+
+
+def atom_problems(src):
+    """Regras do padrao ATOMO que o .frag quebra (lista vazia = ok). Ver shaders/ATOMO.md."""
+    src = src or ''
+    out, fx, meta = [], parse_fx_defaults(src), parse_meta(src)
+    code = re.sub(r'//[^\n]*', '', src)
+    if meta['cat'] not in ATOM_CATS:
+        out.append(f"// cat: '{meta['cat']}' nao e' um tipo de atomo ({', '.join(ATOM_CATS)})")
+    if not re.search(r'(?m)^//\s*ATOMOS\s*·\s*\S', src):
+        out.append('falta a linha "// ATOMOS · Nome. o que faz"')
+    for n in re.findall(r'\buniform\s+\w+\s+([^;]+);', code):
+        for u in (x.strip().split('[')[0] for x in n.split(',')):
+            if u.startswith('u_fx_'):
+                k = u[5:]
+                if k == 'layer' or k.startswith('on_'):
+                    out.append(f'knob proibido {k}: misturar = opacidade da peca; som = modulador no knob')
+                elif k not in fx:
+                    out.append(f'{u} declarado mas fora do // fx:')
+            elif u not in ATOM_UNIFORMS:
+                out.append(f'{u} nao e\' entrada de atomo (so\' imagem, u_resolution, u_time, u_beat, u_bar)')
+    for k in fx:
+        if not re.search(r'\bu_fx_' + re.escape(k) + r'\b', code):
+            out.append(f'knob {k} do // fx: nao e\' usado no codigo')
+    if re.search(r'\bu_texture_[12]\b', code) and not meta['ins']:
+        out.append('le a entrada B (u_texture_1/2) sem "// in:"')
+    if 'gl_FragColor' not in code:
+        out.append('sem gl_FragColor')
+    return out
 
 
 # MODULADOR LFO (dash v4: peca de controle que se solta num knob; mod[knob] = {b: ['lfo'], lo, hi, lfo: {f, r, ph}})
@@ -400,4 +435,12 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert [t['pw'] for t in pack_raster([{'pw': 2000, 'ph': 10}, {'pw': 10, 'ph': 10}], 1920, 1080)] == [2000]
     assert img_mod_levels({'grids': [{'name': 'BRILHO', 'total': 0.4}, {'name': 'MOVIMENTO', 'total': 1.3}]}) == {'luz': 0.4, 'mov': 1.0}
     assert img_mod_levels(None) == {'luz': 0.0, 'mov': 0.0}
+    ok = '// fx: forca=0.5\n// cat: cor\n// ATOMOS · T. x\nuniform sampler2D u_texture_0;\nuniform float u_fx_forca;\nvoid main(){ gl_FragColor = vec4(u_fx_forca); }\n'
+    assert atom_problems(ok) == [], atom_problems(ok)
+    bad = '// fx: layer, z\n// cat: luzes\nuniform float u_bass, u_fx_layer;\nuniform sampler2D u_texture_1;\nvoid main(){ gl_FragColor = vec4(u_bass * u_fx_layer); }\n'
+    pr = ' | '.join(atom_problems(bad))
+    for frag in ("cat: 'luzes'", 'ATOMOS', 'u_bass', 'knob proibido layer', 'knob z', 'sem "// in:"'):
+        assert frag in pr, (frag, pr)
+    for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shaders', 'presets', 'atomos', '*.frag'))):
+        assert not atom_problems(open(f, encoding='utf-8').read()), (os.path.basename(f), atom_problems(open(f, encoding='utf-8').read()))
     print('dash_data self-check ok')

@@ -344,7 +344,8 @@ def _shader_meta(names):
     for rel in names:
         try:
             with open(os.path.join(_SHADERS, rel), encoding='utf-8', errors='replace') as f:
-                out[rel] = dash_data.parse_meta(f.read(4000))
+                src = f.read()
+            out[rel] = dict(dash_data.parse_meta(src[:4000]), atom=not dash_data.atom_problems(src))   # padrao ATOMO
         except OSError:
             out[rel] = dash_data.parse_meta('')
     return out

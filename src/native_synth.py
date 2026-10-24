@@ -2938,8 +2938,10 @@ void main() {
         a *= u_use_mask == 2 ? s : 1.0 - s;
     }
     vec3 b = texture2D(u_base, uv).rgb;
-    vec3 l = texture2D(u_layer, u_flip == 1 ? vec2(lu.x, 1.0 - lu.y) : lu).rgb;
+    vec4 lt = texture2D(u_layer, u_flip == 1 ? vec2(lu.x, 1.0 - lu.y) : lu);
+    vec3 l = lt.rgb;
     if (u_flip == 1) l = clamp(l * u_lv.x + u_lv.y, 0.0, 1.0);
+    else a *= lt.a;   // peca que desenha so' uma parte (alfa = cobertura): o resto deixa passar o de baixo
     vec3 m = l;
     if (u_mode == 1) m = min(b + l, 1.0);
     else if (u_mode == 2) m = 1.0 - (1.0 - b) * (1.0 - l);
@@ -3035,7 +3037,8 @@ def make_layer_targets(w, h):
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filt)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
+        rgba = t == texs[4]   # 'layer' = saida da peca: o ALFA dela e' cobertura (padrao ATOMO: traco/gerador)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA if rgba else GL_RGB, w, h, 0, GL_RGBA if rgba else GL_RGB, GL_UNSIGNED_BYTE, None)
     return {'size': (w, h), 'fbo': glGenFramebuffers(1), 'out': [texs[0], texs[1]],
             'src': [texs[2], texs[3]], 'layer': texs[4], 'old': [texs[5], texs[8]], 'cue': [texs[9], texs[10]],
             'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)

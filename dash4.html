@@ -2271,7 +2271,8 @@ function renderPalette(){
     item('grupo', g.name, g.items.length + ' peças', (g.desc || '') + ' — arraste pro patch ou clique', { kind: 'grp', lib: g }, () => clickInsert({ kind: 'grp', lib: g }))));
   const modItem = f => item(catIcon(catOf(f)), fxName(f), '', (metaOf(f).desc || fxName(f)) + ' — arraste até onde quer ligar, ou clique (entra depois da peça selecionada)',
     { kind: 'mod', file: f }, () => clickInsert({ kind: 'mod', file: f }));
-  const mods = lastShaderList.filter(f => f.startsWith('presets/') && (!palCat || catOf(f) === palCat));
+  const mods = lastShaderList.filter(f => f.startsWith('presets/') && (!palCat || catOf(f) === palCat))
+    .sort((a, b) => !!metaOf(b).atom - !!metaOf(a).atom);   // ATOMOS (padrao, combinam entre si) primeiro
   if (q){   // buscando: uma lista so', quem tem o termo no NOME vem primeiro (o que se digitou aparece em cima)
     const rank = f => { const n = fxName(f).toLowerCase(); return n.startsWith(q) ? 0 : n.includes(q) ? 1 : 2; };
     group('Módulos', 'outros', mods.filter(f => hit(fxName(f), metaOf(f).desc, (CATS.find(([c]) => c === catOf(f)) || [])[1])).sort((a, b) => rank(a) - rank(b)).map(modItem));
