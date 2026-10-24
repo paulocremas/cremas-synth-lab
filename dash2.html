@@ -3141,7 +3141,7 @@ function applyRow(i, lo, hi){
   if (!(dragRow === i || r.lo === document.activeElement || r.hi === document.activeElement)){ r.lo.value = lo; r.hi.value = hi; }
   const a = hzPct(lo), b = hzPct(hi);
   r.tLo.style.left = a + '%'; r.tHi.style.left = b + '%'; r.seg.style.left = a + '%'; r.seg.style.width = (b - a) + '%'; r.nm.style.left = a + '%';
-  r.nm.style.display = (b - a) > 6 ? '' : 'none';
+  const bw_ = r.bar.clientWidth; r.nm.style.display = (bw_ ? (b - a) / 100 * bw_ > r.nm.textContent.length * 7 + 10 : (b - a) > 6) ? '' : 'none';   // cabe em px (aba escondida: %)
 }
 // COSTURA (so' SEM sobreposicao — com ela cada borda anda sozinha): borda que encosta na borda
 // OPOSTA de outra faixa (hi de uma = lo de outra) fica grudada

@@ -323,16 +323,16 @@
   canvas#spec { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   #lanes { position: absolute; inset: 0 0 16px 0; display: flex; flex-direction: column-reverse; }
   #lanes.dim { opacity: .35; }
-  .lane { position: relative; flex: 1; cursor: pointer; touch-action: none; }
-  .lane .seg { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; opacity: .22; pointer-events: none; }
-  .lane .nm { position: absolute; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 700; pointer-events: none; white-space: nowrap; padding-left: 6px; text-shadow: 0 1px 2px #000; }
-  .lane .thumb { position: absolute; top: 1px; bottom: 1px; width: 14px; margin-left: -7px; cursor: ew-resize; touch-action: none; }
-  .lane .thumb::before { content: ''; position: absolute; left: 5px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: #eef0f2; opacity: .75; }
-  .lane .thumb:hover::before { opacity: 1; }
-  .lane .thumb.glued::before { opacity: .95; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
-  .lane .thumb.free::before { background: none; border: 1px dashed #eef0f2; width: 2px; }
-  .lane.swap { background: rgba(255,255,255,.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); border-radius: 4px; }
-  .lane .hzhint { position: absolute; top: 50%; transform: translate(-50%, -50%); font: 10px var(--mono); color: var(--tx); background: rgba(0,0,0,.7); padding: 1px 4px; border-radius: 3px; pointer-events: none; white-space: nowrap; }
+  .hzlane { position: relative; flex: 1; cursor: pointer; touch-action: none; }
+  .hzlane .seg { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; opacity: .22; pointer-events: none; }
+  .hzlane .nm { position: absolute; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 700; pointer-events: none; white-space: nowrap; padding-left: 6px; text-shadow: 0 1px 2px #000; }
+  .hzlane .thumb { position: absolute; top: 1px; bottom: 1px; width: 14px; margin-left: -7px; cursor: ew-resize; touch-action: none; }
+  .hzlane .thumb::before { content: ''; position: absolute; left: 5px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: #eef0f2; opacity: .75; }
+  .hzlane .thumb:hover::before { opacity: 1; }
+  .hzlane .thumb.glued::before { opacity: .95; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+  .hzlane .thumb.free::before { background: none; border: 1px dashed #eef0f2; width: 2px; }
+  .hzlane.swap { background: rgba(255,255,255,.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); border-radius: 4px; }
+  .hzlane .hzhint { position: absolute; top: 50%; transform: translate(-50%, -50%); font: 10px var(--mono); color: var(--tx); background: rgba(0,0,0,.7); padding: 1px 4px; border-radius: 3px; pointer-events: none; white-space: nowrap; }
   #hzruler { position: absolute; left: 0; right: 0; bottom: 0; height: 16px; border-top: 1px solid var(--line); pointer-events: none; }
   #hzruler span { position: absolute; transform: translateX(-50%); bottom: 2px; font: 9px var(--mono); color: var(--tx3); }
   .cols { display: grid; grid-template-columns: repeat(10, minmax(104px, 1fr)); gap: 6px; margin-top: var(--gap); overflow-x: auto; }
@@ -3283,7 +3283,7 @@ const rangeRows = BAND_NAMES.map((name, i) => {
   const seg = h('div', { class: 'seg', style: `background:${color}` }), nm = h('span', { class: 'nm', text: name, style: `color:${color}` });
   const tLo = h('div', { class: 'thumb', title: name + ' — borda de baixo' }), tHi = h('div', { class: 'thumb', title: name + ' — borda de cima' });
   const hint = h('span', { class: 'hzhint', hidden: true });
-  const bar = h('div', { class: 'lane' }, seg, nm, tLo, tHi, hint);
+  const bar = h('div', { class: 'hzlane' }, seg, nm, tLo, tHi, hint);   // nao 'lane': essa e' a raia da mesa (CSS colidia)
   $('#lanes').append(bar);
   const lo = h('input', { type: 'number', class: 'inp num', min: HZ_LO, max: HZ_HI, step: 1, title: name + ' — Hz de baixo' });
   const hi = h('input', { type: 'number', class: 'inp num', min: HZ_LO, max: HZ_HI, step: 1, title: name + ' — Hz de cima' });
@@ -3355,7 +3355,7 @@ function applyRow(i, lo, hi){
   if (!(dragRow === i || r.lo === document.activeElement || r.hi === document.activeElement)){ r.lo.value = lo; r.hi.value = hi; }
   const a = hzPct(lo), b = hzPct(hi);
   r.tLo.style.left = a + '%'; r.tHi.style.left = b + '%'; r.seg.style.left = a + '%'; r.seg.style.width = (b - a) + '%'; r.nm.style.left = a + '%';
-  r.nm.style.display = (b - a) > 6 ? '' : 'none';
+  const bw_ = r.bar.clientWidth; r.nm.style.display = (bw_ ? (b - a) / 100 * bw_ > r.nm.textContent.length * 7 + 10 : (b - a) > 6) ? '' : 'none';   // cabe em px (aba escondida: %)
 }
 // COSTURA (so' SEM sobreposicao — com ela cada borda anda sozinha): borda que encosta na borda
 // OPOSTA de outra faixa (hi de uma = lo de outra) fica grudada
