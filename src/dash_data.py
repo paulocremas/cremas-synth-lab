@@ -54,7 +54,8 @@ def parse_meta(src):
 
 
 # PADRAO ATOMO (shaders/ATOMO.md): o que um .frag de shaders/presets/atomos/ pode e nao pode
-ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador')
+ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador', 'mascara')
+MASK_UNIFORMS = {'u_subject', 'u_subject_on'}   # so' atomo de MASCARA (dash v5): a mascara do assunto (U2-Net) da fonte
 ATOM_MAX_KNOBS = 3   # minimalismo: o principal + ate' 2 detalhes essenciais; mais que isso = dividir em atomos
 ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
 
@@ -78,13 +79,17 @@ def atom_problems(src):
                     out.append(f'knob proibido {k}: misturar = opacidade da peca; som = modulador no knob')
                 elif k not in fx:
                     out.append(f'{u} declarado mas fora do // fx:')
-            elif u not in ATOM_UNIFORMS:
+            elif u in MASK_UNIFORMS and meta['cat'] != 'mascara':
+                out.append(f'{u} so\' em atomo de mascara (// cat: mascara)')
+            elif u not in ATOM_UNIFORMS | MASK_UNIFORMS:
                 out.append(f'{u} nao e\' entrada de atomo (so\' imagem, u_resolution, u_time, u_beat, u_bar)')
     for k in fx:
         if not re.search(r'\bu_fx_' + re.escape(k) + r'\b', code):
             out.append(f'knob {k} do // fx: nao e\' usado no codigo')
     if re.search(r'\bu_texture_[12]\b', code) and not meta['ins']:
         out.append('le a entrada B (u_texture_1/2) sem "// in:"')
+    if meta['cat'] == 'mascara' and (meta['ins'] or re.search(r'\bu_texture_[12]\b', code)):
+        out.append('atomo de mascara le so\' a ENTRADA da caixa (u_texture_0), sem entrada B')
     if 'gl_FragColor' not in code:
         out.append('sem gl_FragColor')
     return out
@@ -445,6 +450,10 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert any('no maximo' in x for x in atom_problems('// fx: a, b, c, d\n' + ok))
     for frag in ("cat: 'luzes'", 'ATOMOS', 'u_bass', 'knob proibido layer', 'knob z', 'sem "// in:"'):
         assert frag in pr, (frag, pr)
+    mk = '// cat: mascara\n// ATOMOS · M. x\nuniform sampler2D u_texture_0, u_subject;\nuniform float u_subject_on;\nvoid main(){ gl_FragColor = vec4(u_subject_on); }\n'
+    assert atom_problems(mk) == [], atom_problems(mk)
+    assert any('so\' em atomo de mascara' in x for x in atom_problems(mk.replace('mascara', 'cor', 1)))
+    assert any('sem entrada B' in x for x in atom_problems(mk.replace('M. x', 'M. x\n// in: src')))
     for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shaders', 'presets', 'atomos', '*.frag'))):
         assert not atom_problems(open(f, encoding='utf-8').read()), (os.path.basename(f), atom_problems(open(f, encoding='utf-8').read()))
     print('dash_data self-check ok')

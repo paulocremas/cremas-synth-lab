@@ -33,6 +33,7 @@ _HTML = os.path.join(_ROOT, 'dash.html')
 _HTML2 = os.path.join(_ROOT, 'dash2.html')                   # v2 (ao vivo), servido em /v2
 _HTML3 = os.path.join(_ROOT, 'dash3.html')                   # v3 (modulos encadeados), servido em /v3
 _HTML4 = os.path.join(_ROOT, 'dash4.html')                   # v4 (canvas de fluxo: pecas, ramos, moduladores), /v4
+_HTML5 = os.path.join(_ROOT, 'dash5.html')                   # v5 (canvas de caixas de atomos + SAIDA), /v5
 _FAVICON = os.path.join(_ROOT, 'favicon.png')  # copia do de paulocremas.github.io
 _SHADERS = os.path.join(_ROOT, 'shaders')                   # image.frag + presets/*.frag
 _MEDIA = os.path.join(_ROOT, 'media')                       # galeria da aba Visuais (imgs/videos)
@@ -970,6 +971,16 @@ def _norm_overlays(items, dedupe=True):
         r = _norm_rect(it.get('rect'))
         if r:               # objeto no CANVAS (posicao/tamanho); ausente = canvas inteiro
             o['rect'] = r
+        try:                # CAIXA no canvas do dash v5 (px do canvas; o native ignora); ausente = arrumada
+            o['xy'] = [round(max(-1e5, min(1e5, float(v)))) for v in it['xy']][:2]
+            if len(o['xy']) != 2:
+                del o['xy']
+        except (KeyError, TypeError, ValueError):
+            pass
+        if it.get('fold'):  # caixa dobrada (so' o cabecalho, dash v5)
+            o['fold'] = 1
+        if isinstance(it.get('n'), int) and 1 <= it['n'] <= 999:   # numero ESTAVEL da caixa (dash v5; a ordem e' a da SAIDA)
+            o['n'] = it['n']
         out.append(o)
     return out
 
@@ -1067,6 +1078,12 @@ def _norm_bindings(b):
             mk = {n: round(max(0.0, min(1.0, float(mk[n]))), 3) for n in ('th', 'soft') if n in mk}
             if mk:
                 out[key]['mask'] = mk
+        mt = v.get('matte')   # MASCARA DA CAIXA (dash v5): atomos de mascara; 'e' (padrao) = multiplica, 'ou' = o mais claro;
+        if isinstance(mt, dict):   # cut = recortar (fora fica transparente) em vez de passar a entrada da caixa
+            items = _norm_overlays(mt.get('items'), dedupe=False)
+            if items:
+                out[key]['matte'] = dict({'items': items}, **({'op': 'ou'} if mt.get('op') == 'ou' else {}),
+                                         **({'cut': 1} if mt.get('cut') else {}))
     return out
 
 
@@ -1105,9 +1122,14 @@ def _remap_bindings(bindings, files=None, shaders=None):
         nk = _remap_key(key, files)
         if not nk:
             continue
-        out[nk] = {'shaders': [dict(o, file=shaders[o['file']]) if o['file'] in shaders else o
-                               for o in v.get('shaders', []) if shaders.get(o['file'], 1)],
-                   'fx': {shaders.get(sh, sh): lv for sh, lv in v.get('fx', {}).items() if shaders.get(sh, 1)}}
+        ren = lambda xs: [dict(o, file=shaders[o['file']]) if o['file'] in shaders else o
+                          for o in xs if shaders.get(o['file'], 1)]
+        out[nk] = dict(v, shaders=ren(v.get('shaders', [])),   # o resto (mask, matte) segue junto
+                       fx={shaders.get(sh, sh): lv for sh, lv in v.get('fx', {}).items() if shaders.get(sh, 1)})
+        if v.get('matte'):
+            out[nk]['matte'] = dict(v['matte'], items=ren(v['matte'].get('items') or []))
+            if not out[nk]['matte']['items']:
+                del out[nk]['matte']
     return out
 
 
@@ -2228,6 +2250,7 @@ def _payload():
         'html2_mtime': os.path.getmtime(_HTML2) if os.path.exists(_HTML2) else 0,   # idem, v2
         'html3_mtime': os.path.getmtime(_HTML3) if os.path.exists(_HTML3) else 0,   # idem, v3
         'html4_mtime': os.path.getmtime(_HTML4) if os.path.exists(_HTML4) else 0,   # idem, v4
+        'html5_mtime': os.path.getmtime(_HTML5) if os.path.exists(_HTML5) else 0,   # idem, v5
     }
 
 
@@ -2259,6 +2282,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, 'text/html; charset=utf-8', open(_HTML3, 'rb').read())
         elif path in ('/v4', '/dash4.html'):
             self._send(200, 'text/html; charset=utf-8', open(_HTML4, 'rb').read())
+        elif path in ('/v5', '/dash5.html'):
+            self._send(200, 'text/html; charset=utf-8', open(_HTML5, 'rb').read())
         elif path == '/groups':   # atomos compostos (dash v4)
             self._send(200, 'application/json', json.dumps({'list': _list_groups()}).encode())
         elif path in ('/favicon.png', '/favicon.ico'):  # navegador tambem sonda /favicon.ico
@@ -2875,7 +2900,7 @@ def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mod
     url = f'http://127.0.0.1:{port}'
     print(f'dash: {url}  (tabs Audio/Image no header, ou ?panel=audio | ?panel=image p/ popup)')
     if open_browser:
-        _open_dash_window(url + '/v3')   # v3 (modulos) e' o dash principal; v2 segue em /v2, v1 em /
+        _open_dash_window(url + '/v5')   # v5 (canvas de caixas) e' o dash principal; v4 em /v4, v3 em /v3, v2 em /v2, v1 em /
 
 
 # navegadores com --app/--user-data-dir (familia Chromium), na ordem de preferencia
@@ -2990,6 +3015,16 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert (v4[0]['id'], v4[0]['pub'], v4[0]['grp'], v4[0]['gname'], v4[0]['ins']) == ('k7', ['forca', 'matiz'], 'g1', 'Neon', ['@k2']), v4[0]
     assert v4[0]['mod']['forca'] == {'b': ['kick', 'lfo'], 'lfo': {'f': 'tri', 'r': 64.0, 'ph': 0.0}}, 'lfo: forma valida, r no teto, fase texto = padrao'
     assert not ({'id', 'grp', 'pub', 'gname'} & set(v4[1])), 'id/grp invalidos e pub que nao e lista somem'
+    v5 = _norm_overlays([{'file': 'webcam:/dev/video0', 'id': 'c1', 'xy': [12.4, '30'], 'fold': 1, 'n': 3}, {'file': '@c1', 'xy': 'x', 'n': '2'}])
+    assert (v5[0]['xy'], v5[0]['fold'], v5[0]['id'], v5[0]['n']) == ([12, 30], 1, 'c1', 3) and not {'xy', 'n'} & set(v5[1]), v5
+    mb = _norm_bindings({'cam': {'shaders': [], 'matte': {'items': [{'file': 'presets/atomos/Assunto.frag', 'fx': {'limiar': 0.4}}],
+                                                         'op': 'ou', 'cut': 1}},
+                         'v': {'shaders': [], 'matte': {'items': [], 'op': 'ou'}}})
+    assert mb['cam']['matte'] == {'items': [{'file': 'presets/atomos/Assunto.frag', 'opacity': 1.0, 'fx': {'limiar': 0.4}}],
+                                  'op': 'ou', 'cut': 1} and 'matte' not in mb['v'], mb
+    rm = _remap_bindings(mb, shaders={'presets/atomos/Assunto.frag': 'presets/atomos/Pessoa.frag'})
+    assert rm['cam']['matte']['items'][0]['file'] == 'presets/atomos/Pessoa.frag' and rm['cam']['matte']['cut'] == 1, rm
+    assert 'matte' not in _remap_bindings(mb, shaders={'presets/atomos/Assunto.frag': None})['cam'], 'mascara apagada some'
     assert _norm_overlays([{'file': '@k7', 'opacity': 0.5}, {'file': '@k7', 'dup': 2}]) == \
         [{'file': '@k7', 'opacity': 0.5}, {'file': '@k7', 'opacity': 1.0, 'dup': 2}], 'fileira que nasce de um modulo (ramo)'
     _st0 = _state

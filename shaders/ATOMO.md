@@ -55,3 +55,12 @@ Um verbo por arquivo: Tingir, Contornar, Desfocar, Espelhar. Se o efeito precisa
 - Arrastar a etiqueta até outra peça liga o **mesmo** modificador nela (um fio pontilhado mostra): um Matiz
   com LFO pintando o Contornar e os Pontos juntos, com um knob só.
 - Motor: o modificador mora na pilha `~post` da cena (itens com `id`); a peça guarda `post: [ids]`.
+
+## 8. Átomo de MÁSCARA (`// cat: mascara`, dash v5)
+- Não entra na cadeia: mora na **máscara da caixa** (`BINDINGS[canal].matte = {items, op?, cut?}`) e diz ONDE o
+  resultado da caixa aparece. Lê a **entrada da caixa** em `u_texture_0` (nunca entrada B) e devolve um cinza
+  `vec4(vec3(m), 1.0)`: 1 = mostra o resultado, 0 = passa a entrada (ou transparente, com `cut` = recortar).
+- Só átomo de máscara pode ler `u_subject` (máscara do assunto da fonte, U²-Net, topo→baixo) e `u_subject_on`
+  (0 enquanto a detecção não chegou — a máscara fica vazia). Pedir o `u_subject` já liga a detecção daquela fonte.
+- Várias na mesma caixa: `op: 'e'` (padrão, multiplica = onde todas acham) ou `'ou'` (o mais claro).
+- Hoje: **Assunto** (pessoa/objeto), **Brilho** (luma key), **Cor** (chroma key). `inverter` = o contrário.

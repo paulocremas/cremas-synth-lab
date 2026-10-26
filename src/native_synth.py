@@ -1238,6 +1238,9 @@ def _graph_wants(bindings, overlays):
     rows = [_chkey(o) for o in overlays or []]
     src_of = {_chkey(o): str(o['file'])[1:] for o in overlays or [] if str(o.get('file') or '').startswith('@')}
     row_of, lanes, taps, need = {}, set(), set(), set()
+    for o in overlays or []:   # dash v5: '@<id da fileira>' = o FIM da caixa (depois da mascara)
+        if o.get('id'):
+            row_of[o['id']] = _chkey(o)
     for k in rows:
         for o in ((bindings or {}).get(k) or {}).get('shaders') or []:
             if o.get('id'):
@@ -2821,8 +2824,10 @@ def _prog_locs(prog, manifest):
     # (item 'ins'); u_texture_src = a fonte crua do canal, sempre
     u['ins'] = [g(f'u_texture_{i + 1}') for i in range(len(INS_UNITS))]
     u['src'] = g('u_texture_src')
+    u['subject'], u['subject_on'] = g('u_subject'), g('u_subject_on')   # atomo de mascara Assunto (U2-Net)
     glUseProgram(prog)
-    for l, unit in ((g('u_texture_0'), 0), (smoke, 3), (fumaca, 4), (u['src'], SRC_UNIT), *zip(u['ins'], INS_UNITS)):
+    for l, unit in ((g('u_texture_0'), 0), (smoke, 3), (fumaca, 4), (u['src'], SRC_UNIT), (u['subject'], SUBJ_UNIT),
+                    *zip(u['ins'], INS_UNITS)):
         if l >= 0:
             glUniform1i(l, unit)
     return u
@@ -3028,6 +3033,7 @@ void main() {
 """
 OUTPUT_MAP_UNIT = 9   # u_canvas (a textura `canvas` dos layer targets)
 INS_UNITS, SRC_UNIT = (10, 11), 12   # u_texture_1/2 (outras raias) e u_texture_src (fonte crua) dos modulos
+SUBJ_UNIT = 13   # u_subject: mascara do ASSUNTO da fonte (atomo de mascara Assunto, dash v5)
 
 
 def build_output_map_program():
@@ -3247,6 +3253,7 @@ def main():
     lane_out = {}   # canal -> saida da raia (topo->baixo), so' das que algum modulo le ('ins'; 'fb' = a propria)
     tap_tex = {}    # id do modulo -> saida dele (topo->baixo), so' dos que alguem le (ramo '@id', 'ins' '@id'; dash v4)
     live_taps = [set()]   # taps que a cena AO VIVO pede (o resto e' apagado no fim do frame)
+    own = {}        # texturas de trabalho da MASCARA DA CAIXA (dash v5): m_in = entrada, m_a/m_b = soma, m = final
 
     def layer_targets():
         if not ltargets[0] or ltargets[0]['size'] != (CMP_W, CMP_H):
@@ -3260,6 +3267,9 @@ def main():
             if tap_tex:
                 glDeleteTextures(list(tap_tex.values()))
                 tap_tex.clear()
+            if own:
+                glDeleteTextures(list(own.values()))
+                own.clear()
             ltargets[0] = make_layer_targets(CMP_W, CMP_H)
         return ltargets[0]
 
@@ -3765,8 +3775,9 @@ def main():
                     st_[1] = frame
             return st_[0]
 
-        def copy_flip(store, k, tex):
-            """saida (orientacao GL) -> store[k], virada topo->baixo como a fonte crua (quem le e' um shader)."""
+        def own_tex(k, store=None):
+            """textura RGB do tamanho da mistura em store[k] (padrao: own, as de trabalho da mascara), criada 1x."""
+            store = own if store is None else store
             if k not in store:
                 store[k] = t = glGenTextures(1)
                 glBindTexture(GL_TEXTURE_2D, t)
@@ -3774,7 +3785,11 @@ def main():
                                (GL_TEXTURE_MIN_FILTER, GL_LINEAR), (GL_TEXTURE_MAG_FILTER, GL_LINEAR)):
                     glTexParameteri(GL_TEXTURE_2D, pn, pv)
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, CMP_W, CMP_H, 0, GL_RGB, GL_UNSIGNED_BYTE, None)
-            blend_into(store[k], tex, tex, 1.0, 0, flip=1)
+            return store[k]
+
+        def copy_flip(store, k, tex):
+            """saida (orientacao GL) -> store[k], virada topo->baixo como a fonte crua (quem le e' um shader)."""
+            blend_into(own_tex(k, store), tex, tex, 1.0, 0, flip=1)
 
         def render_mix(pair, sc, frames, alpha, live):
             """MISTURA de uma cena -> uma das texturas de `pair` (ping-pong), que e' devolvida: cada fonte
@@ -3790,6 +3805,7 @@ def main():
             src_blend = {_chkey(o): o.get('blend') for o in sc.get('overlays') or []}
             src_rect = {_chkey(o): o.get('rect') for o in sc.get('overlays') or []}
             src_auto = {_chkey(o) for o in sc.get('overlays') or [] if o.get('auto')}
+            src_id = {_chkey(o): o.get('id') for o in sc.get('overlays') or [] if o.get('id')}
             # raias que algum modulo le (ins): a saida delas fica guardada (lane_out); modulos que alguem le (ramo
             # '@id', ins '@id'): a saida deles fica em tap_tex. Lida mais acima na mesa / 'fb' (a propria) = a do
             # frame anterior — o atraso de 1 frame do feedback (LocalIn/LocalOut)
@@ -3831,6 +3847,11 @@ def main():
                     lv = e[0]
                 blend_into(lt['src'][0], ftex, ftex, 1.0, 0, flip=1, lv=lv)
                 b = bindings.get(key) or {}
+                mt = b.get('matte') or {}
+                mt_items = [x for x in mt.get('items') or () if not x.get('off') and
+                            (sh_avail is None or x['file'] in sh_avail)]
+                if mt_items:                            # MASCARA DA CAIXA: guarda a ENTRADA (passa fora da mascara)
+                    blend_into(own_tex('m_in'), ftex, ftex, 1.0, 0, flip=1, lv=lv)
                 # ASSUNTO: pilha com region (ou previa da mascara aberta) -> pede a mascara dessa fonte
                 bk = re.sub(r'#\d+$', '', key)
                 if frame is not None and (any(o.get('region') for o in b.get('shaders') or []) or
@@ -3924,6 +3945,47 @@ def main():
                     blend_into(lt['src'][1 - si], lt['src'][si], cur_l, a, mode, mask=um, mth=_subject_params(b))
                     si = 1 - si
                     after_module(key, oj, o, lt['src'][si])
+                cut = None
+                if mt_items:                            # MASCARA DA CAIXA (Matte TOP): atomos de mascara leem a ENTRADA
+                    acc = None                          # e dao um cinza; 'e' = multiplica, 'ou' = o mais claro
+                    for mj, x in enumerate(mt_items):
+                        mh = layer_program(x['file'])
+                        if not mh:
+                            continue
+                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
+                        use_program(mh)
+                        set_uniforms(x.get('fx') or {}, x.get('mod'), ('mt', key, mj, x['file']) if live else None)
+                        if uniforms['subject_on'] >= 0:
+                            if frame is not None:
+                                subject_want[bk] = (time.time(), frame)
+                            glUniform1f(uniforms['subject_on'], 1.0 if sjt is not None else 0.0)
+                            glActiveTexture(GL_TEXTURE0 + SUBJ_UNIT)
+                            glBindTexture(GL_TEXTURE_2D, sjt[0] if sjt is not None else 0)
+                        if uniforms['src'] >= 0:
+                            glActiveTexture(GL_TEXTURE0 + SRC_UNIT)
+                            glBindTexture(GL_TEXTURE_2D, ftex)
+                        glActiveTexture(GL_TEXTURE0)
+                        glBindTexture(GL_TEXTURE_2D, ftex)
+                        glClear(GL_COLOR_BUFFER_BIT)
+                        glDrawArrays(GL_TRIANGLES, 0, 3)
+                        nxt = 'm_b' if acc == 'm_a' else 'm_a'
+                        if acc is None:
+                            blend_into(own_tex(nxt), lt['layer'], lt['layer'], 1.0, 0)
+                        else:
+                            blend_into(own_tex(nxt), own_tex(acc), lt['layer'], 1.0, 4 if mt.get('op') == 'ou' else 3)
+                        acc = nxt
+                    if acc:
+                        copy_flip(own, 'm', own_tex(acc))   # topo->baixo, como o u_mask do blend le
+                        if mt.get('cut'):                   # RECORTAR: fora fica transparente (as caixas de baixo aparecem)
+                            cut = own['m']
+                        else:                               # fora da mascara passa a ENTRADA da caixa
+                            glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
+                            glBindTexture(GL_TEXTURE_2D, own['m'])
+                            blend_into(lt['src'][1 - si], own['m_in'], lt['src'][si], 1.0, 0, mask=1)
+                            si = 1 - si
+                if live and src_id.get(key) in tap_want:    # dash v5: alguem le o FIM desta caixa
+                    copy_flip(tap_tex, src_id[key], lt['src'][si])
                 if key == step_key:
                     state['steps_small'] = {'key': key, 'n': len(b.get('shaders') or []), 'img': steps_img}
                     step_pv['t'] = time.perf_counter()
@@ -3948,6 +4010,10 @@ def main():
                 sm = src_blend.get(key)                     # modo da FONTE sobre as de baixo (normal = cobre)
                 sm = dash_server.LAYER_BLENDS.index(sm) if sm in dash_server.LAYER_BLENDS else 0
                 al = alpha.get(key)                         # imagem com transparencia: so' onde e' opaca
+                if cut is not None:                         # caixa RECORTADA pela mascara: so' dentro dela
+                    al = None
+                    glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
+                    glBindTexture(GL_TEXTURE_2D, cut)
                 if al is not None:
                     glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
                     glBindTexture(GL_TEXTURE_2D, lt['mask'])
@@ -3957,7 +4023,7 @@ def main():
                 a_out = sv(('src', key) if live else None, min(1.0, src_a), 0.0)
                 if a_out > 0.002:                           # a 0% (so' lida por outra fileira) nao entra na saida
                     blend_into(pair[1 - oi], pair[oi], lt['src'][si], a_out, sm,
-                               mask=int(al is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
+                               mask=int(al is not None or cut is not None), rect=_rect_uv(src_rect.get(key), cbox), clip=cbox, scr=scr_uv)
                     oi = 1 - oi
             # IMAGEM DA CENA (campo 'grade' do set; knobs no Palco do v2): o mesmo calibrar.frag na MISTURA
             # da cena -> antes da transicao (cada cena cruza com a sua) e da calibracao do telao. Neutro = sem passe.
@@ -4512,6 +4578,11 @@ def _selfcheck():
     assert _graph_wants(bnd, [{'file': 'cam', 'off': 1}, {'file': 'vid'}]) == ({'cam'}, {'k1'}, {'cam'}), \
         'entrada B (raia + tap) faz a desligada rodar'
     assert _graph_wants({}, []) == (set(), set(), set())
+    # dash v5: caixa lendo o FIM de outra caixa ('@<id da fileira>'): a mae roda (mesmo fora da saida) e o fim vira tap
+    b5 = {'cam': {'shaders': [{'file': 'a.frag', 'id': 'k1'}]}, '@c1': {'shaders': []}}
+    assert _graph_wants(b5, [{'file': 'cam', 'id': 'c1', 'opacity': 0.0}, {'file': '@c1', 'opacity': 1.0}]) == \
+        (set(), {'c1'}, {'cam'}), 'caixa lida por outra roda a 0% e o fim dela e\' guardado'
+    assert _graph_wants(b5, [{'file': 'cam', 'id': 'c1'}, {'file': '@c1', 'opacity': 0}]) == (set(), set(), set())
     _f0 = state.get('frame')
     _ovl['webcam:/dev/video9'] = {'frame': np.full(FRAME_SIZE, 200, np.uint8)}
     state['bindings'] = {'webcam:/dev/video9': {'shaders': [{'file': 'a.frag', 'id': 'k1'}]}}

@@ -2,14 +2,14 @@
 
 Ideias combinadas e ainda não feitas. Ao começar uma, mover pro código/commit e tirar daqui.
 
-## v5 — canvas de camadas de átomos (próximo chat: `PROMPT_V5.md`)
-- `dash5.html` em `/v5`, mais limpo que a v4: CAMADA = caixa no canvas com átomos em pilha; fios só entre caixas;
-  camada alimenta várias (ramo); nó de SAÍDA mistura ramos com opacidade/modo por entrada.
-- Máscara/rastreamento como átomos num conjunto paralelo da CAMADA (some o "tudo/assunto/fundo" por efeito).
-- Show: canvas travado e pequeno; PROGRAMA, cenas e publicados grandes.
+## v5 — canvas de caixas (feito: caixas, fios, SAÍDA, máscara por caixa com Assunto/Brilho/Cor, cadeado)
+- Máscaras que faltam: Olhos (precisa de modelo de rosto), Movimento (precisa da entrada 1 quadro atrás, não o `fb` da caixa).
+- Caixa salva na biblioteca (a caixa como preset; os grupos da v4 só aparecem na Biblioteca do equipamento).
+- Mixer interno com N entradas (hoje: átomo Misturar com B = outra caixa) e várias SAÍDAS (ver "Várias saídas").
+- Prévia fora do ar ao soltar MÁSCARA (o `/try` só troca a pilha) e miniatura de cada átomo da caixa escolhida.
+- Teste com tela de toque e MIDI físico na v5; caixa que recorta + quem lê ela recebe só o RGB (sem o alfa do recorte).
 
 ## v4 — patch (feito na v4: ligação por zona, ramos, LFO/som/macro como peça, variações, prévia por passo, grupos, publicados no Show, custo por fileira)
-- Abrir a v4 como dash principal quando aprovada: `_open_dash_window(url + '/v4')` no `dash_server` (hoje abre /v3).
 - Modulador por imagem de UM módulo ou fonte (hoje `luz`/`mov` = a imagem de entrada inteira, ~14 Hz).
 - Teste em tela de toque de verdade (alvos já ≥ 44 px no Show) e com controlador MIDI físico na v4.
 

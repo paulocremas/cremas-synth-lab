@@ -88,7 +88,15 @@ Cada ferramenta isolada, depois comparar, só então compor.
   `on_*`/`layer`), knobs 0..1 de vocabulário comum (o 1º = PRINCIPAL, o botão grande da peça), alfa = cobertura (a camada
   da peça é RGBA e o blend usa). MODIFICADOR PARALELO: átomo solto EM CIMA de uma peça age só na saída
   dela (`post: [ids]` → pilha `~post` da cena, `_post_items`; mesmo id em várias peças = um só, com fio). ↶ desfazer (por cena) e 🛟 socorro só no dash.
-- **v5 planejada** (`PROMPT_V5.md`): canvas de camadas de átomos (caixas + fios + nó de saída), máscara por camada.
+- **v5** (`dash5.html`, `/v5` = o dash que o app abre desde 2026-10-24; decisões no topo do arquivo + Claude Doc "PRISMA v5"): canvas de CAIXAS. Caixa = fileira do
+  OVERLAYS (`id`, `n` = número estável, `xy`/`fold` = lugar no canvas, o native ignora); entrada = fonte ou o FIM de outra
+  caixa (`file: '@<id da caixa>'`: `_graph_wants` mapeia id de fileira, `render_mix` guarda o tap DEPOIS da máscara).
+  Fios só entre caixas; nó SAÍDA = o programa (a camada de cada fileira: `off`/opacidade/modo/ordem). MÁSCARA DA CAIXA =
+  `BINDINGS[k].matte = {items, op: 'e'|'ou', cut}`: átomos `// cat: mascara` leem a ENTRADA, dão cinza (`own` textures,
+  `u_use_mask` 1 no blend); fora passa a entrada (`m_in`) ou, com `cut`, transparente na SAÍDA. `u_subject` (unidade 13,
+  `SUBJ_UNIT`) = máscara U²-Net pro átomo Assunto. No dash, `stackOf(k + '|m')` = os itens da máscara. Sem abas
+  Show/Montar: cadeado (`mode` continua 'show'|'montar'); equipamento em 5 abas (`EQ_GROUP`). Grupos e região por item
+  saíram da UI (a região ainda roda; "mais" converte pra máscara).
 - **v4** (`dash4.html`, `/v4`, do zero; decisões no topo do arquivo + doc de design): 3 colunas fixas (Cenas/Peças |
   Patch | Programa, Próxima/GO, Controles, Macros), Show = só knobs publicados (`pub` no item), gavetas Socorro e
   Equipamento (editores da v3 refeitos). Patch = fileiras (topo = frente) + RAMO: fileira com `file: '@<id>'` lê a

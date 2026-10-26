@@ -34,7 +34,7 @@ if False:
     import pyaudiowpatch  # noqa  (so' existe no build do Windows)
 
 IS_WIN = sys.platform == 'win32'
-CODE_FILES = ['dash.html', 'dash2.html', 'dash3.html', 'dash4.html', 'favicon.png']        # + src/*.py menos o tuning.py
+CODE_FILES = ['dash.html', 'dash2.html', 'dash3.html', 'dash4.html', 'dash5.html', 'favicon.png']        # + src/*.py menos o tuning.py
 DATA = ['src/tuning.py', 'shaders', 'transitions', 'media', 'models']
 
 
