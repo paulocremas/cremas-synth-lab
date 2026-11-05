@@ -31,7 +31,7 @@ if False:
     import fcntl  # noqa  (so' existe no Linux: plat._v4l2_captures)
     import msvcrt  # noqa  (so' existe no Windows: plat.readable)
     import tempfile, threading, types, time, urllib.parse, urllib.request, webbrowser, http.server  # noqa
-    import numpy, pygame, OpenGL, OpenGL.GL, cv2  # noqa
+    import numpy, pygame, pygame._sdl2.video, OpenGL, OpenGL.GL, cv2  # noqa  (_sdl2: mover a saida fixada sem reabrir o GL)
     import pyaudiowpatch  # noqa  (so' existe no build do Windows)
     import pyvirtualcam  # noqa  (so' no Windows: plat.VCam, webcam virtual pela camera do OBS)
 
