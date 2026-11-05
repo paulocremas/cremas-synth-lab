@@ -1524,11 +1524,13 @@ let knobHeld = false, renderLater = false, warpOK = true;
 function knobGrab(){ knobHeld = true; document.body.classList.add('kturn'); }   // girando: os fios do canvas somem ate' soltar
 function knobLetGo(){ knobHeld = false; document.body.classList.remove('kturn'); if (renderLater){ renderLater = false; renderBoxes(); renderCtl(); } }
 window.addEventListener('pointerup', () => setTimeout(() => { if (knobHeld) knobLetGo(); }, 0), true);   // soltou sem o fim normal: destrava
-const warpTo = (sx, sy) => post('/warp', { x: Math.round(sx * devicePixelRatio), y: Math.round(sy * devicePixelRatio) })
+// home = onde o cursor estava no CLIQUE em px fisicos, perguntado ao sistema (Windows: com escala de tela, screenX x
+// devicePixelRatio cai no lugar errado); sem resposta (Linux) = a conta de sempre
+const warpTo = (sx, sy, home) => post('/warp', home ? { x: home[0], y: home[1] } : { x: Math.round(sx * devicePixelRatio), y: Math.round(sy * devicePixelRatio) })
   .then(j => { if (!j.ok) warpOK = false; return !!j.ok; }).catch(() => { warpOK = false; return false; })
   .then(ok => { if (!ok) document.documentElement.classList.remove('kdrag'); return ok; });   // sem warp: o cursor nao fica sumido
 function dragCtl(w, o, axis, dflt, io){
-  let cur = 0, dragging = false, moved = 0, lx = 0, ly = 0, cx = 0, cy = 0, sx = 0, sy = 0, warping = 0;
+  let cur = 0, dragging = false, moved = 0, lx = 0, ly = 0, cx = 0, cy = 0, sx = 0, sy = 0, warping = 0, home = null;
   const put = v => { cur = clamp01(v); o.set(cur); w._show(cur); };
   const span = () => axis === 'y' ? 200 : Math.max(160, w.clientWidth);
   w.addEventListener('pointerdown', e => {
@@ -1538,6 +1540,7 @@ function dragCtl(w, o, axis, dflt, io){
     try { w.setPointerCapture(e.pointerId); } catch {}
     dragging = true; moved = 0; warping = 0;
     lx = cx = e.clientX; ly = cy = e.clientY; sx = e.screenX; sy = e.screenY; cur = clamp01(o.get()); knobGrab();
+    home = null; if (warpOK) post('/warp', { get: 1 }).then(j => { if (j && j.ok) home = [j.x, j.y]; }).catch(() => {});
     w.classList.add('drag'); activeDrag = o.id || '?'; io.touch();
   });
   w.addEventListener('pointermove', e => {
@@ -1553,7 +1556,7 @@ function dragCtl(w, o, axis, dflt, io){
     moved += Math.abs(dx) + Math.abs(dy);
     if (moved > DRAG_LOCK_PX && warpOK) document.documentElement.classList.add('kdrag');   // some o cursor
     if (!warping && warpOK && moved > DRAG_LOCK_PX && Math.hypot(e.clientX - cx, e.clientY - cy) > WRAP_PX){
-      warping = now(); warpTo(sx, sy).then(ok => { if (!ok) warping = 0; });
+      warping = now(); warpTo(sx, sy, home).then(ok => { if (!ok) warping = 0; });
     }
     if (!d) return;
     put(cur + d / (e.shiftKey ? 1000 : span())); io.touch(); io.live();
@@ -1563,7 +1566,7 @@ function dragCtl(w, o, axis, dflt, io){
     dragging = false; w.classList.remove('drag'); activeDrag = ''; io.commit(); w._dragged = moved > DRAG_LOCK_PX;
     if (document.documentElement.classList.contains('kdrag')){
       document.documentElement.classList.remove('kdrag');
-      if (warpOK) warpTo(sx, sy);   // o cursor reaparece onde foi clicado
+      if (warpOK) warpTo(sx, sy, home);   // o cursor reaparece onde foi clicado
     }
     if (document.activeElement === w) w.blur();
     knobLetGo();

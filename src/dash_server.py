@@ -2673,6 +2673,10 @@ class _Handler(BaseHTTPRequestHandler):
         if path == '/warp':   # knob: ARRASTO INFINITO — {x, y} px fisicos da tela -> o cursor volta pra la' (plat)
             try:
                 b = json.loads(raw.decode())
+                if b.get('get'):   # {get: 1} = onde o cursor esta' agora (px fisicos; Windows) -> {ok, x, y} | {ok: false}
+                    pos = plat.pointer_pos()
+                    self._send(200, 'application/json', json.dumps({'ok': True, 'x': pos[0], 'y': pos[1]} if pos else {'ok': False}).encode())
+                    return
                 ok = plat.warp_pointer(int(b['x']), int(b['y']))
             except (ValueError, KeyError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())

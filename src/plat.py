@@ -53,6 +53,43 @@ def child_cmd(cmd):
 _x11 = None   # (libX11, display) aberto na 1a vez
 
 
+def _win_dpi(fn):
+    """Windows: roda fn(user32) com ESTA thread em DPI por monitor (v2) — sem isso, com escala de tela != 100%, o Windows
+    reescala as coordenadas do SetCursorPos/GetCursorPos (o processo nao declara DPI) e o cursor do arrasto infinito voltava
+    pro lugar errado. So' a thread, so' durante a chamada: a janela de saida (pygame) nao muda."""
+    import ctypes
+    u = ctypes.windll.user32
+    old = None
+    try:
+        u.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+        u.SetThreadDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+        old = u.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))   # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    except AttributeError:   # Windows < 10 1607: sem a funcao, fica como era
+        pass
+    try:
+        return fn(u)
+    finally:
+        if old:
+            u.SetThreadDpiAwarenessContext(ctypes.c_void_p(old))
+
+
+def pointer_pos():
+    """Onde o cursor ESTA', em pixel fisico (x, y) — o knob guarda isso no clique e devolve o cursor exatamente pra la' ao
+    soltar (sem converter screenX x devicePixelRatio, que erra com escala de tela). Windows: GetCursorPos; Linux: None
+    (o dash usa a conta de sempre, que la' funciona)."""
+    if not IS_WIN:
+        return None
+    import ctypes
+
+    class _P(ctypes.Structure):
+        _fields_ = [('x', ctypes.c_long), ('y', ctypes.c_long)]
+    p = _P()
+    try:
+        return (p.x, p.y) if _win_dpi(lambda u: u.GetCursorPos(ctypes.byref(p))) else None
+    except (OSError, AttributeError):
+        return None
+
+
 def warp_pointer(x, y):
     """Leva o cursor do mouse pra (x, y) em pixel fisico da tela (o knob do dash: ARRASTO INFINITO sem o pointer
     lock do navegador, que mostra um aviso que nao da' pra esconder — o cursor some e volta pro lugar).
@@ -61,7 +98,7 @@ def warp_pointer(x, y):
     import ctypes
     try:
         if IS_WIN:
-            return bool(ctypes.windll.user32.SetCursorPos(int(x), int(y)))
+            return bool(_win_dpi(lambda u: u.SetCursorPos(int(x), int(y))))
         if os.environ.get('XDG_SESSION_TYPE') == 'wayland' or not os.environ.get('DISPLAY'):
             return False
         if _x11 is None:
@@ -745,6 +782,7 @@ if __name__ == '__main__':  # self-check das partes puras (roda em qualquer SO)
     vc = vcam_cmd('/dev/video9', 1280, 720, 30)
     assert vc[-1] == '/dev/video9' and '1280x720' in vc and not _is_source_ffmpeg(vc), 'webcam virtual nao e\' fonte orfa'
     assert isinstance(vcam_devices(), list)
+    assert IS_WIN or pointer_pos() is None, 'cursor: Linux = None (o dash usa a conta de sempre)'
     if _SETPRIV:   # filho morre junto: pai morto com kill -9 -> o "ffmpeg" (sleep) recebe TERM
         _pai = subprocess.Popen([sys.executable, '-c', 'import subprocess,sys,time;'
                                  f'p=subprocess.Popen({child_cmd(["sleep", "30"])!r});print(p.pid,flush=True);time.sleep(30)'],
