@@ -1959,8 +1959,8 @@ function syncCtls(ids){   // todo movimento tem o seu controlador; ids = true da
   const have = new Set(ctlStore().map(c => c.id)); let made = ids ? autoPlace(false) : false;   // gravando: no' sem lugar ganha (o controlador nasce perto dele)
   forEachMod((m, w) => {
     if (w.ctl || w.row) return;
-    const o = rowOf(mkBase(w.key));
-    if (w.key !== POST_KEY && !(o && o.xy)) return;   // o no' ainda nao chegou/nao tem lugar (SSE: bindings antes das caixas): espera
+    const o = w.key === POST_KEY ? rowOf((postUsers(w.s.id)[0] || {}).key) : rowOf(mkBase(w.key));   // paralelo: perto da peca onde ele age
+    if (!(o && o.xy)) return;   // o no' ainda nao chegou/nao tem lugar (SSE: bindings antes das caixas): espera
     if (!m.id){ if (!ids) return; m.id = 'v' + rid(); made = true; }
     if (have.has(m.id)) return;
     have.add(m.id); made = true;
@@ -2112,6 +2112,7 @@ function normalizeNodes(){
     for (const p of AIR_PROPS) delete o[p]; o.opacity = 1;
     if (b.matte){ lastBindings[lk].matte = b.matte; delete b.matte; }
     lastOverlays.splice(lastOverlays.indexOf(o) + 1, 0, ...made);
+    if (o.xy) declutter(made);   // a corrente nova empurra o que estava no caminho
   }
   return changed;
 }
@@ -2190,11 +2191,14 @@ function sendMedia(){
 let lastRecipes = [];
 const TOOLS = ['presets/default/Teste.frag'];
 function loadRecipes(){ fetch('/receitas').then(r => r.json()).then(d => { lastRecipes = d.list || []; palSig = ''; renderPalette(); }).catch(() => {}); }
-function recipeItems(r){   // itens prontos pra inserir: id novo por atomo e por MOVIMENTO (o mesmo r1 em dois knobs = o mesmo controlador)
-  const ids = {};
-  return r.items.map(x => { const m = Object.assign(newModule(x.file), { fx: JSON.parse(JSON.stringify(x.fx || {})) });
+function recipeItems(r, commit = true){   // itens prontos pra inserir: id novo por atomo e por MOVIMENTO (o mesmo r1 em dois knobs = o mesmo
+  const ids = {};                         // controlador); 'paralelo' vira MODIFICADOR PARALELO (pilha POST_KEY) — commit=false (previa) nao cria
+  const one = x => { const m = Object.assign(newModule(x.file), { fx: JSON.parse(JSON.stringify(x.fx || {})) });
     if ((x.opacity ?? 1) !== 1) m.opacity = x.opacity;
     if (x.mod){ m.mod = JSON.parse(JSON.stringify(x.mod)); for (const v of Object.values(m.mod)) if (v.id) v.id = ids[v.id] = ids[v.id] || 'v' + rid(); }
+    return m; };
+  return r.items.map(x => { const m = one(x);
+    if (commit && (x.paralelo || []).length){ m.post = x.paralelo.map(px => { const pm = one(px); delete pm.in; delete pm.ins; binding(POST_KEY, true).shaders.push(pm); ensurePool('shaders', pm.file); return pm.id; }); }
     return m; });
 }
 function clickRecipe(r){   // entra depois do atomo escolhido (ou no fim da caixa escolhida / da da frente), como clickInsert
@@ -2382,7 +2386,27 @@ function autoPlace(all){   // caixa sem lugar (cena da v4, caixa nova): coluna =
   }
   return moved;
 }
-function tidy(){ autoPlace(true); sendOverlays(true); cvSig = ''; renderBoxes(); }
+function tidy(){   // ARRUMAR: nos em colunas (autoPlace) e depois cada controlador de novo num lugar livre perto do no' que ele move
+  autoPlace(true);
+  const cs = ctlStore(); cs.forEach(c => delete c.xy);
+  for (const c of cs){ const u = mvUses(c.id)[0], o = u && (u.row ? rowOf(u.row) : rowOf(mkBase(u.key))); c.xy = ctlSpot(o && o.xy ? o : null); }
+  sendOverlays(true); if (cs.length) sendBindings(true); cvSig = ''; renderBoxes(); }
+// SEM SOBREPOR (2026-11-05): no' que nasce (no fio, do menu, receita dividida em corrente) EMPURRA quem ele cobre — pra direita quem
+// esta' a' direita dele (a corrente segue andando), pra baixo quem esta' a' esquerda; em cascata. Controladores contam como nos.
+const rectOfNode = o => o.file === 'ctl' && !o.kind && o.mod ? [o.xy[0], o.xy[1], CTL_W, CTL_H] : [o.xy[0], o.xy[1], boxW(chKey(o)), boxH(chKey(o))];
+function declutter(fixed){
+  const G = 24, all = () => [...lastOverlays.filter(o => o.xy), ...ctlStore().filter(c => c.xy)];
+  const hit = (a, b) => a[0] < b[0] + b[2] + G && a[0] + a[2] + G > b[0] && a[1] < b[1] + b[3] + G && a[1] + a[3] + G > b[1];
+  const todo = fixed.filter(o => o && o.xy), done = new Set(todo); let moved = false, guard = 0;
+  while (todo.length && guard++ < 300){
+    const a = todo.shift(), ra = rectOfNode(a);
+    for (const o of all()){ if (o === a || done.has(o) && fixed.includes(o)) continue;
+      const r = rectOfNode(o); if (!hit(ra, r)) continue;
+      o.xy = r[0] >= ra[0] ? snapXY([ra[0] + ra[2] + G + 20, r[1]]) : snapXY([r[0], ra[1] + ra[3] + G]);
+      moved = true; done.add(o); todo.push(o); }
+  }
+  return moved;
+}
 function costOf(key){   // passes de GPU por quadro (native render_mix): fonte 1 + entrada no programa 1, atomo 2 (+1 se le a corrente), mascara 2 cada + 3
   if (isNodeKey(key)){ const o = rowOf(key) || {}, st = stackOf(key).filter(s => !s.off).length;   // mixer: 1 por camada (+ limpar) e os atomos
     return (o.layers || []).filter(L => !L.off).length + 1 + (st ? 2 + 3 * st : 0); }
@@ -2660,7 +2684,10 @@ function cvWireStart(e, id){   // CABO DE CONTROLE: do losango do controlador at
       cvSig = ''; renderBoxes(); } });
 }
 function cvEnd(u){   // onde o cabo de controle CHEGA: na borda esquerda do no', na altura do knob (o cabo passa por baixo: nao cobre o knob)
-  if (u.key === POST_KEY) return null;
+  if (u.key === POST_KEY){   // modificador paralelo: na etiqueta dele, embaixo do atomo onde age
+    const R = CVI.getBoundingClientRect(), z = cvZoom(), ch = CVI.querySelector(`.pchip[data-post="${CSS.escape(u.s.id || '')}"]`), bx = ch && ch.closest('.bx');
+    if (!ch || !bx) return null; const r = ch.getBoundingClientRect(), B = bx.getBoundingClientRect();
+    return [(B.left - R.left) / z, (r.top + r.height / 2 - R.top) / z]; }
   const bk = mkBase(u.key), bx = boxEls[bk]; if (!bx) return null;
   const R = CVI.getBoundingClientRect(), z = cvZoom(), B = bx.getBoundingClientRect(), x = (B.left - R.left) / z;
   let y = (B.top - R.top) / z + 18;
@@ -2822,7 +2849,8 @@ function drawBoxWires(){
       const late = sk && (sk === key || feeds(key, sk)), isSel = selWire && wireSig(selWire) === wireSig(wid);
       const lit = (hoverKey && (hoverKey === key || hoverKey === sk)) || (hoverWire && wireSig(hoverWire) === wireSig(wid));
       const off = w.port === 'L' && o.layers[w.i] && o.layers[w.i].off;
-      path(d, 'w' + (late ? ' late' : '') + (off ? ' off' : '') + (isSel ? ' sel' : '') + (lit ? ' hl' : (hoverKey || hoverWire) ? ' dim' : ''), col);
+      path(d, 'w' + (late ? ' late' : '') + (off ? ' off' : '') + (isSel ? ' sel' : '') + (lit ? ' hl' : (hoverKey || hoverWire) ? ' dim' : ''), col)
+        ._w = { key, port: w.port, idx: w.port === 'L' ? w.i : (w.j || 0), ref: w.ref };   // soltar um atomo AQUI = no' no meio do fio
       for (const p of [from, to]){ p.classList.add('con'); p.style.setProperty('--pc', col); if (lit || isSel) p.classList.add('hl'); }
       if (!isShow()){
         const hit = path(d, 'hit');
@@ -3099,9 +3127,25 @@ function newNode(ref, xy, item){   // no' novo lendo ref (com 1 atomo, ou vazio)
   if (same.length) ov.dup = Math.max(...same.map(o => o.dup || 1)) + 1;
   lastOverlays.push(ov);
   if (item){ binding(chKey(ov), true).shaders.push(item); ensurePool('shaders', item.file); }
+  declutter([ov]);
   sendOverlays(true); sendBindings(true); setSel(chKey(ov), item ? 0 : -1, true);
   toast(item ? `${item.espelho ? 'espelho de ' : ''}${fxName(item.file)} (nó ${ov.n}) lendo ${nodeTitle(nodeKeyOfRef(ref) || '') || ref}` : `nó vazio ${ov.n}`);
   return ov;
+}
+function insertOnWire(z, items, ev){   // ATOMO SOLTO NO FIO: no' novo lendo o que o fio trazia, e a entrada do fio passa a ler ele
+  const t = rowOf(z.key); if (!t || !items.length) return;
+  const p = canvasPt(ev), same = lastOverlays.filter(o => o.file === z.ref);
+  const ov = { file: z.ref, opacity: 1, id: 'c' + rid(), xy: snapXY([p[0] - BOX_W / 2, p[1] - 18]), n: nextNo() };
+  if (same.length) ov.dup = Math.max(...same.map(o => o.dup || 1)) + 1;
+  lastOverlays.push(ov); binding(chKey(ov), true).shaders.push(...items); items.forEach(m => ensurePool('shaders', m.file));
+  const nr = '@' + ov.id;
+  if (z.port === 'a') renameRowKey(t, nr);
+  else if (z.port === 'L'){ if (t.layers && t.layers[z.idx]) t.layers[z.idx].from = nr; }
+  else if (z.port === 'b'){ const s = stackOf(z.key)[z.idx]; if (s) s.ins = [nr]; }
+  else if (z.port === 'm'){ const lu = ((matteOf(z.key) || {}).items || []).find(x => isTapKey((x.ins || [])[0] || '')); if (lu) lu.ins = [nr]; }
+  declutter([ov]);
+  sendOverlays(true); sendBindings(true); selWire = null; setSel(chKey(ov), 0, true);
+  toast(`${items.length > 1 ? items.length + ' átomos' : fxName(items[0].file)} no meio do fio → ${nodeTitle(chKey(t)) || ''}`);
 }
 function freeScreenRect(){   // a 1a tela do palco que nenhuma saida ocupa (a saida nova cai nela)
   const st = canvasOf(); if (!st || !st.rects.length) return null;
@@ -3112,7 +3156,7 @@ function newMix(kind, ref, xy){   // STAGING (mixer) ou SAIDA nova; ref = a 1a e
   const o = { kind, id: (kind === 'out' ? 'o' : 'm') + rid(), xy: snapXY(xy), layers: ref ? [{ from: ref }] : [] };
   if (kind === 'out'){ o.n = Math.max(0, ...outRows().map(x => x.n || 0)) + 1; o.nome = 'saída ' + o.n; const r = freeScreenRect(); if (r && outRows().length) o.rect = r.map(v => Math.round(v * 10000) / 10000); }
   else o.n = nextNo();
-  lastOverlays.push(o); sendOverlays(true); setSel(chKey(o), -1, true);
+  lastOverlays.push(o); declutter([o]); sendOverlays(true); setSel(chKey(o), -1, true);
   toast(kind === 'out' ? `${o.nome}${o.rect ? ' (numa tela livre do palco)' : ''} — posição em Saída → Saídas no palco` : `staging ${o.n}: ligue mais entradas na bolinha "+"`);
   return o;
 }
@@ -3913,6 +3957,11 @@ function computeZones(spec){
       const b = c.getBoundingClientRect(); add({ type: 'post', key: c.dataset.k, j, x: b.left + b.width / 2, y: b.top + 15, w: b.width * 0.8, h: 24, label: 'usar aqui também' }); });
     return Z;
   }
+  if (spec.kind === 'mod' || spec.kind === 'recipe'){   // EM CIMA DO FIO: o meio de cada cabo de imagem = um no' novo ali, no meio da ligacao
+    const R = CVI.getBoundingClientRect(), z = cvZoom();
+    for (const p of WIRES.querySelectorAll('path.w')) if (p._w){ const L = p.getTotalLength(); if (L < 30) continue;
+      const m = p.getPointAtLength(L / 2); add({ type: 'wire', ...p._w, x: R.left + m.x * z, y: R.top + m.y * z, w: 34, h: 34, label: '+' }); }
+  }
   for (const [k, el, b] of boxes){   // atomo / mover: entre dois = inserir; em cima de um = paralelo (so' nele); caixa vazia = no fim
     if (rowOf(k).fold) continue;
     const ats = $$('.at', el), lrs = $$('.lr', el), hd = (lrs.length ? lrs[lrs.length - 1] : el.querySelector('.bh')).getBoundingClientRect();   // mixer: os atomos vem DEPOIS das entradas
@@ -3955,7 +4004,7 @@ function dragMove(ev){
 function auditionFor(z){   // a PREVIA fora do ar do que aconteceria se soltasse aqui (native: POST /try)
   const d = drag; if (!d) return;
   if (!z || z.type !== 'ins' || !['mod', 'move', 'recipe'].includes(d.spec.kind)){ clearTimeout(tryT); tryT = null; if (tryKey) postTry('', []); renderNext(); return; }
-  const items = d.spec.kind === 'move' ? d.spec.js.map(j => stackOf(d.spec.key)[j]) : d.spec.kind === 'recipe' ? recipeItems(d.spec.r) : prepItems([{ file: d.spec.file }]);
+  const items = d.spec.kind === 'move' ? d.spec.js.map(j => stackOf(d.spec.key)[j]) : d.spec.kind === 'recipe' ? recipeItems(d.spec.r, false) : prepItems([{ file: d.spec.file }]);
   let st = stackOf(z.key).slice(), at = z.at;
   if (d.spec.kind === 'move' && !d.copy && d.spec.key === z.key){ st = st.filter(s => !items.includes(s)); at -= d.spec.js.filter(j => j < z.at).length; }
   st.splice(at, 0, ...items);
@@ -4002,6 +4051,7 @@ function dragDrop(ev){
   if (sp.kind === 'postlink' && z.type === 'post') return linkPost(sp.id, z.key, z.j);
   if (sp.kind === 'mod' && z.type === 'post') return attachPost(z.key, z.j, sp.file);
   if (sp.kind === 'mod' && z.type === 'ins') return insertItems(z.key, z.at, prepItems([{ file: sp.file }]));
+  if ((sp.kind === 'mod' || sp.kind === 'recipe') && z.type === 'wire') return insertOnWire(z, sp.kind === 'mod' ? prepItems([{ file: sp.file }]) : recipeItems(sp.r), ev);
   if (sp.kind === 'recipe' && z.type === 'ins'){ insertItems(z.key, z.at, recipeItems(sp.r)); return toast(`receita ${sp.r.nome || sp.r.name} na caixa ${boxNo(z.key)}`); }
   cvSig = ''; renderBoxes();
 }

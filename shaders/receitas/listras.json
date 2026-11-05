@@ -1,6 +1,6 @@
 {
  "nome": "Listras",
- "desc": "faixas que correm por cima; aparecem com o agudo",
+ "desc": "faixas que correm por cima (aparecem com o agudo), pintadas por um Tingir em cima delas com a cor andando",
  "de": [
   "sortidos/Listras.frag"
  ],
@@ -27,7 +27,34 @@
      "hi": 0.7,
      "id": "r11"
     }
-   }
+   },
+   "paralelo": [
+    {
+     "file": "presets/atomos/Tingir.frag",
+     "opacity": 1.0,
+     "fx": {
+      "forca": 1.0,
+      "matiz": 0.0
+     },
+     "mod": {
+      "matiz": {
+       "b": [
+        "lfo"
+       ],
+       "modo": "loop",
+       "lfo": {
+        "f": "saw",
+        "r": 16,
+        "ph": 0
+       },
+       "lo": 0.0,
+       "hi": 1.0,
+       "id": "r90",
+       "nome": "anda"
+      }
+     }
+    }
+   ]
   }
  ]
 }

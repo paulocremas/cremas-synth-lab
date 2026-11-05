@@ -190,7 +190,9 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - **Controlador** (dash5, 2026-11-04): o movimento com corpo no canvas = item da pilha `~ctl` do BINDINGS `{file: 'ctl', id, xy,
   mod: {sinal}}` (id = o do movimento); o knob ligado guarda a receita + a faixa (`mod[knob].id`), o motor não muda. `syncCtls`
   cria um por movimento; cabo tracejado até a altura do knob (`cvEnd`). Átomo não tem cor/giro/som dentro: os Clássicos viraram
-  RECEITAS (`shaders/receitas/*.json` → `/receitas`, `recipeItems`) e saíram da biblioteca (cena antiga roda o `.frag` velho).
+  RECEITAS (`shaders/receitas/*.json` → `/receitas`, `recipeItems`; item `paralelo: [...]` = modificador paralelo, ex. Tingir
+  só na linha do Contornar) e saíram da biblioteca (cena antiga roda o `.frag` velho). Átomo/receita solto NO FIO = nó no meio
+  (`insertOnWire`, zona `wire` no meio de cada cabo); nó novo empurra quem ele cobre (`declutter`); ARRUMAR recoloca controladores.
 - **Saída "por cima do PRISMA"** (monitor = `dash_data.PIN_MON` `'@topo'`): janela sempre no topo (`plat.keep_on_top`: wmctrl
   `above` | HWND_TOPMOST) ancorada no dash — sobre o painel PROGRAMA ou num canto (`pin = {box (px de tela, o dash mede), onde,
   tam, aspect do palco}` → `dash_data.pin_rect`); o dash remede a cada 0,5 s e, se só o lugar mudou, o native MOVE a janela

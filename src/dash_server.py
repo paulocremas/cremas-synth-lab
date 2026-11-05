@@ -2319,7 +2319,12 @@ def _list_recipes(rdir=None):
         try:
             with open(f, encoding='utf-8') as fh:
                 r = json.load(fh)
-            items = _norm_overlays(r.get('items'), dedupe=False)
+            items = []
+            for raw in r.get('items') or ():   # 'paralelo' = atomos EM CIMA deste (so' na saida dele: o Tingir pinta so' a linha)
+                n = _norm_overlays([raw], dedupe=False)
+                if n:
+                    par = _norm_overlays(raw.get('paralelo'), dedupe=False) if isinstance(raw.get('paralelo'), list) else []
+                    items.append(dict(n[0], paralelo=par) if par else n[0])
         except (OSError, ValueError, TypeError, AttributeError):
             continue
         if items:

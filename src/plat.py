@@ -751,11 +751,16 @@ if __name__ == '__main__':  # self-check das partes puras (roda em qualquer SO)
                                 stdout=subprocess.PIPE, text=True)
         _filho = int(_pai.stdout.readline())
         _pai.kill(); _pai.wait()
-        for _ in range(50):
+        def _vivo(pid):   # ZUMBI conta como morto: no CI ninguem recolhe o filho na hora e o kill(pid, 0) ainda acha ele
             try:
-                os.kill(_filho, 0); time.sleep(0.05)
-            except ProcessLookupError:
+                with open(f'/proc/{pid}/stat') as f:
+                    return f.read().rsplit(')', 1)[1].split()[0] != 'Z'
+            except (OSError, IndexError):
+                return False
+        for _ in range(100):
+            if not _vivo(_filho):
                 break
+            time.sleep(0.05)
         else:
             raise AssertionError('filho sobreviveu ao pai (pdeathsig)')
     if not IS_WIN:   # orfao com a assinatura morre; ffmpeg alheio (sem assinatura) fica

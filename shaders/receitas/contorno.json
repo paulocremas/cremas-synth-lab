@@ -1,6 +1,6 @@
 {
  "nome": "Contorno",
- "desc": "linhas das bordas em neon: Luz escurece o fundo, Contornar desenha (segue o agudo), Tingir pinta e a cor anda sozinha",
+ "desc": "linhas das bordas em neon: Luz escurece o fundo, Contornar desenha (segue o agudo) e o Tingir EM CIMA dele pinta só a linha, com a cor andando sozinha",
  "de": [
   "sortidos/Contorno.frag"
  ],
@@ -34,32 +34,34 @@
      "hi": 1.0,
      "id": "r1"
     }
-   }
-  },
-  {
-   "file": "presets/atomos/Tingir.frag",
-   "opacity": 1.0,
-   "fx": {
-    "forca": 0.8,
-    "matiz": 0.5
    },
-   "mod": {
-    "matiz": {
-     "b": [
-      "lfo"
-     ],
-     "modo": "loop",
-     "lfo": {
-      "f": "saw",
-      "r": 16,
-      "ph": 0
+   "paralelo": [
+    {
+     "file": "presets/atomos/Tingir.frag",
+     "opacity": 1.0,
+     "fx": {
+      "forca": 0.8,
+      "matiz": 0.5
      },
-     "lo": 0.0,
-     "hi": 1.0,
-     "id": "r2",
-     "nome": "anda"
+     "mod": {
+      "matiz": {
+       "b": [
+        "lfo"
+       ],
+       "modo": "loop",
+       "lfo": {
+        "f": "saw",
+        "r": 16,
+        "ph": 0
+       },
+       "lo": 0.0,
+       "hi": 1.0,
+       "id": "r2",
+       "nome": "anda"
+      }
+     }
     }
-   }
+   ]
   }
  ]
 }
