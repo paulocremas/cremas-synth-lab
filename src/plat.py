@@ -38,6 +38,91 @@ if IS_WIN:   # todo subprocess sem console piscando (app empacotado e' --windowe
     subprocess.Popen = _QuietPopen
 
 
+_SETPRIV = None if IS_WIN else shutil.which('setpriv')
+
+
+def child_cmd(cmd):
+    """Comando de um filho que tem que morrer JUNTO com o prisma (ffmpeg das fontes). Linux:
+    `setpriv --pdeathsig TERM` (util-linux) — sem isso um prisma morto (crash, kill -9) deixa o
+    ffmpeg da camera orfao segurando o /dev/video* (v4l2 e' exclusivo) e a webcam nao abre mais.
+    O sinal vem quando a THREAD que criou o filho acaba: so' criar de thread longa ou que mata o
+    proprio filho antes de sair. Windows/sem setpriv: o comando como veio."""
+    return [_SETPRIV, '--pdeathsig', 'TERM', '--', *cmd] if _SETPRIV else list(cmd)
+
+
+_x11 = None   # (libX11, display) aberto na 1a vez
+
+
+def warp_pointer(x, y):
+    """Leva o cursor do mouse pra (x, y) em pixel fisico da tela (o knob do dash: ARRASTO INFINITO sem o pointer
+    lock do navegador, que mostra um aviso que nao da' pra esconder — o cursor some e volta pro lugar).
+    Linux X11 (XWarpPointer) | Windows (SetCursorPos). Wayland/sem X: False (o arrasto so' fica finito)."""
+    global _x11
+    import ctypes
+    try:
+        if IS_WIN:
+            return bool(ctypes.windll.user32.SetCursorPos(int(x), int(y)))
+        if os.environ.get('XDG_SESSION_TYPE') == 'wayland' or not os.environ.get('DISPLAY'):
+            return False
+        if _x11 is None:
+            lib = ctypes.CDLL('libX11.so.6')
+            lib.XOpenDisplay.restype = ctypes.c_void_p
+            lib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+            lib.XDefaultRootWindow.restype = ctypes.c_ulong
+            lib.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+            lib.XWarpPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong] + [ctypes.c_int] * 2 + \
+                [ctypes.c_uint] * 2 + [ctypes.c_int] * 2
+            lib.XFlush.argtypes = [ctypes.c_void_p]
+            dpy = lib.XOpenDisplay(None)
+            if not dpy:
+                return False
+            _x11 = (lib, dpy)
+        lib, dpy = _x11
+        lib.XWarpPointer(dpy, 0, lib.XDefaultRootWindow(dpy), 0, 0, 0, 0, int(x), int(y))
+        lib.XFlush(dpy)
+        return True
+    except (OSError, AttributeError):
+        return False
+
+
+FFMPEG_SIG = ('-fflags', 'nobuffer')   # todo ffmpeg de fonte do prisma leva isso (_FAST_IN no native)
+
+
+def reap_orphans():
+    """Linux: mata ffmpeg de fonte ORFAO (pai = init) que um prisma anterior deixou — ele segura a
+    camera (v4l2 e' exclusivo) e ela some em TODO app. Reconhece pela assinatura (ffmpeg com
+    `-fflags nobuffer` saindo rawvideo no stdout), do mesmo usuario. SIGKILL: o travado ignora TERM.
+    Devolve os pids mortos."""
+    if IS_WIN or not os.path.isdir('/proc'):
+        return []
+    out, uid = [], os.getuid()
+    for pid in filter(str.isdigit, os.listdir('/proc')):
+        try:
+            if os.stat('/proc/' + pid).st_uid != uid:
+                continue
+            with open(f'/proc/{pid}/cmdline', 'rb') as f:
+                a = f.read().decode(errors='replace').split('\0')
+            with open(f'/proc/{pid}/stat') as f:
+                ppid = int(f.read().rsplit(')', 1)[1].split()[1])
+            if ppid != 1:   # orfao vira filho do init OU de um subreaper (systemd --user)
+                with open(f'/proc/{ppid}/comm') as f:
+                    ppid = 1 if f.read().strip() == 'systemd' else ppid
+        except (OSError, ValueError, IndexError):
+            continue
+        if ppid == 1 and a and os.path.basename(a[0]) == 'ffmpeg' and _is_source_ffmpeg(a):
+            try:
+                os.kill(int(pid), 9)
+                out.append(int(pid))
+            except OSError:
+                pass
+    return out
+
+
+def _is_source_ffmpeg(a):
+    s = ' '.join(a)
+    return ' '.join(FFMPEG_SIG) in s and '-f rawvideo -' in s + ' '
+
+
 def init_process():
     """Chamar no comeco do processo. Windows: DPI-aware por monitor (coordenadas e tamanhos em
     pixel fisico — o pixel map so' e' 1:1 assim)."""
@@ -171,7 +256,28 @@ def list_cams():
     if IS_WIN:
         return _dshow_cams()
     import glob
-    return sorted(glob.glob('/dev/video*'))
+    return [d for d in sorted(glob.glob('/dev/video*')) if d not in _vcam_busy and _v4l2_captures(d)]
+
+
+def _v4l2_captures(dev):
+    """O no' entrega VIDEO? Webcam UVC cria 2 nos (/dev/video0 = imagem, /dev/video1 = metadados):
+    o de metadados abre no ffmpeg e nunca da' frame. VIDIOC_QUERYCAP -> device_caps tem
+    VIDEO_CAPTURE (0x1) ou _MPLANE (0x1000). Nao deu pra perguntar (permissao): fica na lista."""
+    import fcntl
+    try:
+        fd = os.open(dev, os.O_RDWR | os.O_NONBLOCK)
+    except OSError:
+        return True
+    try:
+        buf = bytearray(104)                        # struct v4l2_capability
+        fcntl.ioctl(fd, 0x80685600, buf)            # VIDIOC_QUERYCAP (funciona com a camera em uso)
+        caps = int.from_bytes(buf[84:88], 'little')
+        dcaps = int.from_bytes(buf[88:92], 'little') if caps & 0x80000000 else caps   # DEVICE_CAPS
+        return bool(dcaps & 0x1001)
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
 
 
 def default_cam():
@@ -190,6 +296,95 @@ def cam_input_args(device, w, h):
     if device == '/dev/video0':   # so a webcam de verdade precisa forcar o formato
         a += ['-input_format', 'yuyv422']
     return a + ['-video_size', f'{w}x{h}', '-i', device]
+
+
+# ---------------------------------------------------------------- webcam virtual (a SAIDA como camera)
+
+_vcam_busy = set()   # no' que o prisma esta' escrevendo agora: fora do list_cams (senao vira fonte de si mesmo)
+
+VCAM_HELP = ('webcam virtual: carregue o v4l2loopback — sudo apt install v4l2loopback-dkms && '
+             'sudo modprobe v4l2loopback devices=1 exclusive_caps=1 card_label=PRISMA')
+VCAM_HELP_WIN = 'webcam virtual: instale o OBS Studio (a camera virtual dele recebe a imagem)'
+
+
+def vcam_devices():
+    """Linux: nos do v4l2loopback (virtuais, sem hardware: /sys/devices/virtual/video4linux), o de
+    card_label PRISMA primeiro. Windows: [] (o pyvirtualcam acha a camera do OBS sozinho)."""
+    if IS_WIN:
+        return []
+    import glob
+    out = []
+    for d in sorted(glob.glob('/sys/class/video4linux/video*'), key=lambda p: int(re.sub(r'\D', '', p) or 0)):
+        if '/virtual/' not in os.path.realpath(d):
+            continue
+        try:
+            name = open(os.path.join(d, 'name'), encoding='utf-8', errors='replace').read().strip()
+        except OSError:
+            name = ''
+        out.append(('/dev/' + os.path.basename(d), name))
+    out.sort(key=lambda dn: 'prisma' not in dn[1].lower())
+    return out
+
+
+def vcam_cmd(dev, w, h, fps):
+    """ffmpeg: rgb24 topo->baixo no stdin -> no' v4l2loopback (yuv420p = o que Chrome/Zoom/OBS leem)."""
+    return ['ffmpeg', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{w}x{h}',
+            '-r', str(fps), '-i', '-', '-f', 'v4l2', '-pix_fmt', 'yuv420p', dev]
+
+
+class VCam:
+    """A saida como webcam. send(bytes rgb24 h x w topo->baixo) por quadro; close(). Linux: ffmpeg no
+    v4l2loopback (criar de THREAD LONGA: child_cmd/pdeathsig); Windows: pyvirtualcam (camera do OBS).
+    Sem o que precisa: RuntimeError com o que instalar. .dev = nome pra mostrar."""
+
+    def __init__(self, w, h, fps):
+        self.w, self.h, self.p, self.cam = w, h, None, None
+        if IS_WIN:
+            try:
+                import pyvirtualcam
+            except ImportError:
+                raise RuntimeError(VCAM_HELP_WIN)
+            try:
+                self.cam = pyvirtualcam.Camera(w, h, fps, fmt=pyvirtualcam.PixelFormat.RGB)
+            except Exception as e:
+                raise RuntimeError(f'{VCAM_HELP_WIN} ({e})')
+            self.dev = self.cam.device
+            return
+        devs = vcam_devices()
+        if not devs:
+            raise RuntimeError(VCAM_HELP)
+        if not shutil.which('ffmpeg'):
+            raise RuntimeError('webcam virtual: falta o ffmpeg')
+        self.dev = devs[0][0]
+        self.p = subprocess.Popen(child_cmd(vcam_cmd(self.dev, w, h, fps)), stdin=subprocess.PIPE,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        _vcam_busy.add(self.dev)
+
+    def send(self, rgb):
+        if self.cam is not None:
+            self.cam.send(np.frombuffer(rgb, np.uint8).reshape(self.h, self.w, 3))
+            return
+        if self.p.poll() is not None:
+            err = (self.p.stderr.read() or b'').decode(errors='replace').strip().splitlines()
+            raise RuntimeError(f'webcam virtual ({self.dev}): ' + (err[-1] if err else 'ffmpeg saiu'))
+        self.p.stdin.write(rgb)
+
+    def close(self):
+        if self.cam is not None:
+            try:
+                self.cam.close()
+            except Exception:
+                pass
+            return
+        _vcam_busy.discard(self.dev)
+        try:
+            self.p.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.p.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            self.p.kill()
 
 
 _dda_ok = {}   # (output_idx, w, h) -> o ddagrab capturou 1 frame desse monitor inteiro
@@ -532,6 +727,50 @@ if __name__ == '__main__':  # self-check das partes puras (roda em qualquer SO)
            '[dshow @ 0x1] "OBS Virtual Camera" (video)\n[dshow @ 0x1] "Microfone (Realtek)" (audio)\n')
     assert parse_dshow_cams(txt) == ['Integrated Camera', 'OBS Virtual Camera']
     assert cam_input_args('/dev/video0', 640, 480)[:2] == ['-f', 'v4l2'] or IS_WIN
+    vc = vcam_cmd('/dev/video9', 1280, 720, 30)
+    assert vc[-1] == '/dev/video9' and '1280x720' in vc and not _is_source_ffmpeg(vc), 'webcam virtual nao e\' fonte orfa'
+    assert isinstance(vcam_devices(), list)
+    if _SETPRIV:   # filho morre junto: pai morto com kill -9 -> o "ffmpeg" (sleep) recebe TERM
+        _pai = subprocess.Popen([sys.executable, '-c', 'import subprocess,sys,time;'
+                                 f'p=subprocess.Popen({child_cmd(["sleep", "30"])!r});print(p.pid,flush=True);time.sleep(30)'],
+                                stdout=subprocess.PIPE, text=True)
+        _filho = int(_pai.stdout.readline())
+        _pai.kill(); _pai.wait()
+        for _ in range(50):
+            try:
+                os.kill(_filho, 0); time.sleep(0.05)
+            except ProcessLookupError:
+                break
+        else:
+            raise AssertionError('filho sobreviveu ao pai (pdeathsig)')
+    if not IS_WIN:   # orfao com a assinatura morre; ffmpeg alheio (sem assinatura) fica
+        assert _is_source_ffmpeg(['ffmpeg', '-loglevel', 'error', *FFMPEG_SIG, '-i', '/dev/video0', '-f', 'rawvideo', '-'])
+        assert not _is_source_ffmpeg(['ffmpeg', '-i', 'a.mp4', 'b.mp4'])
+        def _orfao(args):   # neto que vira orfao (o filho sai na hora); argv[0] = 'ffmpeg'
+            r = subprocess.run([sys.executable, '-c', 'import os,sys\nif os.fork()==0:\n os.setsid()\n'
+                                f' os.execv(sys.executable, {["ffmpeg", "-c", "import time; time.sleep(20)", *args]!r})\n'
+                                'print(os.getpid())'], capture_output=True, text=True)
+            time.sleep(0.4)
+            for pid in filter(str.isdigit, os.listdir('/proc')):
+                try:
+                    with open(f'/proc/{pid}/cmdline', 'rb') as f:
+                        if f.read().split(b'\0')[1:3] == [b'-c', b'import time; time.sleep(20)'] and \
+                                args[-1].encode() in open(f'/proc/{pid}/cmdline', 'rb').read():
+                            return int(pid)
+                except (OSError, IndexError):
+                    pass
+        _sig, _alheio = _orfao([*FFMPEG_SIG, '-f', 'rawvideo', '-', 'sig']), _orfao(['-i', 'x', 'alheio'])
+        try:
+            if _sig and _alheio:
+                mortos = reap_orphans()
+                _subreaper = _sig not in mortos   # pai adotivo nao e' init/systemd (ex.: container do CI): pula
+                assert _subreaper or _alheio not in mortos
+        finally:
+            for _p in (_sig, _alheio):
+                try:
+                    os.kill(_p, 9)
+                except (OSError, TypeError):
+                    pass
     assert screen_input_args({'x': 10, 'y': 0, 'w': 100, 'h': 50})[-1].endswith('+10,0') or IS_WIN
     ms = [{'x': 0, 'y': 0, 'w': 1920, 'h': 1080}, {'x': 1920, 'y': 0, 'w': 1280, 'h': 720}]
     i, _, s = _dda_spec({'x': 2020, 'y': 10, 'w': 640, 'h': 360}, ms)

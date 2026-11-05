@@ -193,7 +193,7 @@ def set_bands_off(names, tuning_path=None):
     return _write_var('BANDS_OFF', off, 'faixas desligadas (dash: botao na coluna da aba Audio) — 0 pro shader/♪', tuning_path)
 
 
-TEMPO_QUANTS = ('', 'beat', 'bar')        # troca de cena: na hora / na proxima batida / no proximo "1"
+TEMPO_QUANTS = ('', 'beat', 'bar', 'phrase')   # GRADE de toda acao discreta: na hora / batida / "1" do compasso / "1" da frase
 KEY_COLOR_MODES = ('quintas', 'scriabin')  # cor do tom: circulo das quintas / tabela do Scriabin (ritmo.key_rgb)
 
 
@@ -229,6 +229,15 @@ def set_limits(cfg, tuning_path=None):
     return _write_var('LIMITS', cur, 'PROTECAO da saida: anti-estrobo (flash) + teto de brilho medio (bright, 1 = sem)', tuning_path)
 
 
+def set_vcam(cfg, tuning_path=None):
+    """WEBCAM VIRTUAL (native vcam_thread): {'on', 'w', 'fps'} -> tuning.VCAM (dash_data.vcam_cfg). So' muda o que vier."""
+    cur = dash_data.vcam_cfg(getattr(_tuning, 'VCAM', None))
+    cur = dash_data.vcam_cfg(dict(cur, **{k: cfg[k] for k in ('on', 'w', 'fps') if k in cfg}))
+    cur.pop('h')
+    _write_var('VCAM', cur, 'WEBCAM VIRTUAL: a saida como camera (v4l2loopback | OBS); w x 16:9 @ fps', tuning_path)
+    return dash_data.vcam_cfg(cur)
+
+
 def set_tempo_cfg(cfg, tuning_path=None):
     """Ritmo/tom (dash): {'quant': '' | 'beat' | 'bar', 'beats': 0..32 (duracao da transicao em batidas;
     0 = o ms do .glsl), 'colors': 'quintas' | 'scriabin'} -> SCENE_QUANT / TRANS_BEATS / KEY_COLORS. So'
@@ -240,6 +249,8 @@ def set_tempo_cfg(cfg, tuning_path=None):
         _write_var('SCENE_QUANT', q, 'troca de cena quantizada: "" na hora | "beat" proxima batida | "bar" proximo compasso', tuning_path)
     if 'beats' in cfg:
         _write_var('TRANS_BEATS', max(0, min(32, int(cfg['beats']))), 'duracao da transicao em batidas (0 = o ms do .glsl)', tuning_path)
+    if 'bars' in cfg:   # FRASE = N compassos (padrao 8)
+        _write_var('PHRASE_BARS', max(1, min(64, int(cfg['bars']))), 'frase da musica em compassos (grade "phrase", evento frase)', tuning_path)
     if 'colors' in cfg:
         c = str(cfg['colors'])
         if c not in KEY_COLOR_MODES:
@@ -250,7 +261,8 @@ def set_tempo_cfg(cfg, tuning_path=None):
 
 def _tempo_cfg():
     return {'quant': str(getattr(_tuning, 'SCENE_QUANT', '') or ''), 'beats': int(getattr(_tuning, 'TRANS_BEATS', 0) or 0),
-            'colors': str(getattr(_tuning, 'KEY_COLORS', 'quintas') or 'quintas')}
+            'colors': str(getattr(_tuning, 'KEY_COLORS', 'quintas') or 'quintas'),
+            'bars': int(getattr(_tuning, 'PHRASE_BARS', 8) or 8)}
 
 
 # dinamica por faixa (release/attack/auto-gain das 8 finas): 3 listas de 8 floats em
@@ -522,7 +534,7 @@ def _write_keys(block, nested, tuning_path=None):
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
         src = open(path, encoding='utf-8').read()
-        src, n = re.subn(rf'(?ms)^{block} = \{{.*?^\}}', text, src)
+        src, n = re.subn(rf'(?ms)^{block} = \{{.*?^\}}', lambda _m: text, src)
         if n != 1:
             raise KeyError(f'tuning.py: {block} x{n} (esperava 1)')
         _write_atomic(path, src)
@@ -669,7 +681,7 @@ def _write_media(allm, tuning_path=None):
     path = tuning_path or _cfg['tuning_path']
     with _knob_lock:
         src = open(path, encoding='utf-8').read()
-        src, n = re.subn(r'(?ms)^MEDIA = \[.*?^\]', block, src)
+        src, n = re.subn(r'(?ms)^MEDIA = \[.*?^\]', lambda _m: block, src)
         if n != 1:
             raise KeyError(f'tuning.py: MEDIA x{n} (esperava 1)')
         _write_atomic(path, src)
@@ -856,9 +868,8 @@ LAYER_BLENDS = ['normal', 'soma', 'tela', 'multiplicar', 'clarear']
 
 def _chkey(o):
     """chave do CANAL da mesa: a mesma fonte pode estar 2x+ (item com 'dup': N >= 2) -> 'file#N'.
-    BINDINGS e a selecao usam essa chave; o frame vem da fonte (_base_key)."""
-    d = o.get('dup')
-    return f"{o.get('file', '')}#{d}" if d else o.get('file', '')
+    BINDINGS e a selecao usam essa chave; o frame vem da fonte (_base_key). Staging/saida = '+<id>'."""
+    return dash_data.node_key(o)
 
 
 def _base_key(key):
@@ -895,26 +906,64 @@ def _norm_rect(r):
 MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
                'm1', 'm2', 'm3', 'm4',   # m1..m4 = MACROS (faders no Palco): a mesma faixa lo->hi, movida a mao/MIDI
                'luz', 'mov',              # IMAGEM de entrada: brilho e movimento (dash_data.img_mod_levels)
-               'lfo')                     # OSCILADOR no tempo da musica (dash v4: modulador como peca); forma em 'lfo'
+               'lfo',                     # OSCILADOR no tempo da musica (dash v4: modulador como peca); forma em 'lfo'
+               'energia', 'build', 'key_hue') + dash_data.TRACK_SIGNALS + dash_data.TRACK_GATES   # musica longa (+ TOM: cor do tom 0..1) + RASTREIO
+
+
+NO_SRC = re.compile(r'no:[A-Za-z0-9_-]{1,24}')   # ATOMO v2 §8: brilho medio da saida do no' <id> (native grab_no)
 
 
 def _norm_mod1(v):
-    """Um ♪ -> {b: faixas validas (ordem do espectro), lo?, hi?} | None. Lista solta = formato velho (so' b)."""
+    """Um MOVIMENTO num knob -> {b, lo?, hi?, lfo?, modo?, ev?, env?, seg?, q?, id?, nome?} | None (dash_data: MOV_MODES).
+    Lista solta = formato velho (so' b). 'disparo' pode vir sem b (a fonte e' o evento)."""
     v = {'b': v} if isinstance(v, list) else v
-    if not isinstance(v, dict) or not isinstance(v.get('b'), list):
+    if not isinstance(v, dict) or not isinstance(v.get('b', []), list):
         return None
-    d = {'b': [b for b in MOD_SOURCES if b in v['b']]}
+    d = {'b': [b for b in MOD_SOURCES if b in (v.get('b') or [])] +
+         [b for b in v.get('b') or () if isinstance(b, str) and NO_SRC.fullmatch(b)][:4]}   # no:<id> = o SINAL de um no'
+    num = lambda q, k, lo, hi, df: round(max(lo, min(hi, float(q[k]))), 4) if isinstance(q.get(k), (int, float)) else df
     for k in ('lo', 'hi'):
         try:
             d[k] = round(max(0.0, min(1.0, float(v[k]))), 3)
         except (KeyError, TypeError, ValueError):
             pass
-    if 'lfo' in d['b']:   # forma do LFO (dash_data.lfo): f, r = batidas por ciclo (1/16..64), ph = fase 0..1
+    if 'lfo' in d['b']:   # forma do LFO (dash_data.lfo): f, r = batidas por ciclo (1/16..64), ph = fase 0..1, st = passos
         q = v.get('lfo') if isinstance(v.get('lfo'), dict) else {}
-        num = lambda k, lo, hi, df: round(max(lo, min(hi, float(q[k]))), 4) if isinstance(q.get(k), (int, float)) else df
         d['lfo'] = {'f': q.get('f') if q.get('f') in dash_data.LFO_SHAPES else 'sin',
-                    'r': num('r', 1 / 16, 64.0, 4.0), 'ph': num('ph', 0.0, 1.0, 0.0)}
-    return d if d['b'] else None
+                    'r': num(q, 'r', 1 / 16, 64.0, 4.0), 'ph': num(q, 'ph', 0.0, 1.0, 0.0)}
+        st = [round(max(0.0, min(1.0, float(x))), 3) for x in q.get('st') or () if isinstance(x, (int, float))][:16] \
+            if isinstance(q.get('st'), list) else []
+        if d['lfo']['f'] == 'passos' and len(st) >= 2:
+            d['lfo']['st'] = st
+    if v.get('modo') in dash_data.MOV_MODES:
+        d['modo'] = v['modo']
+    e = v.get('ev') if isinstance(v.get('ev'), dict) else None
+    if d.get('modo') == 'disparo' and e and e.get('src') in dash_data.EVENTS:
+        ev = {'src': e['src']}
+        c = e.get('cond') if isinstance(e.get('cond'), dict) else {}
+        if c.get('first'):
+            ev['cond'] = {'first': 1}
+        elif isinstance(c.get('b'), int) and 1 <= c['b'] <= 64:
+            ev['cond'] = {'a': max(1, min(c['b'], int(c.get('a') or 1))), 'b': c['b']}
+        elif isinstance(c.get('n'), int) and 2 <= c['n'] <= 64:
+            ev['cond'] = {'n': c['n']}
+        elif isinstance(c.get('p'), (int, float)) and 0 < c['p'] < 1:
+            ev['cond'] = {'p': round(float(c['p']), 3)}
+        d['ev'] = ev
+        q = v.get('env') if isinstance(v.get('env'), dict) else {}
+        d['env'] = {'a': num(q, 'a', 0.0, 16.0, 0.0), 'd': num(q, 'd', 1 / 16, 64.0, 0.5)}
+    elif d.get('modo') == 'disparo':
+        del d['modo']                                   # disparo sem evento valido = movimento comum
+    if d.get('modo') == 'segue':
+        q = v.get('seg') if isinstance(v.get('seg'), dict) else {}
+        d['seg'] = {'a': num(q, 'a', 0.0, 5000.0, 10.0), 'r': num(q, 'r', 0.0, 10000.0, 200.0)}
+    if (v.get('q') in MOD_SOURCES and v['q'] != 'lfo') or NO_SRC.fullmatch(str(v.get('q') or '')):   # quantidade movida por outro sinal
+        d['q'] = v['q']
+    if re.fullmatch(r'[A-Za-z0-9_-]{1,24}', str(v.get('id') or '')):   # MESMO id = o mesmo movimento em varios knobs
+        d['id'] = str(v['id'])
+    if isinstance(v.get('nome'), str) and v['nome'].strip():
+        d['nome'] = v['nome'].strip()[:24]
+    return d if d['b'] or 'ev' in d else None
 
 
 def _norm_overlays(items, dedupe=True):
@@ -922,6 +971,12 @@ def _norm_overlays(items, dedupe=True):
     com as suas forcas em 'fx')."""
     out, seen, aud = [], set(), False
     for it in items or []:
+        if dedupe and isinstance(it, dict) and it.get('kind') in dash_data.NODE_KINDS:   # STAGING / SAIDA (grafo v5)
+            n = _norm_node(it)
+            if n and _chkey(n) not in seen:
+                seen.add(_chkey(n))
+                out.append(n)
+            continue
         f = str((it or {}).get('file', '')).replace('\\', '/').lstrip('/')
         dup = int(it.get('dup') or 0) if str(it.get('dup') or '').isdigit() else 0
         ck = f'{f}#{dup}' if dup >= 2 else f
@@ -946,6 +1001,8 @@ def _norm_overlays(items, dedupe=True):
             o['ins'] = ins
         if re.fullmatch(r'[A-Za-z0-9_-]{1,24}', str(it.get('id') or '')):   # id ESTAVEL do modulo (dash v4): ramo e entrada '@id'
             o['id'] = str(it['id'])
+        if re.fullmatch(r'[A-Za-z0-9_-]{1,24}', str(it.get('espelho') or '')):   # ESPELHO: knobs/movimento do atomo <id>
+            o['espelho'] = str(it['espelho'])
         pub = [n for n in it.get('pub') or () if isinstance(n, str) and re.fullmatch(r'[A-Za-z0-9_]{1,32}', n)][:16] \
             if isinstance(it.get('pub'), list) else []
         if pub:             # knobs PUBLICADOS (dash v4): o modo Show so mostra estes
@@ -977,12 +1034,87 @@ def _norm_overlays(items, dedupe=True):
                 del o['xy']
         except (KeyError, TypeError, ValueError):
             pass
+        ac = {k: it['acao'][k] for k in ('liga', 'desliga') if isinstance(it.get('acao'), dict) and it['acao'].get(k) in dash_data.EVENTS
+              and not it['acao'][k].endswith('.on')}
+        if ac:              # ACAO da caixa por EVENTO (native): {liga: 'secao:drop', desliga: 'secao:pausa'} -> off na SAIDA
+            o['acao'] = ac
+        est = {k: it['estado'][k] for k in ('semear', 'limpar') if isinstance(it.get('estado'), dict)
+               and it['estado'].get(k) in dash_data.EVENTS and not it['estado'][k].endswith('.on')}
+        if est:             # ATOMO COM ESTADO (v2 §6): evento que semeia / zera a memoria dele
+            o['estado'] = est
         if it.get('fold'):  # caixa dobrada (so' o cabecalho, dash v5)
             o['fold'] = 1
         if isinstance(it.get('n'), int) and 1 <= it['n'] <= 999:   # numero ESTAVEL da caixa (dash v5; a ordem e' a da SAIDA)
             o['n'] = it['n']
         out.append(o)
     return out
+
+
+_ID = re.compile(r'[A-Za-z0-9_-]{1,24}')
+
+
+def _norm_layer(L):
+    """Camada de um staging/saida: {from: '@<id>', opacity, blend, off, mod: {opacity}, acao, rect} | None."""
+    if not isinstance(L, dict) or not (str(L.get('from') or '').startswith('@') and _ID.fullmatch(str(L['from'])[1:])):
+        return None
+    o = {'from': str(L['from'])}
+    try:
+        a = round(max(0.0, min(1.0, float(L.get('opacity', 1.0)))), 3)
+    except (TypeError, ValueError):
+        a = 1.0
+    if a != 1.0:
+        o['opacity'] = a
+    if L.get('blend') in LAYER_BLENDS[1:]:
+        o['blend'] = L['blend']
+    if L.get('off'):
+        o['off'] = 1
+    if isinstance(L.get('mod'), dict):   # so' a opacidade da camada aceita movimento
+        m = {'opacity': d for n, v in L['mod'].items() if n == 'opacity' and (d := _norm_mod1(v))}
+        if m:
+            o['mod'] = m
+    ac = {k: L['acao'][k] for k in ('liga', 'desliga') if isinstance(L.get('acao'), dict) and L['acao'].get(k) in dash_data.EVENTS
+          and not L['acao'][k].endswith('.on')}
+    if ac:
+        o['acao'] = ac
+    r = _norm_rect(L.get('rect'))
+    if r:
+        o['rect'] = r
+    return o
+
+
+def _norm_node(it):
+    """STAGING (kind 'mix') / SAIDA (kind 'out') do grafo v5 (dash_data: NODE_KINDS) -> dict limpo | None."""
+    if not _ID.fullmatch(str(it.get('id') or '')):
+        return None
+    o = {'kind': it['kind'], 'id': str(it['id'])}
+    if isinstance(it.get('n'), int) and 1 <= it['n'] <= 999:
+        o['n'] = it['n']
+    if isinstance(it.get('nome'), str) and it['nome'].strip():
+        o['nome'] = it['nome'].strip()[:32]
+    try:
+        o['xy'] = [round(max(-1e5, min(1e5, float(v)))) for v in it['xy']][:2]
+        if len(o['xy']) != 2:
+            del o['xy']
+    except (KeyError, TypeError, ValueError):
+        pass
+    if it.get('fold'):
+        o['fold'] = 1
+    if it['kind'] == 'out':   # lugar da saida no PALCO (0..1, origem em cima); ausente = o palco inteiro
+        r = _norm_rect(it.get('rect'))
+        if r:
+            o['rect'] = r
+    o['layers'] = [x for x in (_norm_layer(L) for L in (it.get('layers') or [])[:32]) if x]
+    return o
+
+
+def state_cmd(b, state=None):
+    """Botao semear/limpar de um atomo com ESTADO: sobe o contador manual {id: {op: n}} (o native compara com o que viu)."""
+    state = _state if state is None else state
+    if b.get('op') not in ('semear', 'limpar') or not re.fullmatch(r'[A-Za-z0-9_-]{1,24}', str(b.get('id') or '')):
+        raise ValueError('id/op invalido')
+    c = state.setdefault('st_cmd', {}).setdefault(str(b['id']), {})
+    c[b['op']] = c.get(b['op'], 0) + 1
+    return {'id': b['id'], b['op']: c[b['op']]}
 
 
 def _set_layers(key, var, items, save, tuning_path, comment, live=True):
@@ -998,7 +1130,7 @@ def _set_layers(key, var, items, save, tuning_path, comment, live=True):
         path = tuning_path or _cfg['tuning_path']
         with _knob_lock:
             src = open(path, encoding='utf-8').read()
-            src, n = re.subn(rf'(?ms)^{var} = \[.*?^\]', block, src)
+            src, n = re.subn(rf'(?ms)^{var} = \[.*?^\]', lambda _m: block, src)   # funcao: \u00ed do json nao e' escape de regex
             if n == 0:
                 src = src.rstrip('\n') + f'\n\n# {comment}\n' + block + '\n'
             _write_atomic(path, src)
@@ -1015,10 +1147,10 @@ def _current_layers(key, var):
 def _remap_layers(key, var, setter, mapping, tuning_path=None):
     """{file_antigo: file_novo | None} -> atualiza as camadas (renomear move, apagar tira)."""
     cur = _current_layers(key, var)
-    if not any(o['file'] in mapping for o in cur):
+    if not any(o.get('file') in mapping for o in cur):
         return
-    new = [dict(o, file=mapping[o['file']]) if o['file'] in mapping else o for o in cur]
-    setter([o for o in new if o['file']], save=True, tuning_path=tuning_path)
+    new = [dict(o, file=mapping[o['file']]) if o.get('file') in mapping else o for o in cur]
+    setter([o for o in new if o.get('file') or o.get('kind')], save=True, tuning_path=tuning_path)
 
 
 def set_overlays(items, save=False, tuning_path=None, live=True):
@@ -2185,6 +2317,59 @@ def delete_group(name, gdir=None):
     os.remove(os.path.join(gdir or _GROUPS, _slugify(str(name or '')) + '.json'))
 
 
+GRID_OPS = ('fx_off', 'box_off', 'layer_off', 'ev')
+
+
+def grid_request(g):
+    """Acao discreta do dash (/grid): {op: 'fx_off', key, j, file, off} | {op: 'box_off', key, off} | {op: 'ev', name}.
+    now=1 (Shift) ou grade '' = aplica ja'; senao entra na fila que o native solta na proxima fronteira
+    (tuning.SCENE_QUANT: batida/compasso/frase). Devolve o pedido normalizado."""
+    if not isinstance(g, dict) or g.get('op') not in GRID_OPS:
+        raise ValueError('op desconhecida')
+    q = {k: g[k] for k in ('op', 'key', 'j', 'file', 'off', 'name', 'node', 'from') if k in g}
+    q['unit'] = '' if g.get('now') else str(getattr(_tuning, 'SCENE_QUANT', '') or '')
+    q['t'] = time.time()
+    if not q['unit'] or _state is None:
+        grid_apply(q)
+    else:
+        _state.setdefault('grid_q', []).append(q)
+    return q
+
+
+def grid_apply(g):
+    """Aplica UMA acao da grade (chamado pelo native na fronteira, numa thread; ou na hora)."""
+    op = g.get('op')
+    if op == 'ev':
+        if g.get('name') in dash_data.EVENTS and _state is not None:
+            man = _state.setdefault('ev_man', {})
+            man[g['name']] = man.get(g['name'], 0) + 1
+        return
+    if op == 'fx_off':
+        b = _current_bindings()
+        it = ((b.get(g.get('key')) or {}).get('shaders') or [])
+        j = g.get('j')
+        if not isinstance(j, int) or not 0 <= j < len(it) or (g.get('file') and it[j].get('file') != g['file']):
+            return
+        if g.get('off'):
+            it[j]['off'] = 1
+        else:
+            it[j].pop('off', None)
+        set_bindings(b, save=True)
+    elif op in ('box_off', 'layer_off'):   # layer_off = CAMADA de um staging/saida: {node: '+<id>', from: '@<id>', off}
+        cur = [dict(o) for o in _current_layers('overlays', 'OVERLAYS')]
+        for o in cur:
+            if op == 'box_off' and _chkey(o) == g.get('key'):
+                if g.get('off'):
+                    o['off'] = 1
+                else:
+                    o.pop('off', None)
+            elif op == 'layer_off' and o.get('kind') and _chkey(o) == g.get('node'):
+                o['layers'] = [dict(L, off=1) if L.get('from') == g.get('from') and g.get('off') else
+                               {k: v for k, v in L.items() if k != 'off' or L.get('from') != g.get('from')} for L in o['layers']]
+        set_overlays(cur, save=True)
+    save_active_scene()
+
+
 def _payload():
     return {
         'audio': _state.get('audio_dash', {}),   # kick / bands / spectrum — ver dash_data.audio_dash_data
@@ -2196,10 +2381,14 @@ def _payload():
         'lights': {'cfg': getattr(_tuning, 'LIGHTS', None) or {'on': 0, 'fixtures': []},   # luzes.py (painel: depois)
                    'live': _state.get('lights_live', []),
                    'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
-        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3)),
+        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3), phrase=round(_state.get('phrase', 0.0), 3)),
         'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)
+        'mv': {k: round(v, 3) for k, v in list((_state.get('mv') or {}).items())},   # sinal VIVO de cada movimento (id)
+        'mv_freeze': int(_state.get('mv_freeze') or 0),
+        'grid': [{k: g.get(k) for k in ('op', 'key', 'j', 'off', 'name', 'unit')} for g in list(_state.get('grid_q') or [])],
         'cue': _state.get('scene_cue') or '',                         # PROXIMA cena (preview/GO)
-        'limit': dict(_state.get('limit') or {}, cfg=_limits_cfg()),    # protecao: ganho agora + motivo   # ritmo.py: BPM, TAP, tom, compasso
+        'limit': dict(_state.get('limit') or {}, cfg=_limits_cfg()),
+        'vcam': dict(_state.get('vcam') or {}, cfg=dash_data.vcam_cfg(getattr(_tuning, 'VCAM', None))),   # webcam virtual    # protecao: ganho agora + motivo   # ritmo.py: BPM, TAP, tom, compasso
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
         'audio_source': _state.get('audio_source') or _cfg['audio_source'],  # muda ao vivo via set_input
@@ -2336,6 +2525,10 @@ class _Handler(BaseHTTPRequestHandler):
                  'meta': _shader_meta(al),
                  'keys': _read_keys_for('SHADER_KEYS', s),
                  'set': s, 'sets': _list_shader_sets()}).encode())
+        elif path == '/vocab':   # vocabulario do MOVIMENTO (dash: presets, eventos, fontes) — dash_data
+            self._send(200, 'application/json', json.dumps(
+                {'presets': dash_data.MOV_PRESETS, 'events': dash_data.EVENTS, 'modes': dash_data.MOV_MODES,
+                 'sources': MOD_SOURCES, 'shapes': dash_data.LFO_SHAPES, 'secoes': dash_data.SECOES}).encode())
         elif path == '/media':
             s = _active_media_set()
             self._send(200, 'application/json', json.dumps(
@@ -2415,6 +2608,12 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError, AttributeError, OSError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
+        if path == '/vcam':   # {on, w, fps}
+            try:
+                self._send(200, 'application/json', json.dumps(set_vcam(json.loads(raw.decode()))).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
         if path == '/limits':   # {on, flash, bright}
             try:
                 self._send(200, 'application/json', json.dumps(set_limits(json.loads(raw.decode()))).encode())
@@ -2429,6 +2628,48 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
+        if path == '/grid':   # acao discreta na GRADE (liga/desliga atomo ou caixa, disparar evento): grid_request
+            try:
+                out = grid_request(json.loads(raw.decode()))
+                self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/warp':   # knob: ARRASTO INFINITO — {x, y} px fisicos da tela -> o cursor volta pra la' (plat)
+            try:
+                b = json.loads(raw.decode())
+                ok = plat.warp_pointer(int(b['x']), int(b['y']))
+            except (ValueError, KeyError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+                return
+            self._send(200, 'application/json', json.dumps({'ok': ok}).encode())
+            return
+        if path == '/tempo-cmd':   # bloco da musica: {cmd: x2|d2|one|nudge|frase1|secao, arg?} -> native audio_thread
+            try:
+                b = json.loads(raw.decode())
+                if b.get('cmd') not in ('x2', 'd2', 'one', 'nudge', 'frase1', 'secao'):
+                    raise ValueError('cmd desconhecido')
+                arg = max(-0.25, min(0.25, float(b.get('arg') or 0))) if b['cmd'] == 'nudge' else b.get('arg')
+                if b['cmd'] == 'secao' and arg not in dash_data.SECOES:
+                    raise ValueError('secao desconhecida')
+                _state.setdefault('tempo_cmd', []).append((b['cmd'], arg, time.monotonic()))
+                self._send(200, 'application/json', b'{}')
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/state-cmd':   # {id, op: semear|limpar} -> o atomo com estado <id> semeia / zera JA' (native run_state)
+            try:
+                self._send(200, 'application/json', json.dumps(state_cmd(json.loads(raw.decode()))).encode())
+            except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/mv-freeze':   # SOCORRO: {on: 0|1} congela todos os movimentos onde estao (native _mod_value)
+            try:
+                _state['mv_freeze'] = int(bool(json.loads(raw.decode() or '{}').get('on')))
+                self._send(200, 'application/json', json.dumps({'on': _state['mv_freeze']}).encode())
+            except (ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
         if path == '/tap':   # toque do TAP (botao/MIDI): o relogio do servidor marca (native audio_thread consome)
             _state.setdefault('tap_q', []).append(time.monotonic())
             self._send(200, 'application/json', b'{}')
@@ -2438,7 +2679,7 @@ class _Handler(BaseHTTPRequestHandler):
                 b = json.loads(raw.decode() or '{}')
                 if b.get('auto'):
                     _state['tempo_auto'] = True
-                out = set_tempo_cfg({k: b[k] for k in ('quant', 'beats', 'colors') if k in b})
+                out = set_tempo_cfg({k: b[k] for k in ('quant', 'beats', 'colors', 'bars') if k in b})
                 self._send(200, 'application/json', json.dumps(out).encode())
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
@@ -3014,9 +3255,39 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
                          {'file': 'y.frag', 'id': 'bad id!', 'grp': '../g', 'pub': 'forca'}], dedupe=False)
     assert (v4[0]['id'], v4[0]['pub'], v4[0]['grp'], v4[0]['gname'], v4[0]['ins']) == ('k7', ['forca', 'matiz'], 'g1', 'Neon', ['@k2']), v4[0]
     assert v4[0]['mod']['forca'] == {'b': ['kick', 'lfo'], 'lfo': {'f': 'tri', 'r': 64.0, 'ph': 0.0}}, 'lfo: forma valida, r no teto, fase texto = padrao'
+    mv = _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'kick', 'cond': {'n': 2}}, 'env': {'d': 999}, 'lo': 0, 'hi': 1, 'id': 'm1x', 'nome': 'pulsa'})
+    assert mv == {'b': [], 'lo': 0.0, 'hi': 1.0, 'modo': 'disparo', 'ev': {'src': 'kick', 'cond': {'n': 2}}, 'env': {'a': 0.0, 'd': 64.0},
+                  'id': 'm1x', 'nome': 'pulsa'}, mv
+    assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'lixo'}}) is None, 'disparo sem evento valido e sem fonte = nada'
+    assert _norm_mod1({'b': ['subbass'], 'modo': 'segue'})['seg'] == {'a': 10.0, 'r': 200.0}
+    assert _norm_mod1({'b': ['no:k1', 'no:../x', 'kick']})['b'] == ['kick', 'no:k1'], 'no:<id> = sinal de um no\' (ATOMO v2)'
+    assert _norm_mod1({'b': ['kick'], 'q': 'no:k2'})['q'] == 'no:k2'
+    assert _norm_overlays([{'file': 'a.frag', 'estado': {'semear': 'frase', 'limpar': 'secao:drop', 'x': 'kick'}}], dedupe=False)[0]['estado'] == \
+        {'semear': 'frase', 'limpar': 'secao:drop'}
+    assert 'estado' not in _norm_overlays([{'file': 'a.frag', 'estado': {'semear': 'lixo'}}], dedupe=False)[0]
+    st_ = {}
+    assert state_cmd({'id': 'r1', 'op': 'limpar'}, st_) == {'id': 'r1', 'limpar': 1} and state_cmd({'id': 'r1', 'op': 'limpar'}, st_)['limpar'] == 2
+    try:
+        state_cmd({'id': 'r1', 'op': 'apaga'}, st_)
+        raise AssertionError('op invalido passou')
+    except ValueError:
+        pass
+    assert _norm_mod1({'b': ['lfo'], 'lfo': {'f': 'passos', 'st': [1, 0, 2, 'x']}})['lfo']['st'] == [1.0, 0.0, 1.0]
+    assert _norm_mod1({'b': ['mao.y', 'rosto.on'], 'q': 'energia'}) == {'b': ['mao.y', 'rosto.on'], 'q': 'energia'}
+    assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'compasso', 'cond': {'a': 9, 'b': 4}}})['ev']['cond'] == {'a': 4, 'b': 4}
+    ac = _norm_overlays([{'file': 'x.mp4', 'acao': {'liga': 'secao:drop', 'desliga': 'mao.on', 'x': 'kick'}}])[0]
+    assert ac['acao'] == {'liga': 'secao:drop'}, ac
     assert not ({'id', 'grp', 'pub', 'gname'} & set(v4[1])), 'id/grp invalidos e pub que nao e lista somem'
     v5 = _norm_overlays([{'file': 'webcam:/dev/video0', 'id': 'c1', 'xy': [12.4, '30'], 'fold': 1, 'n': 3}, {'file': '@c1', 'xy': 'x', 'n': '2'}])
     assert (v5[0]['xy'], v5[0]['fold'], v5[0]['id'], v5[0]['n']) == ([12, 30], 1, 'c1', 3) and not {'xy', 'n'} & set(v5[1]), v5
+    gn = _norm_overlays([{'file': 'a.png', 'id': 'c1'}, {'kind': 'out', 'id': 'o1', 'nome': ' saída 1 ', 'rect': [0.5, 0, 0.5, 1], 'xy': [9, 9],
+                          'layers': [{'from': '@c1', 'opacity': 0.4, 'blend': 'soma', 'mod': {'opacity': ['kick'], 'x': ['kick']}},
+                                     {'from': 'c1'}, {'from': '@m1', 'off': True, 'opacity': 1}]},
+                         {'kind': 'mix', 'id': 'm1', 'layers': []}, {'kind': 'mix', 'id': 'x y'}, {'kind': 'mix', 'id': 'm1'}])
+    assert gn[1] == {'kind': 'out', 'id': 'o1', 'nome': 'saída 1', 'xy': [9, 9], 'rect': [0.5, 0, 0.5, 1],
+                     'layers': [{'from': '@c1', 'opacity': 0.4, 'blend': 'soma', 'mod': {'opacity': {'b': ['kick']}}}, {'from': '@m1', 'off': 1}]}, gn[1]
+    assert [_chkey(o) for o in gn] == ['a.png', '+o1', '+m1'], 'staging/saida = +<id>; id invalido ou repetido sai'
+    assert _norm_overlays([{'file': 'M.frag', 'id': 'h2', 'espelho': 'h1'}], dedupe=False)[0]['espelho'] == 'h1'
     mb = _norm_bindings({'cam': {'shaders': [], 'matte': {'items': [{'file': 'presets/atomos/Assunto.frag', 'fx': {'limiar': 0.4}}],
                                                          'op': 'ou', 'cut': 1}},
                          'v': {'shaders': [], 'matte': {'items': [], 'op': 'ou'}}})
@@ -3109,6 +3380,7 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert set_macros([2, -1, '0.5'], save=True, tuning_path=p) == [1.0, 0.0, 0.5, 0.0]
     ns = {}; exec(open(p, encoding='utf-8').read(), ns); assert ns['MACROS'] == [1.0, 0.0, 0.5, 0.0], 'macros gravados'
     assert _norm_mod1({'b': ['m2', 'air', 'nada']}) == {'b': ['air', 'm2']}, 'macro = fonte do ♪'
+    assert set_vcam({'on': 1, 'w': 640}, p) == {'on': 1, 'w': 640, 'h': 360, 'fps': 30}
     assert set_limits({'bright': 0.05, 'flash': 0}, p) == {'on': 1, 'flash': 0, 'bright': 0.2}, 'teto minimo 0.2'
     st_cue = globals()['_state']
     globals()['_state'] = {}
@@ -3620,6 +3892,18 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
         pass
     ns = {}; exec(open(p2, encoding='utf-8').read(), ns)               # o tuning.py continua Python valido
     assert [sc['name'] for sc in ns['SCENES']] == ['default'] and ns['SCENE'] == 'default'
+    # GRAFO: SAIDA com nome acentuado grava (o json vira \u00ed: nao pode ser lido como escape de regex) e a GRADE liga/desliga
+    # UMA camada (layer_off: o que a acao por evento e a tecla 1-9 mandam)
+    _o0 = _state.get('overlays')
+    set_overlays([{'file': 'default/w.png', 'id': 'c1'}, {'kind': 'out', 'id': 'o1', 'nome': 'saída 1', 'layers': [{'from': '@c1'}, {'from': '@c1', 'blend': 'soma'}]}],
+                 save=True, tuning_path=p2)
+    ns = {}; exec(open(p2, encoding='utf-8').read(), ns)
+    assert ns['OVERLAYS'][1]['nome'] == 'saída 1' and len(ns['OVERLAYS'][1]['layers']) == 2, ns['OVERLAYS']
+    grid_apply({'op': 'layer_off', 'node': '+o1', 'from': '@c1', 'off': 1})
+    assert [L.get('off') for L in _current_overlays()[1]['layers']] == [1, 1], _current_overlays()
+    grid_apply({'op': 'layer_off', 'node': '+o1', 'from': '@c1', 'off': 0})
+    assert [L.get('off') for L in _current_overlays()[1]['layers']] == [None, None]
+    set_overlays(_o0 or [], save=True, tuning_path=p2)
     globals().update(_SHADERS=_g0[0], _MEDIA=_g0[1], _TRANS=_g0[2], _tuning=None, _state={})
     _cfg['on_set_input'] = _g0[3]
     _cfg['tuning_path'] = _tp0

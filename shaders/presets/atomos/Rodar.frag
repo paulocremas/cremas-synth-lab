@@ -1,23 +1,17 @@
 // fx: giro=0.5, zoom=0.5, velocidade=0.5
 // cat: geometria
-// ATOMOS · Rodar. Aproxima e gira a imagem em volta do centro. zoom: 0.5 = igual; giro = ângulo fixo;
-// velocidade = gira sozinho (0.5 = parado; abaixo/acima = um sentido/outro).
-#ifdef GL_ES
-precision mediump float;
-#endif
+// bipolar: giro, zoom, velocidade
+// ritmo: velocidade
+// mod: zoom=pulsa
+// ATOMOS · Rodar. Aproxima e gira a imagem em volta do centro. giro = ângulo fixo; zoom = aproxima/afasta;
+// velocidade = gira sozinho (abaixo/acima = um sentido/outro). Os três: 0.5 = parado. No loop ↻ de um Feedback,
+// cada volta gira de novo: o rastro vira espiral.
 
-uniform vec2 u_resolution;
-uniform sampler2D u_texture_0;   // A: a corrente
-uniform float u_time;
 uniform float u_fx_zoom, u_fx_giro, u_fx_velocidade;
 
 void main() {
-    vec2 st = gl_FragCoord.xy / u_resolution;
-    st.y = 1.0 - st.y;
-    vec2 p = st - 0.5;
-    p.x *= u_resolution.x / u_resolution.y;
+    vec2 p = asp(uv());
     float a = (u_fx_giro - 0.5) * 6.2831853 + u_time * (u_fx_velocidade - 0.5) * 2.0;
-    p = mat2(cos(a), -sin(a), sin(a), cos(a)) * p / pow(4.0, u_fx_zoom - 0.5);
-    p.x /= u_resolution.x / u_resolution.y;
-    gl_FragColor = vec4(texture2D(u_texture_0, fract(p + 0.5)).rgb, 1.0);
+    p = rot(a) * p / pow(4.0, u_fx_zoom - 0.5);
+    gl_FragColor = A(fract(desasp(p)));
 }

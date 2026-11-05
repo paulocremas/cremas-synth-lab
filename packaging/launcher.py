@@ -28,10 +28,12 @@ import updater
 if False:
     import argparse, atexit, collections, colorsys, concurrent.futures, copy, ctypes, ctypes.wintypes, glob, hashlib, importlib  # noqa
     import io, json, math, re, select, signal, socket, subprocess  # noqa
+    import fcntl  # noqa  (so' existe no Linux: plat._v4l2_captures)
     import msvcrt  # noqa  (so' existe no Windows: plat.readable)
     import tempfile, threading, types, time, urllib.parse, urllib.request, webbrowser, http.server  # noqa
     import numpy, pygame, OpenGL, OpenGL.GL, cv2  # noqa
     import pyaudiowpatch  # noqa  (so' existe no build do Windows)
+    import pyvirtualcam  # noqa  (so' no Windows: plat.VCam, webcam virtual pela camera do OBS)
 
 IS_WIN = sys.platform == 'win32'
 CODE_FILES = ['dash.html', 'dash2.html', 'dash3.html', 'dash4.html', 'dash5.html', 'favicon.png']        # + src/*.py menos o tuning.py

@@ -42,6 +42,9 @@ class Tempo:
         self.taps = []
         self.n = 0
         self.thr = 0.0              # limiar adaptativo dos ataques (media movel do fluxo)
+        self.golpes = 0             # GOLPE (onset): quantos ataques fortes ate' agora — o evento 'golpe' dos movimentos
+        self._gl = -1.0             # instante do ultimo golpe (refratario de 80 ms)
+        self.p0 = 0.0               # FRASE: batida (pos) do "1 da frase" — frase = PHRASE_BARS compassos a partir dela
 
     def update(self, t, spectrum):
         s = np.log1p(np.asarray(spectrum, np.float64) * 100.0)
@@ -53,6 +56,9 @@ class Tempo:
             self._estimate()
         # PLL: ataque forte perto da batida prevista puxa o relogio (20% do erro)
         self.thr = self.thr * 0.97 + flux * 0.03
+        if flux > self.thr * 1.6 and flux > 1e-3 and t - self._gl > 0.08:
+            self.golpes += 1
+            self._gl = t
         if self.bpm > 0 and flux > self.thr * 1.6 and flux > 1e-3:
             T = 60.0 / self.bpm
             if self.t0 is None:
@@ -105,6 +111,26 @@ class Tempo:
     def auto(self):
         self.manual, self.taps = False, []
 
+    def scale(self, k):
+        """x2 / /2 (erro de oitava): o BPM muda, o '1' de agora continua o '1'. Trava como o TAP."""
+        if self.bpm:
+            self.bpm, self.manual = max(self.lo / 2, min(self.hi * 2, self.bpm * k)), True
+
+    def one(self, t):
+        """'1': este instante passa a ser o '1' do compasso (o BPM fica)."""
+        self.t0 = t
+
+    def nudge(self, sec):
+        """Empurra a fase (+ = as batidas caem mais tarde)."""
+        if self.t0 is not None:
+            self.t0 += sec
+
+    def phrase_one(self, t):
+        """'1 da frase': o compasso mais perto de t vira o comeco da frase."""
+        p = self.pos(t)
+        if p is not None:
+            self.p0 = round(p / 4.0) * 4.0
+
     def phase(self, t, beats_per_bar=4):
         """(posicao na batida 0..1, posicao no compasso 0..1). (0, 0) sem tempo."""
         if not self.bpm or self.t0 is None:
@@ -118,12 +144,81 @@ class Tempo:
             return None
         return (t - self.t0) * self.bpm / 60.0
 
-    def next_boundary(self, t, unit):
-        """Instante da proxima batida ('beat') ou do proximo '1' ('bar') a partir de t (None sem tempo)."""
-        if not self.bpm or self.t0 is None or unit not in ('beat', 'bar'):
+    def next_boundary(self, t, unit, bars=8):
+        """Instante da proxima batida ('beat'), do proximo '1' ('bar') ou do proximo '1 da frase' ('phrase', frase de
+        `bars` compassos a partir de p0) a partir de t (None sem tempo)."""
+        if not self.bpm or self.t0 is None or unit not in ('beat', 'bar', 'phrase'):
             return None
-        T = 60.0 / self.bpm * (4 if unit == 'bar' else 1)
-        return self.t0 + math.ceil((t - self.t0) / T + 1e-6) * T
+        T = 60.0 / self.bpm * {'beat': 1, 'bar': 4, 'phrase': 4 * max(1, int(bars))}[unit]
+        o = self.t0 + (self.p0 * 60.0 / self.bpm if unit == 'phrase' else 0.0)
+        return o + math.ceil((t - o) / T + 1e-6) * T
+
+
+def clock(bpos, p0=0.0, bars=8, beats_per_bar=4):
+    """Contadores do RELOGIO em batidas continuas: {batida, compasso, frase} (inteiros que sobem) + fase da frase 0..1.
+    Um evento do relogio = o contador mudou de um quadro pro outro."""
+    L = beats_per_bar * max(1, int(bars))
+    f = (bpos - p0) / L
+    return {'batida': math.floor(bpos), 'compasso': math.floor(bpos / beats_per_bar), 'frase': math.floor(f)}, f % 1.0
+
+
+SECOES = ('intro', 'sobe', 'drop', 'pausa')
+
+
+class Secao:
+    """SECAO da musica por REGRA (sem rede neural; rekordbox: Intro/Up/Chorus/Down): energia curta (~2 s) contra a
+    longa (~30 s) + kicks por compasso, decidida no '1' de cada compasso.
+      pausa: 2 compassos sem kick e a musica abaixo da media longa; sobe: sem kick mas subindo (build > 0.5 ou
+      energia curta >= longa); drop: o kick volta depois de pausa/sobe com energia curta >= 0.9 x longa;
+      intro: o resto (o comeco, ou kick com pouca energia).
+    force(nome, compasso) segura o nome ate' o fim da frase. n[nome] = quantas vezes entrou (evento 'secao:<nome>').
+    energia = curta / (2 x longa), 0..1 (0.5 = na media da musica)."""
+
+    def __init__(self, fps=44100 / 1024):
+        self.ks, self.kl = 1 - math.exp(-1 / (fps * 2.0)), 1 - math.exp(-1 / (fps * 30.0))
+        self.es = self.el = 0.0
+        self.nome, self.n = 'intro', {k: 0 for k in SECOES}
+        self.bar, self.kicks, self.nok = None, 0, 0
+        self.forced = None          # (nome, ate' o compasso)
+        self.energia = 0.0
+
+    def update(self, amp, kick_hit, build, bar):
+        self.es += (amp - self.es) * self.ks
+        self.el += (amp - self.el) * (self.kl if self.el else 1.0)
+        self.energia = max(0.0, min(1.0, self.es / (2 * self.el))) if self.el > 1e-6 else 0.0
+        if kick_hit:
+            self.kicks += 1
+        if self.bar is None:
+            self.bar = bar
+        if bar == self.bar:
+            return
+        self.bar = bar                                   # virou o compasso: decide
+        self.nok = 0 if self.kicks else self.nok + 1
+        self.kicks = 0
+        if self.forced and bar < self.forced[1]:
+            return self._set(self.forced[0])
+        self.forced = None
+        hi = self.es >= self.el * 0.9
+        if self.nok >= 2:
+            subindo = self.el > 1e-4 and self.es >= self.el    # silencio (tudo ~0) NAO e' subida: e' pausa
+            nome = 'sobe' if (build > 0.5 or subindo) else 'pausa'
+        elif self.nok == 0 and self.nome in ('pausa', 'sobe'):
+            nome = 'drop' if hi else 'intro'
+        elif self.nok == 0 and self.nome == 'drop' and self.es < self.el * 0.6:
+            nome = 'intro'
+        else:
+            nome = self.nome
+        self._set(nome)
+
+    def force(self, nome, bar, bars=8):
+        if nome in SECOES:
+            self.forced = (nome, (math.floor(bar / bars) + 1) * bars)
+            self._set(nome)
+
+    def _set(self, nome):
+        if nome != self.nome:
+            self.nome = nome
+            self.n[nome] += 1
 
 
 class Key:
@@ -226,6 +321,31 @@ if __name__ == '__main__':   # self-check: python src/ritmo.py
     assert abs(tt.pos(50.6) - 1.0) < 1e-6 and abs(tt.pos(53.0) - 5.0) < 1e-6 and Tempo(fps).pos(1.0) is None, 'pos = batidas continuas'
     tt.tap(60.0)                                               # pausa > 2 s: sequencia nova
     assert tt.taps == [60.0]
+    assert tp.golpes >= 20, ('golpes do metronomo', tp.golpes)
+    t2 = Tempo(fps); [t2.tap(10.0 + i * 0.5) for i in range(4)]   # 120 BPM
+    t2.scale(0.5); assert abs(t2.bpm - 60) < 1e-6 and t2.manual, 'x2 / /2'
+    t2.one(20.0); assert abs(t2.phase(20.0)[1]) < 1e-9, "'1' = comeco do compasso"
+    t2.nudge(0.1); assert abs(t2.phase(20.1)[1]) < 1e-9, 'empurrar'
+    t2.phrase_one(20.1 + 4 * 4 * 1.0 + 0.2); assert t2.p0 == 16.0, ('1 da frase no compasso mais perto', t2.p0)
+    nb = t2.next_boundary(36.2, 'phrase', 8); assert abs(nb - (20.1 + 16 + 32)) < 1e-9, ('proxima frase', nb)
+    c, f = clock(16.0 + 32 * 1.5, t2.p0, 8)
+    assert c == {'batida': 64, 'compasso': 16, 'frase': 1} and abs(f - 0.5) < 1e-9, (c, f)
+    # SECAO: 8 compassos com kick (intro), 2+ sem kick subindo (sobe), kick volta forte (drop), 2 sem kick quieto (pausa)
+    sc, bar = Secao(fps), 0
+    def run(bars, amp, kick, build=0.0):
+        global bar
+        for _ in range(bars):
+            for i in range(int(fps * 2)):                       # ~2 s por compasso (120 BPM)
+                sc.update(amp, kick and i % int(fps / 2) == 0, build, bar)
+            bar += 1
+    run(8, 0.3, True); assert sc.nome == 'intro', sc.nome
+    run(4, 0.35, False, 0.8); assert sc.nome == 'sobe', sc.nome
+    run(2, 0.5, True); assert sc.nome == 'drop' and sc.n['drop'] == 1, sc.nome
+    run(4, 0.05, False); assert sc.nome == 'pausa', sc.nome
+    s0 = Secao(fps); bar = 0
+    sc_, sc = sc, s0; run(4, 0.0, False); assert s0.nome == 'pausa', ('silencio = pausa', s0.nome); sc = sc_
+    sc.force('drop', bar); assert sc.nome == 'drop'
+    run(1, 0.05, False); assert sc.nome == 'drop', 'forcado vale ate o fim da frase'
     # TOM: progressao I-IV-V-I em Sol maior / i-iv-v-i em Mi menor (notas puras somadas)
     def chords(roots_minor, secs=10):
         ky = Key(rate)

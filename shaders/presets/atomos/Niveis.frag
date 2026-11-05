@@ -1,17 +1,13 @@
-// fx: quantos=0.25
+// fx: forca=0.75
 // cat: luz
-// ATOMOS · Níveis. Poucos tons, como serigrafia (posterizar). quantos = de 2 (0) a 16 (1) tons por cor.
-#ifdef GL_ES
-precision mediump float;
-#endif
+// mod: forca=passos
+// ATOMOS · Níveis. Poucos tons, como serigrafia (posterizar). forca = de nada (0) a só 2 tons por cor (1).
 
-uniform vec2 u_resolution;
-uniform sampler2D u_texture_0;   // A: a corrente
-uniform float u_fx_quantos;
+uniform float u_fx_forca;
 
 void main() {
-    vec2 st = gl_FragCoord.xy / u_resolution;
-    st.y = 1.0 - st.y;
-    float n = floor(2.0 + u_fx_quantos * 14.0);
-    gl_FragColor = vec4(floor(texture2D(u_texture_0, st).rgb * n + 0.5) / n, 1.0);
+    vec4 c = A(uv());
+    float n = floor(2.0 + (1.0 - u_fx_forca) * (1.0 - u_fx_forca) * 30.0);
+    vec3 p = floor(c.rgb * n + 0.5) / n;
+    gl_FragColor = vec4(mix(c.rgb, p, smoothstep(0.0, 0.1, u_fx_forca)), c.a);
 }

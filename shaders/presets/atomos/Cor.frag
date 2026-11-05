@@ -2,12 +2,7 @@
 // cat: mascara
 // ATOMOS · Cor. Máscara de uma cor da entrada (chroma key). matiz = a cor (0 vermelho, 0.33 verde,
 // 0.66 azul); limiar = quão larga a faixa de cor; borda = macia/dura. Cinza/preto/branco ficam de fora.
-#ifdef GL_ES
-precision mediump float;
-#endif
 
-uniform vec2 u_resolution;
-uniform sampler2D u_texture_0;   // a entrada da caixa
 uniform float u_fx_matiz, u_fx_limiar, u_fx_borda;
 
 vec3 hsv(vec3 c) {
@@ -19,9 +14,8 @@ vec3 hsv(vec3 c) {
 }
 
 void main() {
-    vec2 st = gl_FragCoord.xy / u_resolution;
-    st.y = 1.0 - st.y;
-    vec3 c = hsv(texture2D(u_texture_0, st).rgb);
+    vec2 st = uv();
+    vec3 c = hsv(A(st).rgb);
     float d = abs(fract(c.x - u_fx_matiz + 0.5) - 0.5) * 2.0;   // 0 = a cor, 1 = a oposta
     float w = 0.02 + u_fx_limiar * 0.5, h = u_fx_borda * w + 1e-3;
     float m = (1.0 - smoothstep(w - h, w + h, d)) * smoothstep(0.1, 0.25, c.y) * smoothstep(0.05, 0.15, c.z);

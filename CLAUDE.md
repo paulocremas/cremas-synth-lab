@@ -43,13 +43,33 @@ Cada ferramenta isolada, depois comparar, só então compor.
   Krumhansl; `key_rgb`: círculo das quintas | Scriabin). O `audio_thread` alimenta com TODO chunk (lote de vídeo
   inclusive — pular chunk distorce o BPM); a fase (`u_beat`/`u_bar`) é calculada no render a cada frame. Troca de
   cena quantizada (`SCENE_QUANT`) espera `next_boundary` no fim do frame; `TRANS_BEATS` = transição em batidas.
+  Frase (`PHRASE_BARS`, `Tempo.p0` = "1 da frase", `u_phrase`), `golpe` (onset do fluxo), `Secao` (intro/sobe/drop/pausa por
+  REGRA: energia curta × longa + kicks/compasso, decidida no "1"; forçar vale até o fim da frase). `/tempo-cmd`: x2, d2, one,
+  nudge, frase1, secao.
+- **Movimento** (Claude Doc "PRISMA — sync com a música"; `shaders/ATOMO.md` §9): 3 tipos (imagem, sinal 0..1, evento) e 7
+  regras. `mod[knob] = {b, lo, hi, modo: loop|disparo|segue, lfo, ev: {src, cond}, env: {a, d} batidas, seg: {a, r} ms, q, id,
+  nome}` → `native_synth._mod_value` (estado por id em `_MV`; MESMO id = o mesmo movimento, a faixa é de cada knob; sinal vivo
+  em `MV_OUT` → SSE `mv`). Eventos do quadro = CONTADORES (`_music_events` → `state['ev']`: batida/compasso/frase/kick/golpe/
+  secao:*/pad:N/`ev_man`; sem som 2 compassos kick/golpe caem pra batida); rastreio vira fonte por caixa (`_trk`,
+  `dash_data.track_signals`, y pra cima; `rosto.on` = contador de aparições `d['n']`). Opacidade do átomo e da caixa
+  (`row.mod.opacity`) aceitam movimento. GRADE: `/grid` (`fx_off`, `box_off`, `ev`) → `grid_q` → o native aplica na fronteira
+  de `SCENE_QUANT` (beat|bar|phrase) numa thread (`grid_apply`); caixa com `acao: {liga, desliga}` = evento liga/desliga.
+  Vocabulário/presets em `dash_data` (`MOV_PRESETS`, `EVENTS`, `/vocab`); `// mod: knob=preset` no `.frag` só sugere.
+  `/mv-freeze` = SOCORRO congelar.
 - Show (fase 4): macros = fontes `m1..m4` do ♪ (`MOD_SOURCES`, `MACROS`); proteção `Limiter` (anti-estrobo
   WCAG 2.3.1 + teto de brilho, ganho no master, `LIMITS`); auto-nível por fonte (`auto`, `_auto_levels` → `u_lv`
   no blend); PRÓXIMA cena (`set_cue`/`take_cue`, `state['scene_cue_sc']` aquece fontes, prévia `which=cue` em
   `lt['cue']`); MIDI `kind: 'rel'` = encoder (63/65 ou 1/127).
+- **Webcam virtual** (`tuning.VCAM = {on, w, fps}`, `dash_data.vcam_cfg`, `/vcam`, Saída → Proteção no dash5): o loop GL
+  encaixa o palco (`read_canvas`) num quadro 16:9 fixo (blit + PBO) → `vcam_q` → `vcam_thread` → `plat.VCam` (Linux: ffmpeg
+  no nó do v4l2loopback, `card_label=PRISMA` primeiro, fora do `list_cams` enquanto escreve; Windows: `pyvirtualcam` = câmera do OBS).
 - Luzes: `src/luzes.py` (Art-Net, detector ArtPoll/WLED, mapeamento por câmera `scan`) + aba Luzes; `LIGHTS`.
 - Testar o native: SEMPRE em segundo plano com a webcam e `PRISMA_HIDDEN=1` (janela nunca na tela);
   `PRISMA_GL_CHECK=1` religa a checagem de erro do PyOpenGL (desligada por desempenho).
+- Câmera NUNCA presa: ffmpeg de fonte nasce via `plat.child_cmd` (`setpriv --pdeathsig TERM`: morre junto com o prisma, até
+  kill -9; criar só de thread longa ou que mata o próprio filho); ao abrir, `plat.reap_orphans` mata órfão com a assinatura
+  `FFMPEG_SIG` (= `_FAST_IN`); `_pool_reader` mata ffmpeg vivo sem frame há `READER_STALL_S` e reabre com espera crescente
+  (0.3→5 s). `list_cams` só lista nó que captura vídeo (UVC: `/dev/video1` = metadados).
 - `/select` não mexe na saída: fonte viva tem ffmpeg próprio em `_ovl`; v4l2 é exclusivo → `_feed` copia de lá.
 - Canal `file#N` = mesma fonte 2× (`_chkey`/`_base_key`); pilha por canal em `BINDINGS`, pela POSIÇÃO.
   Fora do `pool` some da mesa/saída mas fica lembrado.
@@ -57,8 +77,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - Passes: mistura → `SCENE_GRADE` → transição (`from` antes da calibração) → `OUTPUT_GRADE` (`master` →
   `u_dim`) → com telão, `OUTPUT_MAP_SRC`; os dois grades usam `calibrar.frag`.
 - Canvas (`_stage` no native = `stageOf`/`canvasOf` no dash) = SEMPRE o palco: contorno das telas `SCREENS` com os
-  vãos. Sem telão: encaixado na janela com barras (`_canvas_box`). Fonte no canvas = `rect` 0..1 (origem em cima)
-  em `OVERLAYS` → `_rect_uv`.
+  vãos. Sem telão: encaixado na janela com barras (`_canvas_box`). Lugar no canvas = `rect` 0..1 (origem em cima)
+  da SAÍDA e de cada camada dentro dela → `_rect_uv`.
 - Tela com forma livre: `rot` (centro) + `poly` (0..1 no painel SEM giro); geometria única em
   `dash_data.screen_axes` (= `shapeAxes` no dash). Shader: `inShape` (`POLY_GLSL`, textura `u_poly` 32×16, unidade 8).
 - **Telão** = `PIXEL_MAP = {on, w, h}`. O computador vê o telão como UMA resolução (EDID); blocos e espaço entre eles
@@ -91,12 +111,67 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - **v5** (`dash5.html`, `/v5` = o dash que o app abre desde 2026-10-24; decisões no topo do arquivo + Claude Doc "PRISMA v5"): canvas de CAIXAS. Caixa = fileira do
   OVERLAYS (`id`, `n` = número estável, `xy`/`fold` = lugar no canvas, o native ignora); entrada = fonte ou o FIM de outra
   caixa (`file: '@<id da caixa>'`: `_graph_wants` mapeia id de fileira, `render_mix` guarda o tap DEPOIS da máscara).
-  Fios só entre caixas; nó SAÍDA = o programa (a camada de cada fileira: `off`/opacidade/modo/ordem). MÁSCARA DA CAIXA =
+  MÁSCARA DA CAIXA =
   `BINDINGS[k].matte = {items, op: 'e'|'ou', cut}`: átomos `// cat: mascara` leem a ENTRADA, dão cinza (`own` textures,
   `u_use_mask` 1 no blend); fora passa a entrada (`m_in`) ou, com `cut`, transparente na SAÍDA. `u_subject` (unidade 13,
   `SUBJ_UNIT`) = máscara U²-Net pro átomo Assunto. No dash, `stackOf(k + '|m')` = os itens da máscara. Sem abas
-  Show/Montar: cadeado (`mode` continua 'show'|'montar'); equipamento em 5 abas (`EQ_GROUP`). Grupos e região por item
+  Show/Montar: cadeado (`mode` continua 'show'|'montar'); equipamento em 5 abas (`EQ_GROUP`). Larguras das colunas + zoom do canvas por modo
+  (`v5layout`); arrasto = `follow()`/`swallowClick()`/`edgeTrack` (soltar perdido não trava o canvas). Knob/fader = `dragCtl`: RELATIVO sobre o
+  valor do próprio arrasto (passou do fim e voltou = anda na hora) + ARRASTO INFINITO SEM pointer lock (o Chromium mostra
+  "press Esc" e não dá pra esconder): depois de 4 px o cursor some (`html.kdrag`) e, a `WRAP_PX` do clique, `POST /warp` →
+  `plat.warp_pointer` (XWarpPointer | SetCursorPos; Wayland = finito) o devolve, salto ignorado; segurando knob
+  (`knobHeld`) `renderCtl`/`renderBoxes` esperam soltar (a assinatura do renderCtl tem VALORES); SSE não troca `lastBindings`. Grupos e região por item
   saíram da UI (a região ainda roda; "mais" converte pra máscara).
+  NÓ = ÁTOMO (2026-10-28): fonte sem átomo → nó de efeito com 1 átomo (lê o anterior) → … → SAÍDA; knobs sempre abertos,
+  REDONDOS no card (`nodeKnobs`/`nodeKnobH` = altura no `boxH`; ids `bar:` de sempre).
+  `normalizeNodes()` (em todo `sendBindings/sendOverlays(true)` e ao receber cena antiga) divide caixa com vários átomos em
+  corrente — redireciona quem lia o FIM ANTES de criar os nós (chave do nó = o que ele lê); a ponta herda `AIR_PROPS` e a
+  máscara. `healRemove`/`dropEmptyNode` fecham a corrente; `topoOrder` = nó depois de quem ele lê (senão 1 quadro de atraso/nó).
+  CARD (2026-11-02; o "módulo de synth" foi revisto no mesmo dia, decisões no topo do `dash5.html`): entrada = anel vazado, saída =
+  cheia com setinha, nome do jack por dentro, LED no ar; apagar a fonte / tirar o fio do A = nó SEM ENTRADA (`NO_IN = '@-'`), nunca
+  uma fonte nova. `cvZoom()` = cache do `applyLayout` (ler estilo no meio do `renderBoxes` forçava layout).
+  Fio na bolinha "máscara" = átomo **Luma** (`atomos/Luma.frag`, máscara com `ins: ['@id']`). Caixa que lê outra rastreia a
+  FONTE de origem (`_track_root`).
+- **GRAFO / cabos VCV** (2026-11-01; `PROMPT_CABOS.md`, decisões no topo do `dash5.html`): nós no OVERLAYS = fonte | átomo |
+  **STAGING** `{kind: 'mix', id, layers}` | **SAÍDA** `{kind: 'out', id, nome, rect (no palco), layers}`; chave `'+<id>'`
+  (`dash_data.node_key`), átomos DEPOIS da mistura em `BINDINGS['+<id>']`. Camada = `{from: '@<id>', opacity, blend, off, mod,
+  acao, rect (dentro do mixer)}` (0 = atrás). Fileira não tem mais `off`/opacidade/modo/`rect`/`acao` de SAÍDA: cena sem `out`
+  → `dash_data.migrate_graph` (motor via `_graph`, cache por identidade; dash `migrateGraph`, mesmos ids `stable_id`): o que
+  estava no ar vira entrada da "saída 1" (v5: `off` = meio de corrente; v3/v4: entra desligada). Motor PUXA (`graph_pull`: só
+  roda o que chega numa saída, + `no:` + nó com prévia pedida) e ordena sozinho (`graph_order`; LAÇO = o fio que fecha lê o
+  quadro anterior). `render_mix`: `run_row` por fileira → `bake` (FIM com alfa em `lay_tex`, cor amostrada encaixada
+  `u_snap`) → `mix_node` (3 texturas RGBA PRÉ-MULTIPLICADAS, cobertura no alfa, `u_pre`/`u_aout`) → saída SEM átomos desenha
+  as camadas DIRETO no palco (cena antiga = mesmo `/frame`); com átomos, a textura dela no `rect`. **ESPELHO** = item
+  `{file, espelho: <id>, id}` → `resolve_mirrors` (knobs/movimento/liga do original, fio e buffer de estado do lugar, `_seed` do
+  original). Grade/ação por camada = `layer_off {node, from}`. Dash: entrada aceita UM fio (A/B/máscara/camada N), saída
+  vários; clique na bolinha = fio grudado (`cableStick`; vazio → `nodeMenu`), `plug`/`unplug` (o `connect()` é o SSE!);
+  cabos POR BAIXO dos nós, tensão/opacidade globais por modo (`v5cable`); Alt+arrastar = espelho; mapeamento = aba Saída →
+  "Saídas no palco" (2 cliques = entrar e posicionar as entradas).
+  CINCO TIPOS DE CONTROLE (topo do `dash5.html`): knob | CHAVE (`step(.5, u_fx_X)` → `knob_switches`/meta `chave` → `switchCtl`;
+  propriedades liga/desliga = `swEl`) | ESCOLHA (`floor(u_fx_X * K)` → `knob_choices`/meta `escolha`, nomes em `// opcoes:`,
+  opção i = `(i+0.5)/N` → `choiceCtl`) | conjunto (chips `.on`) | ação.
+  Mover átomo entre caixas: alça `.grip` (ou o nome) → zonas `ins` (`moveModules`); máscara: chip `.mc` → `moveMask`;
+  Ctrl+X/C/V = `clipTake`/`clipPaste` (recortar leva o PRÓPRIO item, id junto — ramo que lia ele volta ao colar). Shift+arrastar
+  (no começo ou no meio, `drag.copy`) = cópia (`prepItems`: id novo; máscara: `copyMask`).
+  Navegar: roda = zoom no cursor (`setCvZoom(z, ev)`), arrastar o vazio / botão do meio = mover a vista (scroll do `#cv`, barras
+  escondidas; `CVI` tem uma tela de folga); roda num knob/barra muda o valor (`stopPropagation`).
+- **ÁTOMO v2** (`shaders/ATOMO.md`, `PLANO_PADROES.md`; aprovado 2026-10-31): todo `.frag` de `atomos/` é compilado com o
+  PRELÚDIO `dash_data.ATOM_PRELUDE` (`atom_source`; `uv()`, `A/B/S/E()`, `Am()`, `luma`, `asp`, `dirOf`, `fbm`, `paleta`,
+  `decai`, `u_dt`, `u_seed`) — o átomo NÃO declara uniform comum. Alfa direto (o FIO leva o alfa: `lt['src']`/`chain`/taps
+  RGBA; PNG e recorte entram na corrente no começo da fileira); FILTRO entra por TROCA (`u_aout` 5), `cat: gerador|forma`
+  POR CIMA (3) — `dash_data.atom_replaces`; filtro devolve o alfa que leu; direção =
+  ESCOLHA fixa|relevo|redemoinho|vetor (RG, 0.5 = parado). `// estado:` → `run_state` (render_mix): buffer duplo RGBA16F
+  por id (`st_bufs`), PASSO FIXO `_state_steps` (60/s × passos, ≤ 2× por quadro), `u_vista` 0 atualiza / 1 mostra,
+  `u_fase` (sub-passes), escala = linhas/1080; item `estado: {semear, limpar}` (eventos) + `POST /state-cmd`; `post` num nó
+  com estado = loop RETORNO (`u_agl` = 1, antes de cada passo). Camada da peça (`lt['layer']`) é 16F e o blend dela tem
+  dither. Sinal `no:<id>` (`grab_no`, `_no_wants`: o nó roda mesmo fora da SAÍDA) e `key_hue` (tom) são fontes de
+  movimento. `src/matriz.py` = MATRIZ DE EMERGÊNCIA (no `--selfcheck`, só com GL). Biblioteca v5: só átomos; o resto em
+  "Clássicos"; nome mostrado = `// ATOMOS · Nome.` (`parse_meta` `nome`).
+- **Rastreio** (`src/rastreio.py`, cv2.dnn, modelos opencv_zoo em `models/`): Rosto/Olhos (YuNet), Corpo/Mãos
+  (BlazePose; acha a pessoa pelo NanoDet e depois segue pelos próprios pontos), Objeto (NanoDet, 80 classes COCO), Contorno dos olhos (Face Mesh do MediaPipe `.tflite` via
+  `readNetFromTFLite`, entrada NCHW 0..1; tipo `olho` → `u_olho[64]`, 16 pontos por pálpebra; átomo Olhos).
+  `track_thread(tipo)` + `track_want`/`track` por fonte base, só sob demanda; `TRACK_U` = uniforms → `_bind_track`
+  (pilha e máscara). Átomos de máscara em `atomos/` (ATOMO.md §8). O antigo `u_eyes` (preset Olhos) sai daqui.
 - **v4** (`dash4.html`, `/v4`, do zero; decisões no topo do arquivo + doc de design): 3 colunas fixas (Cenas/Peças |
   Patch | Programa, Próxima/GO, Controles, Macros), Show = só knobs publicados (`pub` no item), gavetas Socorro e
   Equipamento (editores da v3 refeitos). Patch = fileiras (topo = frente) + RAMO: fileira com `file: '@<id>'` lê a
@@ -119,7 +194,7 @@ Cada ferramenta isolada, depois comparar, só então compor.
 ## Testes
 `.venv/bin/python src/dash_server.py` e `.venv/bin/python src/native_synth.py --selfcheck` (+ `src/plat.py`,
 `src/dash_data.py`, `src/telao_sim.py --selfcheck`, `packaging/updater.py`, `packaging/check_imports.py` — o CI roda
-todos). Build local fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning.py`
+todos; `src/matriz.py [pasta]` sozinho = a matriz + PNG por átomo). Build local fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning.py`
 temporário (`tuning_path`). Rodar o native do repo migra/auto-salva o `src/tuning.py` do repo; porta 8765 pode
 estar com o prisma aberto; simulador aberto = telão virtual anunciado (teste que lê saídas isola o
 `VIRTUAL_OUTPUTS`). Arrastar/clicar no dash do app aberto GRAVA no `tuning.py` vivo — backup antes.

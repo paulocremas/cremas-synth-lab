@@ -1,22 +1,20 @@
 // fx: tamanho=0.3
 // cat: textura
-// ATOMOS · Desfocar. Embaça. tamanho = raio do borrão (16 amostras em espiral).
-#ifdef GL_ES
-precision mediump float;
-#endif
+// mod: tamanho=abaixa
+// ATOMOS · Desfocar. Embaça. tamanho = raio do borrão (0 = nada; 16 amostras em espiral). Faz a MÉDIA com a
+// cobertura junto (Am): a borda de uma peça que desenha só linhas não escurece.
 
-uniform vec2 u_resolution;
-uniform sampler2D u_texture_0;   // A: a corrente
 uniform float u_fx_tamanho;
 
 void main() {
-    vec2 st = gl_FragCoord.xy / u_resolution;
-    st.y = 1.0 - st.y;
+    vec2 st = uv();
     float r = u_fx_tamanho * 0.03;
-    vec3 acc = vec3(0.0);
+    vec4 acc = vec4(0.0);
     for (int i = 0; i < 16; i++) {
         float k = float(i) + 0.5, a = k * 2.39996;
-        acc += texture2D(u_texture_0, st + vec2(cos(a), sin(a)) * r * sqrt(k / 16.0)).rgb;
+        vec2 o = vec2(cos(a), sin(a)) * r * sqrt(k / 16.0);
+        acc += Am(st + vec2(o.x / aspecto(), o.y));
     }
-    gl_FragColor = vec4(acc / 16.0, 1.0);
+    acc /= 16.0;
+    gl_FragColor = vec4(acc.rgb / max(acc.a, 1e-4), acc.a);
 }

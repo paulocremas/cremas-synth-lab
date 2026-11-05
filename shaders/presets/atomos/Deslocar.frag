@@ -1,23 +1,20 @@
-// fx: forca=0.3, angulo=0.25
+// fx: forca=0.3, direcao=0.375, angulo=0.25
 // cat: mistura
 // in: src
-// ATOMOS · Deslocar. Uma imagem ENTORTA a outra (o modulate do Hydra): o brilho da entrada B empurra
-// os pixels da corrente. Sem B ligada = a propria fonte crua (relevo). forca = quanto empurra;
-// angulo = pra onde (0 = direita, 0.25 = cima, ...).
-#ifdef GL_ES
-precision mediump float;
-#endif
+// opcoes: direcao=fixa|relevo|redemoinho|vetor
+// mod: forca=pulsa
+// ATOMOS · Deslocar. Uma imagem ENTORTA a outra (o modulate do Hydra): a entrada B empurra os pixels da corrente.
+// Sem B ligada = a própria fonte crua. forca = quanto empurra (0 = nada); direcao = de onde sai o empurrão: fixa (o
+// angulo, na medida do brilho de B), relevo (desce do claro pro escuro de B), redemoinho (gira em volta do claro) ou
+// vetor (B já é um vetor: R = x, G = y, 0.5 = parado — o Movimento e o Fluido). angulo = pra onde, no modo fixa.
 
-uniform vec2 u_resolution;
-uniform sampler2D u_texture_0;   // a corrente
-uniform sampler2D u_texture_1;   // B: quem entorta
-uniform float u_fx_forca, u_fx_angulo;
+uniform float u_fx_forca, u_fx_direcao, u_fx_angulo;
 
 void main() {
-    vec2 st = gl_FragCoord.xy / u_resolution;
-    st.y = 1.0 - st.y;
-    float b = dot(texture2D(u_texture_1, st).rgb, vec3(0.299, 0.587, 0.114)) - 0.5;
-    float a = u_fx_angulo * 6.2831853;
-    vec2 d = vec2(cos(a), -sin(a)) * b * u_fx_forca * 0.3;
-    gl_FragColor = vec4(texture2D(u_texture_0, st + d).rgb, 1.0);
+    vec2 st = uv();
+    float m = floor(u_fx_direcao * 3.999);
+    vec2 v = dirOf(u_texture_1, st, m, u_fx_angulo);
+    if (m < 0.5) v *= (luma(B(st).rgb) - 0.5) * 2.0;
+    vec2 d = v * u_fx_forca * 0.15;
+    gl_FragColor = A(st + vec2(d.x / aspecto(), d.y));
 }

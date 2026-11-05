@@ -44,24 +44,179 @@ def parse_meta(src):
     src = src or ''
     m = re.search(r'(?m)^//\s*cat:\s*(\S+)', src)
     i = re.search(r'(?m)^//\s*in:\s*(.+)$', src)
-    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in):)\s*(.+)$', src)
+    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala):)\s*(.+)$', src)
+    mo = re.search(r'(?m)^//\s*mod:\s*(.+)$', src)
     desc = d.group(1).strip() if d else ''
-    if '·' in desc:   # "SORTIDOS · Contorno. Contornos em neon." -> "Contornos em neon."
+    nome = ''
+    if '·' in desc:   # "SORTIDOS · Contorno. Contornos em neon." -> "Contornos em neon." (+ nome "Contorno", com acento)
+        nome = desc.split('·', 1)[1].strip().partition('.')[0].strip()
         desc = desc.split('·', 1)[1].strip().partition('. ')[2] or desc
-    return {'cat': m.group(1) if m else '', 'ins': [s.strip() for s in i.group(1).split(',') if s.strip()][:2] if i else [],
-            'desc': desc}
+    out = {'cat': m.group(1) if m else '', 'ins': [s.strip() for s in i.group(1).split(',') if s.strip()][:2] if i else [],
+           'desc': desc}
+    if nome:   # o nome mostrado no dash (o arquivo nao tem acento: Reacao.frag -> "Reação")
+        out['nome'] = nome[:32]
+    if mo:   # MOVIMENTO SUGERIDO: "// mod: forca=pulsa, matiz=respira" (knob = preset de MOV_PRESETS; o dash oferece, nao liga)
+        out['mod'] = {k.strip(): v.strip() for k, _, v in (x.partition('=') for x in mo.group(1).split(',')) if k.strip() and v.strip()}
+    ch = knob_switches(src)
+    if ch:
+        out['chave'] = ch
+    es = knob_choices(src)
+    if es:
+        out['escolha'] = es
+    for tag in ('bipolar', 'ritmo'):   # ATOMO v2: knob de dois lados (0.5 = nada) / que pode travar no BPM
+        if _header_list(src, tag):
+            out[tag] = _header_list(src, tag)
+    est = parse_estado(src)
+    if est:                            # ATOMO v2: atomo com MEMORIA (o dash oferece semear/limpar)
+        out['estado'] = est
+    return out
+
+
+def knob_choices(src):
+    """Knobs que sao ESCOLHA (um entre N): o codigo le floor(u_fx_X * K) (K ~ N - 0.01). -> {knob: [nomes]}; os nomes vem de
+    "// opcoes: modo=a|b|c" no cabecalho (sem eles, "1".."N"). O valor guardado da opcao i e' (i + 0.5) / N."""
+    code = re.sub(r'//[^\n]*', '', src or '')
+    op = re.search(r'(?m)^//\s*opcoes:\s*(.+)$', src or '')
+    names = {}
+    if op:
+        for part in re.split(r'[;,]\s*(?=\w+=)', op.group(1)):
+            k, _, v = part.partition('=')
+            names[k.strip()] = [x.strip() for x in v.split('|') if x.strip()]
+    out = {}
+    for k in parse_fx_defaults(src):
+        m = re.search(r'floor\(\s*u_fx_' + re.escape(k) + r'\s*\*\s*([0-9.]+)\s*\)', code)
+        if not m:
+            continue
+        n = int(round(float(m.group(1))))
+        if 2 <= n <= 16:
+            nm = names.get(k) or []
+            out[k] = nm if len(nm) == n else [str(i + 1) for i in range(n)]
+    return out
+
+
+def knob_switches(src):
+    """Knobs que sao CHAVE (liga/desliga): o codigo so' os le como step(0.5, u_fx_X) — o dash mostra um botao, nao
+    um knob. Deduzido do codigo (sem cabecalho): quem usa o valor continuo continua knob."""
+    code = re.sub(r'//[^\n]*', '', src or '')
+    out = []
+    for k in parse_fx_defaults(src):
+        uses = len(re.findall(r'\bu_fx_' + re.escape(k) + r'\b', code))
+        steps = len(re.findall(r'step\(\s*0?\.5\s*,\s*u_fx_' + re.escape(k) + r'\s*\)', code))
+        if steps and steps == uses - 1:   # -1 = a declaracao do uniform
+            out.append(k)
+    return out
 
 
 
 # PADRAO ATOMO (shaders/ATOMO.md): o que um .frag de shaders/presets/atomos/ pode e nao pode
 ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador', 'mascara')
+ATOM_DRAW_CATS = ('gerador', 'forma')   # quem DESENHA/gera: vai POR CIMA da corrente; o resto e' FILTRO (TROCA, ATOMO §5)
+
+
+def atom_replaces(rel, src):
+    """COMO o atomo entra na corrente (ATOMO §5): True = FILTRO, a saida dele SUBSTITUI a entrada (opacidade = o quanto
+    do original volta; o alfa e' o que ele devolve: leu transparente, fica transparente); False = DESENHA por cima
+    (gerador, traco; e todo shader classico, que sempre foi camada com cobertura). Base opaca = o mesmo resultado."""
+    return is_atom_path(rel) and parse_meta(src)['cat'] not in ATOM_DRAW_CATS
 MASK_UNIFORMS = {'u_subject', 'u_subject_on'}   # so' atomo de MASCARA (dash v5): a mascara do assunto (U2-Net) da fonte
+MASK_UNIFORMS |= {'u_rosto', 'u_olhos', 'u_rosto_on', 'u_corpo', 'u_corpo_on', 'u_obj', 'u_obj_p', 'u_obj_on', 'u_olho', 'u_olho_on'}   # + o RASTREIO (src/rastreio.py)
 ATOM_MAX_KNOBS = 3   # minimalismo: o principal + ate' 2 detalhes essenciais; mais que isso = dividir em atomos
-ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
+ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_phrase', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
+
+# PRELUDIO do ATOMO v2 (shaders/ATOMO.md §3): o motor poe ISTO antes de todo .frag de presets/atomos/ (atom_source).
+# O atomo nao declara estes uniforms nem copia funcoes: a mesma palavra faz a mesma coisa em todo atomo. Texturas
+# topo->baixo (A/B/C/S leem em uv()); o ESTADO (E) e' gravado em gl_FragCoord, entao E() vira de volta. u_agl = 1:
+# u_texture_0 tambem esta' em orientacao GL (loop RETORNO: o atomo le o estado de outro como a sua corrente).
+ATOM_PRELUDE_U = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_phrase', 'u_dt', 'u_seed', 'u_vista', 'u_fase',
+                  'u_semear', 'u_agl', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src', 'u_state'}
+ATOM_PRELUDE = """#ifdef GL_ES
+precision highp float;
+#endif
+uniform vec2 u_resolution;
+uniform float u_time, u_beat, u_bar, u_phrase, u_dt, u_seed, u_vista, u_fase, u_semear, u_agl;
+uniform sampler2D u_texture_0, u_texture_1, u_texture_2, u_texture_src, u_state;
+vec2 uv() { vec2 s = gl_FragCoord.xy / u_resolution; return vec2(s.x, 1.0 - s.y); }
+vec2 px() { return 1.0 / u_resolution; }
+vec2 _ag(vec2 s) { return u_agl > 0.5 ? vec2(s.x, 1.0 - s.y) : s; }
+vec4 A(vec2 s) { return texture2D(u_texture_0, _ag(s)); }
+vec4 Am(vec2 s) { vec4 c = A(s); return vec4(c.rgb * c.a, c.a); }
+vec4 B(vec2 s) { return texture2D(u_texture_1, s); }
+vec4 C(vec2 s) { return texture2D(u_texture_2, s); }
+vec4 S(vec2 s) { return texture2D(u_texture_src, s); }
+vec4 E(vec2 s) { return texture2D(u_state, vec2(s.x, 1.0 - s.y)); }
+float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+float aspecto() { return u_resolution.x / u_resolution.y; }
+vec2 asp(vec2 s) { return vec2((s.x - 0.5) * aspecto(), s.y - 0.5); }
+vec2 desasp(vec2 p) { return vec2(p.x / aspecto() + 0.5, p.y + 0.5); }
+mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+float hash(vec2 p) {
+    vec3 q = fract(vec3(p.xyx) * 0.1031 + u_seed * 0.6180339);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p, float detalhe) {
+    float s = 0.0, a = 0.5, w = 0.0, n = 1.0 + floor(clamp(detalhe, 0.0, 1.0) * 5.0);
+    for (int i = 0; i < 6; i++) {
+        if (float(i) >= n) break;
+        s += a * noise(p); w += a;
+        p = rot(0.6) * p * 2.03 + 17.1; a *= 0.5;
+    }
+    return s / w;
+}
+float _lu(sampler2D t, vec2 s) { return luma(texture2D(t, s).rgb); }
+vec2 dirOf(sampler2D t, vec2 s, float modo, float ang) {
+    if (modo < 0.5) { float a = ang * 6.2831853; return vec2(cos(a), -sin(a)); }
+    if (modo > 2.5) { vec2 v = (texture2D(t, s).rg - 0.5) * 2.0; return vec2(v.x, -v.y); }
+    vec2 e = vec2(1.0 / (240.0 * aspecto()), 1.0 / 240.0);
+    vec2 g = vec2(_lu(t, s + vec2(e.x, 0.0)) - _lu(t, s - vec2(e.x, 0.0)),
+                  _lu(t, s + vec2(0.0, e.y)) - _lu(t, s - vec2(0.0, e.y))) * 6.0;
+    if (modo > 1.5) g = vec2(-g.y, g.x);
+    else g = -g;
+    float l = length(g);
+    return l > 1.0 ? g / l : g;
+}
+vec3 paleta(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(6.2831853 * (c * t + d)); }
+float decai(float s) { return exp2(-u_dt / max(s, 1e-4)); }
+"""
+
+
+def is_atom_path(rel):
+    """O .frag e' um ATOMO (recebe o preludio)? rel = caminho sob shaders/ ('presets/atomos/X.frag')."""
+    return str(rel or '').replace('\\', '/').lstrip('/').startswith('presets/atomos/')
+
+
+def atom_source(rel, src):
+    """Fonte que vai pro compilador: atomo = PRELUDIO + o arquivo (#line: o erro aponta a linha do arquivo — GLSL
+    1.10, sem #version: a linha depois de '#line N' e' a N+1). Outros shaders: como estao."""
+    return ATOM_PRELUDE + '#line 0\n' + src if is_atom_path(rel) else src
+
+
+def parse_estado(src):
+    """'// estado: canais=4, passos=8, fases=1, escala=0.25' -> {canais, passos, fases, escala} | None (sem estado).
+    passos = quantos passos a cada 1/60 s (passo fixo); fases = sub-passes por passo (u_fase 0..F-1, a sim de
+    fluido); escala = linhas do buffer / 1080 (fixa: a mesma forma em qualquer saida)."""
+    m = re.search(r'(?m)^//\s*estado:\s*(.*)$', src or '')
+    if not m:
+        return None
+    kv = {k.strip(): v.strip() for k, _, v in (x.partition('=') for x in m.group(1).split(',')) if k.strip()}
+    num = lambda k, lo, hi, d, t=float: max(lo, min(hi, t(kv[k]))) if re.fullmatch(r'[0-9.]+', kv.get(k, '')) else d
+    return {'canais': num('canais', 1, 4, 4, int), 'passos': num('passos', 1, 32, 1, int),
+            'fases': num('fases', 1, 64, 1, int), 'escala': num('escala', 0.05, 2.0, 0.5)}
+
+
+def _header_list(src, tag):
+    """'// bipolar: giro, zoom' -> ['giro', 'zoom']."""
+    m = re.search(r'(?m)^//\s*' + tag + r':\s*(.+)$', src or '')
+    return [x.strip() for x in m.group(1).split(',') if x.strip()] if m else []
 
 
 def atom_problems(src):
-    """Regras do padrao ATOMO que o .frag quebra (lista vazia = ok). Ver shaders/ATOMO.md."""
+    """Regras do padrao ATOMO v2 que o .frag quebra (lista vazia = ok). Ver shaders/ATOMO.md. O arquivo e' lido SEM
+    o preludio (o motor o poe antes: atom_source) — declarar um uniform dele = erro de compilacao."""
     src = src or ''
     out, fx, meta = [], parse_fx_defaults(src), parse_meta(src)
     code = re.sub(r'//[^\n]*', '', src)
@@ -79,17 +234,36 @@ def atom_problems(src):
                     out.append(f'knob proibido {k}: misturar = opacidade da peca; som = modulador no knob')
                 elif k not in fx:
                     out.append(f'{u} declarado mas fora do // fx:')
+            elif u in ATOM_PRELUDE_U:
+                out.append(f'{u} vem do preludio: nao declare (ATOMO.md §3)')
             elif u in MASK_UNIFORMS and meta['cat'] != 'mascara':
                 out.append(f'{u} so\' em atomo de mascara (// cat: mascara)')
-            elif u not in ATOM_UNIFORMS | MASK_UNIFORMS:
-                out.append(f'{u} nao e\' entrada de atomo (so\' imagem, u_resolution, u_time, u_beat, u_bar)')
+            elif u not in MASK_UNIFORMS:
+                out.append(f'{u} nao e\' entrada de atomo (so\' imagem e relogio: o preludio; som = modulador no knob)')
+    if re.search(r'^\s*#\s*(ifdef\s+GL_ES|version)', code, re.M):
+        out.append('#ifdef GL_ES/#version vem do preludio')
     for k in fx:
         if not re.search(r'\bu_fx_' + re.escape(k) + r'\b', code):
             out.append(f'knob {k} do // fx: nao e\' usado no codigo')
-    if re.search(r'\bu_texture_[12]\b', code) and not meta['ins']:
-        out.append('le a entrada B (u_texture_1/2) sem "// in:"')
-    if meta['cat'] == 'mascara' and (meta['ins'] or re.search(r'\bu_texture_[12]\b', code)):
-        out.append('atomo de mascara le so\' a ENTRADA da caixa (u_texture_0), sem entrada B')
+    if re.search(r'\b(u_texture_[12]|[BC]\s*\()', code) and not meta['ins']:
+        out.append('le a entrada B (B()/u_texture_1) sem "// in:"')
+    for k, v in (meta.get('mod') or {}).items():
+        if k not in fx and k != 'opacity':
+            out.append(f'// mod: knob {k} nao existe no // fx:')
+        if v not in MOV_PRESETS:
+            out.append(f"// mod: '{v}' nao e' um movimento ({', '.join(MOV_PRESETS)})")
+    for tag in ('bipolar', 'ritmo'):
+        for k in _header_list(src, tag):
+            if k not in fx:
+                out.append(f'// {tag}: knob {k} nao existe no // fx:')
+    est = meta.get('estado')
+    if est:
+        if not re.search(r'\bu_vista\b', code):
+            out.append('// estado: sem u_vista (fase 0 atualiza, 1 mostra)')
+        if re.search(r'\bu_time\b', code):
+            out.append('// estado: acumula com u_dt/decai(), nao com u_time (passo fixo)')
+    elif re.search(r'\b(u_state|u_vista|u_fase|u_semear|E\s*\()', code):
+        out.append('le o estado (E()/u_state/u_vista) sem "// estado:"')
     if 'gl_FragColor' not in code:
         out.append('sem gl_FragColor')
     return out
@@ -105,7 +279,7 @@ def img_mod_levels(image):
     return {k: max(0.0, min(1.0, float(tot.get(g, 0.0)))) for k, g in IMG_MODS}
 
 
-LFO_SHAPES = ('sin', 'tri', 'saw', 'sq', 'rnd')
+LFO_SHAPES = ('sin', 'tri', 'saw', 'sq', 'rnd', 'sh', 'passos')   # sh = acaso SEGURADO (S&H); passos = sequencia 'st'
 
 
 def lfo(p, bpos):
@@ -121,11 +295,99 @@ def lfo(p, bpos):
         return x
     if f == 'sq':
         return 1.0 if x < 0.5 else 0.0
-    if f == 'rnd':
-        h = lambda k: (math.sin(k * 12.9898 + 78.233) * 43758.5453) % 1.0
-        a, b = h(math.floor(c)), h(math.floor(c) + 1)
-        return a + (b - a) * (0.5 - 0.5 * math.cos(math.pi * x))
+    if f in ('rnd', 'sh'):
+        a, b = _h(math.floor(c)), _h(math.floor(c) + 1)
+        return a if f == 'sh' else a + (b - a) * (0.5 - 0.5 * math.cos(math.pi * x))
+    if f == 'passos':
+        st = [v for v in p.get('st') or () if isinstance(v, (int, float))] or [1.0, 0.0, 0.5, 0.0]
+        return max(0.0, min(1.0, float(st[min(len(st) - 1, int(x * len(st)))])))
     return 0.5 - 0.5 * math.cos(2.0 * math.pi * x)
+
+
+def _h(k):
+    """acaso deterministico 0..1 de um inteiro (o mesmo k = o mesmo valor em todo knob que segue o movimento)."""
+    return (math.sin(k * 12.9898 + 78.233) * 43758.5453) % 1.0
+
+
+# MOVIMENTO (Claude Doc "PRISMA — sync com a musica"): fonte -> modo -> forma -> faixa. mod[knob] = {b, lo, hi, lfo?,
+# modo?, ev?, env?, seg?, q?, id?, nome?}. Formato velho (sem modo) = 'loop' se b tem 'lfo', senao 'segue' sem slew.
+MOV_MODES = ('loop', 'disparo', 'segue')
+TRACK_SIGNALS = ('rosto.x', 'rosto.y', 'rosto.tam', 'mao.x', 'mao.y', 'corpo.x', 'corpo.abre', 'obj.x', 'obj.y', 'obj.tam')
+TRACK_GATES = ('rosto.on', 'mao.on', 'corpo.on', 'obj.on')
+SECOES = ('intro', 'sobe', 'drop', 'pausa')
+EVENTS = ('batida', 'compasso', 'frase', 'kick', 'golpe') + tuple('secao:' + x for x in SECOES) + TRACK_GATES \
+    + ('pad:1', 'pad:2', 'pad:3', 'pad:4')
+# presets de 1 gesto (dash: botao do knob). faixa = (de, ate') RELATIVA ao valor do knob (None = absoluta 0..1)
+MOV_PRESETS = {
+    'pulsa':   {'mod': {'b': [], 'modo': 'disparo', 'ev': {'src': 'kick'}, 'env': {'a': 0, 'd': 0.5}}, 'faixa': (0.0, 0.4)},
+    'respira': {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'sin', 'r': 4, 'ph': 0}}, 'faixa': (-0.25, 0.25)},
+    'anda':    {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'saw', 'r': 16, 'ph': 0}}, 'faixa': None},
+    'passos':  {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'passos', 'r': 4, 'ph': 0, 'st': [1, 0, 0.5, 0, 0.75, 0, 0.25, 0]}}, 'faixa': (-0.3, 0.3)},
+    'acaso':   {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'sh', 'r': 1, 'ph': 0}}, 'faixa': (-0.3, 0.3)},
+    'grave':   {'mod': {'b': ['subbass'], 'modo': 'segue', 'seg': {'a': 10, 'r': 200}}, 'faixa': (0.0, 1.0)},
+    'drop':    {'mod': {'b': [], 'modo': 'disparo', 'ev': {'src': 'secao:drop'}, 'env': {'a': 0, 'd': 8}}, 'faixa': (0.0, 1.0)},
+    'abaixa':  {'mod': {'b': [], 'modo': 'disparo', 'ev': {'src': 'kick'}, 'env': {'a': 0, 'd': 0.5}}, 'faixa': (0.0, -0.5)},
+}
+
+
+def env(a, d, x):
+    """ENVELOPE AD em batidas: x = batidas desde o disparo. Sobe em `a` (linear), cai em `d` (curva (1-t)^2: soco
+    rapido e cauda). Antes do disparo / depois do fim = 0."""
+    if x < 0:
+        return 0.0
+    a, d = max(0.0, float(a or 0)), max(1e-3, float(d or 0.5))
+    if x < a:
+        return x / a
+    t = (x - a) / d
+    return (1.0 - t) ** 2 if t < 1 else 0.0
+
+
+def ev_ok(cond, k, salt=0):
+    """CONDICAO do evento (trig condition do Elektron) para a k-esima vez (1, 2, 3...) que ele aconteceu:
+    {n: N} a cada N | {a: A, b: B} A:B (a A-esima de cada B) | {p: 0..1} probabilidade | {first: 1} so' a 1a."""
+    if not cond:
+        return True
+    if cond.get('first'):
+        return k == 1
+    if 'b' in cond:
+        b = max(1, int(cond['b']))
+        return (k - 1) % b + 1 == max(1, min(b, int(cond.get('a', 1))))
+    if 'n' in cond:
+        return (k - 1) % max(1, int(cond['n'])) == 0
+    if 'p' in cond:
+        return _h(k * 7.31 + salt) < float(cond['p'])
+    return True
+
+
+def track_signals(kind, d):
+    """Rastreio (dict da track_thread: u_rosto/u_corpo/u_obj + on) -> SINAIS 0..1 com y PRA CIMA (1 = alto da tela).
+    Posicao x fica no ultimo lugar quando perde; o resto (y, tamanho, abertura) vai junto com 'on' (some com a pessoa)."""
+    d = d or {}
+    on = float(d.get('on', 0.0))
+    if kind == 'rosto':
+        r = d.get('u_rosto')
+        if r is None or len(r) < 4:
+            return {}
+        return {'rosto.x': float(r[0]), 'rosto.y': (1 - float(r[1])) * on, 'rosto.tam': min(1.0, float(r[2]) * 2.5) * on}
+    if kind == 'corpo':
+        c = d.get('u_corpo')
+        if c is None or len(c) < 99:
+            return {}
+        c = np.asarray(c, np.float32).reshape(33, 3)
+        w = [i for i in (15, 16) if c[i, 2] > 0.5] or [15, 16]       # pulsos visiveis (MediaPipe: 15 esq, 16 dir)
+        top = min(w, key=lambda i: c[i, 1])                           # a mao mais alta
+        return {'mao.x': float(c[top, 0]), 'mao.y': (1 - float(c[top, 1])) * on,
+                'corpo.x': float((c[23, 0] + c[24, 0]) / 2), 'corpo.abre': min(1.0, abs(float(c[15, 0] - c[16, 0])) * 1.5) * on}
+    if kind == 'obj':
+        o = d.get('u_obj')
+        if o is None or len(o) < 4:
+            return {}
+        x0, y0, x1, y1 = (float(v) for v in o[:4])
+        return {'obj.x': (x0 + x1) / 2, 'obj.y': (1 - (y0 + y1) / 2) * on, 'obj.tam': min(1.0, max(0.0, (x1 - x0) * (y1 - y0)) * 4) * on}
+    return {}
+
+
+TRACK_KIND = {'rosto': 'rosto', 'mao': 'corpo', 'corpo': 'corpo', 'obj': 'obj'}   # prefixo do sinal -> thread de rastreio
 
 
 # espelha FREQ_BANDS (native_synth.py) pro lado web/JSON — nome, [lo, hi] default, cor.
@@ -368,14 +630,227 @@ def in_poly(pts, x, y):
     return ins
 
 
+def vcam_cfg(d):
+    """WEBCAM VIRTUAL (tuning.VCAM): {on, w (largura 320..1920), fps 10..60}. Sai SEMPRE 16:9 (w x h pares) com o
+    palco encaixado e barras pretas — mudar o palco nao troca o formato da camera (com alguem lendo, trocar falha)."""
+    d = d or {}
+    w = int(max(320, min(1920, int(d.get('w', 1280)))) // 16 * 16)
+    return {'on': int(bool(d.get('on', 0))), 'w': w, 'h': w * 9 // 16 // 2 * 2,
+            'fps': int(max(10, min(60, int(d.get('fps', 30)))))}
+
+
+# ---------------- GRAFO (dash v5, 2026-11-01: cabos como no VCV) ----------------
+# OVERLAYS = os NOS: fonte (file = camera/video/imagem), atomo (file '@<id>' = le aquele no'; 1 atomo em BINDINGS[chave]),
+# STAGING (kind 'mix') e SAIDA (kind 'out'). Staging e saida = mixer: layers = [{from: '@<id>', opacity, blend, off, mod,
+# acao, rect}] (0 = atras; rect = lugar DENTRO dele, 0..1), atomos DEPOIS da mistura em BINDINGS['+<id>']; a saida tem
+# rect no PALCO. Entrada aceita UM fio, saida varios. Laco (A -> B -> A) = o fio que fecha le o QUADRO ANTERIOR.
+# ESPELHO = item da pilha {file, espelho: <id do original>, id}: knobs/movimento/liga do original, fio e estado do lugar.
+NODE_KINDS = ('mix', 'out')
+LAYER_PROPS = ('opacity', 'off', 'blend', 'mod', 'acao', 'rect')   # o que era da caixa NA SAIDA e virou da CAMADA
+MIRROR_PROPS = ('fx', 'mod', 'opacity', 'off', 'kick', 'in', 'estado', 'region')   # do ORIGINAL; ins/post/id = do lugar
+
+
+def node_key(o):
+    """Chave do no' (= a de BINDINGS): staging/saida = '+<id>'; fonte/atomo = 'file' ('file#N' se repetido)."""
+    if o.get('kind') in NODE_KINDS:
+        return '+' + str(o.get('id') or '')
+    d = o.get('dup')
+    return f"{o.get('file', '')}#{d}" if d else o.get('file', '')
+
+
+def stable_id(key):
+    """Id deterministico de uma chave (FNV-1a 32 bits em base 36): a mesma cena antiga migra sempre igual
+    (o dash5 faz a mesma conta em stableId)."""
+    h = 2166136261
+    for ch in str(key).encode('utf-8'):
+        h = ((h ^ ch) * 16777619) & 0xFFFFFFFF
+    s, d = '', '0123456789abcdefghijklmnopqrstuvwxyz'
+    while True:
+        h, r = divmod(h, 36)
+        s = d[r] + s
+        if not h:
+            return 'k' + s
+
+
+def migrate_graph(overlays):
+    """Cena SEM saida (todas antes de 2026-11-01) -> a mesma imagem no grafo novo: cada caixa NO AR vira uma camada
+    da 'saida 1' (palco inteiro), na mesma ordem, levando o que era dela na SAIDA (LAYER_PROPS). v5 (caixas com xy):
+    'off' = meio de corrente, nao entra. v3/v4: 'off' = mudo no programa, entra desligada (menos quem outra fileira le).
+    Ja' tem saida = devolve a MESMA lista (o native guarda pela identidade)."""
+    if any(o.get('kind') == 'out' for o in overlays or ()):
+        return overlays
+    rows = [dict(o) for o in overlays or () if o.get('kind') not in NODE_KINDS]
+    v5 = any('xy' in o for o in rows)
+    used = {o['id'] for o in rows if o.get('id')}
+    for o in rows:
+        if not o.get('id'):
+            i, base = 1, stable_id(node_key(o))
+            o['id'] = base
+            while o['id'] in used:
+                i += 1
+                o['id'] = f'{base}{i}'
+            used.add(o['id'])
+    read = {str(o['file'])[1:] for o in rows if str(o.get('file') or '').startswith('@')}
+    layers = []
+    for o in rows:
+        lay = {'from': '@' + o['id']}
+        for p in LAYER_PROPS:
+            if p in o:
+                lay[p] = o.pop(p)
+        if lay.get('off') and (v5 or o['id'] in read):
+            continue
+        if (lay.get('opacity') if 'opacity' in lay else 1.0) == 1.0:
+            lay.pop('opacity', None)
+        layers.append(lay)
+    oid = 'o1' if 'o1' not in used else stable_id('saida' + ''.join(sorted(used)))
+    return rows + [{'kind': 'out', 'id': oid, 'n': 1, 'nome': 'saída 1', 'layers': layers}]
+
+
+def _stack_items(b):
+    return list((b or {}).get('shaders') or []) + list(((b or {}).get('matte') or {}).get('items') or [])
+
+
+def graph_index(overlays, bindings):
+    """id -> chave do no' que o tem: id da fileira (o FIM, depois da mascara), id de staging/saida e id de cada atomo
+    (pilha e mascara; ramo do meio da v4)."""
+    ix = {}
+    for o in overlays or ():
+        if o.get('id'):
+            ix[o['id']] = node_key(o)
+    for o in overlays or ():
+        for it in _stack_items((bindings or {}).get(node_key(o))):
+            if it.get('id'):
+                ix.setdefault(it['id'], node_key(o))
+    return ix
+
+
+def node_refs(o, b, active=False):
+    """'@<id>' que o no' le: fileira = a entrada (file) + entrada B de cada atomo + Luma da mascara; staging/saida = as
+    camadas. active=True = so' o que conta pra RODAR (atomo/camada desligada ou camada a 0% nao puxa)."""
+    out = []
+    if o.get('kind') in NODE_KINDS:
+        for L in o.get('layers') or ():
+            if active and (L.get('off') or float(L.get('opacity', 1.0) or 0) <= 0):
+                continue
+            if str(L.get('from') or '').startswith('@'):
+                out.append(L['from'])
+    elif str(o.get('file') or '').startswith('@'):
+        out.append(o['file'])
+    for it in _stack_items(b):
+        if active and it.get('off'):
+            continue
+        out += [r for r in it.get('ins') or () if str(r).startswith('@')]
+    return out
+
+
+def graph_order(overlays, bindings):
+    """Ordem de render (cada no' DEPOIS de quem ele le) -> (chaves, late): late = {(quem, id lido)} = fios que fecham um
+    LACO; esses leem o quadro anterior (como o LocalIn/LocalOut). Ordem estavel: a do OVERLAYS onde nao ha dependencia."""
+    ix = graph_index(overlays, bindings)
+    deps = {}
+    for o in overlays or ():
+        k = node_key(o)
+        deps[k] = [(ix[r[1:]], r[1:]) for r in node_refs(o, (bindings or {}).get(k)) if ix.get(r[1:]) not in (None, k)]
+    seen, out, late = {}, [], set()
+
+    def visit(k):
+        seen[k] = 1
+        for d, rid in deps.get(k, ()):
+            if seen.get(d) == 1:
+                late.add((k, rid))
+            elif not seen.get(d):
+                visit(d)
+        seen[k] = 2
+        out.append(k)
+    for o in overlays or ():
+        if not seen.get(node_key(o)):
+            visit(node_key(o))
+    return out, late
+
+
+def graph_pull(overlays, bindings, extra=()):
+    """Chaves dos nos que precisam RODAR: tudo que chega numa SAIDA (camada ligada) + os ids em `extra` (sinal no:<id>)."""
+    ix = graph_index(overlays, bindings)
+    by = {node_key(o): o for o in overlays or ()}
+    todo = [node_key(o) for o in overlays or () if o.get('kind') == 'out'] + [ix[i] for i in extra if i in ix]
+    need = set()
+    while todo:
+        k = todo.pop()
+        if k in need or k not in by:
+            continue
+        need.add(k)
+        todo += [ix[r[1:]] for r in node_refs(by[k], (bindings or {}).get(k), active=True) if r[1:] in ix]
+    return need
+
+
+def resolve_mirrors(bindings):
+    """ESPELHOS -> itens de verdade pro motor: knobs, movimento, opacidade, liga/desliga (MIRROR_PROPS) do ORIGINAL;
+    fio (ins, post), id (estado = um buffer por LUGAR) e chave da cena do lugar; '_seed' = id do original (o mesmo
+    acaso). Original sumido = o espelho roda com o que tem. Sem espelho = devolve o MESMO dict."""
+    if not any(it.get('espelho') for b in (bindings or {}).values() for it in (b or {}).get('shaders') or ()):
+        return bindings
+    orig = {}
+    for b in bindings.values():
+        for it in _stack_items(b):
+            if it.get('id') and not it.get('espelho'):
+                fx = it['fx'] if isinstance(it.get('fx'), dict) else ((b.get('fx') or {}).get(it.get('file')) or {})
+                orig[it['id']] = dict(it, fx=fx)
+    out = {}
+    for k, b in bindings.items():
+        st = (b or {}).get('shaders') or []
+        if not any(it.get('espelho') for it in st):
+            out[k] = b
+            continue
+        new = []
+        for it in st:
+            o = orig.get(it.get('espelho')) if it.get('espelho') else None
+            if o and o.get('file') == it.get('file'):
+                it = dict({p: it[p] for p in ('file', 'id', 'ins', 'post', 'espelho') if p in it},
+                          **{p: o[p] for p in MIRROR_PROPS if p in o}, _seed=o['id'])
+            new.append(it)
+        out[k] = dict(b, shaders=new)
+    return out
+
+
 if __name__ == '__main__':  # self-check (roda: python dash_data.py)
+    # GRAFO: a cena antiga vira saida 1 com as caixas no ar, na mesma ordem; ja' migrada = a mesma lista
+    v5 = [{'file': 'webcam:/dev/video0', 'id': 'c1', 'xy': [0, 0], 'off': 1}, {'file': '@c1', 'id': 'c2', 'xy': [9, 0], 'opacity': 0.5,
+          'blend': 'soma', 'rect': [0, 0, 0.5, 0.5]}, {'file': 'a.png', 'xy': [0, 99], 'mod': {'opacity': {'b': ['kick']}}}]
+    g = migrate_graph(v5)
+    assert [o.get('kind') for o in g] == [None, None, None, 'out'] and g[2]['id'] == stable_id('a.png') == migrate_graph(v5)[2]['id']
+    assert g[3]['layers'] == [{'from': '@c2', 'opacity': 0.5, 'blend': 'soma', 'rect': [0, 0, 0.5, 0.5]},
+                              {'from': '@' + g[2]['id'], 'mod': {'opacity': {'b': ['kick']}}}], g[3]
+    assert 'off' not in g[0] and 'opacity' not in g[1] and migrate_graph(g) is g and v5[1]['opacity'] == 0.5, 'migra sem mexer no original'
+    v4 = migrate_graph([{'file': 'a.png', 'id': 'r1', 'off': 1}, {'file': '@r1', 'id': 'r2'}, {'file': 'b.png', 'id': 'r3', 'off': 1}])
+    assert v4[3]['layers'] == [{'from': '@r2'}, {'from': '@r3', 'off': 1}], 'v4: mudo continua na saida (desligado); lido por outra nao'
+    assert migrate_graph([])[0]['layers'] == [] and stable_id('x') == stable_id('x') != stable_id('y')
+    gb = {'@c1': {'shaders': [{'file': 'A.frag', 'id': 'a1', 'ins': ['@c9']}]}, '+m1': {'shaders': []}}
+    gg = [{'file': 'v.mp4', 'id': 'c1'}, {'kind': 'out', 'id': 'o1', 'layers': [{'from': '@m1'}]},
+          {'kind': 'mix', 'id': 'm1', 'layers': [{'from': '@a1'}, {'from': '@c9', 'off': 1}]}, {'file': '@c1', 'id': 'c3'}, {'file': 'w.png', 'id': 'c9'}]
+    order, late = graph_order(gg, gb)
+    assert order.index('v.mp4') < order.index('@c1') < order.index('+m1') < order.index('+o1') and order.index('w.png') < order.index('@c1'), order
+    assert late == set() and graph_index(gg, gb)['a1'] == '@c1'
+    assert graph_pull(gg, gb) == {'+o1', '+m1', '@c1', 'v.mp4', 'w.png'}, 'puxa so\' o que chega numa saida (w.png = entrada B)'
+    assert graph_pull(gg, gb, extra=('c3',)) >= {'@c1'} and 'w.png' in graph_pull(gg, gb)
+    loop = [{'kind': 'mix', 'id': 'm1', 'layers': [{'from': '@m2'}]}, {'kind': 'mix', 'id': 'm2', 'layers': [{'from': '@m1'}]}]
+    o2, l2 = graph_order(loop, {})
+    assert len(o2) == 2 and len(l2) == 1, 'laco: um fio le o quadro anterior'
+    mb = {'a': {'shaders': [{'file': 'M.frag', 'id': 'h1', 'fx': {'matiz': 0.7}, 'mod': {'matiz': {'b': ['lfo']}}}]},
+          '+m1': {'shaders': [{'file': 'M.frag', 'id': 'h2', 'espelho': 'h1', 'fx': {'matiz': 0.1}, 'ins': ['@x']}]}}
+    rm = resolve_mirrors(mb)
+    assert rm['+m1']['shaders'][0] == {'file': 'M.frag', 'id': 'h2', 'ins': ['@x'], 'espelho': 'h1', 'fx': {'matiz': 0.7},
+                                       'mod': {'matiz': {'b': ['lfo']}}, '_seed': 'h1'}, rm
+    assert rm['a'] is mb['a'] and resolve_mirrors(gb) is gb, 'sem espelho = o mesmo dict'
+
+    assert vcam_cfg(None) == {'on': 0, 'w': 1280, 'h': 720, 'fps': 30}
+    assert vcam_cfg({'on': True, 'w': 99999, 'fps': 1}) == {'on': 1, 'w': 1920, 'h': 1080, 'fps': 10}
     assert parse_fx_manifest('// fx: wave, grain ,vignette\nfoo bar') == ['wave', 'grain', 'vignette']
     assert parse_fx_manifest('//fx:wave') == ['wave']
     assert parse_fx_manifest('nada aqui') == [] and parse_fx_manifest('') == []
     assert parse_fx_manifest('// fx: a=0.5, b') == ['a', 'b']
     assert parse_fx_defaults('// fx: a=0.5, b, c=2, d=x') == {'a': 0.5, 'b': 1.0, 'c': 1.0, 'd': 1.0}
     assert parse_meta('// fx: a\n// cat: tempo\n// in: fb, src, x\n// ATOMOS · Feedback. Rastro. Mais.\n') == \
-        {'cat': 'tempo', 'ins': ['fb', 'src'], 'desc': 'Rastro. Mais.'}
+        {'cat': 'tempo', 'ins': ['fb', 'src'], 'desc': 'Rastro. Mais.', 'nome': 'Feedback'}
     assert parse_meta('// fx: a\n// so texto\n') == {'cat': '', 'ins': [], 'desc': 'so texto'}
     near = lambda a, b: abs(a - b) < 1e-9
     assert near(lfo({'f': 'sin', 'r': 4}, 0), 0) and near(lfo({'f': 'sin', 'r': 4}, 2), 1) and near(lfo({'r': 4}, 4), 0), 'sin: 0 no 1, cheio no meio'
@@ -385,6 +860,22 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     rs = [lfo({'f': 'rnd', 'r': 1}, k / 8) for k in range(64)]
     assert all(0 <= v <= 1 for v in rs) and max(rs) - min(rs) > 0.2 and max(abs(a - b) for a, b in zip(rs, rs[1:])) < 0.5, 'acaso: 0..1, suave'
     assert near(lfo({'f': 'rnd', 'r': 2}, 6), lfo({'f': 'rnd', 'r': 2}, 6.0)) and lfo(None, 1) == lfo({'f': 'sin', 'r': 4}, 1), 'deterministico; padrao = seno de 4 batidas'
+
+    assert lfo({'f': 'sh', 'r': 1}, 2.1) == lfo({'f': 'sh', 'r': 1}, 2.9) != lfo({'f': 'sh', 'r': 1}, 3.1), 'acaso segurado: um valor por ciclo'
+    assert lfo({'f': 'passos', 'r': 4, 'st': [1, 0, 0.5, 0]}, 0.1) == 1 and lfo({'f': 'passos', 'r': 4, 'st': [1, 0, 0.5, 0]}, 2.5) == 0.5, 'passos'
+    assert env(0, 1, -0.1) == 0 and env(0, 1, 0) == 1 and near(env(0, 1, 0.5), 0.25) and env(0, 1, 1) == 0, 'envelope: soco e cauda'
+    assert near(env(1, 1, 0.5), 0.5) and env(1, 1, 1) == 1, 'ataque linear'
+    assert [k for k in range(1, 9) if ev_ok({'n': 2}, k)] == [1, 3, 5, 7] and [k for k in range(1, 9) if ev_ok({'a': 2, 'b': 4}, k)] == [2, 6]
+    assert [k for k in range(1, 4) if ev_ok({'first': 1}, k)] == [1] and ev_ok(None, 5)
+    ps = [ev_ok({'p': 0.5}, k) for k in range(200)]; assert 60 < sum(ps) < 140 and ps == [ev_ok({'p': 0.5}, k) for k in range(200)], 'probabilidade deterministica'
+    cp = np.zeros((33, 3), np.float32); cp[15] = (0.2, 0.3, 1); cp[16] = (0.8, 0.9, 1); cp[23] = (0.4, 0.6, 1); cp[24] = (0.6, 0.6, 1)
+    ts = track_signals('corpo', {'u_corpo': cp.ravel(), 'on': 1.0})
+    assert all(abs(ts[k] - v) < 1e-6 for k, v in {'mao.y': 0.7, 'mao.x': 0.2, 'corpo.x': 0.5, 'corpo.abre': 0.9}.items()), ts
+    assert track_signals('corpo', {'u_corpo': cp.ravel(), 'on': 0.0})['mao.y'] == 0, 'perdeu = some'
+    assert abs(track_signals('rosto', {'u_rosto': np.array([0.5, 0.25, 0.2, 0.3] * 4), 'on': 1})['rosto.y'] - 0.75) < 1e-6
+    assert set(TRACK_KIND) == {x.split('.')[0] for x in TRACK_SIGNALS + TRACK_GATES}
+    assert parse_meta('// fx: a\n// cat: cor\n// mod: a=pulsa, b = respira\n// ATOMOS · X. y\n')['mod'] == {'a': 'pulsa', 'b': 'respira'}
+    assert parse_meta('// fx: a\n// cat: cor\n// mod: a=pulsa\n// ATOMOS · X. y\n')['desc'] == 'y', '// mod: nao vira descricao'
 
     freqs = np.fft.rfftfreq(1024, d=1 / 44100)
     spec = np.full(len(freqs), 0.01)
@@ -443,17 +934,41 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert [t['pw'] for t in pack_raster([{'pw': 2000, 'ph': 10}, {'pw': 10, 'ph': 10}], 1920, 1080)] == [2000]
     assert img_mod_levels({'grids': [{'name': 'BRILHO', 'total': 0.4}, {'name': 'MOVIMENTO', 'total': 1.3}]}) == {'luz': 0.4, 'mov': 1.0}
     assert img_mod_levels(None) == {'luz': 0.0, 'mov': 0.0}
-    ok = '// fx: forca=0.5\n// cat: cor\n// ATOMOS · T. x\nuniform sampler2D u_texture_0;\nuniform float u_fx_forca;\nvoid main(){ gl_FragColor = vec4(u_fx_forca); }\n'
+    ok = '// fx: forca=0.5\n// cat: cor\n// ATOMOS · T. x\nuniform float u_fx_forca;\nvoid main(){ gl_FragColor = vec4(u_fx_forca) * A(uv()); }\n'
     assert atom_problems(ok) == [], atom_problems(ok)
-    bad = '// fx: layer, z\n// cat: luzes\nuniform float u_bass, u_fx_layer;\nuniform sampler2D u_texture_1;\nvoid main(){ gl_FragColor = vec4(u_bass * u_fx_layer); }\n'
+    bad = '// fx: layer, z\n// cat: luzes\nuniform float u_bass, u_fx_layer;\nvoid main(){ gl_FragColor = vec4(u_bass * u_fx_layer) * B(uv()); }\n'
     pr = ' | '.join(atom_problems(bad))
     assert any('no maximo' in x for x in atom_problems('// fx: a, b, c, d\n' + ok))
     for frag in ("cat: 'luzes'", 'ATOMOS', 'u_bass', 'knob proibido layer', 'knob z', 'sem "// in:"'):
         assert frag in pr, (frag, pr)
-    mk = '// cat: mascara\n// ATOMOS · M. x\nuniform sampler2D u_texture_0, u_subject;\nuniform float u_subject_on;\nvoid main(){ gl_FragColor = vec4(u_subject_on); }\n'
+    mk = '// cat: mascara\n// ATOMOS · M. x\nuniform sampler2D u_subject;\nuniform float u_subject_on;\nvoid main(){ gl_FragColor = vec4(u_subject_on); }\n'
     assert atom_problems(mk) == [], atom_problems(mk)
+    assert any("'pula' nao" in x for x in atom_problems(ok.replace('// cat: cor', '// cat: cor\n// mod: forca=pula')))
+    assert any('knob zz' in x for x in atom_problems(ok.replace('// cat: cor', '// cat: cor\n// mod: zz=pulsa')))
+    assert atom_problems(ok.replace('// cat: cor', '// cat: cor\n// mod: forca=pulsa')) == []
     assert any('so\' em atomo de mascara' in x for x in atom_problems(mk.replace('mascara', 'cor', 1)))
-    assert any('sem entrada B' in x for x in atom_problems(mk.replace('M. x', 'M. x\n// in: src')))
+    assert atom_problems(mk.replace('M. x', 'M. x\n// in: src').replace('vec4(u_subject_on)', 'B(uv())')) == [], 'mascara le B (Luma)'
+    # ATOMO v2: preludio nao se declara; estado pede u_vista e nao usa u_time; bipolar/ritmo so' em knob que existe
+    assert any('vem do preludio' in x for x in atom_problems(ok.replace('uniform float', 'uniform vec2 u_resolution;\nuniform float')))
+    assert any('#ifdef' in x for x in atom_problems('#ifdef GL_ES\nprecision mediump float;\n#endif\n' + ok))
+    st_ = ok.replace('// cat: cor', '// cat: tempo\n// estado: canais=2, passos=4\n// bipolar: forca').replace('A(uv())', 'E(uv()) * u_vista')
+    assert atom_problems(st_) == [], atom_problems(st_)
+    assert parse_meta(st_)['estado'] == {'canais': 2, 'passos': 4, 'fases': 1, 'escala': 0.5} and parse_meta(st_)['bipolar'] == ['forca']
+    assert any('u_vista' in x for x in atom_problems(st_.replace('* u_vista', '')))
+    assert any('u_time' in x for x in atom_problems(st_.replace('* u_vista', '* u_vista * u_time')))
+    assert any('sem "// estado:"' in x for x in atom_problems(ok.replace('A(uv())', 'E(uv())')))
+    assert any('bipolar: knob zz' in x for x in atom_problems(ok.replace('// cat: cor', '// cat: cor\n// bipolar: zz')))
+    assert atom_source('presets/atomos/X.frag', 'y').startswith(ATOM_PRELUDE) and atom_source('presets/sortidos/X.frag', 'y') == 'y'
+    assert parse_estado('// estado: canais=9, passos=x, escala=0.25') == {'canais': 4, 'passos': 1, 'fases': 1, 'escala': 0.25}
+    sw = '// fx: limiar=0.5, inverter=0\nuniform float u_fx_limiar, u_fx_inverter;\nvoid main(){ float m = step(u_fx_limiar, 0.3); m = mix(m, 1.0 - m, step(0.5, u_fx_inverter)); }'
+    assert knob_switches(sw) == ['inverter'] and parse_meta(sw)['chave'] == ['inverter'], 'chave = so\' step(0.5, ...)'
+    assert knob_switches(sw.replace('step(0.5, u_fx_inverter)', 'u_fx_inverter')) == [], 'valor continuo = knob'
+    assert knob_switches(sw.replace('step(0.5,', 'step(.5,')) == ['inverter'], 'step(.5, ...) tambem'
+    es = '// fx: modo=0\n// opcoes: modo=a|b|c\nuniform float u_fx_modo;\nvoid main(){ float m = floor(u_fx_modo * 2.999); }'
+    assert knob_choices(es) == {'modo': ['a', 'b', 'c']} and parse_meta(es)['escolha'] == {'modo': ['a', 'b', 'c']}
+    assert knob_choices(es.replace('// opcoes: modo=a|b|c\n', '')) == {'modo': ['1', '2', '3']}, 'sem nomes = numeros'
+    assert all(int((i + 0.5) / 3 * 2.999) == i for i in range(3)), 'valor da opcao cai no meio da fatia'
+    assert any('so\' em atomo de mascara' in x for x in atom_problems(ok.replace('u_fx_forca;', 'u_fx_forca;\nuniform vec4 u_rosto[4];')))
     for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shaders', 'presets', 'atomos', '*.frag'))):
         assert not atom_problems(open(f, encoding='utf-8').read()), (os.path.basename(f), atom_problems(open(f, encoding='utf-8').read()))
     print('dash_data self-check ok')
