@@ -96,6 +96,13 @@
     disparo (envelope num evento, com condicao A:B/%/a cada N) | segue (seguidor com ataque/soltura). O movimento MORA NO KNOB
     (nao e' no com fio): o botao do knob abre os PRESETS (1 toque: pulsa, respira, anda, passos, acaso, segue o grave, estoura
     no drop, abaixa no kick; o // mod: do atomo sugere e aparece primeiro); "abrir..." mostra modo/forma/evento/fontes/quantidade.
+    (2026-11-04, SUBSTITUI "nao e' no' com fio": pedido "a cor e' mexida por um atomo de cor e a alteracao de valores por OUTRO
+    no' que controla ele") todo movimento tem CORPO: um CONTROLADOR no canvas (pilha CTL_KEY '~ctl', id = o do movimento; o
+    knob guarda receita + a faixa dele, o motor nao muda) com saida em losango e cabo tracejado ate' a altura do knob. Puxar o
+    losango ate' um knob liga; clicar no cabo + Delete solta; tirar o controlador devolve os knobs. Controlador solto = arrastar
+    um da biblioteca ("Controladores") pro vazio. Preset tocado num knob cria o controlador dele (syncCtls).
+    RECEITAS (2026-11-04): os Classicos sairam da biblioteca (rodam nas cenas antigas) e voltaram como corrente de atomos +
+    controladores (shaders/receitas/*.json, /receitas). Ferramenta (padrao de teste) fica em "Ferramentas".
     Painel MOVIMENTOS (era Macros): M1-M4 + cada movimento da cena com o sinal VIVO do motor (SSE mv); passar o mouse acende o que
     ele mexe; arrastar ate' um knob = segue o mesmo. Opacidade (atomo e caixa na SAIDA) aceita movimento. Caixa: entra/sai sozinha
     num evento (acao). GRADE: liga/desliga de atomo/caixa espera batida/compasso/frase (/grid; tracejado piscando = esperando;
@@ -718,6 +725,12 @@
   #eq .hzio input { width: 100%; min-width: 0; text-align: center; padding: 0 2px; font-size: 11px; min-height: 24px; -moz-appearance: textfield; appearance: textfield; }
   #eq .hzio input::-webkit-inner-spin-button, #eq .hzio input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   #eq .col .kn { display: flex; justify-content: center; width: 100%; }
+  /* LIMIAR da faixa (2026-11-04): knob + chave ATIVA (gate: abaixo da linha vale 0) | TETO (limite: nao passa da linha); a linha no medidor */
+  #eq .col .gt { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; }
+  #eq .tall b.thl { position: absolute; left: 0; right: 0; height: 2px; margin-bottom: -1px; background: var(--warn); z-index: 1; pointer-events: none; }
+  #eq .tall b.thl.teto { background: var(--bad); }
+  #eq .sndb.gm.teto { background: var(--bad-d); border-color: #5a2a2d; color: #ffb3b6; }
+  #eq .sndb.gm.ativa { background: var(--warn-d); border-color: #6b5a1c; color: #f0dc9a; }
   #eq #knobgroups { display: grid; gap: 8px; }
   #eq #knobgroups .knobs { justify-items: center; }
   #eq .chanrow { display: grid; grid-template-columns: 110px 1fr 1fr 90px 40px 12px 30px; gap: 6px; align-items: center; margin: 4px 0; }
@@ -1096,6 +1109,9 @@
             <label>tamanho <input type="number" class="inp num" id="out-w" min="160" step="10">×<input type="number" class="inp num" id="out-h" min="120" step="10"></label>
             <button class="btn sm" id="out-fitmedia" disabled>= mídia</button>
             <button class="btn" id="out-full">tela cheia</button></div>
+          <div class="outbar" id="out-pin" hidden>
+            <span class="hint">fixada em</span><span class="seg" id="out-pin-onde"></span>
+            <label>tamanho <select class="inp sm" id="out-pin-tam"><option value="0.2">P</option><option value="0.3">M</option><option value="0.45">G</option></select></label></div>
           <div class="bh" style="margin-top:14px"><b>Quadros por segundo</b></div>
           <div class="outbar"><span class="fpsbig" id="fps-big">—</span><span class="seg" id="fps-seg"></span></div>
           <div class="fpsgraph"><canvas id="fps-graph"></canvas><span class="hint num" id="fps-stats"></span></div>
@@ -1940,18 +1956,26 @@ const ctlStore = () => stackOf(CTL_KEY);
 const ctlRecipe = m => { const r = JSON.parse(JSON.stringify(m || {})); delete r.lo; delete r.hi; return r; };
 const ctlName = m => m.nome ? (PRESET_TXT[m.nome] || [m.nome])[0] : modeOf(m) === 'disparo' ? 'envelope' : (m.b || []).includes('lfo') ? 'LFO' : 'segue ' + srcName((m.b || [])[0] || '');
 function syncCtls(ids){   // todo movimento tem o seu controlador; ids = true da' id a quem nao tem (so' ao gravar: o SSE troca o objeto)
-  const have = new Set(ctlStore().map(c => c.id)), per = {}; let made = false;
+  const have = new Set(ctlStore().map(c => c.id)); let made = ids ? autoPlace(false) : false;   // gravando: no' sem lugar ganha (o controlador nasce perto dele)
   forEachMod((m, w) => {
     if (w.ctl || w.row) return;
+    const o = rowOf(mkBase(w.key));
+    if (w.key !== POST_KEY && !(o && o.xy)) return;   // o no' ainda nao chegou/nao tem lugar (SSE: bindings antes das caixas): espera
     if (!m.id){ if (!ids) return; m.id = 'v' + rid(); made = true; }
     if (have.has(m.id)) return;
     have.add(m.id); made = true;
-    const o = rowOf(mkBase(w.key)), k = per[w.key] = (per[w.key] || 0) + 1;
-    let xy = [24, 24 + (k - 1) * (CTL_H + 16)];
-    if (o && o.xy){ xy = [o.xy[0] + 32, o.xy[1] - (CTL_H + 24) * k]; if (xy[1] < 0) xy = [o.xy[0] + 32, o.xy[1] + boxH(chKey(o)) + 24 + (CTL_H + 16) * (k - 1)]; }
-    binding(CTL_KEY, true).shaders.push({ file: 'ctl', opacity: 1, id: m.id, xy: snapXY(xy), mod: { sinal: ctlRecipe(m) } });
+    binding(CTL_KEY, true).shaders.push({ file: 'ctl', opacity: 1, id: m.id, xy: ctlSpot(o && o.xy ? o : null), mod: { sinal: ctlRecipe(m) } });
   });
   return made;
+}
+function ctlSpot(o){   // lugar LIVRE pro controlador novo: em cima do no' que ele move, embaixo, ou a' esquerda (desce ate' achar vaga)
+  const R = [...lastOverlays.filter(x => x.xy).map(x => [x.xy[0], x.xy[1], boxW(chKey(x)), boxH(chKey(x))]),
+    ...ctlStore().filter(c => c.xy).map(c => [c.xy[0], c.xy[1], CTL_W, CTL_H])];
+  const free = (x, y) => x >= 0 && y >= 0 && !R.some(r => x < r[0] + r[2] + 16 && x + CTL_W + 16 > r[0] && y < r[1] + r[3] + 12 && y + CTL_H + 12 > r[1]);
+  const maxY = Math.max(0, ...R.map(r => r[1] + r[3]));
+  const starts = o ? [[o.xy[0] + 32, o.xy[1] - CTL_H - 24], [o.xy[0] + 32, o.xy[1] + boxH(chKey(o)) + 24], [o.xy[0] - CTL_W - 40, o.xy[1]]] : [[24, 24]];
+  for (const [x, y0] of starts) for (let y = Math.max(0, y0), i = 0; i < 40; i++, y += SNAP * 2) if (free(x, y)) return snapXY([x, y]);
+  return snapXY([o ? o.xy[0] : 24, maxY + 24]);
 }
 function specRecipe(spec){   // algo da biblioteca (preset / LFO / som / macro) -> receita de movimento, sem faixa
   if (spec.kind === 'preset'){ const P = (VOCAB.presets || {})[spec.name]; return P ? Object.assign(JSON.parse(JSON.stringify(P.mod)), { nome: spec.name }) : null; }
@@ -2160,7 +2184,27 @@ function sendMedia(){
   post('/media', { media: lastMedia }).then(list => { lastMedia = list; renderMediaAdmin(true); cvSig = ''; renderBoxes(); loadScenes(); })
     .catch(e => { toast('mídia: ' + e, 'err'); loadMedia(); });
 }
+// RECEITAS (2026-11-04): os presets CLASSICOS refeitos em ATOMOS — o som/giro que morava dentro deles virou CONTROLADOR.
+// Inserir = os atomos em corrente (normalizeNodes) + um controlador por movimento (syncCtls). Os .frag antigos saem da
+// biblioteca (continuam rodando nas cenas antigas); fica so' o que e' ferramenta (TOOLS).
+let lastRecipes = [];
+const TOOLS = ['presets/default/Teste.frag'];
+function loadRecipes(){ fetch('/receitas').then(r => r.json()).then(d => { lastRecipes = d.list || []; palSig = ''; renderPalette(); }).catch(() => {}); }
+function recipeItems(r){   // itens prontos pra inserir: id novo por atomo e por MOVIMENTO (o mesmo r1 em dois knobs = o mesmo controlador)
+  const ids = {};
+  return r.items.map(x => { const m = Object.assign(newModule(x.file), { fx: JSON.parse(JSON.stringify(x.fx || {})) });
+    if ((x.opacity ?? 1) !== 1) m.opacity = x.opacity;
+    if (x.mod){ m.mod = JSON.parse(JSON.stringify(x.mod)); for (const v of Object.values(m.mod)) if (v.id) v.id = ids[v.id] = ids[v.id] || 'v' + rid(); }
+    return m; });
+}
+function clickRecipe(r){   // entra depois do atomo escolhido (ou no fim da caixa escolhida / da da frente), como clickInsert
+  const k = mkBase(sel.key), key = k && rowOf(k) ? k : (rowsTopDown()[0] ? chKey(rowsTopDown()[0]) : '');
+  if (!key) return toast('ponha uma fonte no canvas primeiro (arraste da biblioteca)', 'err');
+  insertItems(key, sel.key === key && sel.j >= 0 ? sel.j + 1 : stackOf(key).length, recipeItems(r));
+  toast(`receita ${r.nome || r.name}: ${r.items.length} átomo${r.items.length > 1 ? 's' : ''}` + (r.items.some(x => x.mod) ? ' + controladores' : ''));
+}
 function loadShaders(){
+  loadRecipes();
   fetch('/shaders').then(r => r.json()).then(d => {
     lastShaderList = d.list || []; lastManifests = d.manifests || {}; lastFxDefaults = d.fxDefaults || {}; lastMeta = d.meta || {};
     cvSig = ''; ctlSig = ''; palSig = ''; renderBoxes(); renderPalette(); shaderAdminSig = ''; renderShaderAdmin();
@@ -3734,7 +3778,7 @@ function moveModules(fk, js, tk, at){
 // Arrastar = zonas no canvas; clicar = entra depois do atomo escolhido (fonte = caixa nova; mascara = na caixa escolhida).
 // =====================================================================================
 let palSig = '', palCat = LS.get('v5palCat', '');
-const PAL_CATS = [['', 'outros', 'tudo'], ['fonte', 'camera', 'fontes'], ['mascara', 'mascara', 'máscaras'], ['ctl', 'sin', 'controladores'],
+const PAL_CATS = [['', 'outros', 'tudo'], ['fonte', 'camera', 'fontes'], ['receita', 'grupo', 'receitas'], ['mascara', 'mascara', 'máscaras'], ['ctl', 'sin', 'controladores'],
   ...CATS.filter(c => c[0] && c[0] !== 'mascara').map(([c, l]) => [c, c, l])];
 function ctlItems(){
   return [...Object.keys(VOCAB.presets || {}).map(p => ({ name: (PRESET_TXT[p] || [p])[0], icon: presetIcon(p), spec: { kind: 'preset', name: p }, desc: (PRESET_TXT[p] || ['', ''])[1] })),
@@ -3748,7 +3792,7 @@ function ctlItems(){
 function renderPalette(){
   if (isShow()) return;
   const q = $('#pal-q').value.trim().toLowerCase();
-  const sig = JSON.stringify([q, palCat, lastShaderList, Object.keys(lastMeta).length, lastVideoInputs.map(v => v.id), lastMedia.map(m => m.file)]);
+  const sig = JSON.stringify([q, palCat, lastShaderList, Object.keys(lastMeta).length, lastRecipes.length, lastVideoInputs.map(v => v.id), lastMedia.map(m => m.file)]);
   if (sig === palSig) return; palSig = sig;
   const cats = $('#pal-cats'); cats.innerHTML = '';
   for (const [c, ic, l] of PAL_CATS) cats.append(h('button', { class: palCat === c ? 'on' : '', title: l, onclick: () => { palCat = c; LS.set('v5palCat', c); palSig = ''; renderPalette(); } }, icon(ic, 'sm')));
@@ -3778,16 +3822,18 @@ function renderPalette(){
   const modItem = f => item(catIcon(catOf(f)), fxName(f), '', (metaOf(f).desc || fxName(f)) + ' — arraste pra dentro de uma caixa, ou clique (entra depois do átomo escolhido)',
     { kind: 'mod', file: f }, () => clickInsert(f));
   const mods = atoms.filter(f => !isMaskFile(f) && metaOf(f).atom && (!palCat || catOf(f) === palCat));   // so' ATOMOS (contrato v2)
-  const classics = atoms.filter(f => !isMaskFile(f) && !metaOf(f).atom && hit(fxName(f), metaOf(f).desc));   // presets antigos (sortidos/, default/...)
-  if (palCat === 'fonte' || palCat === 'mascara' || palCat === 'ctl'){ /* so' o grupo da aba */ }
+  const tools = atoms.filter(f => TOOLS.includes(f) && hit(fxName(f), metaOf(f).desc));   // classicos: so' o que e' ferramenta (o resto virou RECEITA)
+  if (!palCat || palCat === 'receita') group('Receitas', 'grupo', lastRecipes.filter(r => hit(r.nome, r.desc, r.items.map(x => fxName(x.file)).join(' '))).map(r =>
+    item('grupo', r.nome || r.name, r.items.map(x => fxName(x.file)).join(' → '), r.desc + ' — arraste pra dentro de uma caixa (vira uma corrente de átomos' + (r.items.some(x => x.mod) ? ' + controladores' : '') + '), ou clique',
+      { kind: 'recipe', r }, () => clickRecipe(r))));
+  if (palCat === 'fonte' || palCat === 'mascara' || palCat === 'ctl' || palCat === 'receita'){ /* so' o grupo da aba */ }
   else if (q){
     const rank = f => { const n = fxName(f).toLowerCase(); return n.startsWith(q) ? 0 : n.includes(q) ? 1 : 2; };
     group('Átomos', 'outros', mods.filter(f => hit(fxName(f), metaOf(f).desc, (CATS.find(([c]) => c === catOf(f)) || [])[1])).sort((a, b) => rank(a) - rank(b)).map(modItem));
   } else for (const [c, l] of CATS) if (c !== 'mascara') group(l, catIcon(c), mods.filter(f => catOf(f) === c).map(modItem));
-  if (!palCat && classics.length){   // CLASSICOS: fora do contrato ATOMO (combinam mal), continuam rodando nas cenas antigas
-    const d = h('details', { class: 'pclassic' }, h('summary', { class: 'pgt' }, icon('outros', 'sm'), 'Clássicos (' + classics.length + ')'));
-    d.append(h('div', { class: 'hint', style: 'padding:2px 6px 6px', text: 'presets de antes dos átomos: rodam, mas não seguem o contrato (podem não combinar)' }));
-    classics.forEach(f => d.append(modItem(f)));
+  if (!palCat && tools.length){   // FERRAMENTAS: nao e' efeito (padrao de teste do telao)
+    const d = h('details', { class: 'pclassic' }, h('summary', { class: 'pgt' }, icon('outros', 'sm'), 'Ferramentas (' + tools.length + ')'));
+    tools.forEach(f => d.append(modItem(f)));
     if (LS.get('v5classic') === '1') d.open = true;
     d.ontoggle = () => LS.set('v5classic', d.open ? '1' : '0');
     box.append(d);
@@ -3908,8 +3954,8 @@ function dragMove(ev){
 }
 function auditionFor(z){   // a PREVIA fora do ar do que aconteceria se soltasse aqui (native: POST /try)
   const d = drag; if (!d) return;
-  if (!z || z.type !== 'ins' || !['mod', 'move'].includes(d.spec.kind)){ clearTimeout(tryT); tryT = null; if (tryKey) postTry('', []); renderNext(); return; }
-  const items = d.spec.kind === 'move' ? d.spec.js.map(j => stackOf(d.spec.key)[j]) : prepItems([{ file: d.spec.file }]);
+  if (!z || z.type !== 'ins' || !['mod', 'move', 'recipe'].includes(d.spec.kind)){ clearTimeout(tryT); tryT = null; if (tryKey) postTry('', []); renderNext(); return; }
+  const items = d.spec.kind === 'move' ? d.spec.js.map(j => stackOf(d.spec.key)[j]) : d.spec.kind === 'recipe' ? recipeItems(d.spec.r) : prepItems([{ file: d.spec.file }]);
   let st = stackOf(z.key).slice(), at = z.at;
   if (d.spec.kind === 'move' && !d.copy && d.spec.key === z.key){ st = st.filter(s => !items.includes(s)); at -= d.spec.js.filter(j => j < z.at).length; }
   st.splice(at, 0, ...items);
@@ -3956,6 +4002,7 @@ function dragDrop(ev){
   if (sp.kind === 'postlink' && z.type === 'post') return linkPost(sp.id, z.key, z.j);
   if (sp.kind === 'mod' && z.type === 'post') return attachPost(z.key, z.j, sp.file);
   if (sp.kind === 'mod' && z.type === 'ins') return insertItems(z.key, z.at, prepItems([{ file: sp.file }]));
+  if (sp.kind === 'recipe' && z.type === 'ins'){ insertItems(z.key, z.at, recipeItems(sp.r)); return toast(`receita ${sp.r.nome || sp.r.name} na caixa ${boxNo(z.key)}`); }
   cvSig = ''; renderBoxes();
 }
 // =====================================================================================
@@ -4374,22 +4421,52 @@ function renderFpsSeg(){
 renderFpsSeg();
 // ---- janela de saida (monitor / tamanho / tela cheia) — POST /output, igual v1 ----
 let outTouched = 0, lastOutput = null, outFull = false, outStr = '';
+// POR CIMA DO PRISMA (2026-11-04): a janela de saida de verdade (60 fps, a imagem do publico) SEMPRE NO TOPO, ancorada no dash —
+// em cima do painel PROGRAMA (no lugar da previa) ou num canto da janela do dash; da' pra mexer no resto olhando a saida. E' uma
+// opcao do "monitor" (dash_data.PIN_MON). O dash mede o lugar em px de TELA (screenX + o elemento x devicePixelRatio) e manda de
+// novo quando o lugar muda (janela do dash arrastada/redimensionada): o motor so' MOVE a janela, sem reabrir o OpenGL.
+const PIN_MON = '@topo', PIN_SPOTS = [['programa', 'PROGRAMA', 'em cima do painel PROGRAMA (no lugar da prévia)'], ['nw', '↖', 'canto de cima, à esquerda'],
+  ['ne', '↗', 'canto de cima, à direita'], ['sw', '↙', 'canto de baixo, à esquerda'], ['se', '↘', 'canto de baixo, à direita']];
+let pinCfg = LS.get('v5pin', { onde: 'programa', tam: 0.3 }), pinSent = '';
+function pinBox(){   // o lugar em px de TELA: o painel PROGRAMA ou a area da pagina do dash
+  const k = devicePixelRatio || 1, bx = screenX + Math.max(0, (outerWidth - innerWidth) / 2), by = screenY + Math.max(0, outerHeight - innerHeight);
+  if (pinCfg.onde === 'programa'){ const r = $('#pgm').parentElement.getBoundingClientRect(); if (r.width > 40 && r.height > 40) return [bx + r.left, by + r.top, r.width, r.height].map(v => Math.round(v * k)); }
+  return [bx, by, innerWidth, innerHeight].map(v => Math.round(v * k));
+}
+function pinSpec(){   // aspecto = o do PALCO (telas); sem palco, 16:9 (o da janela fixada se alimentaria dela mesma)
+  const st = canvasOf();
+  return { box: pinBox(), onde: pinCfg.onde, tam: pinCfg.tam, aspect: st ? +(st.cw / Math.max(1, st.ch)).toFixed(4) : 16 / 9 }; }
 function sendOutput(){
   outTouched = now();
+  const pin = $('#out-mon').value === PIN_MON ? pinSpec() : null;
+  pinSent = pin ? JSON.stringify(pin) : '';
   fetch('/output', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ monitor: $('#out-mon').value, fullscreen: outFull, w: +$('#out-w').value || 0, h: +$('#out-h').value || 0 }) });
+    body: JSON.stringify({ monitor: $('#out-mon').value, fullscreen: pin ? false : outFull, w: +$('#out-w').value || 0, h: +$('#out-h').value || 0, ...(pin ? { pin } : {}) }) });
+  renderPinBar();
 }
+function renderPinBar(){
+  const on = $('#out-mon').value === PIN_MON; $('#out-pin').hidden = !on; $('#out-full').disabled = on;
+  if (on) $('#out-w').disabled = $('#out-h').disabled = true;
+  const seg = $('#out-pin-onde'); seg.innerHTML = '';
+  for (const [v, t, ti] of PIN_SPOTS) seg.append(h('button', { class: pinCfg.onde === v ? 'on' : '', text: t, title: ti, onclick: () => { pinCfg.onde = v; LS.set('v5pin', pinCfg); sendOutput(); } }));
+  $('#out-pin-tam').value = String(pinCfg.tam); $('#out-pin-tam').disabled = pinCfg.onde === 'programa';
+}
+$('#out-pin-tam').onchange = () => { pinCfg.tam = +$('#out-pin-tam').value; LS.set('v5pin', pinCfg); sendOutput(); };
+setInterval(() => {   // a janela do dash andou / mudou de tamanho / o painel mudou: a fixada acompanha
+  if ((lastOutput || {}).monitor !== PIN_MON || $('#out-mon').value !== PIN_MON || now() - outTouched < TOUCH_MS) return;
+  const p = JSON.stringify(pinSpec()); if (p !== pinSent) sendOutput();
+}, 500);
 function renderOutput(o){
   if (!o || !o.window_w) return;
   lastOutput = o;
-  if (!o.fullscreen) LS.set('outSize', { w: o.window_w, h: o.window_h });
+  if (!o.fullscreen && o.monitor !== PIN_MON) LS.set('outSize', { w: o.window_w, h: o.window_h });   // a fixada tem tamanho proprio
   const md = o.media_dims, fb = $('#out-fitmedia');
   fb.disabled = !md; fb.title = md ? `janela do tamanho da mídia (${md[0]}×${md[1]})` : 'sem mídia ativa';
   if (now() - outTouched >= TOUCH_MS){
     const sig = JSON.stringify([o.monitors, o.monitor]);
     if (sig !== outStr){ outStr = sig;
-      fillSel($('#out-mon'), [{ id: '', name: '— não fixa (janela normal)' },
-        ...(o.monitors || []).map(m => ({ id: m.name, name: `${m.name} ${m.w}×${m.h}` + (m.primary ? ' *' : '') }))], o.monitor || ''); }
+      fillSel($('#out-mon'), [{ id: '', name: '— não fixa (janela normal)' }, { id: PIN_MON, name: '📌 por cima do PRISMA (sempre no topo)' },
+        ...(o.monitors || []).map(m => ({ id: m.name, name: `${m.name} ${m.w}×${m.h}` + (m.primary ? ' *' : '') }))], o.monitor || ''); renderPinBar(); }
     outFull = !!o.fullscreen; $('#out-full').classList.toggle('on', outFull);
     if (document.activeElement !== $('#out-w')) $('#out-w').value = o.window_w;
     if (document.activeElement !== $('#out-h')) $('#out-h').value = o.window_h;
@@ -4412,7 +4489,10 @@ function renderOutput(o){
 }
 $('#out-mon').addEventListener('pointerdown', () => { outTouched = now(); });
 $('#out-mon').addEventListener('change', () => {   // escolher monitor = ocupar ele (senao vira janelinha 640x480 no canto)
-  if ($('#out-mon').value){ outFull = true; $('#out-full').classList.add('on'); $('#out-w').disabled = $('#out-h').disabled = true; }
+  if ((lastOutput || {}).monitor === PIN_MON && $('#out-mon').value !== PIN_MON){   // saindo da fixada: a janela volta ao tamanho de antes
+    const p = LS.get('outSize', null); if (p && p.w && p.h){ $('#out-w').value = p.w; $('#out-h').value = p.h; } outFull = false; $('#out-full').classList.remove('on');
+    $('#out-w').disabled = $('#out-h').disabled = false; }
+  if ($('#out-mon').value && $('#out-mon').value !== PIN_MON){ outFull = true; $('#out-full').classList.add('on'); $('#out-w').disabled = $('#out-h').disabled = true; }
   sendOutput();
 });
 $('#out-full').onclick = () => {
@@ -5291,19 +5371,45 @@ const pctHz = p => Math.round(Math.exp(_L + (_R - _L) * Math.max(0, Math.min(1, 
 const kfmt = hz => hz >= 1000 ? (hz / 1000).toFixed(hz % 1000 ? 1 : 0) + 'k' : '' + hz;
 // ---- colunas ----
 const COLS = {};
+// LIMIAR POR FAIXA (POST /band-gate; o servidor ecoa em bands_hz.gate): ATIVA = gate (o sinal so' existe acima da linha, como o
+// gate de um mixer: o grave baixinho nao mexe em nada), TETO = limite (o sinal nunca passa da linha: o pico nao estoura o knob)
+let bandGate = {}, gateTouched = 0, gateT = null;
+const gateOf = k => bandGate[k] || { th: 0, m: 'ativa' };
+const gateOn = g => g.m === 'teto' ? g.th < 1 : g.th > 0;
+const IO_GATE = { touch(){ gateTouched = now(); }, live(){ gateTouched = now(); if (!gateT) gateT = setTimeout(IO_GATE.commit, 80); },
+  commit(){ gateTouched = now(); clearTimeout(gateT); gateT = null; post('/band-gate', { gate: bandGate }).catch(() => {}); } };
+function paintGate(){
+  for (const [k, c] of Object.entries(COLS)) if (c.gm){
+    const g = gateOf(k), on = gateOn(g);
+    c.gm.textContent = g.m === 'teto' ? 'teto' : 'ativa'; c.gm.className = 'sndb gm ' + (on ? g.m : '');
+    c.gm.title = g.m === 'teto' ? 'TETO (limite): o sinal nunca passa da linha — clique: vira ATIVA' : 'ATIVA (gate): abaixo da linha o sinal vale 0 — clique: vira TETO';
+    c.thl.hidden = !on; c.thl.classList.toggle('teto', g.m === 'teto'); c.thl.style.bottom = (g.th * 100) + '%';
+  }
+}
 function mkCol(key, name, color, lead){
   const raw = h('i', { class: 'raw', style: `background:${color}` }), fin = h('i', { style: `background:${color}` });
   const lv = h('span', { class: 'lv num', text: '0.00' }), hz = h('div', { class: 'hzio' }), kn = h('div', { class: 'kn' });
   // amp nao desliga (e' o volume, nao uma faixa); kick + as 8: botao liga/desliga (tuning.BANDS_OFF)
   const mute = key === 'amp' ? '' : h('button', { class: 'sndb mute on', text: 'on', title: 'desligar esta faixa (vale 0 pros efeitos e pra modulação)', onclick: () => toggleBandOff(key) });
+  // LIMIAR (amp + as 8; o kick tem o limiar dele): knob + chave ativa/teto + a linha no medidor (tuning.BAND_GATE, POST /band-gate)
+  const thl = h('b', { class: 'thl', hidden: true }), gt = key === 'kick' ? '' : h('div', { class: 'gt' });
   const el = h('div', { class: 'col' + (lead ? ' lead' : '') }, h('span', { class: 'cn', text: name, style: `color:${color}` }),
-    h('div', { class: 'mv' }, h('span', { class: 'tall' }, raw, fin)), lv, mute, hz, kn);
+    h('div', { class: 'mv' }, h('span', { class: 'tall' }, raw, fin, thl)), lv, mute, gt, hz, kn);
   $('#cols').append(el);
-  COLS[key] = { el, raw: meter(raw, 'y', 'audio'), fin: meter(fin, 'y', 'audio', key === 'kick' ? 60 : 32), lv, hz, kn, mute };
+  COLS[key] = { el, raw: meter(raw, 'y', 'audio'), fin: meter(fin, 'y', 'audio', key === 'kick' ? 60 : 32), lv, hz, kn, mute, thl };
+  if (gt){
+    const gk = knob({ id: 'gate:' + key, size: 32, cls: 'sm', label: 'limiar', mlabel: 'limiar · ' + name, dflt: 0, bip: false, fmt: v => v.toFixed(2), io: IO_GATE,
+      title: `limiar de ${name}: ATIVA = só passa acima da linha (abaixo vale 0) · TETO = nunca passa da linha — arraste ↕ · duplo-clique = desliga`,
+      get: () => gateOf(key).th, set: v => { bandGate[key] = Object.assign({}, gateOf(key), { th: Math.round(v * 1000) / 1000 }); paintGate(); } });
+    const gm = h('button', { class: 'sndb gm', onclick: () => { const g = gateOf(key), m = g.m === 'teto' ? 'ativa' : 'teto';
+      bandGate[key] = { m, th: m === 'teto' && g.th <= 0 ? 1 : m === 'ativa' && g.th >= 1 ? 0 : g.th }; gk._show(bandGate[key].th); paintGate(); IO_GATE.commit(); } });
+    gt.append(gk, gm); COLS[key].gk = gk; COLS[key].gm = gm;
+  }
 }
 mkCol('kick', 'kick', 'var(--sel)', true);
 mkCol('amp', 'amp', 'var(--tx2)', true);
 for (const n of BAND_NAMES) mkCol(n, n, BAND_COLORS[n]);
+paintGate();
 // FAIXAS DESLIGADAS (POST /bands-off): o botao da coluna; o servidor ecoa em bands_hz.off
 let bandsOff = new Set(), bandsOffTouched = 0;
 function paintBandsOff(){
@@ -5608,6 +5714,8 @@ function renderRanges(bh){
   if (document.activeElement !== $('#bands-cb')) $('#bands-cb').checked = bh.enabled !== 0;
   $('#lanes').classList.toggle('dim', bh.enabled === 0);
   if (now() - bandsOffTouched > TOUCH_MS){ const o = new Set(bh.off || []); if ([...o].join() !== [...bandsOff].join()){ bandsOff = o; paintBandsOff(); } }
+  if (now() - gateTouched > TOUCH_MS && JSON.stringify(bh.gate || {}) !== JSON.stringify(bandGate)){ bandGate = JSON.parse(JSON.stringify(bh.gate || {}));
+    for (const c of Object.values(COLS)) if (c.gk && !c.gk.classList.contains('drag')) c.gk._show(gateOf(Object.keys(COLS).find(k => COLS[k] === c)).th); paintGate(); }
   if (dragRow >= 0 || now() - rangesTouched < 400) return;
   if (rangesSent){   // mandei e o servidor ainda nao confirmou: nao deixa o eco velho desfazer o arrasto
     const same = JSON.stringify(bh.ranges) === JSON.stringify(rangesSent);

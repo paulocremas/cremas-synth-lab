@@ -1,0 +1,42 @@
+{
+ "nome": "Ondas",
+ "desc": "anéis do centro que crescem com o médio, pintados",
+ "de": [
+  "default/Ondas.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Gota.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.4,
+    "tamanho": 0.5,
+    "velocidade": 0.4
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "midrange"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r38"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Paleta.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.5,
+    "matiz": 0.0,
+    "paleta": 0.125
+   }
+  }
+ ]
+}

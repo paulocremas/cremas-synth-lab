@@ -1,0 +1,33 @@
+{
+ "nome": "Gota",
+ "desc": "anéis saindo do centro; o grave levanta",
+ "de": [
+  "sortidos/Gota.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Gota.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.4,
+    "tamanho": 0.4,
+    "velocidade": 0.5
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "subbass"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.0,
+     "hi": 0.8,
+     "id": "r9"
+    }
+   }
+  }
+ ]
+}

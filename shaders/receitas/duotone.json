@@ -1,0 +1,40 @@
+{
+ "nome": "Duotone",
+ "desc": "tira a cor e pinta com uma paleta; o grave empurra o tom",
+ "de": [
+  "sortidos/Duotone.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Saturar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "saturacao": 0.0
+   }
+  },
+  {
+   "file": "presets/atomos/Paleta.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 1.0,
+    "matiz": 0.6,
+    "paleta": 0.625
+   },
+   "mod": {
+    "matiz": {
+     "b": [
+      "subbass"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.6,
+     "hi": 0.85,
+     "id": "r6"
+    }
+   }
+  }
+ ]
+}

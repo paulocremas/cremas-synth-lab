@@ -204,6 +204,21 @@ def monitors():
     return res
 
 
+def keep_on_top(wid):
+    """Janela SEMPRE NO TOPO (saida "por cima do PRISMA"): wid = pygame.display.get_wm_info()['window'] (X11: id; Windows:
+    HWND). Linux = _NET_WM_STATE_ABOVE pelo wmctrl (sem wmctrl: nada); Windows = HWND_TOPMOST. Devolve True se pediu."""
+    if not wid:
+        return False
+    if IS_WIN:
+        import ctypes
+        return bool(ctypes.windll.user32.SetWindowPos(int(wid), -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010))   # NOSIZE|NOMOVE|NOACTIVATE
+    try:
+        subprocess.run(['wmctrl', '-i', '-r', hex(int(wid)), '-b', 'add,above'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+        return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def screen_size():
     """Linux: a tela X inteira (xrandr 'current'). Windows: o monitor principal."""
     if IS_WIN:

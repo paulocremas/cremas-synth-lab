@@ -1,0 +1,35 @@
+{
+ "nome": "Vinheta",
+ "desc": "as bordas fecham na batida",
+ "de": [
+  "sortidos/Vinheta.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Vinheta.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.4,
+    "tamanho": 0.5,
+    "borda": 0.5
+   },
+   "mod": {
+    "forca": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.5
+     },
+     "lo": 0.2,
+     "hi": 0.8,
+     "id": "r23",
+     "nome": "pulsa"
+    }
+   }
+  }
+ ]
+}

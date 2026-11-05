@@ -1,0 +1,32 @@
+{
+ "nome": "Revelar",
+ "desc": "ajuste de foto parado: luz, contraste, saturação e temperatura",
+ "de": [
+  "default/Revelar.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Luz.frag",
+   "opacity": 1.0,
+   "fx": {
+    "brilho": 0.5,
+    "contraste": 0.55
+   }
+  },
+  {
+   "file": "presets/atomos/Saturar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "saturacao": 0.55
+   }
+  },
+  {
+   "file": "presets/atomos/Tingir.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.1,
+    "matiz": 0.08
+   }
+  }
+ ]
+}

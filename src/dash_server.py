@@ -39,6 +39,7 @@ _SHADERS = os.path.join(_ROOT, 'shaders')                   # image.frag + prese
 _MEDIA = os.path.join(_ROOT, 'media')                       # galeria da aba Visuais (imgs/videos)
 _TRANS = os.path.join(_ROOT, 'transitions')                 # galeria "Transições": *.glsl
 _GROUPS = os.path.join(_SHADERS, 'grupos')                  # ATOMOS COMPOSTOS (dash v4): <nome>.json = {desc, items}
+_RECIPES = os.path.join(_SHADERS, 'receitas')               # RECEITAS (dash v5): cada clássico refeito em átomos + controladores
 _DEFAULT_TUNING = os.path.join(_HERE, 'tuning.py')
 
 # knobs "ao vivo" — os fixos que controlam a DINAMICA (ver explicacao no README/CLAUDE.md).
@@ -191,6 +192,14 @@ def set_bands_off(names, tuning_path=None):
     ok = ['kick'] + list(_BAND_NAMES)
     off = [n for n in ok if n in set(names or [])]
     return _write_var('BANDS_OFF', off, 'faixas desligadas (dash: botao na coluna da aba Audio) — 0 pro shader/♪', tuning_path)
+
+
+def set_band_gate(d, tuning_path=None):
+    """Reescreve BAND_GATE em tuning.py = LIMIAR por faixa (coluna do mixer de audio): {nome: {th, m}}, m 'ativa' (gate:
+    abaixo vale 0) | 'teto' (limite: nunca passa dele). Faixas = _BAND_NAMES + 'amp' (o kick tem o KICK_THRESHOLD);
+    neutro sai (dash_data.norm_band_gate). Devolve o dict normalizado."""
+    return _write_var('BAND_GATE', dash_data.norm_band_gate(d, list(_BAND_NAMES) + ['amp']),
+                      'limiar por faixa (dash: coluna do mixer de audio) — ativa = gate, teto = limite', tuning_path)
 
 
 TEMPO_QUANTS = ('', 'beat', 'bar', 'phrase')   # GRADE de toda acao discreta: na hora / batida / "1" do compasso / "1" da frase
@@ -2301,6 +2310,24 @@ def _list_groups(gdir=None):
     return out
 
 
+def _list_recipes(rdir=None):
+    """RECEITAS (2026-11-04): os presets CLASSICOS (sortidos/, default/) refeitos como corrente de ATOMOS, com o som/giro
+    que era de dentro deles virando MOVIMENTO no knob (= um CONTROLADOR no canvas). [{name, nome, desc, de, items}];
+    de = os .frag antigos que ela substitui (continuam rodando nas cenas antigas, fora da biblioteca)."""
+    out = []
+    for f in sorted(glob.glob(os.path.join(rdir or _RECIPES, '*.json'))):
+        try:
+            with open(f, encoding='utf-8') as fh:
+                r = json.load(fh)
+            items = _norm_overlays(r.get('items'), dedupe=False)
+        except (OSError, ValueError, TypeError, AttributeError):
+            continue
+        if items:
+            out.append({'name': os.path.splitext(os.path.basename(f))[0], 'nome': str(r.get('nome') or '')[:40],
+                        'desc': str(r.get('desc') or '')[:200], 'de': [str(x) for x in r.get('de') or () if isinstance(x, str)][:8], 'items': items})
+    return out
+
+
 def save_group(name, items, desc='', gdir=None):
     """Grava um grupo (varios modulos -> 1 peca, com os knobs publicados) em shaders/grupos/<nome>.json."""
     name, d = _slugify(str(name or '')), gdir or _GROUPS
@@ -2405,6 +2432,7 @@ def _payload():
         'bands_hz': {'overlap': int(getattr(_tuning, 'HZ_OVERLAP', 0)),
                      'enabled': int(getattr(_tuning, 'BANDS_ENABLED', 1)),
                      'off': list(getattr(_tuning, 'BANDS_OFF', None) or []),   # botao por coluna (set_bands_off)
+                     'gate': dict(getattr(_tuning, 'BAND_GATE', None) or {}),   # limiar por coluna (set_band_gate)
                      'ranges': [list(x) for x in getattr(_tuning, 'FREQ_BAND_HZ', [])],
                      'names': _BAND_NAMES},
         # dinamica por faixa (popup "engrenagem" de cada faixa) — 3 listas de 8, ordem de bands_hz
@@ -2475,6 +2503,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, 'text/html; charset=utf-8', open(_HTML5, 'rb').read())
         elif path == '/groups':   # atomos compostos (dash v4)
             self._send(200, 'application/json', json.dumps({'list': _list_groups()}).encode())
+        elif path == '/receitas':   # classicos refeitos em atomos (dash v5)
+            self._send(200, 'application/json', json.dumps({'list': _list_recipes()}).encode())
         elif path in ('/favicon.png', '/favicon.ico'):  # navegador tambem sonda /favicon.ico
             try:
                 self._send(200, 'image/png', open(_FAVICON, 'rb').read())
@@ -2710,6 +2740,13 @@ class _Handler(BaseHTTPRequestHandler):
                 out = set_bands_off(json.loads(raw.decode())['off'])
                 self._send(200, 'application/json', json.dumps({'off': out}).encode())
             except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/band-gate':   # {gate: {'Sub-bass': {th: 0.3, m: 'ativa'|'teto'}, 'amp': ...}}
+            try:
+                out = set_band_gate(json.loads(raw.decode())['gate'])
+                self._send(200, 'application/json', json.dumps({'gate': out}).encode())
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
         if path == '/tweaks':
@@ -3247,6 +3284,11 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     pb = _norm_bindings({POST_KEY: {'shaders': [{'file': 'presets/atomos/Matiz.frag', 'id': 'm1'}]},
                          'cam': {'shaders': [{'file': 'a.frag', 'post': ['m1', 'm1', 'x y', 3, 'm2']}]}})
     assert pb[POST_KEY]['shaders'][0]['id'] == 'm1' and pb['cam']['shaders'][0]['post'] == ['m1', 'm2'], pb
+    rc = _list_recipes()
+    assert rc and all(x['items'] and all(i['file'].startswith('presets/atomos/') for i in x['items']) for x in rc), 'receitas: so\' atomos'
+    cb = _norm_bindings({'~ctl': {'shaders': [{'file': 'ctl', 'id': 'v1', 'xy': [10, 20], 'mod': {'sinal': {'b': ['lfo'], 'id': 'v1'}}}]}})
+    assert cb['~ctl']['shaders'][0]['xy'] == [10, 20] and cb['~ctl']['shaders'][0]['mod']['sinal']['id'] == 'v1', \
+        'CONTROLADOR (dash v5, pilha ~ctl): lugar e receita passam'
     ch = _norm_overlays([{'file': 'x.frag', 'in': 'chain', 'ins': ['fb', 'cam#2', '../x', 'a', 'b']},
                          {'file': 'y.frag', 'in': 'src', 'ins': 'fb'}], dedupe=False)
     assert [(o.get('in'), o.get('ins')) for o in ch] == [('chain', ['fb', 'cam#2']), ('src', None)], 'entradas do modulo'
@@ -3399,6 +3441,8 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     except ValueError:
         pass
     assert set_bands_off(['Air', 'lixo', 'kick'], p) == ['kick', 'Air'], 'faixas desligadas: validas, ordem fixa'
+    assert set_band_gate({'Air': {'th': 0.4, 'm': 'teto'}, 'amp': {'th': 0}}, p) == {'Air': {'th': 0.4, 'm': 'teto'}} \
+        and open(p, encoding='utf-8').read().count('BAND_GATE = ') == 1, 'limiar por faixa: grava so\' o que nao e\' neutro'
     assert set_bands_off(['Sub-bass'], p) == ['Sub-bass'] and open(p, encoding='utf-8').read().count('BANDS_OFF = ') == 1, \
         'sem a linha: cria no fim; com ela: reescreve'
 

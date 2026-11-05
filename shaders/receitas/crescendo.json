@@ -1,0 +1,63 @@
+{
+ "nome": "Crescendo",
+ "desc": "empilha conforme a música cresce (fonte “build”): espelho, giro e rastro",
+ "de": [
+  "default/Crescendo.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Espelhar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "modo": 0.833
+   },
+   "mod": {
+    "opacity": {
+     "b": [
+      "build"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 200,
+      "r": 1500
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r34"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Rodar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "giro": 0.5,
+    "zoom": 0.5,
+    "velocidade": 0.55
+   }
+  },
+  {
+   "file": "presets/atomos/Feedback.frag",
+   "opacity": 1.0,
+   "fx": {
+    "rastro": 0.6,
+    "junta": 0.25
+   },
+   "mod": {
+    "opacity": {
+     "b": [
+      "build"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 200,
+      "r": 1500
+     },
+     "lo": 0.0,
+     "hi": 0.9,
+     "id": "r35"
+    }
+   }
+  }
+ ]
+}

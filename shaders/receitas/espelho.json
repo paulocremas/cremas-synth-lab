@@ -1,0 +1,16 @@
+{
+ "nome": "Espelho",
+ "desc": "espelha a imagem nos lados",
+ "de": [
+  "sortidos/Espelho.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Espelhar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "modo": 0.167
+   }
+  }
+ ]
+}

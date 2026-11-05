@@ -1,0 +1,33 @@
+{
+ "nome": "Caleidoscópio",
+ "desc": "fatias espelhadas que giram sozinhas",
+ "de": [
+  "sortidos/Caleidoscopio.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Fatias.frag",
+   "opacity": 1.0,
+   "fx": {
+    "quantos": 0.3,
+    "giro": 0.5
+   },
+   "mod": {
+    "giro": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 32,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r4"
+    }
+   }
+  }
+ ]
+}

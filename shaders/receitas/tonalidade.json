@@ -1,0 +1,32 @@
+{
+ "nome": "Tonalidade",
+ "desc": "pinta com a cor do TOM da música (círculo das quintas)",
+ "de": [
+  "sortidos/Tonalidade.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Tingir.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.5,
+    "matiz": 0.5
+   },
+   "mod": {
+    "matiz": {
+     "b": [
+      "key_hue"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 500,
+      "r": 2000
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r19"
+    }
+   }
+  }
+ ]
+}

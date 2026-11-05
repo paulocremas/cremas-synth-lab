@@ -1,0 +1,32 @@
+{
+ "nome": "Grão de filme",
+ "desc": "grão que cresce com a presença",
+ "de": [
+  "sortidos/Grao.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Grao.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.3,
+    "tamanho": 0.2
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "presence"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.15,
+     "hi": 0.7,
+     "id": "r10"
+    }
+   }
+  }
+ ]
+}

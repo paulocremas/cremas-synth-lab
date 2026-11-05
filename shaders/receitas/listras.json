@@ -1,0 +1,33 @@
+{
+ "nome": "Listras",
+ "desc": "faixas que correm por cima; aparecem com o agudo",
+ "de": [
+  "sortidos/Listras.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Listras.frag",
+   "opacity": 1.0,
+   "fx": {
+    "quantos": 0.3,
+    "angulo": 0.0,
+    "velocidade": 0.3
+   },
+   "mod": {
+    "opacity": {
+     "b": [
+      "treble_hi"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.0,
+     "hi": 0.7,
+     "id": "r11"
+    }
+   }
+  }
+ ]
+}

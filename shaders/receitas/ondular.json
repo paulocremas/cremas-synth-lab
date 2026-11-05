@@ -1,0 +1,33 @@
+{
+ "nome": "Ondular",
+ "desc": "bandeira; o médio-grave aumenta a onda",
+ "de": [
+  "sortidos/Ondular.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Onda.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.3,
+    "tamanho": 0.4,
+    "velocidade": 0.4
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "lowmid"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.1,
+     "hi": 0.7,
+     "id": "r12"
+    }
+   }
+  }
+ ]
+}

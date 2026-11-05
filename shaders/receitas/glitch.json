@@ -1,0 +1,62 @@
+{
+ "nome": "Glitch",
+ "desc": "blocos na batida, cor desencaixando no grave, degraus de cor",
+ "de": [
+  "default/Glitch.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Blocos.frag",
+   "opacity": 1.0,
+   "fx": {
+    "tamanho": 0.0
+   },
+   "mod": {
+    "tamanho": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.25
+     },
+     "lo": 0.0,
+     "hi": 0.6,
+     "id": "r36"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Separar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.2,
+    "angulo": 0.0
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "subbass"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.0,
+     "hi": 0.7,
+     "id": "r37"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Niveis.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.3
+   }
+  }
+ ]
+}

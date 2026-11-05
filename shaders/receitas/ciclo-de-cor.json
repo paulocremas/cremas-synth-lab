@@ -1,0 +1,40 @@
+{
+ "nome": "Ciclo de cor",
+ "desc": "a roda de cores anda sozinha (Matiz + controlador “anda”)",
+ "de": [
+  "sortidos/CicloDeCor.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Matiz.frag",
+   "opacity": 1.0,
+   "fx": {
+    "giro": 0.0
+   },
+   "mod": {
+    "giro": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 16,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r5",
+     "nome": "anda"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Saturar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "saturacao": 0.6
+   }
+  }
+ ]
+}

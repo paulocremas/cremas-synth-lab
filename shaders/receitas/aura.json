@@ -1,0 +1,56 @@
+{
+ "nome": "Aura",
+ "desc": "halo de luz que cresce com o médio-grave, com a cor andando",
+ "de": [
+  "default/Aura.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Brilhar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.6,
+    "limiar": 0.4,
+    "tamanho": 1.0
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "lowmid"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.2,
+     "hi": 1.0,
+     "id": "r26"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Matiz.frag",
+   "opacity": 0.5,
+   "fx": {
+    "giro": 0.0
+   },
+   "mod": {
+    "giro": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 32,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r27"
+    }
+   }
+  }
+ ]
+}

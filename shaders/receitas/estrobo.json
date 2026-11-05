@@ -1,0 +1,33 @@
+{
+ "nome": "Estrobo",
+ "desc": "clarão na batida (Luz + controlador “pulsa”)",
+ "de": [
+  "sortidos/Estrobo.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Luz.frag",
+   "opacity": 1.0,
+   "fx": {
+    "brilho": 0.5,
+    "contraste": 0.5
+   },
+   "mod": {
+    "brilho": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.25
+     },
+     "lo": 0.5,
+     "hi": 1.0,
+     "id": "r7"
+    }
+   }
+  }
+ ]
+}

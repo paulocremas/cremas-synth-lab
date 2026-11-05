@@ -1,0 +1,27 @@
+{
+ "nome": "Campo de fluido",
+ "desc": "a imagem vira relevo que escorre, pintado por uma paleta",
+ "de": [
+  "default/CampoDeFluido.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Fluido.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.5,
+    "direcao": 0.375,
+    "rastro": 0.5
+   }
+  },
+  {
+   "file": "presets/atomos/Paleta.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.8,
+    "matiz": 0.0,
+    "paleta": 0.375
+   }
+  }
+ ]
+}

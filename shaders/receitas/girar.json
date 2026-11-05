@@ -1,0 +1,35 @@
+{
+ "nome": "Girar",
+ "desc": "gira devagar e dá um tranco na batida",
+ "de": [
+  "sortidos/Girar.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Rodar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "giro": 0.5,
+    "zoom": 0.6,
+    "velocidade": 0.55
+   },
+   "mod": {
+    "giro": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.5
+     },
+     "lo": 0.5,
+     "hi": 0.62,
+     "id": "r8",
+     "nome": "pulsa"
+    }
+   }
+  }
+ ]
+}

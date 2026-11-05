@@ -1,0 +1,109 @@
+{
+ "nome": "Caos",
+ "desc": "o antigo Caos (e os retratos Silhueta / TipoFumaça) em átomos: onda, cor andando, pontos e brilho",
+ "de": [
+  "default/Caos.frag",
+  "default/Silhueta.frag",
+  "default/TipoFumaca.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Onda.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.3,
+    "tamanho": 0.6,
+    "velocidade": 0.3
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "lowmid"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.1,
+     "hi": 0.6,
+     "id": "r28"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Matiz.frag",
+   "opacity": 1.0,
+   "fx": {
+    "giro": 0.0
+   },
+   "mod": {
+    "giro": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 16,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r29",
+     "nome": "anda"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Pontos.frag",
+   "opacity": 1.0,
+   "fx": {
+    "quantos": 0.4,
+    "tamanho": 0.2,
+    "velocidade": 0.3
+   },
+   "mod": {
+    "opacity": {
+     "b": [
+      "highmid"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.2,
+     "hi": 1.0,
+     "id": "r30"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Brilhar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.4,
+    "limiar": 0.6,
+    "tamanho": 0.5
+   },
+   "mod": {
+    "forca": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.5
+     },
+     "lo": 0.2,
+     "hi": 0.9,
+     "id": "r31",
+     "nome": "pulsa"
+    }
+   }
+  }
+ ]
+}

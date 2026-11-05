@@ -187,6 +187,16 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - Elemento recriado a cada SSE perde clique/pointer capture — atualizar no lugar.
 - Classe no `body` não pode colidir com classe de componente (blackout = `body.blackout`, não `.blk`).
 
+- **Controlador** (dash5, 2026-11-04): o movimento com corpo no canvas = item da pilha `~ctl` do BINDINGS `{file: 'ctl', id, xy,
+  mod: {sinal}}` (id = o do movimento); o knob ligado guarda a receita + a faixa (`mod[knob].id`), o motor não muda. `syncCtls`
+  cria um por movimento; cabo tracejado até a altura do knob (`cvEnd`). Átomo não tem cor/giro/som dentro: os Clássicos viraram
+  RECEITAS (`shaders/receitas/*.json` → `/receitas`, `recipeItems`) e saíram da biblioteca (cena antiga roda o `.frag` velho).
+- **Saída "por cima do PRISMA"** (monitor = `dash_data.PIN_MON` `'@topo'`): janela sempre no topo (`plat.keep_on_top`: wmctrl
+  `above` | HWND_TOPMOST) ancorada no dash — sobre o painel PROGRAMA ou num canto (`pin = {box (px de tela, o dash mede), onde,
+  tam, aspect do palco}` → `dash_data.pin_rect`); o dash remede a cada 0,5 s e, se só o lugar mudou, o native MOVE a janela
+  (`pygame._sdl2` Window.position) sem reabrir o GL.
+- **Limiar por faixa** (coluna do mixer de áudio): `tuning.BAND_GATE = {nome: {th, m}}` (`/band-gate`, `dash_data.band_gate`):
+  `ativa` = gate (abaixo vale 0), `teto` = limite; amp + 8 faixas (o kick tem `KICK_THRESHOLD`).
 - Faixas de áudio: nível = magnitude / teto da PRÓPRIA faixa (`named_band_levels`); o teto nunca cai abaixo de
   `BAND_FLOOR` (0.25, `getattr` no tuning) × o pico de LONGO prazo dela (`BAND_LONG_DECAY`) — sem esse piso,
   faixa sem som amplificava o próprio chiado até acender.

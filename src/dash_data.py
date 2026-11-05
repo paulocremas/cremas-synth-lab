@@ -282,6 +282,73 @@ def img_mod_levels(image):
 LFO_SHAPES = ('sin', 'tri', 'saw', 'sq', 'rnd', 'sh', 'passos')   # sh = acaso SEGURADO (S&H); passos = sequencia 'st'
 
 
+PIN_MON = '@topo'   # SAIDA "por cima do PRISMA" (2026-11-04): janela sempre no topo, ancorada no dash (no lugar do monitor)
+PIN_SPOTS = ('programa', 'se', 'sw', 'ne', 'nw')   # sobre o painel PROGRAMA | canto da janela do dash (sudeste, sudoeste...)
+
+
+def norm_pin(p):
+    """{box: [x, y, w, h] px de TELA (o PROGRAMA ou a janela do dash, medido pelo dash), onde, tam 0.1..0.8, aspect} | None."""
+    if not isinstance(p, dict):
+        return None
+    try:
+        box = [int(round(float(v))) for v in p['box']][:4]
+        aspect = max(0.2, min(8.0, float(p.get('aspect') or 16 / 9)))
+        tam = max(0.1, min(0.8, float(p.get('tam') or 0.3)))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if len(box) != 4 or box[2] < 40 or box[3] < 40:
+        return None
+    return {'box': box, 'onde': p.get('onde') if p.get('onde') in PIN_SPOTS else 'programa', 'tam': round(tam, 3), 'aspect': round(aspect, 4)}
+
+
+def pin_rect(p):
+    """Onde a janela FIXADA fica (x, y, w, h) em px de tela. programa = o maior retangulo no aspecto da saida dentro do painel
+    (centrado: a saida de verdade, a 60 fps, no lugar da previa); canto = largura tam x a do dash, 16 px da borda."""
+    p = norm_pin(p) or {'box': [0, 0, 1280, 720], 'onde': 'se', 'tam': 0.3, 'aspect': 16 / 9}
+    x, y, w, h = p['box']
+    a = p['aspect']
+    if p['onde'] == 'programa':
+        ww, hh = (w, w / a) if w / a <= h else (h * a, h)
+        ww, hh = max(160, int(ww)), max(90, int(hh))
+        return x + (w - ww) // 2, y + (h - hh) // 2, ww, hh
+    ww = max(160, int(w * p['tam']))
+    hh = max(90, int(ww / a))
+    m = 16
+    px = x + w - ww - m if p['onde'] in ('se', 'ne') else x + m
+    py = y + h - hh - m if p['onde'] in ('se', 'sw') else y + m
+    return px, py, ww, hh
+
+
+GATE_MODES = ('ativa', 'teto')   # LIMIAR da faixa de audio (dash: coluna do mixer): ativa = gate, teto = limite
+
+
+def band_gate(v, g):
+    """LIMIAR de uma faixa de audio (tuning.BAND_GATE[nome] = {th, m}) no nivel 0..1 dela, como no mixer de som:
+    m 'ativa' (gate) = abaixo do limiar vale 0, acima passa igual (th 0 = sempre passa);
+    m 'teto' (limite) = nunca passa do limiar (th 1 = sem teto). Sem g = o nivel."""
+    if not g:
+        return v
+    th = float(g.get('th', 0.0))
+    return min(v, th) if g.get('m') == 'teto' else (v if v >= th else 0.0)
+
+
+def norm_band_gate(d, names):
+    """{nome: {th, m}} do dash -> so' faixas conhecidas, th 0..1 (3 casas), m em GATE_MODES; neutro (ativa 0 / teto 1) sai."""
+    out = {}
+    for n in names:
+        g = (d or {}).get(n)
+        if not isinstance(g, dict):
+            continue
+        try:
+            th = round(max(0.0, min(1.0, float(g.get('th', 0.0)))), 3)
+        except (TypeError, ValueError):
+            continue
+        m = g.get('m') if g.get('m') in GATE_MODES else 'ativa'
+        if (m == 'ativa' and th > 0) or (m == 'teto' and th < 1):
+            out[n] = {'th': th, 'm': m}
+    return out
+
+
 def lfo(p, bpos):
     """Valor 0..1 de um LFO no TEMPO da musica. p = {f: forma (LFO_SHAPES), r: batidas por ciclo, ph: fase
     0..1}; bpos = batidas desde um '1' (continuo; sem tempo detectado o native conta a 120 BPM). sin/tri
@@ -813,6 +880,13 @@ def resolve_mirrors(bindings):
 
 
 if __name__ == '__main__':  # self-check (roda: python dash_data.py)
+    assert pin_rect({'box': [100, 50, 400, 400], 'onde': 'programa', 'aspect': 2}) == (100, 150, 400, 200), 'fixada: cabe no PROGRAMA'
+    assert pin_rect({'box': [0, 0, 1000, 800], 'onde': 'se', 'tam': 0.3, 'aspect': 1.5}) == (684, 584, 300, 200), 'fixada: canto sudeste'
+    assert pin_rect({'box': [0, 0, 1000, 800], 'onde': 'nw', 'tam': 0.3, 'aspect': 1.5})[:2] == (16, 16) and norm_pin({'box': [1, 2]}) is None
+    assert band_gate(0.3, None) == 0.3 and band_gate(0.3, {'th': 0.4, 'm': 'ativa'}) == 0.0 and band_gate(0.5, {'th': 0.4}) == 0.5, 'limiar ativa = gate'
+    assert band_gate(0.9, {'th': 0.6, 'm': 'teto'}) == 0.6 and band_gate(0.2, {'th': 0.6, 'm': 'teto'}) == 0.2, 'limiar teto = limite'
+    assert norm_band_gate({'Air': {'th': 2, 'm': 'x'}, 'amp': {'th': 1, 'm': 'teto'}, 'lixo': {'th': .5}, 'kick': {'th': 0}}, ('Air', 'amp', 'kick')) \
+        == {'Air': {'th': 1.0, 'm': 'ativa'}}, 'limiar: so\' faixa conhecida, neutro sai'
     # GRAFO: a cena antiga vira saida 1 com as caixas no ar, na mesma ordem; ja' migrada = a mesma lista
     v5 = [{'file': 'webcam:/dev/video0', 'id': 'c1', 'xy': [0, 0], 'off': 1}, {'file': '@c1', 'id': 'c2', 'xy': [9, 0], 'opacity': 0.5,
           'blend': 'soma', 'rect': [0, 0, 0.5, 0.5]}, {'file': 'a.png', 'xy': [0, 99], 'mod': {'opacity': {'b': ['kick']}}}]

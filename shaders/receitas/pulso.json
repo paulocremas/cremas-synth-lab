@@ -1,0 +1,60 @@
+{
+ "nome": "Pulso",
+ "desc": "clarão e anel na batida",
+ "de": [
+  "default/Pulso.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Luz.frag",
+   "opacity": 1.0,
+   "fx": {
+    "brilho": 0.5,
+    "contraste": 0.5
+   },
+   "mod": {
+    "brilho": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.5
+     },
+     "lo": 0.5,
+     "hi": 0.8,
+     "id": "r40",
+     "nome": "pulsa"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Gota.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.0,
+    "tamanho": 0.6,
+    "velocidade": 0.6
+   },
+   "mod": {
+    "forca": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.5
+     },
+     "lo": 0.0,
+     "hi": 0.8,
+     "id": "r41",
+     "nome": "pulsa"
+    }
+   }
+  }
+ ]
+}

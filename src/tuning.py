@@ -20,6 +20,8 @@ HZ_OVERLAP = 0
 BANDS_ENABLED = 1
 # BANDS_OFF: faixas desligadas UMA a UMA (botao na coluna da aba Audio): nomes + "kick" = 0 pro shader/♪
 BANDS_OFF = []
+# BAND_GATE: LIMIAR por faixa (coluna do mixer de audio): {nome: {th, m}}; m "ativa" = gate (abaixo vale 0), "teto" = limite
+BAND_GATE = {}
 
 # OUT_ANALYSIS_ENABLED: liga a leitura da imagem sintetizada (pos-shader) pros mesmos
 # medidores do Source Image (cor dominante, brilho, grids, histogramas), ~5x/s — tab

@@ -1,0 +1,25 @@
+{
+ "nome": "Líquido",
+ "desc": "a imagem ondula como água",
+ "de": [
+  "default/Liquido.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Onda.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.5,
+    "tamanho": 0.7,
+    "velocidade": 0.3
+   }
+  },
+  {
+   "file": "presets/atomos/Desfocar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "tamanho": 0.05
+   }
+  }
+ ]
+}

@@ -1,0 +1,33 @@
+{
+ "nome": "Brilho",
+ "desc": "o claro vaza luz em volta; o médio-agudo acende",
+ "de": [
+  "sortidos/Brilho.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Brilhar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.5,
+    "limiar": 0.6,
+    "tamanho": 0.4
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "highmid"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.2,
+     "hi": 1.0,
+     "id": "r3"
+    }
+   }
+  }
+ ]
+}

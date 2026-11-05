@@ -1,0 +1,32 @@
+{
+ "nome": "RGB split",
+ "desc": "vermelho e azul desencaixam no grave",
+ "de": [
+  "sortidos/RGBSplit.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Separar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.3,
+    "angulo": 0.0
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "subbass"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.0,
+     "hi": 0.6,
+     "id": "r16"
+    }
+   }
+  }
+ ]
+}

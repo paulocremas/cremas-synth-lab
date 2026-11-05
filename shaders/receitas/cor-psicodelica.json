@@ -1,0 +1,63 @@
+{
+ "nome": "Cor psicodélica",
+ "desc": "roda de cores andando + paleta que segue o médio",
+ "de": [
+  "default/CorPsicodelica.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Matiz.frag",
+   "opacity": 1.0,
+   "fx": {
+    "giro": 0.0
+   },
+   "mod": {
+    "giro": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 8,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r32"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Saturar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "saturacao": 0.8
+   }
+  },
+  {
+   "file": "presets/atomos/Paleta.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.35,
+    "matiz": 0.0,
+    "paleta": 0.875
+   },
+   "mod": {
+    "matiz": {
+     "b": [
+      "midrange"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r33"
+    }
+   }
+  }
+ ]
+}

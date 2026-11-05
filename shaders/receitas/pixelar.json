@@ -1,0 +1,31 @@
+{
+ "nome": "Pixelar",
+ "desc": "blocos que crescem com o grave",
+ "de": [
+  "sortidos/Pixelar.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Blocos.frag",
+   "opacity": 1.0,
+   "fx": {
+    "tamanho": 0.2
+   },
+   "mod": {
+    "tamanho": {
+     "b": [
+      "subbass"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.0,
+     "hi": 0.7,
+     "id": "r14"
+    }
+   }
+  }
+ ]
+}

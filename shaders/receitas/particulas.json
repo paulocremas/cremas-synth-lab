@@ -1,0 +1,33 @@
+{
+ "nome": "Partículas",
+ "desc": "pontinhos subindo; aparecem com o médio-agudo",
+ "de": [
+  "default/Particulas.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Pontos.frag",
+   "opacity": 1.0,
+   "fx": {
+    "quantos": 0.4,
+    "tamanho": 0.2,
+    "velocidade": 0.3
+   },
+   "mod": {
+    "opacity": {
+     "b": [
+      "highmid"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.3,
+     "hi": 1.0,
+     "id": "r39"
+    }
+   }
+  }
+ ]
+}

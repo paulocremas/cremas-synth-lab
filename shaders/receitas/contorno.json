@@ -1,0 +1,65 @@
+{
+ "nome": "Contorno",
+ "desc": "linhas das bordas em neon: Luz escurece o fundo, Contornar desenha (segue o agudo), Tingir pinta e a cor anda sozinha",
+ "de": [
+  "sortidos/Contorno.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Luz.frag",
+   "opacity": 1.0,
+   "fx": {
+    "brilho": 0.3,
+    "contraste": 0.5
+   }
+  },
+  {
+   "file": "presets/atomos/Contornar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "limiar": 0.15,
+    "borda": 0.5
+   },
+   "mod": {
+    "opacity": {
+     "b": [
+      "treble_hi"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.3,
+     "hi": 1.0,
+     "id": "r1"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Tingir.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.8,
+    "matiz": 0.5
+   },
+   "mod": {
+    "matiz": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 16,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r2",
+     "nome": "anda"
+    }
+   }
+  }
+ ]
+}

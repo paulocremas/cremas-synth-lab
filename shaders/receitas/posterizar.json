@@ -1,0 +1,31 @@
+{
+ "nome": "Posterizar",
+ "desc": "cores em degraus, mais duros no médio",
+ "de": [
+  "sortidos/Posterizar.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Niveis.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.5
+   },
+   "mod": {
+    "forca": {
+     "b": [
+      "midrange"
+     ],
+     "modo": "segue",
+     "seg": {
+      "a": 10,
+      "r": 200
+     },
+     "lo": 0.2,
+     "hi": 0.8,
+     "id": "r15"
+    }
+   }
+  }
+ ]
+}

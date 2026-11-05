@@ -1,0 +1,35 @@
+{
+ "nome": "Paleta cíclica",
+ "desc": "troca as cores por uma paleta que anda sozinha",
+ "de": [
+  "sortidos/Paleta.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Paleta.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 1.0,
+    "matiz": 0.0,
+    "paleta": 0.125
+   },
+   "mod": {
+    "matiz": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 16,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r13",
+     "nome": "anda"
+    }
+   }
+  }
+ ]
+}

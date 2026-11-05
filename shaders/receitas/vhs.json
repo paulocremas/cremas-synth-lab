@@ -1,0 +1,49 @@
+{
+ "nome": "VHS",
+ "desc": "fita gasta: cor desencaixada (estoura na batida), grão e um pouco de borrão",
+ "de": [
+  "sortidos/VHS.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Separar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.3,
+    "angulo": 0.0
+   },
+   "mod": {
+    "forca": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.5
+     },
+     "lo": 0.2,
+     "hi": 0.8,
+     "id": "r22",
+     "nome": "pulsa"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Grao.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.2,
+    "tamanho": 0.3
+   }
+  },
+  {
+   "file": "presets/atomos/Desfocar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "tamanho": 0.08
+   }
+  }
+ ]
+}

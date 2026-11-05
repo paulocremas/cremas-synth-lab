@@ -432,9 +432,12 @@ def resolve_output(cfg):
     """cfg: {'monitor': nome ou '', 'fullscreen': bool, 'w': int, 'h': int} -> (win_w, win_h,
     pos, flags, label). Unifica o que antes era so --monitor/--fullscreen/janela default no
     arranque — agora tambem serve pra reconfigurar ao vivo (barra "saida" no dash)."""
+    flags = pygame.OPENGL | pygame.DOUBLEBUF
+    if cfg.get('monitor') == dash_data.PIN_MON:   # POR CIMA DO PRISMA: sempre no topo, ancorada no dash (dash_data.pin_rect)
+        x, y, win_w, win_h = dash_data.pin_rect(cfg.get('pin'))
+        return win_w, win_h, (x, y), flags | pygame.NOFRAME, 'por cima do PRISMA'
     monitors = get_monitors()
     mon = next((m for m in monitors if m['name'] == cfg.get('monitor')), None) if cfg.get('monitor') else None
-    flags = pygame.OPENGL | pygame.DOUBLEBUF
     if cfg.get('fullscreen') and not mon:
         win_w, win_h = get_screen_size()
         pos = (0, 0)
@@ -500,8 +503,11 @@ def open_window(cfg):
         flags |= pygame.HIDDEN
     pygame.display.set_mode((win_w, win_h), flags)
     pygame.display.set_caption('PRISMA! · saída')
-    if cfg.get('fullscreen') and not label.startswith('telão virtual'):   # WM encolheria pro monitor real
+    if cfg.get('fullscreen') and not label.startswith('telão virtual') and cfg.get('monitor') != dash_data.PIN_MON:   # WM encolheria pro monitor real
         _wm_fullscreen()
+    if cfg.get('monitor') == dash_data.PIN_MON and not os.environ.get('PRISMA_HIDDEN'):
+        pygame.event.pump()   # mapeada antes do pedido ao WM
+        plat.keep_on_top(pygame.display.get_wm_info().get('window'))
     glViewport(0, 0, win_w, win_h)
 
     vbo = glGenBuffers(1)
@@ -548,12 +554,15 @@ def set_output(cfg):
     """cfg: {'monitor','fullscreen','w','h'} — o dash escreve aqui (aba Video, barra "saida");
     quem realmente reabre a janela e o main thread (dono do contexto GL), no proximo frame,
     quando ve state['output_req'] diferente do que esta aplicado agora (ver main())."""
-    state['output_req'] = {
+    req = {
         'monitor': str(cfg.get('monitor') or ''),
         'fullscreen': bool(cfg.get('fullscreen')),
         'w': int(cfg.get('w') or 0) or WIDTH,
         'h': int(cfg.get('h') or 0) or HEIGHT,
     }
+    if req['monitor'] == dash_data.PIN_MON:   # por cima do PRISMA: onde o dash mediu (painel PROGRAMA ou canto da janela dele)
+        req['fullscreen'], req['pin'] = False, dash_data.norm_pin(cfg.get('pin'))
+    state['output_req'] = req
 
 
 def pick_window(title=None):
@@ -2668,6 +2677,8 @@ def audio_thread(device):
             named_levels = named_band_levels(spectrum, freqs, fine_bands, band_peaks, band_peakdecay, band_long)
             # faixas DESLIGADAS no dash (botao na coluna, tuning.BANDS_OFF: nomes + 'kick') = 0 pro shader/♪
             off = {FREQ_BAND_UNIFORM.get(n, n) for n in getattr(tuning, 'BANDS_OFF', None) or ()}
+            # LIMIAR por faixa (coluna do mixer, tuning.BAND_GATE[nome] = {th, m}): ativa = gate, teto = limite (dash_data.band_gate)
+            gate = {FREQ_BAND_UNIFORM.get(n, n): g for n, g in (getattr(tuning, 'BAND_GATE', None) or {}).items()}
             for name, _, level in named_levels:
                 raw[FREQ_BAND_UNIFORM[name]] = level
             for k in smooth:
@@ -2682,7 +2693,7 @@ def audio_thread(device):
                 smooth[k] = smooth[k] * s + raw[k] * (1 - s)
                 # BANDS_ENABLED=0 so silencia o que alimenta o shader/dash ("final"); smooth[k]
                 # continua calculado (auto-gain/attack-release nao perdem o fio quando reativa)
-                state[k] = smooth[k] if (k not in FINE_BAND_KEYS or tuning.BANDS_ENABLED) and k not in off else 0.0
+                state[k] = dash_data.band_gate(smooth[k], gate.get(k)) if (k not in FINE_BAND_KEYS or tuning.BANDS_ENABLED) and k not in off else 0.0
 
             kick_chunk_count += 1
             kick_hit_now = False
@@ -3886,6 +3897,18 @@ def main():
         # troca de saida pedida pelo dash (monitor/tela cheia/dimensao, barra "saida" no topo)
         # — reabre a janela e regera vbo/tex/program (contexto GL pode ter sumido -> prog_cache
         # todo invalido, limpa)
+        req_ = state['output_req']
+        if req_ != out_cfg and req_.get('monitor') == out_cfg.get('monitor') == dash_data.PIN_MON:
+            # FIXADA que so' mudou de LUGAR (o dash andou, painel mudou de posicao): move a janela, sem reabrir o contexto GL
+            nx, ny, nw, nh = dash_data.pin_rect(req_.get('pin'))
+            if (nw, nh) == (WIN_W, WIN_H):
+                try:
+                    from pygame._sdl2.video import Window as _SdlWin
+                    _SdlWin.from_display_module().position = (nx, ny)
+                    out_cfg, out_pos = dict(req_), (nx, ny)
+                    state['output'].update(pos=[nx, ny])
+                except (ImportError, pygame.error, AttributeError):
+                    pass
         if state['output_req'] != out_cfg:
             out_cfg = dict(state['output_req'])
             (WIN_W, WIN_H, out_pos, out_mode, vbo, tex, tex_prev,
@@ -5323,6 +5346,8 @@ def _selfcheck():
     MEDIA_DIR = _md0
     print('native_synth overlay self-check ok')
     lv = {'subbass': 0.5, 'air': 0.9, 'kick': 0.0}
+    assert resolve_output({'monitor': dash_data.PIN_MON, 'pin': {'box': [100, 50, 400, 400], 'onde': 'programa', 'aspect': 2}})[:3] \
+        == (400, 200, (100, 150)), 'saida POR CIMA DO PRISMA: no painel PROGRAMA, sem tela cheia'
     assert _mod_value(0.3, None, lv) == 0.3, '♪ desligado = o knob'
     assert abs(_mod_value(0.3, {'b': ['subbass'], 'lo': 0.2, 'hi': 0.6}, lv) - 0.4) < 1e-9, '♪ = lo + (hi-lo) * nivel'
     assert abs(_mod_value(0.3, {'b': ['subbass', 'air'], 'lo': 1.0, 'hi': 0.0}, lv) - 0.1) < 1e-9, '♪ mais forte vale; hi<lo inverte'

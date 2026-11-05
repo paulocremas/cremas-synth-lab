@@ -1,0 +1,49 @@
+{
+ "nome": "Tinta",
+ "desc": "banho de cor na batida; a cor anda sozinha",
+ "de": [
+  "sortidos/Tinta.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Tingir.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.3,
+    "matiz": 0.0
+   },
+   "mod": {
+    "forca": {
+     "b": [],
+     "modo": "disparo",
+     "ev": {
+      "src": "kick"
+     },
+     "env": {
+      "a": 0,
+      "d": 0.5
+     },
+     "lo": 0.1,
+     "hi": 0.8,
+     "id": "r17",
+     "nome": "pulsa"
+    },
+    "matiz": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "saw",
+      "r": 16,
+      "ph": 0
+     },
+     "lo": 0.0,
+     "hi": 1.0,
+     "id": "r18",
+     "nome": "anda"
+    }
+   }
+  }
+ ]
+}

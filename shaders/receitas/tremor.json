@@ -1,0 +1,56 @@
+{
+ "nome": "Tremor",
+ "desc": "câmera na mão: dois controladores “acaso” empurram x e y; o zoom esconde a borda",
+ "de": [
+  "sortidos/Tremor.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Mover.frag",
+   "opacity": 1.0,
+   "fx": {
+    "x": 0.5,
+    "y": 0.5
+   },
+   "mod": {
+    "x": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "sh",
+      "r": 0.25,
+      "ph": 0
+     },
+     "lo": 0.48,
+     "hi": 0.52,
+     "id": "r20"
+    },
+    "y": {
+     "b": [
+      "lfo"
+     ],
+     "modo": "loop",
+     "lfo": {
+      "f": "sh",
+      "r": 0.25,
+      "ph": 0.5
+     },
+     "lo": 0.48,
+     "hi": 0.52,
+     "id": "r21"
+    }
+   }
+  },
+  {
+   "file": "presets/atomos/Rodar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "giro": 0.5,
+    "zoom": 0.54,
+    "velocidade": 0.5
+   }
+  }
+ ]
+}

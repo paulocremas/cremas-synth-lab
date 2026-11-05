@@ -1,0 +1,25 @@
+{
+ "nome": "Fumaça",
+ "desc": "a imagem vira fumaça que gira (Fluido em redemoinho) e embaça",
+ "de": [
+  "default/Fumaca.frag"
+ ],
+ "items": [
+  {
+   "file": "presets/atomos/Fluido.frag",
+   "opacity": 1.0,
+   "fx": {
+    "forca": 0.6,
+    "direcao": 0.625,
+    "rastro": 0.7
+   }
+  },
+  {
+   "file": "presets/atomos/Desfocar.frag",
+   "opacity": 1.0,
+   "fx": {
+    "tamanho": 0.2
+   }
+  }
+ ]
+}

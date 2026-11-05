@@ -125,6 +125,13 @@ ducking; várias fontes = a mais forte) · movimento = fonte → modo → forma 
 grade · mesmo id = o mesmo movimento. `mod[knob] = {b, lo, hi, modo: loop|disparo|segue, lfo, ev: {src, cond}, env,
 seg, q, id, nome}` (`native_synth._mod_value`). `// mod: knob=preset` só sugere (`dash_data.MOV_PRESETS`).
 
+## 10b. Quem MEXE no valor é outro nó (2026-11-04)
+Cor é de átomo de cor (Matiz, Tingir, Paleta, Saturar); quem desenha/entorta não tem `matiz`, `giro` de cor nem som dentro
+(o Contornar desenha branco, o Mover só empurra). Valor que anda sozinho = um **CONTROLADOR** no canvas (dash v5: o
+movimento com corpo — LFO, segue o grave, envelope… — com um cabo tracejado até o knob; pilha `~ctl`, `mod[knob].id` = o id
+dele). Os presets antigos (`sortidos/`, `default/`) viraram **receitas** (`shaders/receitas/*.json`: corrente de átomos +
+movimentos) e saíram da biblioteca; as cenas antigas continuam rodando o `.frag` velho.
+
 ## 11. Verificação
 - `atom_problems`: cabeçalho, ≤ 3 knobs, nada do prelúdio redeclarado, só imagem + relógio, `// bipolar:`/`// ritmo:`
   em knob que existe, `// estado:` com `u_vista` e sem `u_time`, `E()`/`u_state` só com estado.
@@ -135,7 +142,7 @@ seg, q, id, nome}` (`native_synth._mod_value`). `// mod: knob=preset` só sugere
   **Falhou = buraco na regra, não "combinação proibida".** `python src/matriz.py <pasta>` grava um PNG por átomo.
 
 ## Os átomos
-Filtros: Afiar, Blocos, Brilhar, Desfocar, Deslocar, Dobrar, Espelhar, Fatias, Grão, Inverter, Limiar, Luz, Matiz,
-Misturar, Máscara, Níveis, Onda, Paleta, Polar, Rodar, Saturar, Tingir. Traço/gerador: Contornar, Listras, Pontos.
+Filtros: Afiar, Blocos, Brilhar, Desfocar, Deslocar, Dobrar, Espelhar, Esticar, Fatias, Gota, Grão, Inverter, Limiar,
+Luz, Matiz, Misturar, Máscara, Mover, Níveis, Onda, Paleta, Polar, Rodar, Saturar, Separar, Tingir, Vinheta. Traço/gerador: Contornar, Listras, Pontos.
 Matéria: Ruído, Rampa, Células. Com estado: Feedback, Reação (Gray-Scott), Fluido (Stable Fluids), Movimento (fluxo
 óptico). Máscaras: §9.
