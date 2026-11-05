@@ -750,6 +750,14 @@ if __name__ == '__main__':  # self-check das partes puras (roda em qualquer SO)
                                  f'p=subprocess.Popen({child_cmd(["sleep", "30"])!r});print(p.pid,flush=True);time.sleep(30)'],
                                 stdout=subprocess.PIPE, text=True)
         _filho = int(_pai.stdout.readline())
+        for _ in range(100):   # so' mata o pai DEPOIS do setpriv armar o pdeathsig e virar o sleep (antes = corrida: o sinal
+            try:               # nunca chega; foi o que derrubava o CI de vez em quando)
+                with open(f'/proc/{_filho}/comm') as f:
+                    if f.read().strip() == 'sleep':
+                        break
+            except OSError:
+                break
+            time.sleep(0.02)
         _pai.kill(); _pai.wait()
         def _vivo(pid):   # ZUMBI conta como morto: no CI ninguem recolhe o filho na hora e o kill(pid, 0) ainda acha ele
             try:
