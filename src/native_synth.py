@@ -3380,6 +3380,52 @@ void main() {
 }
 """
 LAYER_BLEND_UNIT_BASE, LAYER_BLEND_UNIT_LAYER, LAYER_BLEND_UNIT_MASK = 5, 6, 7   # fora das do preset (0..4)
+
+# EM CIMA (PLANO_CONVERSA.md §2): o atomo solto EM CIMA de outro age so' na MARCA dele = o que ele fez. Tudo em orientacao
+# GL (como lt['layer'] e lt['src']), alfa DIRETO. op 0 = MARCA de um FILTRO: a saida dele onde ela difere da entrada (quem
+# desenha ja' tem a marca no alfa); op 1 = DENTRO (quem desenha em cima: alpha lock, a cobertura nao cresce); op 2 = TROCA
+# com opacidade (cor, espaco, memoria: a saida do de cima vale u_a). Junta de volta POR CIMA da entrada (u_aout 3).
+STACK_SRC = """
+#ifdef GL_ES
+precision mediump float;
+#endif
+uniform vec2 u_res;
+uniform sampler2D u_in;    // op 0: a ENTRADA do de baixo
+uniform sampler2D u_lay;   // a marca (op 0: a saida do de baixo)
+uniform sampler2D u_top;   // a saida do de cima
+uniform int u_op;
+uniform float u_a;
+uniform vec2 u_mk;         // dash_data.MARCA_LO, MARCA_HI
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_res;
+    vec4 L = texture2D(u_lay, uv);
+    if (u_op == 0) {
+        vec4 I = texture2D(u_in, uv);
+        vec4 d = abs(vec4(L.rgb * L.a, L.a) - vec4(I.rgb * I.a, I.a));
+        gl_FragColor = vec4(L.rgb, L.a * smoothstep(u_mk.x, u_mk.y, max(max(d.r, d.g), max(d.b, d.a))));
+        return;
+    }
+    vec4 T = texture2D(u_top, uv);
+    if (u_op == 1) {
+        gl_FragColor = vec4(mix(L.rgb, T.rgb, clamp(T.a * u_a, 0.0, 1.0)), L.a);
+        return;
+    }
+    float oa = mix(L.a, T.a, u_a);
+    vec3 c = L.rgb * L.a * (1.0 - u_a) + T.rgb * T.a * u_a;
+    gl_FragColor = vec4(oa > 0.0 ? c / oa : vec3(0.0), oa);
+}
+"""
+STACK_UNITS = (5, 6, 7)   # u_in, u_lay, u_top (programa proprio: as mesmas do blend, religadas a cada uso)
+
+
+def build_stack_program():
+    p = build_program(STACK_SRC)
+    _use_basic(p)
+    u = _locs(p, 'u_res', 'u_in', 'u_lay', 'u_top', 'u_op', 'u_a', 'u_mk')
+    for n, unit in zip(('u_in', 'u_lay', 'u_top'), STACK_UNITS):
+        glUniform1i(u[n], unit)
+    glUniform2f(u['u_mk'], dash_data.MARCA_LO, dash_data.MARCA_HI)
+    return p, u
 POLY_UNIT = 8   # u_poly (_poly_tex) do LAYER_BLEND_SRC
 FULL_UV = (0.0, 0.0, 1.0, 1.0)
 
@@ -3461,7 +3507,7 @@ def make_layer_targets(w, h):
     old[0]/old[1] (a mistura da cena que SAI, desenhada viva durante a transicao) e cue[0]/cue[1] (a
     PROXIMA cena, so' quando a previa dela e' pedida). Recriado quando o
     tamanho muda (main)."""
-    texs = glGenTextures(13)
+    texs = glGenTextures(14)
     for t in texs:
         glBindTexture(GL_TEXTURE_2D, t)
         filt = GL_LINEAR if t in (texs[7], texs[11]) else GL_NEAREST
@@ -3471,7 +3517,7 @@ def make_layer_targets(w, h):
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt)
         if t in (texs[2], texs[3], texs[11]):   # a CORRENTE (src, chain) e' RGBA: o fio leva a transparencia (ATOMO §1)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, None)
-        elif t in (texs[4], texs[12]):   # 'layer' = saida da peca: ALFA = cobertura (ATOMO: traco/gerador) e 16F (ATOMO v2:
+        elif t in (texs[4], texs[12], texs[13]):   # 'layer' = saida da peca: ALFA = cobertura (ATOMO: traco/gerador) e 16F (ATOMO v2:
             # a vista de um estado, um degrade do Ruido, nao viram degrau antes do blend — que cai pra 8 bits com dither)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, None)
         else:
@@ -3481,7 +3527,8 @@ def make_layer_targets(w, h):
             'mask': texs[6],   # alpha da fonte da vez (WIDTH x HEIGHT, re-upado quando ela tem)
             'canvas': texs[7],
             'chain': texs[11],   # a CORRENTE virada topo->baixo (como os presets leem u_texture_0)
-            'layer2': texs[12]}  # par da 'layer' pros MODIFICADORES PARALELOS (_post_items)
+            'layer2': texs[12],  # par da 'layer' pros atomos EM CIMA (_post_items): a MARCA vai e volta entre as duas
+            'layer3': texs[13]}  # a saida do atomo EM CIMA (antes de juntar na marca: STACK_SRC)
 
 
 def build_fumaca_program():
@@ -3660,12 +3707,14 @@ def main():
         locs = _prog_locs(prog, manifest)
         locs['estado'] = dash_data.parse_estado(src) if dash_data.is_atom_path(rel) else None
         locs['troca'] = dash_data.atom_replaces(rel, src)   # FILTRO: substitui a entrada (TROCA); quem desenha vai POR CIMA
+        locs['marca'] = dash_data.atom_marca(rel, src)       # EM CIMA: 'mudanca' (filtro) = extrai a marca; 'alfa' = a saida como esta'
         prog_cache[lp] = (mt, prog, src, manifest, locs)
         state['output']['shader_status'] = 'ok'
         state['output'].pop('shader_error', None)
         return prog_cache[lp]
 
     blend_prog, blend_u = build_layer_blend_program()
+    stack_prog, stack_u = build_stack_program()
     map_prog, map_u = build_output_map_program()
     ltargets = [None]   # make_layer_targets(...) sob demanda (camada ativa ou transicao de set)
     poly_tex = [None, None]   # textura dos poligonos das telas (_poly_tex) + o que ela tem
@@ -3683,7 +3732,7 @@ def main():
             if ltargets[0]:
                 glDeleteFramebuffers(1, [ltargets[0]['fbo']])
                 glDeleteTextures([t for k in ('out', 'src', 'old', 'cue') for t in ltargets[0][k]] +
-                                 [ltargets[0][k] for k in ('layer', 'layer2', 'mask', 'canvas', 'chain')])
+                                 [ltargets[0][k] for k in ('layer', 'layer2', 'layer3', 'mask', 'canvas', 'chain')])
             if lane_out:
                 glDeleteTextures(list(lane_out.values()))
                 lane_out.clear()
@@ -3919,6 +3968,7 @@ def main():
             trans_cache.clear()          # contexto GL novo -> programas de transicao invalidos
             layer_bad.clear()            # camadas de shader recompilam no proximo frame
             blend_prog, blend_u = build_layer_blend_program()
+            stack_prog, stack_u = build_stack_program()
             map_prog, map_u = build_output_map_program()
             ltargets[0] = None           # FBO/texturas das camadas eram do contexto velho
             poly_tex[:] = [None, None]   # idem a dos poligonos
@@ -4190,6 +4240,19 @@ def main():
             glBindTexture(GL_TEXTURE_2D, layer)
             glDrawArrays(GL_TRIANGLES, 0, 3)
 
+        def stack_into(dst, op, lay, inp=0, top=0, a=1.0):
+            """EM CIMA (STACK_SRC): op 0 = marca de um filtro (lay = saida, inp = entrada); 1 = dentro; 2 = troca (top, a)."""
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0)
+            _use_basic(stack_prog)
+            glUniform2f(stack_u['u_res'], CMP_W, CMP_H)
+            glUniform1i(stack_u['u_op'], op)
+            glUniform1f(stack_u['u_a'], a)
+            for unit, t in zip(STACK_UNITS, (inp, lay, top)):
+                glActiveTexture(GL_TEXTURE0 + unit)
+                glBindTexture(GL_TEXTURE_2D, t)
+            glActiveTexture(GL_TEXTURE0)
+            glDrawArrays(GL_TRIANGLES, 0, 3)
+
         cbox = FULL_UV if omap else _canvas_box(WIN_W, WIN_H, FIT_W, FIT_H)   # canvas encaixado na janela (barras fora; telao: a mistura e' o canvas)
         scr_uv = _blend_scr(scr_rects)                  # telas (forma livre): fora delas fica preto
         poly_sig = [sh[4] for sh in scr_rects]          # poligonos -> u_poly (so' re-sobe se mudou)
@@ -4319,6 +4382,17 @@ def main():
                     glBindTexture(GL_TEXTURE_2D, ftex)
                 glActiveTexture(GL_TEXTURE0)
                 glBindTexture(GL_TEXTURE_2D, a_tex)
+
+            def bind_subject(bk, tframe, sjt):
+                """ASSUNTO (U2-Net) em QUALQUER atomo que le u_subject (PLANO_CONVERSA §9.3: declarar, nao proibir): liga e pede."""
+                if uniforms['subject_on'] < 0:
+                    return
+                if tframe is not None:
+                    subject_want[bk] = (time.time(), tframe)
+                glUniform1f(uniforms['subject_on'], 1.0 if sjt is not None else 0.0)
+                glActiveTexture(GL_TEXTURE0 + SUBJ_UNIT)
+                glBindTexture(GL_TEXTURE_2D, sjt[0] if sjt is not None else 0)
+                glActiveTexture(GL_TEXTURE0)
 
             def state_tex(w, h):
                 t = glGenTextures(1)
@@ -4543,6 +4617,7 @@ def main():
                     use_program(h)
                     set_uniforms(fxv, o.get('mod'), sk, trk_, seed=seed, vals=vals)
                     bind_inputs(o, a_tex, key, bk, tframe, ftex)
+                    bind_subject(bk, tframe, sjt)
                     if est:                                 # VISTA do estado (u_vista = 1): o que vai pro fio
                         glUniform1f(uniforms['vista'], 1.0)
                         glActiveTexture(GL_TEXTURE0 + STATE_UNIT)
@@ -4553,26 +4628,45 @@ def main():
                     if est:
                         glUniform1f(uniforms['vista'], 0.0)
                     cur_l = lt['layer']
-                    for pm in posts:                        # MODIFICADOR PARALELO (loop POS): age so' na saida DESTA peca
-                        ph = layer_program(pm['file'])
-                        if not ph:
-                            continue
+                    tops = []                               # EM CIMA (PLANO_CONVERSA §2): ligados, com opacidade e programa
+                    for pj, pm in enumerate(posts):
+                        pk = ('post', key, oj, pm.get('id')) if live else None
+                        pa = sv(pk and pk + ('a',), min(1.0, float(pm.get('opacity', 1.0))) * fx_amt, 0.0)
+                        om = (pm.get('mod') or {}).get('opacity')
+                        if om and pa > 0.002:
+                            pa = _mod_value(pa / max(fx_amt, 1e-3), om, state, trk_) * fx_amt
+                        ph = layer_program(pm['file']) if pa > 0.002 else None
+                        if ph:
+                            tops.append((pj, pm, pk, pa, ph))
+                    stacked = bool(tops)
+                    if stacked and h[4].get('marca') == 'mudanca':   # a MARCA de um FILTRO: a saida dele onde mudou a entrada
+                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                        stack_into(lt['layer2'], 0, lt['layer'], inp=lt['src'][si])
+                        cur_l = lt['layer2']
+                    for pj, pm, pk, pa, ph in tops:         # cada um age na MARCA (a cor, o espaco, a memoria dela)
                         alt = lt['layer2'] if cur_l == lt['layer'] else lt['layer']
-                        lw_, lh_ = lt['size']
-                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # 1) camada (com o ALFA do efeito) -> alt
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cur_l, 0)
-                        glBindTexture(GL_TEXTURE_2D, alt)
-                        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, lw_, lh_)
-                        blend_into(lt['chain'], cur_l, cur_l, 1.0, 0, flip=1)   # 2) a cor dela topo->baixo (como o atomo le)
-                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])   # 3) o modificador pinta SO' a cor; o alfa fica o do efeito
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, alt, 0)
+                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                        blend_into(lt['chain'], cur_l, cur_l, 1.0, 0, flip=1, aout=2)   # a marca topo->baixo, com o alfa (como o atomo le A)
+                        pfx, pseed = pm.get('fx') or {}, _atom_seed(pm, key, 200 + pj)
+                        pvals = pst = None
+                        if ph[4]['estado']:                 # com MEMORIA em cima: o rastro da marca (Feedback = a linha deixa rastro)
+                            pvals, pst = run_state(ph, pm, key, oj, pfx, pk, trk_, lt['chain'], pseed, (), live, bk, tframe, ftex)
+                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer3'], 0)
                         use_program(ph)
-                        set_uniforms(pm.get('fx') or {}, pm.get('mod'), ('post', key, oj, pm.get('id')) if live else None, trk_)
-                        glActiveTexture(GL_TEXTURE0)
-                        glBindTexture(GL_TEXTURE_2D, lt['chain'])
-                        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE)
+                        set_uniforms(pfx, pm.get('mod'), pk, trk_, seed=pseed, vals=pvals)
+                        bind_inputs(pm, lt['chain'], key, bk, tframe, ftex)
+                        bind_subject(bk, tframe, sjt)
+                        if pst is not None:
+                            glUniform1f(uniforms['vista'], 1.0)
+                            glActiveTexture(GL_TEXTURE0 + STATE_UNIT)
+                            glBindTexture(GL_TEXTURE_2D, pst)
+                            glActiveTexture(GL_TEXTURE0)
+                        glClear(GL_COLOR_BUFFER_BIT)
                         glDrawArrays(GL_TRIANGLES, 0, 3)
-                        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)
+                        if pst is not None:
+                            glUniform1f(uniforms['vista'], 0.0)
+                        stack_into(alt, 2 if ph[4].get('troca') else 1, cur_l, top=lt['layer3'], a=pa)   # quem desenha: DENTRO
                         cur_l = alt
                     mode = dash_server.LAYER_BLENDS.index(o['blend']) if o.get('blend') in dash_server.LAYER_BLENDS else 0
                     um = 0
@@ -4581,7 +4675,7 @@ def main():
                         glBindTexture(GL_TEXTURE_2D, sjt[0])
                         um = 2 if rg == 'subject' else 3
                     blend_into(lt['src'][1 - si], lt['src'][si], cur_l, a, mode, mask=um, mth=_subject_params(b), dith=1,
-                               aout=5 if h[4].get('troca') else 3)
+                               aout=5 if h[4].get('troca') and not stacked else 3)   # com algo EM CIMA: a marca POR CIMA da entrada
                     si = 1 - si
                     after_module(key, oj, o, lt['src'][si])
                 if mt_items:                            # MASCARA DA CAIXA (Matte TOP): atomos de mascara leem a ENTRADA

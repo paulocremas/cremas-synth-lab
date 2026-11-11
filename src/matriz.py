@@ -6,7 +6,9 @@ shaders/presets/atomos/ e' compilado COM o preludio (dash_data.atom_source) e re
   - todo par A -> B (B le o resultado de A composto na corrente) e todo atomo como entrada B de todo leitor de B;
   - TRANSPARENCIA (o fio leva o alfa): filtro nao fura a corrente opaca; entrada com vazio -> sem NaN, cor nao mexe na
     cobertura; junta como o motor (dash_data.atom_replaces: filtro = TROCA, quem desenha = POR CIMA);
-  - ESTADO: 300 passos com a entrada andando -> nao satura nem morre; limpar zera; todo filtro no loop RETORNO.
+  - ESTADO: 300 passos com a entrada andando -> nao satura nem morre; limpar zera; todo filtro no loop RETORNO;
+  - EM CIMA (PLANO_CONVERSA.md §2): todo par X ↑ Y (Y solto em cima de X age so' na MARCA de X): sem NaN; cor/luz em cima
+    deixa o FUNDO intacto (onde X nao mexeu sai a entrada); Y no neutro = X sozinho; com memoria em cima roda.
 Falhou = buraco no CONTRATO (ou o atomo quebra o contrato), nao "combinacao proibida".
 Sem GL (CI sem tela/GPU) -> run() devolve None e o selfcheck so' avisa. `python src/matriz.py [pasta]` roda
 sozinho e, com pasta, grava PNGs de cada atomo (olhar a forma)."""
@@ -165,11 +167,37 @@ def comp(base, layer, a=1.0, troca=True):
     return out
 
 
+def marca(inp, out):
+    """MARCA de um FILTRO (STACK_SRC op 0): a saida onde ela difere da entrada (pre-multiplicada, o maior canal)."""
+    d = np.abs(np.concatenate([out[..., :3] * out[..., 3:4], out[..., 3:4]], -1) -
+               np.concatenate([inp[..., :3] * inp[..., 3:4], inp[..., 3:4]], -1)).max(-1, keepdims=True)
+    t = np.clip((d - dash_data.MARCA_LO) / (dash_data.MARCA_HI - dash_data.MARCA_LO), 0, 1)
+    o = out.copy()
+    o[..., 3:4] = out[..., 3:4] * t * t * (3 - 2 * t)
+    return o
+
+
+def em_cima(lay, top, a=1.0, troca=True):
+    """Junta o de cima na marca (STACK_SRC): troca = op 2 (cor/espaco/memoria, opacidade a); senao op 1 (DENTRO)."""
+    o = np.empty_like(lay)
+    if not troca:
+        k = np.clip(top[..., 3:4] * a, 0, 1)
+        o[..., :3] = lay[..., :3] * (1 - k) + top[..., :3] * k
+        o[..., 3:4] = lay[..., 3:4]
+        return o
+    oa = lay[..., 3:4] * (1 - a) + top[..., 3:4] * a
+    c = lay[..., :3] * lay[..., 3:4] * (1 - a) + top[..., :3] * top[..., 3:4] * a
+    o[..., :3] = np.where(oa > 0, c / np.maximum(oa, 1e-6), 0.0)
+    o[..., 3:4] = oa
+    return o
+
+
 class Matriz:
     def __init__(self, ctx):
         self.c = ctx
         self.at = {n: (rel, src, meta, fx) for n, rel, src, meta, fx in atoms()}
         self.fail = []
+        self.warn = []
         self.blank = None
         self.tx = {}
 
@@ -240,7 +268,11 @@ class Matriz:
 
     def comp(self, n, base, layer, a=1.0):
         """comp com a regra do atomo n (dash_data.atom_replaces)."""
-        return comp(base, layer, a, troca=self.at[n][2]['cat'] not in dash_data.ATOM_DRAW_CATS)
+        return comp(base, layer, a, troca=self.troca(n))
+
+    def troca(self, n):
+        """filtro (TROCA) ou desenha (POR CIMA): a mesma deducao do motor, com o // entra: do desenvolvedor."""
+        return dash_data.atom_replaces(self.at[n][0], self.at[n][1])
 
     def bad(self, what, why):
         self.fail.append(f'{what}: {why}')
@@ -264,6 +296,11 @@ class Matriz:
             except RuntimeError as e:
                 self.bad(n, 'nao compila: ' + str(e).strip().splitlines()[0][:200])
         names = [n for n in names if n in self.c.progs]
+        for n in names:                                   # contrato: QUEBRA reprova; FORA DO PADRAO so' avisa (PLANO_CONVERSA §9.3)
+            ck = dash_data.atom_check(self.at[n][1])
+            for q in ck['quebra']:
+                self.bad(n, q)
+            self.warn += [f'{n}: {w}' for w in ck['avisos']]
         masks = [n for n in names if self.at[n][2]['cat'] == 'mascara']
         flt = [n for n in names if n not in masks]
         solo = {}
@@ -297,7 +334,7 @@ class Matriz:
         TA = A.copy()                                     # TRANSPARENCIA (§1): o fio leva o alfa — 40% da direita vazio
         TA[:, int(W * 0.6):, 3] = 0.0
         for n in flt:
-            draws = self.at[n][2]['cat'] in dash_data.ATOM_DRAW_CATS
+            draws = not self.troca(n)
             if not draws and solo[n][..., 3].min() < 0.98:   # filtro na corrente opaca: tem que continuar opaca (TROCA)
                 self.bad(n, f'filtro FURA a corrente opaca (alfa min {solo[n][..., 3].min():.2f}): devolva o alfa que leu')
             if self.at[n][2].get('estado'):
@@ -317,6 +354,37 @@ class Matriz:
             for r in readers:
                 o = self.render(r, A, ca)
                 self.check_img(f'{a} como B de {r}', self.comp(r, A, o), flat_ok=True)
+        draws = lambda n: not self.troca(n)
+        for x in flt:                                     # EM CIMA: Y age so' na MARCA de X (PLANO_CONVERSA §2)
+            if self.at[x][2].get('estado'):
+                continue                                  # (em cima de quem tem memoria = loop RETORNO, testado abaixo)
+            mudou = dash_data.atom_marca(self.at[x][0], self.at[x][1]) == 'mudanca'
+            m = np.clip(marca(A, solo[x]) if mudou else solo[x], 0, 1)   # o de cima le a marca pelo fio de 8 bits (lt['chain'])
+            alone = self.comp(x, A, solo[x])
+            for y in flt:
+                ym = self.at[y][2]
+                st = 8 if ym.get('estado') else 0
+                o = self.render(y, m, B, steps=st)
+                out = comp(A, em_cima(m, o, troca=not draws(y)), troca=False)
+                if not self.check_img(f'{x} ↑ {y}', out, flat_ok=True):
+                    continue
+                if ym['cat'] in ('cor', 'luz') and y != 'Brilhar':   # (Brilhar espalha: o halo sai da marca, de proposito)
+                    calm = m[..., 3] < 1e-3
+                    if calm.any() and np.abs(out[..., :3] - A[..., :3])[calm].max() > 2.0 / 255:
+                        self.bad(f'{x} ↑ {y}', 'mexeu no FUNDO (onde o de baixo nao fez nada)')
+                fx = self.at[y][3]
+                if not fx or ym['cat'] == 'gerador' or draws(y) or st:
+                    continue
+                k = next(iter(fx))
+                if k in (ym.get('escolha') or {}) or k in (ym.get('chave') or []):
+                    continue
+                bip = ym.get('bipolar') or []
+                nfx = {b: 0.5 for b in bip}
+                nfx[k] = 0.5 if k in bip else 0.0
+                o = self.render(y, m, B, fx=nfx)
+                d = np.abs(comp(A, em_cima(m, o), troca=False)[..., :3] - alone[..., :3])
+                if d.mean() > 2.0 / 255 or d.max() > 0.05:
+                    self.bad(f'{x} ↑ {y}', f'{y} no neutro nao some (media {d.mean() * 255:.1f}/255, max {d.max():.3f})')
         for n in [n for n in flt if self.at[n][2].get('estado')]:   # ESTADO: 300 passos, limpar, loop retorno
             keep = {}
             o = self.render(n, A, B, steps=STEPS, move=0.003, keep=keep)
@@ -365,7 +433,9 @@ def run(png_dir=None):
     m = Matriz(ctx)
     fails = m.run(png_dir)
     n = len(m.at)
-    print(f'matriz de emergencia: {n} atomos, {n * n} pares, {len(fails)} falhas')
+    print(f'matriz de emergencia: {n} atomos, {n * n} pares, {len(fails)} falhas, {len(m.warn)} fora do padrao')
+    for w in m.warn:
+        print('  ⚠', w)
     return fails
 
 

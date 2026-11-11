@@ -10,6 +10,12 @@ Ideias combinadas e ainda não feitas. Ao começar uma, mover pro código/commit
 - Ableton Link / MIDI clock como relógio externo; pinça (dois dedos) pro zoom no toque.
 - Movimento com gesto de rastreio em `disparo` compartilhado entre caixas: o contador é por caixa — id próprio por caixa.
 
+## Em cima / v6 (PLANO_CONVERSA.md; feito: marca, em cima com memória/espaço/B/opacidade, card ↳, zona = card, auditoria §5.3)
+- Aprovar o mockup `docs/mock_v6.html` → fases §8.5 (TOCAR novo, mistura = saída, MONTAR, cadeado → TOCAR/MONTAR).
+- Prévia fora do ar ao soltar EM CIMA (o `/try` só troca a pilha principal).
+- Arrastar a linha ↳ pra FORA do card (vira nó no fio) e um nó do fio PRA DENTRO de outro card (vira em cima).
+- Filtro que RECORTA (alfa < entrada) com algo em cima: a marca volta por cima da entrada e o recorte some ali.
+
 ## ÁTOMO v2 — o que ficou (feito: prelúdio, estado 16F + passo fixo, semear/limpar, loop retorno, no:<id>, matriz, onda a/b/c)
 - UI do PLANO_PADROES §11 (feito: knobs redondos no card do nó): loop visível (↻ no nó), receitas dobráveis com macros,
   adicionar/remover.

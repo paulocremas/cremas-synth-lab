@@ -44,7 +44,7 @@ def parse_meta(src):
     src = src or ''
     m = re.search(r'(?m)^//\s*cat:\s*(\S+)', src)
     i = re.search(r'(?m)^//\s*in:\s*(.+)$', src)
-    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala):)\s*(.+)$', src)
+    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala|B|entra|marca):)\s*(.+)$', src)
     mo = re.search(r'(?m)^//\s*mod:\s*(.+)$', src)
     desc = d.group(1).strip() if d else ''
     nome = ''
@@ -55,6 +55,9 @@ def parse_meta(src):
            'desc': desc}
     if nome:   # o nome mostrado no dash (o arquivo nao tem acento: Reacao.frag -> "Reação")
         out['nome'] = nome[:32]
+    bn = re.search(r'(?m)^//\s*B:\s*(.+)$', src)
+    if bn:   # o que a ENTRADA B significa pra este atomo ("direção", "outra imagem"): nome do jack pro leigo (PLANO_CONVERSA §3)
+        out['bnome'] = bn.group(1).strip()[:24]
     if mo:   # MOVIMENTO SUGERIDO: "// mod: forca=pulsa, matiz=respira" (knob = preset de MOV_PRESETS; o dash oferece, nao liga)
         out['mod'] = {k.strip(): v.strip() for k, _, v in (x.partition('=') for x in mo.group(1).split(',')) if k.strip() and v.strip()}
     ch = knob_switches(src)
@@ -111,13 +114,41 @@ def knob_switches(src):
 # PADRAO ATOMO (shaders/ATOMO.md): o que um .frag de shaders/presets/atomos/ pode e nao pode
 ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador', 'mascara')
 ATOM_DRAW_CATS = ('gerador', 'forma')   # quem DESENHA/gera: vai POR CIMA da corrente; o resto e' FILTRO (TROCA, ATOMO §5)
+# EM CIMA (PLANO_CONVERSA.md §2.1): a MARCA de um filtro = a saida dele onde |saida - entrada| (pre-multiplicada, o maior
+# canal) passa de LO; a partir de HI vale inteira. Abaixo de LO o fundo sai intacto; o erro de identidade fica < ~0.4 * HI.
+MARCA_LO, MARCA_HI = 0.012, 0.06
+
+
+ATOM_ENTRA = ('troca', 'cima')                 # // entra: contraria a cat: (filtro TROCA / desenha POR CIMA)
+ATOM_MARCAS = ('mudanca', 'alfa')               # // marca: o que EM CIMA pega deste atomo (PLANO_CONVERSA §9.4)
+
+
+def _header_word(src, tag):
+    m = re.search(r'(?m)^//\s*' + tag + r':\s*(\S+)', src or '')
+    return m.group(1).strip().lower() if m else ''
 
 
 def atom_replaces(rel, src):
     """COMO o atomo entra na corrente (ATOMO §5): True = FILTRO, a saida dele SUBSTITUI a entrada (opacidade = o quanto
     do original volta; o alfa e' o que ele devolve: leu transparente, fica transparente); False = DESENHA por cima
     (gerador, traco; e todo shader classico, que sempre foi camada com cobertura). Base opaca = o mesmo resultado."""
-    return is_atom_path(rel) and parse_meta(src)['cat'] not in ATOM_DRAW_CATS
+    if not is_atom_path(rel):
+        return False
+    e = _header_word(src, 'entra')
+    if e in ATOM_ENTRA:                       # o desenvolvedor contraria a deducao
+        return e == 'troca'
+    return parse_meta(src)['cat'] not in ATOM_DRAW_CATS
+
+
+def atom_marca(rel, src):
+    """EM CIMA (PLANO_CONVERSA §2.1): o que o de cima pega deste atomo. 'mudanca' = onde a saida difere da entrada (filtro);
+    'alfa' = a saida como ele devolve (a cobertura = o alfa: quem desenha; num filtro = a imagem toda). // marca: contraria."""
+    m = _header_word(src, 'marca')
+    if m in ATOM_MARCAS:
+        return m
+    return 'mudanca' if atom_replaces(rel, src) else 'alfa'
+
+
 MASK_UNIFORMS = {'u_subject', 'u_subject_on'}   # so' atomo de MASCARA (dash v5): a mascara do assunto (U2-Net) da fonte
 MASK_UNIFORMS |= {'u_rosto', 'u_olhos', 'u_rosto_on', 'u_corpo', 'u_corpo_on', 'u_obj', 'u_obj_p', 'u_obj_on', 'u_olho', 'u_olho_on'}   # + o RASTREIO (src/rastreio.py)
 ATOM_MAX_KNOBS = 3   # minimalismo: o principal + ate' 2 detalhes essenciais; mais que isso = dividir em atomos
@@ -214,59 +245,86 @@ def _header_list(src, tag):
     return [x.strip() for x in m.group(1).split(',') if x.strip()] if m else []
 
 
-def atom_problems(src):
-    """Regras do padrao ATOMO v2 que o .frag quebra (lista vazia = ok). Ver shaders/ATOMO.md. O arquivo e' lido SEM
-    o preludio (o motor o poe antes: atom_source) — declarar um uniform dele = erro de compilacao."""
+# DECLARAR, NAO PROIBIR (PLANO_CONVERSA §9): o som e o rastreio entram em QUALQUER atomo que os le — o motor liga e o dash
+# mostra (♪ ouve a musica, 👁 ve). O caminho recomendado continua o movimento no knob; nao e' o unico.
+AUDIO_UNIFORMS = {'u_amp', 'u_bass', 'u_mid', 'u_treble', 'u_kick', 'u_build', 'u_bpm', 'u_key_hue', 'u_key_minor', 'u_key_conf',
+                  'u_subbass', 'u_lowmid', 'u_midrange', 'u_highmid', 'u_presence', 'u_treble_hi', 'u_brilho', 'u_air',
+                  'u_chan', 'u_chan_hit', 'u_dominant', 'u_beats'}
+
+
+def atom_check(src):
+    """O .frag diante do contrato (PLANO_CONVERSA §9.3) -> {quebra, avisos, ouve, ve}. QUEBRA = o motor nao roda ou
+    nao encaixa (o arquivo nao entra na biblioteca); AVISOS = foge do padrao mas roda (a biblioteca mostra ⚠); ouve/ve =
+    uniforms de som/rastreio que ele le (o motor liga, o dash mostra). Lido SEM o preludio (atom_source o poe antes)."""
     src = src or ''
-    out, fx, meta = [], parse_fx_defaults(src), parse_meta(src)
+    q, w, ouve, ve = [], [], [], []
+    fx, meta = parse_fx_defaults(src), parse_meta(src)
     code = re.sub(r'//[^\n]*', '', src)
     if len(fx) > ATOM_MAX_KNOBS:
-        out.append(f'{len(fx)} knobs: atomo tem no maximo {ATOM_MAX_KNOBS} (o principal + 2 detalhes); o resto e\' outro atomo')
+        w.append(f'{len(fx)} knobs: o padrao e\' ate\' {ATOM_MAX_KNOBS} (o card mostra todos; mais = mais dificil pro leigo)')
     if meta['cat'] not in ATOM_CATS:
-        out.append(f"// cat: '{meta['cat']}' nao e' um tipo de atomo ({', '.join(ATOM_CATS)})")
+        e = _header_word(src, 'entra')
+        w.append(f"// cat: '{meta['cat']}' nao e' um tipo conhecido ({', '.join(ATOM_CATS)}): entra "
+                 + ('por cima' if e == 'cima' else 'como filtro'))
     if not re.search(r'(?m)^//\s*ATOMOS\s*·\s*\S', src):
-        out.append('falta a linha "// ATOMOS · Nome. o que faz"')
+        w.append('sem a linha "// ATOMOS · Nome. o que faz": o nome vem do arquivo')
     for n in re.findall(r'\buniform\s+\w+\s+([^;]+);', code):
         for u in (x.strip().split('[')[0] for x in n.split(',')):
             if u.startswith('u_fx_'):
                 k = u[5:]
                 if k == 'layer' or k.startswith('on_'):
-                    out.append(f'knob proibido {k}: misturar = opacidade da peca; som = modulador no knob')
+                    w.append(f'knob {k}: misturar = opacidade da peca; disparo = movimento no knob')
                 elif k not in fx:
-                    out.append(f'{u} declarado mas fora do // fx:')
+                    w.append(f'{u} declarado mas fora do // fx: (vale 0, sem controle)')
             elif u in ATOM_PRELUDE_U:
-                out.append(f'{u} vem do preludio: nao declare (ATOMO.md §3)')
-            elif u in MASK_UNIFORMS and meta['cat'] != 'mascara':
-                out.append(f'{u} so\' em atomo de mascara (// cat: mascara)')
-            elif u not in MASK_UNIFORMS:
-                out.append(f'{u} nao e\' entrada de atomo (so\' imagem e relogio: o preludio; som = modulador no knob)')
+                q.append(f'{u} vem do preludio: nao declare (ATOMO.md §3)')
+            elif u in AUDIO_UNIFORMS:
+                ouve.append(u[2:])
+            elif u in MASK_UNIFORMS:
+                ve.append(u[2:])
+            else:
+                w.append(f'{u}: o motor nao conhece esta entrada (vale 0)')
     if re.search(r'^\s*#\s*(ifdef\s+GL_ES|version)', code, re.M):
-        out.append('#ifdef GL_ES/#version vem do preludio')
+        q.append('#ifdef GL_ES/#version vem do preludio')
     for k in fx:
         if not re.search(r'\bu_fx_' + re.escape(k) + r'\b', code):
-            out.append(f'knob {k} do // fx: nao e\' usado no codigo')
+            w.append(f'knob {k} do // fx: nao e\' usado no codigo')
     if re.search(r'\b(u_texture_[12]|[BC]\s*\()', code) and not meta['ins']:
-        out.append('le a entrada B (B()/u_texture_1) sem "// in:"')
+        w.append('le a entrada B (B()/u_texture_1) sem "// in:" (sem fio = a fonte crua)')
     for k, v in (meta.get('mod') or {}).items():
         if k not in fx and k != 'opacity':
-            out.append(f'// mod: knob {k} nao existe no // fx:')
+            w.append(f'// mod: knob {k} nao existe no // fx:')
         if v not in MOV_PRESETS:
-            out.append(f"// mod: '{v}' nao e' um movimento ({', '.join(MOV_PRESETS)})")
+            w.append(f"// mod: '{v}' nao e' um movimento ({', '.join(MOV_PRESETS)})")
     for tag in ('bipolar', 'ritmo'):
         for k in _header_list(src, tag):
             if k not in fx:
-                out.append(f'// {tag}: knob {k} nao existe no // fx:')
+                w.append(f'// {tag}: knob {k} nao existe no // fx:')
+    for tag, ok in (('entra', ATOM_ENTRA), ('marca', ATOM_MARCAS)):
+        v = _header_word(src, tag)
+        if v and v not in ok:
+            w.append(f"// {tag}: '{v}' nao e' {' | '.join(ok)} (vale o padrao)")
     est = meta.get('estado')
     if est:
         if not re.search(r'\bu_vista\b', code):
-            out.append('// estado: sem u_vista (fase 0 atualiza, 1 mostra)')
+            q.append('// estado: sem u_vista (fase 0 atualiza, 1 mostra)')
         if re.search(r'\bu_time\b', code):
-            out.append('// estado: acumula com u_dt/decai(), nao com u_time (passo fixo)')
+            w.append('// estado: acumula com u_dt/decai(), nao com u_time (o rastro muda com o fps)')
     elif re.search(r'\b(u_state|u_vista|u_fase|u_semear|E\s*\()', code):
-        out.append('le o estado (E()/u_state/u_vista) sem "// estado:"')
+        q.append('le o estado (E()/u_state/u_vista) sem "// estado:"')
     if 'gl_FragColor' not in code:
-        out.append('sem gl_FragColor')
-    return out
+        q.append('sem gl_FragColor')
+    return {'quebra': q, 'avisos': w, 'ouve': sorted(set(ouve)), 've': sorted(set(ve))}
+
+
+def atom_problems(src):
+    """O que QUEBRA (o arquivo nao entra): ver atom_check. Lista vazia = roda e encaixa."""
+    return atom_check(src)['quebra']
+
+
+def atom_avisos(src):
+    """O que foge do PADRAO mas roda (a biblioteca mostra ⚠ com o motivo; nunca tira o arquivo)."""
+    return atom_check(src)['avisos']
 
 
 # MODULADOR LFO (dash v4: peca de controle que se solta num knob; mod[knob] = {b: ['lfo'], lo, hi, lfo: {f, r, ph}})
@@ -1009,19 +1067,29 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert img_mod_levels({'grids': [{'name': 'BRILHO', 'total': 0.4}, {'name': 'MOVIMENTO', 'total': 1.3}]}) == {'luz': 0.4, 'mov': 1.0}
     assert img_mod_levels(None) == {'luz': 0.0, 'mov': 0.0}
     ok = '// fx: forca=0.5\n// cat: cor\n// ATOMOS · T. x\nuniform float u_fx_forca;\nvoid main(){ gl_FragColor = vec4(u_fx_forca) * A(uv()); }\n'
-    assert atom_problems(ok) == [], atom_problems(ok)
-    bad = '// fx: layer, z\n// cat: luzes\nuniform float u_bass, u_fx_layer;\nvoid main(){ gl_FragColor = vec4(u_bass * u_fx_layer) * B(uv()); }\n'
-    pr = ' | '.join(atom_problems(bad))
-    assert any('no maximo' in x for x in atom_problems('// fx: a, b, c, d\n' + ok))
-    for frag in ("cat: 'luzes'", 'ATOMOS', 'u_bass', 'knob proibido layer', 'knob z', 'sem "// in:"'):
+    assert atom_problems(ok) == [] and atom_avisos(ok) == [], atom_check(ok)
+    bad = '// fx: layer, z\n// cat: luzes\nuniform float u_bass, u_fx_layer, u_zz;\nvoid main(){ gl_FragColor = vec4(u_bass * u_fx_layer * u_zz) * B(uv()); }\n'
+    ck = atom_check(bad)
+    assert ck['quebra'] == [] and ck['ouve'] == ['bass'], ck   # DECLARAR, NAO PROIBIR: fora do padrao RODA (so' avisa)
+    pr = ' | '.join(ck['avisos'])
+    for frag in ("cat: 'luzes'", 'ATOMOS', 'knob layer', 'knob z', 'sem "// in:"', 'u_zz'):
         assert frag in pr, (frag, pr)
+    assert any('ate\' 3' in x for x in atom_avisos('// fx: a, b, c, d\n' + ok)) and not atom_problems('// fx: a, b, c, d\n' + ok)
     mk = '// cat: mascara\n// ATOMOS · M. x\nuniform sampler2D u_subject;\nuniform float u_subject_on;\nvoid main(){ gl_FragColor = vec4(u_subject_on); }\n'
-    assert atom_problems(mk) == [], atom_problems(mk)
-    assert any("'pula' nao" in x for x in atom_problems(ok.replace('// cat: cor', '// cat: cor\n// mod: forca=pula')))
-    assert any('knob zz' in x for x in atom_problems(ok.replace('// cat: cor', '// cat: cor\n// mod: zz=pulsa')))
-    assert atom_problems(ok.replace('// cat: cor', '// cat: cor\n// mod: forca=pulsa')) == []
-    assert any('so\' em atomo de mascara' in x for x in atom_problems(mk.replace('mascara', 'cor', 1)))
-    assert atom_problems(mk.replace('M. x', 'M. x\n// in: src').replace('vec4(u_subject_on)', 'B(uv())')) == [], 'mascara le B (Luma)'
+    assert atom_problems(mk) == [] and atom_avisos(mk) == [] and atom_check(mk)['ve'] == ['subject', 'subject_on']
+    assert atom_check(mk.replace('mascara', 'cor', 1))['avisos'] == [], 'rastreio/assunto em QUALQUER atomo (ve)'
+    assert any("'pula' nao" in x for x in atom_avisos(ok.replace('// cat: cor', '// cat: cor\n// mod: forca=pula')))
+    assert any('knob zz' in x for x in atom_avisos(ok.replace('// cat: cor', '// cat: cor\n// mod: zz=pulsa')))
+    assert atom_avisos(ok.replace('// cat: cor', '// cat: cor\n// mod: forca=pulsa')) == []
+    assert atom_avisos(mk.replace('M. x', 'M. x\n// in: src').replace('vec4(u_subject_on)', 'B(uv())')) == [], 'mascara le B (Luma)'
+    # // entra: e // marca: contrariam a deducao da cat:
+    rel = 'presets/atomos/T.frag'
+    assert atom_replaces(rel, ok) and atom_marca(rel, ok) == 'mudanca'
+    assert not atom_replaces(rel, ok.replace('// cat: cor', '// cat: cor\n// entra: cima')) and atom_marca(rel, ok.replace('// cat: cor', '// cat: cor\n// entra: cima')) == 'alfa'
+    gen = ok.replace('// cat: cor', '// cat: gerador')
+    assert not atom_replaces(rel, gen) and atom_replaces(rel, gen.replace('// cat: gerador', '// cat: gerador\n// entra: troca'))
+    assert atom_marca(rel, ok.replace('// cat: cor', '// cat: cor\n// marca: alfa')) == 'alfa' and parse_meta(ok.replace('// cat: cor', '// cat: cor\n// marca: alfa'))['desc'] == 'x'
+    assert any("'zz'" in x for x in atom_avisos(ok.replace('// cat: cor', '// cat: cor\n// marca: zz')))
     # ATOMO v2: preludio nao se declara; estado pede u_vista e nao usa u_time; bipolar/ritmo so' em knob que existe
     assert any('vem do preludio' in x for x in atom_problems(ok.replace('uniform float', 'uniform vec2 u_resolution;\nuniform float')))
     assert any('#ifdef' in x for x in atom_problems('#ifdef GL_ES\nprecision mediump float;\n#endif\n' + ok))
@@ -1029,9 +1097,9 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert atom_problems(st_) == [], atom_problems(st_)
     assert parse_meta(st_)['estado'] == {'canais': 2, 'passos': 4, 'fases': 1, 'escala': 0.5} and parse_meta(st_)['bipolar'] == ['forca']
     assert any('u_vista' in x for x in atom_problems(st_.replace('* u_vista', '')))
-    assert any('u_time' in x for x in atom_problems(st_.replace('* u_vista', '* u_vista * u_time')))
+    assert any('u_time' in x for x in atom_avisos(st_.replace('* u_vista', '* u_vista * u_time')))
     assert any('sem "// estado:"' in x for x in atom_problems(ok.replace('A(uv())', 'E(uv())')))
-    assert any('bipolar: knob zz' in x for x in atom_problems(ok.replace('// cat: cor', '// cat: cor\n// bipolar: zz')))
+    assert any('bipolar: knob zz' in x for x in atom_avisos(ok.replace('// cat: cor', '// cat: cor\n// bipolar: zz')))
     assert atom_source('presets/atomos/X.frag', 'y').startswith(ATOM_PRELUDE) and atom_source('presets/sortidos/X.frag', 'y') == 'y'
     assert parse_estado('// estado: canais=9, passos=x, escala=0.25') == {'canais': 4, 'passos': 1, 'fases': 1, 'escala': 0.25}
     sw = '// fx: limiar=0.5, inverter=0\nuniform float u_fx_limiar, u_fx_inverter;\nvoid main(){ float m = step(u_fx_limiar, 0.3); m = mix(m, 1.0 - m, step(0.5, u_fx_inverter)); }'
@@ -1042,7 +1110,8 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert knob_choices(es) == {'modo': ['a', 'b', 'c']} and parse_meta(es)['escolha'] == {'modo': ['a', 'b', 'c']}
     assert knob_choices(es.replace('// opcoes: modo=a|b|c\n', '')) == {'modo': ['1', '2', '3']}, 'sem nomes = numeros'
     assert all(int((i + 0.5) / 3 * 2.999) == i for i in range(3)), 'valor da opcao cai no meio da fatia'
-    assert any('so\' em atomo de mascara' in x for x in atom_problems(ok.replace('u_fx_forca;', 'u_fx_forca;\nuniform vec4 u_rosto[4];')))
+    assert atom_check(ok.replace('u_fx_forca;', 'u_fx_forca;\nuniform vec4 u_rosto[4];'))['ve'] == ['rosto'], 'rastreio em qualquer atomo'
     for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shaders', 'presets', 'atomos', '*.frag'))):
-        assert not atom_problems(open(f, encoding='utf-8').read()), (os.path.basename(f), atom_problems(open(f, encoding='utf-8').read()))
+        ck = atom_check(open(f, encoding='utf-8').read())   # os da casa: nem quebra nem aviso (o padrao vale pra eles)
+        assert not ck['quebra'] and not ck['avisos'], (os.path.basename(f), ck)
     print('dash_data self-check ok')

@@ -2,6 +2,7 @@
 // opcoes: modo=normal|soma|tela|multiplicar|diferença
 // cat: mistura
 // in: src
+// B: outra imagem
 // ATOMOS · Misturar. Junta a entrada B na corrente (B = outra caixa; sem B = a fonte crua).
 // quanto = 0 só a corrente … 1 só B; modo = normal, soma, tela, multiplicar ou diferença.
 

@@ -1,6 +1,7 @@
 // fx: limiar=0.5, borda=0.1, inverter=0
 // cat: mistura
 // in: src
+// B: forma
 // ATOMOS · Máscara. A corrente so' aparece onde a entrada B e' clara (o resto fica preto). Sem B ligada
 // = a propria fonte crua. limiar = a partir de que brilho aparece inteira (0 = tudo); borda = macia/dura; inverter = so' no escuro.
 

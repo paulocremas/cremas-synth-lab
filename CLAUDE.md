@@ -167,6 +167,18 @@ Cada ferramenta isolada, depois comparar, só então compor.
   dither. Sinal `no:<id>` (`grab_no`, `_no_wants`: o nó roda mesmo fora da SAÍDA) e `key_hue` (tom) são fontes de
   movimento. `src/matriz.py` = MATRIZ DE EMERGÊNCIA (no `--selfcheck`, só com GL). Biblioteca v5: só átomos; o resto em
   "Clássicos"; nome mostrado = `// ATOMOS · Nome.` (`parse_meta` `nome`).
+- **EM CIMA** (2026-11-05, `PLANO_CONVERSA.md`; ATOMO §7.4): átomo solto NO CARD de outro (`post`) age só na MARCA dele — quem
+  desenha = o alfa; FILTRO = saída onde difere da entrada (`STACK_SRC` op 0, `dash_data.MARCA_LO/HI`). O de cima lê a marca em `A()`:
+  filtro troca (cor/espaço/memória, `run_state` com o id dele, opacidade e B valem), quem desenha fica DENTRO (op 1); a marca volta
+  POR CIMA da entrada (fundo intacto). Em cima de átomo com estado = loop RETORNO. Card: linhas `↳` (`stackRow`, `STK_H` no `boxH`);
+  soltar no card de átomo = em cima, no fio = corrente. Matriz confere todo par X ↑ Y. `// B: nome` = o que a entrada B significa.
+  §8 do plano = v6 (`docs/mock_v6.html`); fase 1 FEITA: seletor TOCAR | MONTAR (`#mode-seg`, `mode` segue 'show'|'montar')
+  no lugar do cadeado; em TOCAR o `#cv-p` some e `#pgm-p`/`#next-p` vão pro `#center` (`setMode`); sem publicado = o
+  principal de cada átomo no ar. DECLARAR, NÃO PROIBIR (§9): `dash_data.atom_check` → QUEBRA (fora da biblioteca) ×
+  avisos (roda, "!" na biblioteca) + `ouve`/`ve` (som/rastreio em qualquer átomo, ♪/olho); `// entra:` e `// marca:`
+  (`atom_replaces`, `atom_marca`); `/shaders` meta `atom` = sem QUEBRA; `cat:` desconhecida → grupo "Outros".
+  v6 fases 2–4: mistura = saída (`setOnStage` troca `kind` mix ↔ out; só "+ mistura" no topo do canvas), biblioteca em 4 abas
+  (`PAL_TABS`, `palCat` = aba; busca em todas), card sem cor de categoria, custo de GPU no aviso de fps da SAÚDE.
 - **Rastreio** (`src/rastreio.py`, cv2.dnn, modelos opencv_zoo em `models/`): Rosto/Olhos (YuNet), Corpo/Mãos
   (BlazePose; acha a pessoa pelo NanoDet e depois segue pelos próprios pontos), Objeto (NanoDet, 80 classes COCO), Contorno dos olhos (Face Mesh do MediaPipe `.tflite` via
   `readNetFromTFLite`, entrada NCHW 0..1; tipo `olho` → `u_olho[64]`, 16 pontos por pálpebra; átomo Olhos).

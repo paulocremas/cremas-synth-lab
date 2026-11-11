@@ -2,6 +2,7 @@
 // opcoes: direcao=fixa|relevo|redemoinho|vetor
 // cat: gerador
 // in: src
+// B: quem empurra
 // estado: canais=4, passos=1, fases=14, escala=0.25
 // mod: forca=pulsa
 // ATOMOS · Fluido. Tinta num líquido (Stable Fluids, Jos Stam): a entrada B EMPURRA o líquido e onde ela empurra

@@ -10,5 +10,5 @@ vec3 hsv(float h) { return clamp(abs(fract(h + vec3(0.0, 2.0, 1.0) / 3.0) * 6.0 
 
 void main() {
     vec4 c = A(uv());
-    gl_FragColor = vec4(mix(c.rgb, hsv(u_fx_matiz) * luma(c.rgb) * 1.6, u_fx_forca), c.a);
+    gl_FragColor = vec4(clamp(mix(c.rgb, hsv(u_fx_matiz) * luma(c.rgb) * 1.6, u_fx_forca), 0.0, 1.0), c.a);
 }

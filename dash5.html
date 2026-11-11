@@ -82,7 +82,7 @@
     no meio do renderBoxes forcava estilo + layout), LED de laco por mapa (readsMemo), autoPlace sai cedo quando todos tem lugar.
   - ENTRADA VAZIA (NO_IN = '@-'): apagar a FONTE de um efeito, ou puxar o fio da entrada A pro vazio, deixa o no' "sem entrada" (jack
     A livre; o motor deixa ele de fora). Antes voltava a ler a fonte do comeco e o efeito virava uma fonte nova.
-  POR QUE CADA ELEMENTO EXISTE: (P) palco, (S) seguranca, (C) montagem. Topo: cadeado (S), musica (P/S), avisos (S),
+  POR QUE CADA ELEMENTO EXISTE: (P) palco, (S) seguranca, (C) montagem. Topo: TOCAR|MONTAR (S: era o cadeado), musica (P/S), avisos (S),
   equipamento (C), EFEITOS/MASTER (P), SOCORRO + BLACKOUT (S). Esquerda: cenas (P), biblioteca (C). Centro: canvas (P: o
   que esta no ar; C: montar) + SAIDA (P: o fader de cada caixa). Direita: PROGRAMA (S), PROXIMA+GO/PREVIA (P/S),
   CONTROLES (P), MACROS (P). Gavetas: socorro (S), equipamento (C).
@@ -110,7 +110,7 @@
     ZOOM SEMANTICO (+ / -, Ctrl+roda; tambem no meio de um arrasto: zonas e caixa remedidas): longe = so' estrutura, perto = o
     movimento de cada knob escrito e vivo. SOCORRO: congelar movimentos.
   TECLADO: 1-9 caixa (segurar = liga/desliga na SAIDA), setas, Enter, Espaco = GO, Delete, '.', Ctrl+Z, letras = cenas,
-  + / - zoom, Shift = na hora (com grade), F1 trava / F2 destrava, Esc fecha.
+  + / - zoom, Shift = na hora (com grade), F1 = TOCAR / F2 = MONTAR, Esc fecha.
 -->
 <style>
   :root {
@@ -266,9 +266,9 @@
   /* ---------- PECAS (paleta, Montar) ---------- */
   #lib-p { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   #pal-q { margin: 0 10px 6px; }
-  #pal-cats { display: flex; flex-wrap: wrap; gap: 3px; padding: 0 10px 6px; }
-  #pal-cats button { width: 30px; height: 28px; border-radius: 6px; border: 1px solid var(--line2); background: var(--s2); color: var(--tx3); cursor: pointer;
-                     display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+  #pal-cats { display: flex; gap: 2px; padding: 0 10px 6px; }
+  #pal-cats button { flex: 1 1 auto; min-width: 0; font-size: 11px; white-space: nowrap; height: 28px; border-radius: 6px; border: 1px solid var(--line2); background: var(--s2); color: var(--tx3); cursor: pointer;
+                     display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; }
   #pal-cats button.on { background: var(--sel-d); border-color: var(--sel); color: var(--tx); }
   #pal { overflow-y: auto; padding: 0 10px 10px; min-height: 0; flex: 1; }
   .pgt { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--tx3); font-weight: 700; }
@@ -276,6 +276,8 @@
          color: var(--tx2); user-select: none; touch-action: none; }
   .pit:hover { background: var(--s2); border-color: var(--line2); color: var(--tx); }
   .pit .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .abdg { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9px; color: var(--midi); flex: none; }
+  .abdg .ico { width: 14px; height: 14px; } .abdg.warn { color: var(--warn); border: 1px solid var(--warn); font: 800 10px var(--sans); }
   .pit small { color: var(--tx3); font-size: 11px; }
   #pal.drop-del { outline: 2px dashed var(--bad); outline-offset: -4px; background: var(--bad-d); }
 
@@ -314,7 +316,7 @@
      do jack POR DENTRO do no' (longe do cabo), LED "no ar" no lugar do selo, knob principal maior, linha fina da cor da cat: no topo,
      a SAIDA achada pela cor verde do cabecalho, cabos finos. Fonte do sistema, caixa normal. */
   .bx { position: absolute; z-index: 3; width: 232px; background: var(--s2); border: 1px solid var(--line2); border-radius: 8px; user-select: none; }
-  .bx.anode { border-top: 3px solid var(--cc, var(--line2)); }
+  .bx.anode { border-top: 3px solid var(--s3); }   /* v6 §8.3: 4 cores com sentido (no ar, escolhido, movimento, onde); o tipo = o icone */
   .bx.sel { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel); }
   .bx.moving { opacity: .85; box-shadow: 0 14px 40px rgba(0,0,0,.6); z-index: 8; }
   .bx.drophot { box-shadow: 0 0 0 2px var(--sel); }
@@ -360,7 +362,7 @@
   body[data-mode="montar"] .port.out:hover { background: var(--sel); }
   body.wiring .port.in, body.wiring .port.pbx, body.wiring .port.pm, body.wiring .port.lin { border-color: var(--sel); }
   body.wiring #cv { cursor: crosshair; }
-  #cable-cfg { display: inline-flex; align-items: center; gap: 4px; } #cable-cfg input { width: 64px; accent-color: var(--sel); }
+  #cable-cfg { display: inline-flex; align-items: center; gap: 4px; } #cable-cfg input { width: 64px; accent-color: var(--sel); } #cable-rs { display: inline-flex; gap: 4px; } #cable-rs[hidden] { display: none; }
   body[data-mode="show"] #cable-cfg { display: none; }
   /* ESPELHO = chip: LED + o icone + a marca de cor do original + o numero */
   .bx.mirror { width: 104px; }
@@ -422,6 +424,13 @@
   .fader.mini.modded .f-fill { background: linear-gradient(90deg, #12263a, var(--midi)); }
   .fader.mini.drag .f-fill { background: linear-gradient(90deg, #3a2410, var(--sel)); }
   .at .posts { display: flex; flex-wrap: wrap; gap: 3px; padding: 0 8px 6px 28px; }
+  /* EM CIMA (PLANO_CONVERSA §5.1): o atomo preso ao de baixo, recuado com a setinha (clipping do Photoshop) — age so' no que ele faz */
+  .stk { border-top: 1px solid var(--line); padding: 2px 0 4px; }
+  .stk .sr { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 22px; color: var(--tx2); cursor: grab; touch-action: none; font-size: 12px; }
+  .stk .sr::before { content: '↳'; color: var(--tx3); margin-right: -2px; }
+  .stk .sr .nm { flex: 0 1 auto; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stk .sr .fader { flex: 1; } .stk .sr.sel { color: var(--tx); background: var(--sel-d); } .stk .sr.off { opacity: .45; }
+  .stk .sr b { font: 600 9px var(--mono); color: var(--tx3); }
   .pchip { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; font-size: 11px; padding: 0 7px; border-radius: 10px; border: 1px dashed var(--line2);
            background: var(--s1); color: var(--tx2); cursor: grab; touch-action: none; max-width: 100%; }
   .pchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -457,14 +466,23 @@
   .zone.big { border-color: transparent; background: none; }
   .zone.hot { border-color: var(--sel); background: rgba(255,157,82,.16); color: var(--sel); }
   .zone.big.hot { border-color: var(--subj); background: rgba(228,108,255,.12); color: var(--subj); }
+  .zone.big.stkz.hot { border-color: var(--sel); background: rgba(255,157,82,.12); color: var(--sel); }   /* EM CIMA (laranja); mascara = roxo */
   .ghost { position: fixed; z-index: 90; pointer-events: none; opacity: .85; transform: translate(-50%, -50%) rotate(-2deg); box-shadow: 0 14px 40px rgba(0,0,0,.6); }
   .ghost.pit { background: var(--s3); border-color: var(--sel); color: var(--tx); }
   .ghost.copy::after { content: '+'; position: absolute; right: -8px; top: -8px; width: 18px; height: 18px; border-radius: 50%;
                        background: var(--sel); color: var(--bg); font: 800 14px/18px var(--sans); text-align: center; }
   body.dragging, body.dragging * { cursor: grabbing !important; }
-  #lock { min-height: 36px; padding: 0 14px; font-weight: 700; }
-  #lock.locked { background: var(--live-d); border-color: var(--live); color: #c5f2dc; }
-  #lock:not(.locked) { background: var(--sel-d); border-color: var(--sel); color: #ffd7b8; }
+  #mode-seg button { min-height: 32px; padding: 0 14px; font-size: 12px; letter-spacing: .08em; font-weight: 800; }
+  #mode-seg button.on[data-m="show"] { background: var(--live-d); color: #c5f2dc; }
+  #mode-seg button.on[data-m="montar"] { background: var(--sel-d); color: #ffd7b8; }
+  /* TOCAR (v6 fase 1, PLANO_CONVERSA §8.2): o canvas sai; o PROGRAMA ocupa o centro com a PROXIMA + GO embaixo */
+  body[data-mode="show"] #cv-p { display: none; }
+  body[data-mode="show"] #center > #pgm-p { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  body[data-mode="show"] #center > #next-p { flex: none; }
+  body[data-mode="show"] #center > #pgm-p > .pb { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  body[data-mode="show"] #center > #pgm-p .mon { width: auto; height: 100%; max-width: 100%; max-height: 100%; }
+  body[data-mode="show"] #center > #next-p #next-box .mon { width: 32%; }
+  body[data-mode="show"] #go { min-height: 96px; font-size: 30px; letter-spacing: .2em; }
 
   /* ---------- DIREITA: programa, proxima/previa, controles, macros ---------- */
   .mon { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
@@ -968,7 +986,7 @@
 
 <header id="top">
   <span id="brand">PRISMA</span>
-  <button class="btn" id="lock" title="TRAVADO = palco: a estrutura não muda, só tocar e mexer (F1) · DESTRAVADO = montar (F2)"><svg class="ico"><use href="#i-cadeado"/></svg><span>travado</span></button>
+  <span class="seg" id="mode-seg" title="TOCAR = o palco: cenas, o que o público vê, GO e os knobs na mão — nada se religa (F1) · MONTAR = criar: biblioteca, canvas, inspetor (F2)"><button data-m="show">TOCAR</button><button data-m="montar">MONTAR</button></span>
   <span id="music" role="button" tabindex="0" title="som chegando (kick + 8 faixas) · tempo, frase e seção · tom — clique: tempo (TAP, ×2, “1”, seção, grade)">
     <span id="m-kick"></span><span id="m-bands"></span>
     <b id="m-bpm" class="num">—</b><small>BPM</small><span id="m-dots"><i class="one"></i><i></i><i></i><i></i></span><span id="m-phr" title="frase: cada traço = 1 compasso"></span><span id="m-sec" title="seção da música (por regra: energia + kick) — clique: forçar">—</span>
@@ -1015,15 +1033,13 @@
   <div class="split" data-side="L" title="arraste pra mudar a largura · 2 cliques = padrão"></div>
 
   <section id="center">
-    <div class="panel">
+    <div class="panel" id="cv-p">
       <div class="ph" id="cv-h"><span class="lbl">Canvas</span><span class="hint" id="cv-hint"></span><span class="grow"></span>
         <span id="cv-zoom" title="tamanho das caixas no canvas (Ctrl + roda do mouse) · clique no número = 100%"><button class="ib" id="cvz-out">−</button><span class="hint num" id="cvz-n"></span><button class="ib" id="cvz-in">+</button></span>
-        <span class="hint num ed" id="cost-total" title="custo estimado na GPU: cada átomo = 2 passes (3 se lê a corrente), cada caixa mais 2, máscara 2 cada + 3"></span>
-        <span id="cable-cfg" title="CABOS (como as configurações do VCV), lembrados por modo: tensão = quanto o cabo cai (reta ↔ funda) · opacidade"><span class="hint">cabo</span>
+        <span id="cable-cfg" title="CABOS (como as configurações do VCV), lembrados por modo: tensão = quanto o cabo cai (reta ↔ funda) · opacidade"><button class="btn sm" id="cable-btn" title="CABOS: tensão e opacidade — preferência de vista, guardada por modo (fica escondida até precisar)">cabos</button><span id="cable-rs" hidden>
           <input type="range" id="cable-t" min="0" max="1" step="0.05" title="tensão: quanto o cabo cai (0 = reta, 1 = curva funda) · 2 cliques = padrão">
-          <input type="range" id="cable-o" min="0.15" max="1" step="0.05" title="opacidade dos cabos · 2 cliques = padrão"></span>
-        <button class="btn sm ed" id="add-mix" title="STAGING novo: mixer com várias entradas (cada uma, uma camada) e átomos depois da mistura"><svg class="ico sm"><use href="#i-mistura"/></svg>staging</button>
-        <button class="btn sm ed" id="add-out" title="SAÍDA nova: outra imagem final, num lugar do palco"><svg class="ico sm"><use href="#i-tela"/></svg>saída</button>
+          <input type="range" id="cable-o" min="0.15" max="1" step="0.05" title="opacidade dos cabos · 2 cliques = padrão"></span></span>
+        <button class="btn sm ed" id="add-mix" title="MISTURA nova: junta várias entradas (cada uma, uma camada) numa imagem; átomos nela agem na imagem já junta"><svg class="ico sm"><use href="#i-mistura"/></svg>mistura</button>
         <button class="btn sm ed" id="tidy-btn" title="arrumar os nós da esquerda pra direita (coluna = quantos nós antes; saídas no fim)">arrumar</button>
         <button class="btn sm ed" id="undo-btn" title="desfazer a última mudança nesta cena (Ctrl+Z)"><svg class="ico sm"><use href="#i-desfazer"/></svg>desfazer</button></div>
       <div id="cvw"><div id="cv"><div id="cv-in"><svg id="cv-wires"></svg></div></div></div>
@@ -1300,15 +1316,17 @@ function setMode(m){
   mode = m === 'montar' ? 'montar' : 'show'; LS.set('v5mode', mode);
   document.body.dataset.mode = mode;
   applyLayout();
-  const lk = $('#lock'); lk.classList.toggle('locked', isShow()); lk.querySelector('use').setAttribute('href', isShow() ? '#i-cadeado' : '#i-cadeado-aberto');
-  lk.querySelector('span').textContent = isShow() ? 'travado' : 'montando';
+  $$('#mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
+  const ctr = $('#center'), rt = $('#right');   // TOCAR: o PROGRAMA e a PROXIMA vao pro centro (no lugar do canvas); MONTAR: de volta a' direita
+  if (isShow()){ ctr.insertBefore($('#pgm-p'), $('#cv-p')); ctr.insertBefore($('#next-p'), $('#cv-p')); }
+  else { rt.prepend($('#next-p')); rt.prepend($('#pgm-p')); }
   selWire = null;
   if (drag) dragCancel();
   stopTry(); closeVariants();
   cvSig = ''; sceneSig = ''; ctlSig = '';
   renderScenes(); renderBoxes(); renderCtl(); renderPalette(); renderNext(); syncCableCfg();
 }
-$('#lock').onclick = () => setMode(isShow() ? 'montar' : 'show');
+$$('#mode-seg button').forEach(b => b.onclick = () => setMode(b.dataset.m));
 
 // TAMANHOS: largura das colunas (divisorias) e zoom do canvas, por modo (travado/montando), so' neste navegador
 const LAYOUT_LIM = { L: [200, 600], R: [260, 1200] }, CVZ_LIM = [0.4, 2], CENTER_MIN = 360;
@@ -1380,7 +1398,7 @@ $('#cv').addEventListener('pointerdown', e => {   // (CV/CVI/WIRES sao declarado
 });
 $('#tidy-btn').onclick = () => tidy();
 $('#add-mix').onclick = () => newMixHere('mix');
-$('#add-out').onclick = () => newMixHere('out');
+$('#cable-btn').onclick = () => { const r = $('#cable-rs'); r.hidden = !r.hidden; $('#cable-btn').classList.toggle('on', !r.hidden); };
 function syncCableCfg(){ const c = cableCfg(); $('#cable-t').value = c.t; $('#cable-o').value = c.o; }   // por modo, como o zoom
 for (const [id, k] of [['#cable-t', 't'], ['#cable-o', 'o']]){
   $(id).oninput = e => setCableCfg(k, +e.target.value);
@@ -1415,7 +1433,7 @@ function tempoPop(){   // TEMPO DA MUSICA: o que fazer quando o BPM/fase/secao e
   const cmd = (c, arg) => post('/tempo-cmd', { cmd: c, arg }).catch(e => toast('tempo: ' + e, 'err'));
   const B = (t, title, fn) => h('button', { class: 'btn sm', title, onclick: fn }, t);
   p.append(h('div', { class: 'ihead' }, h('b', { text: 'Tempo da música' }), h('span', { class: 'grow' }), h('button', { class: 'x', text: '×', onclick: () => p.remove() })),
-    irow('BPM', B('TAP', 'bata no tempo (4 toques; o 1º é o “1”)', () => $('#tap').click()), B('×2', 'o BPM está na METADE: dobra', () => cmd('x2')),
+    irow('BPM', B('×2', 'o BPM está na METADE: dobra', () => cmd('x2')),
       B('÷2', 'o BPM está no DOBRO: divide', () => cmd('d2')), B('auto', 'volta pro BPM detectado', () => post('/tempo', { auto: 1 }).catch(() => {}))),
     irow('fase', B('“1”', 'aperte NUM BUMBO FORTE: vira o 1 do compasso', () => cmd('one')), B('◀', 'empurra as batidas 20 ms pra antes', () => cmd('nudge', -0.02)),
       B('▶', 'empurra 20 ms pra depois', () => cmd('nudge', 0.02)), B('1 da frase', 'este compasso começa a frase', () => cmd('frase1'))),
@@ -1832,6 +1850,8 @@ function syncSGrade(){
   for (const [n, k] of Object.entries(sgEls)) if (activeDrag !== 'sgrade:' + n) k._show(sgVal(n));
   const dirty = lastSGrade.on && Object.keys(lastSGrade.fx).length > 0;
   $('#sg-btn').classList.toggle('on', !$('#sg-box').hidden || dirty);
+  // AUDITORIA (PLANO_CONVERSA §5.3): luz/cor da cena = atomos na SAIDA (um conceito so'). O botao so' aparece na cena que ja' usa
+  $('#sg-btn').hidden = !dirty && $('#sg-box').hidden; if (!dirty && !$('#sg-box').hidden && !Object.keys(lastSGrade.fx).length) $('#sg-box').hidden = true;
   $('#sg-name').textContent = activeScene ? '· ' + activeScene : '';
 }
 $('#sg-btn').onclick = () => { const b = $('#sg-box'); b.hidden = !b.hidden; LS.set('v5sgrade', b.hidden ? 0 : 1); syncSGrade(); };
@@ -1933,10 +1953,10 @@ function gcPost(){   // modificador sem peca some; id que sumiu sai das pecas
 }
 function attachPost(key, j, file){
   const s = stackOf(key)[j]; if (!s) return;
-  const m = newModule(file); delete m.in; delete m.ins;
+  const m = newModule(file); delete m.in;   // EM CIMA le a MARCA do de baixo; a entrada B (se tiver) continua dele
   binding(POST_KEY, true).shaders.push(m); s.post = (s.post || []).concat([m.id]);
   sendBindings(true); setSel(POST_KEY, postStore().length - 1);
-  toast(`${fxName(file)} só em ${fxName(s.file)} — arraste a etiqueta até outra peça pra ela também usar`);
+  toast(`${fxName(file)} em cima de ${fxName(s.file)}: só no que ele faz, o fundo fica`);
 }
 function linkPost(id, key, j){
   const s = stackOf(key)[j]; if (!s || (s.post || []).includes(id)) return;
@@ -2369,7 +2389,7 @@ function boxH(key){ const o = rowOf(key); if (o && o.fold) return HEAD_H + 2;
   if (o && o.kind) return HEAD_H + (o.layers || []).length * LAYER_H + (isShow() ? 0 : 30) + 31 * stackOf(key).length + (o.kind === 'out' ? 34 : 0) + 2;
   const st = stackOf(key), mk = stackOf(key + MK).length ? 34 : 0;
   if (mirrorNode(key)) return HEAD_H + 2;
-  return HEAD_H + (atomNode(key) ? 3 + nodeKnobH(st[0]) : 31 * st.length) + mk + 2; }
+  return HEAD_H + (atomNode(key) ? 3 + nodeKnobH(st[0]) + (postOf(st[0]).length ? 6 + STK_H * postOf(st[0]).length : 0) : 31 * st.length) + mk + 2; }
 const boxW = key => mirrorNode(key) ? MIRROR_W : BOX_W;
 function depthOf(o, seen = new Set()){   // coluna do ARRUMAR = o caminho mais longo ate' uma fonte (corrente A + camadas)
   if (!o || seen.has(o)) return 0; seen.add(o);
@@ -2457,10 +2477,9 @@ function renderBoxes(){
   if (!cvView[0]) cvView = [CV.clientWidth, CV.clientHeight];   // tamanho da vista: do ResizeObserver (ler aqui forcava o layout)
   CVI.style.width = (W + cvView[0] / zz) + 'px'; CVI.style.height = (H + cvView[1] / zz) + 'px';
   if (!rows.some(o => !o.kind)) CVI.append(h('div', { id: 'cv-empty', text: isShow()
-    ? 'Nada no canvas — destrave (cadeado) e arraste uma FONTE da biblioteca pra cá.'
-    : 'Arraste uma FONTE da biblioteca (câmera, vídeo, imagem) pra cá: vira um nó. Clique na bolinha da direita dele: o fio gruda no cursor — clique numa entrada (A, B, máscara, camada de um staging/saída) ou no vazio pro menu.' }));
-  $('#cv-hint').textContent = isShow() ? 'travado · tocar escolhe' : 'bolinha: clique = o fio gruda (Esc cancela) · arrastar também · entrada ligada: puxe pra mover ou soltar no vazio';
-  $('#cost-total').textContent = rows.length ? `≈ ${rows.reduce((t, o) => t + costOf(chKey(o)), 0)} passes de GPU` : '';
+    ? 'Nada no canvas — vá em MONTAR e arraste uma FONTE da biblioteca pra cá.'
+    : 'Arraste uma FONTE da biblioteca (câmera, vídeo, imagem) pra cá: vira um nó. Clique na bolinha da direita dele: o fio gruda no cursor — clique numa entrada (A, B, máscara, camada de uma mistura/saída) ou no vazio pro menu.' }));
+  $('#cv-hint').textContent = isShow() ? '' : 'bolinha: clique = o fio gruda (Esc cancela) · arrastar também · entrada ligada: puxe pra mover ou soltar no vazio';
   requestAnimationFrame(drawBoxWires);
 }
 function srcThumb(key, info){   // miniatura ao vivo da FONTE no cabecalho do no'
@@ -2479,7 +2498,7 @@ function nodeLate(o){   // LED de LACO: alguma entrada le um no' que (direto ou 
 }
 const nodeTitle = key => { const o = rowOf(key); if (!o) return '?'; if (o.kind) return mixName(o);
   const an = atomNode(key) && stackOf(key)[0]; return an ? fxName(an.file) + ' · ' + boxNo(key) : srcInfo(key).name; };
-const mixName = o => o.nome || (o.kind === 'out' ? 'saída ' + (o.n || 1) : 'staging ' + (o.n || ''));
+const mixName = o => o.nome || (o.kind === 'out' ? 'saída ' + (o.n || 1) : 'mistura ' + (o.n || ''));
 const mirrorNode = key => atomNode(key) && !!stackOf(key)[0].espelho;
 function origOf(s){ const t = s && s.espelho && findModule(s.espelho); return t || null; }   // {key, j, s} do ORIGINAL de um espelho
 const origColor = s => { const t = origOf(s); return t ? nodeColor((rowOf(t.key) || {}).id || t.key) : 'var(--tx3)'; };
@@ -2516,7 +2535,7 @@ function boxEl(o, live, mirrored){
   if (info.tap) el.append(inPort(key, 'a', 0, 'A', 'A = a corrente: ' + info.name + (isShow() ? '' : ' — puxe pra mover a ponta ou soltar no vazio (fica sem entrada)')));
   if (an && !mir && (metaOf(an.file).ins.length || (an.ins || []).length)){
     const b = (an.ins || [])[0];
-    el.append(Object.assign(inPort(key, 'b', 0, b === 'fb' ? 'B ↺' : 'B', 'B = a entrada B do átomo' + (b ? ': ' + insName(b) : ' (sem fio: a fonte crua)')), { style: 'top:41px' }));
+    el.append(Object.assign(inPort(key, 'b', 0, b === 'fb' ? 'B ↺' : 'B', 'B = ' + (metaOf(an.file).bnome || 'a entrada B do átomo') + (b ? ': ' + insName(b) : ' (sem fio: a fonte crua)')), { style: 'top:41px' }));
   }
   if (!mir){
     const mt = stackOf(key + MK);
@@ -2551,7 +2570,7 @@ function mixEl(o, live){   // STAGING / SAIDA: entradas numeradas (camadas; em c
   const th = h('div', { class: 'th' }, icon(isOut ? 'tela' : 'mistura', 'sm')), cv = h('canvas');
   th.append(cv); addPreview(cv, '/frame?which=fx&src=' + encodeURIComponent(key), 4);
   const no = isOut ? 'S' + (o.n || 1) : String(boxNo(key));
-  const hd = h('div', { class: 'bh', title: (isOut ? 'SAÍDA: uma imagem final, num lugar do palco (Saída → Saídas no palco)' : 'STAGING: junta as entradas (cada uma = uma camada) e os átomos daqui agem na mistura')
+  const hd = h('div', { class: 'bh', title: (isOut ? 'SAÍDA: uma imagem final, num lugar do palco (Saída → Saídas no palco)' : 'MISTURA: junta as entradas (cada uma = uma camada) e os átomos daqui agem na imagem junta · "no palco" (inspetor) = vira saída')
       + (isShow() ? '' : ' — arraste pra mover · 2 cliques dobra') },
     h('i', { class: 'led' + (on ? ' on' : ''), title: on ? 'no ar' : 'fora do ar' }), h('span', { class: 'ai' }, icon(isOut ? 'tela' : 'mistura', 'sm')),
     h('span', { class: 'nm', text: mixName(o) }), nodeLate(o) ? h('i', { class: 'led lp', title: 'LAÇO: uma entrada lê o quadro anterior' }) : null, th, h('span', { class: 'n', text: no }));
@@ -2710,7 +2729,7 @@ function atomRow(key, j, s){
   if (s.mod && Object.keys(s.mod).length) line.append(h('span', { class: 'bdgs' }, Object.entries(s.mod).map(([n, m]) => modBadge(m, n))));
   const b = (s.ins || [])[0];
   if (b && b !== 'src') line.append(h('span', { class: 'b', text: b === 'fb' ? '↺' : 'B', title: 'entrada B: ' + insName(b) }));
-  if ((s.pub || []).length) line.append(h('span', { class: 'pubdot', title: 'tem knob publicado (aparece travado)' }, icon('estrela-on', 'sm')));
+  if ((s.pub || []).length) line.append(h('span', { class: 'pubdot', title: 'tem knob publicado (aparece em TOCAR)' }, icon('estrela-on', 'sm')));
   if (!node) line.append(barCtl(key, j, s, main));   // NO': os knobs redondos vao embaixo (nodeKnobs)
   else if (line.children.length === 1) line.classList.add('thin');   // so' a alca: faixa fina (selos/B/estrela = altura normal)
   r.append(line);
@@ -2726,7 +2745,7 @@ function atomRow(key, j, s){
     if (det.length) r.append(h('div', { class: 'dt' }, det.map(n => h('div', { class: 'al' }, h('span', { class: 'dn', text: n === 'opacity' ? 'opacidade' : n }), barCtl(key, j, s, n)))));
   }
   const ps = postOf(s);
-  if (ps.length) r.append(h('div', { class: 'posts' }, ps.map(p => postChip(p))));
+  if (ps.length) r.append(node ? h('div', { class: 'stk' }, ps.map(p => stackRow(p))) : h('div', { class: 'posts' }, ps.map(p => postChip(p))));
   r.onclick = e => { e.stopPropagation(); if (isSel && !node){ openAt = openAt === key + '|' + j ? '' : key + '|' + j; LS.set('v5openAt', openAt); } setSel(key, j, true); };
   if (!isShow()) r.onpointerdown = e => atomPointerDown(e, key, j, r);
   return r;
@@ -2792,6 +2811,17 @@ function postChip(p){   // MODIFICADOR PARALELO embaixo do atomo: clique = contr
     icon(catIcon(c), 'sm'), h('span', { text: fxName(p.file) }), n > 1 ? h('b', { text: '×' + n }) : null);
   el.onclick = e => { e.stopPropagation(); setSel(POST_KEY, idx, true); };
   el.onpointerdown = e => { e.stopPropagation(); if (isShow()) return; startDrag(e, { kind: 'postlink', id: p.id, label: fxName(p.file), icon: catIcon(c), click: () => setSel(POST_KEY, idx, true) }); };
+  return el;
+}
+const STK_H = 30;   // uma linha EM CIMA no card (boxH conta)
+function stackRow(p){   // EM CIMA (no card do no'): ↳ icone Nome [knob principal] — clique = controles; arrastar ate' outro atomo = ele tambem usa
+  const idx = postStore().indexOf(p), n = postUsers(p.id).length, c = catOf(p.file), main = mainKnob(p), base = (postUsers(p.id)[0] || {}).s;
+  const el = h('div', { class: 'sr' + (sel.key === POST_KEY && sel.j === idx ? ' sel' : '') + (p.off ? ' off' : ''), 'data-post': p.id,
+    title: `${fxName(p.file)} EM CIMA${base ? ' de ' + fxName(base.file) : ''}: age só no que ele faz, não no fundo${n > 1 ? ` (o mesmo em mais ${n - 1})` : ''} — clique: controles · arraste até outro átomo: ele também usa` },
+    icon(catIcon(c), 'sm'), h('span', { class: 'nm', text: fxName(p.file) }), n > 1 ? h('b', { text: '×' + n }) : null, barCtl(POST_KEY, idx, p, main));
+  el.onclick = e => { e.stopPropagation(); setSel(POST_KEY, idx, true); };
+  el.onpointerdown = e => { if (e.target.closest('.fader, .sw, .chseg, .choice')) return; e.stopPropagation(); if (isShow()) return;
+    startDrag(e, { kind: 'postlink', id: p.id, label: fxName(p.file), icon: catIcon(c), click: () => setSel(POST_KEY, idx, true) }); };
   return el;
 }
 function syncBoxes(){   // valores sem refazer (outra aba, MIDI, cena nova com a mesma estrutura)
@@ -3061,7 +3091,7 @@ function plug(ref, tgt){   // liga '@<id>' na entrada tgt = {key, port: a|b|m|L,
   let o = rowOf(tgt.key); if (!o || !isTapKey(ref)) return;
   let k = tgt.key;
   if (tgt.port === 'a'){
-    if (!isTapKey(o.file)) return toast('a fonte não tem entrada A — ligue numa entrada de átomo, staging ou saída', 'err');
+    if (!isTapKey(o.file)) return toast('a fonte não tem entrada A — ligue numa entrada de átomo, mistura ou saída', 'err');
     k = renameRowKey(o, ref);
   } else if (tgt.port === 'b'){ const s = stackOf(k)[tgt.idx || 0]; if (!s) return; s.ins = [ref]; }
   else if (tgt.port === 'm'){
@@ -3092,8 +3122,8 @@ function nodeMenu(ev, ref, who){
   const W = 300, Hh = 380; Object.assign(menu.style, { left: Math.min(innerWidth - W - 8, ev.clientX) + 'px', top: Math.max(8, Math.min(innerHeight - Hh - 8, ev.clientY - 20)) + 'px' });
   const origs = []; for (const [k, b] of Object.entries(lastBindings)) if (!isMk(k) && k !== POST_KEY) (b.shaders || []).forEach((s, j) => { if (!s.espelho && s.id && rowOf(k)) origs.push({ key: k, j, s }); });
   const base = [
-    { t: 'staging novo', d: 'mixer: junta várias entradas (cada uma, uma camada) e os átomos dele agem na mistura', ic: 'mistura', go: () => newMix('mix', ref, xy) },
-    { t: 'saída nova', d: 'outra imagem final, posicionada no palco (Saída → Saídas no palco)', ic: 'tela', go: () => newMix('out', ref, xy) },
+    { t: 'mistura', d: 'junta várias entradas (cada uma, uma camada); os átomos dela agem na imagem junta', ic: 'mistura', go: () => newMix('mix', ref, xy) },
+    { t: 'mistura no palco (saída)', d: 'a mesma mistura, já com lugar no palco: o que o público vê', ic: 'tela', go: () => newMix('out', ref, xy) },
     { t: 'nó vazio', d: 'só passa a imagem (ponto de ramo; solte átomos nele depois)', ic: 'ramo', go: () => newNode(ref, xy, null) }];
   const atoms = lastShaderList.filter(f => isAtomFile(f) && catOf(f) !== 'mascara').map(f => ({ t: fxName(f), d: metaOf(f).desc || '', c: catOf(f), ic: catIcon(catOf(f)), go: () => newNode(ref, xy, newModule(f)) }));
   const mirrors = origs.map(x => ({ t: 'espelho · ' + fxName(x.s.file), d: `o MESMO átomo do nó ${boxNo(x.key)}: knobs e movimentos dele, agindo aqui`, ic: catIcon(catOf(x.s.file)),
@@ -3160,8 +3190,17 @@ function newMix(kind, ref, xy){   // STAGING (mixer) ou SAIDA nova; ref = a 1a e
   if (kind === 'out'){ o.n = Math.max(0, ...outRows().map(x => x.n || 0)) + 1; o.nome = 'saída ' + o.n; const r = freeScreenRect(); if (r && outRows().length) o.rect = r.map(v => Math.round(v * 10000) / 10000); }
   else o.n = nextNo();
   lastOverlays.push(o); declutter([o]); sendOverlays(true); setSel(chKey(o), -1, true);
-  toast(kind === 'out' ? `${o.nome}${o.rect ? ' (numa tela livre do palco)' : ''} — posição em Saída → Saídas no palco` : `staging ${o.n}: ligue mais entradas na bolinha "+"`);
+  toast(kind === 'out' ? `${o.nome}${o.rect ? ' (numa tela livre do palco)' : ''} — posição em Saída → Saídas no palco` : `mistura ${o.n}: ligue mais entradas na bolinha "+" · no inspetor, "no palco" = vira saída`);
   return o;
+}
+function setOnStage(key, on){   // MISTURA = SAIDA (PLANO_CONVERSA §8.1): o mesmo no'; "no palco" troca o kind no lugar (a chave '+id' nao muda)
+  const o = rowOf(key); if (!o || (o.kind === 'out') === on) return;
+  if (!on && outRows().length === 1) return toast('é a única saída: ligue outra no palco antes (senão nada vai pro ar)', 'err');
+  if (on){ o.kind = 'out'; o.n = Math.max(0, ...outRows().map(x => x.n || 0)) + 1; if (!o.nome || /^mistura \d*$/.test(o.nome)) o.nome = 'saída ' + o.n;
+    const r = freeScreenRect(); if (r) o.rect = r.map(v => Math.round(v * 10000) / 10000); }
+  else { o.kind = 'mix'; delete o.n; o.n = nextNo(); delete o.rect; if (/^saída \d*$/.test(o.nome || '')) delete o.nome; }
+  sendOverlays(true); cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl();
+  toast(on ? `${mixName(o)}: agora no palco${o.rect ? ' (numa tela livre)' : ''}` : `${mixName(o)}: só mistura (fora do palco)`);
 }
 function newMixHere(kind){ const R = CV.getBoundingClientRect(), z = cvZoom(); newMix(kind, null, [(CV.scrollLeft + R.width * 0.45) / z, (CV.scrollTop + R.height * 0.35) / z]); }
 // GRADE (regra 6): ligar/desligar caixa ou atomo espera a fronteira escolhida (tp-quant: batida/compasso/frase) — o motor solta
@@ -3398,13 +3437,13 @@ function renderCtlNode(box, j, c){   // CONTROLADOR: a receita (presets + abrir.
 }
 function renderPostCtl(box, j, s){   // MODIFICADOR PARALELO: knobs dele + em que pecas ele age (fios)
   const file = s.file, users = postUsers(s.id), set = fn => { fn(s); sendBindings(true); cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl(); };
-  box.append(h('div', { class: 'ihead' }, icon(catIcon(catOf(file))), h('b', { text: fxName(file) }), h('span', { class: 'hint', text: 'paralelo · só nos átomos abaixo' }), h('span', { class: 'grow' }),
+  box.append(h('div', { class: 'ihead' }, icon(catIcon(catOf(file))), h('b', { text: fxName(file) }), h('span', { class: 'hint', text: 'em cima · só no que ' + (users.length === 1 ? fxName(users[0].s.file) : 'eles') + ' faz, não no fundo' }), h('span', { class: 'grow' }),
     h('button', { class: 'ib' + (s.off ? '' : ' on'), title: s.off ? 'desligado (clique liga)' : 'ligado (clique desliga)', onclick: () => set(x => { if (x.off) delete x.off; else x.off = 1; }) }, icon('power')),
     h('button', { class: 'ib del', title: 'tirar este modificador de todos os átomos', onclick: () => { removeModules(POST_KEY, [j]); setSel(users[0] ? users[0].key : '', users[0] ? users[0].j : -1); } }, icon('lixo'))));
   if (metaOf(file).desc) box.append(h('div', { class: 'idesc', text: metaOf(file).desc }));
-  box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'age em' }), h('div', { class: 'chips' }, users.map(u =>
+  box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'em cima de' }), h('div', { class: 'chips' }, users.map(u =>
     h('button', { class: 'chip on', title: 'tirar deste átomo', onclick: () => unlinkPost(s.id, u.key, u.j) }, fxName(u.s.file) + ' ×')))));
-  box.append(h('div', { class: 'hint', text: 'arraste a etiqueta dele (embaixo do átomo) até outro átomo: ele passa a usar o mesmo, com os mesmos knobs' }));
+  box.append(h('div', { class: 'hint', text: 'arraste a linha ↳ dele até outro átomo: aquele também usa o mesmo (mesmos knobs). Pra agir na imagem inteira, solte no FIO.' }));
   const main = mainKnob(s);
   if (main !== 'opacity') box.append(h('div', { class: 'irow' }, knobCell(POST_KEY, j, s, main, 0, 56)));
   knobSection(box, POST_KEY, j, s);
@@ -3412,12 +3451,15 @@ function renderPostCtl(box, j, s){   // MODIFICADOR PARALELO: knobs dele + em qu
 function renderShowCtl(box){
   const pubs = pubList();
   $('#ctl-lbl').textContent = 'Controles'; $('#ctl-hint').textContent = pubs.length ? 'os knobs publicados desta cena' : '';
-  if (!pubs.length){
-    const s = selModule();
-    box.append(h('div', { class: 'hint', style: 'margin-bottom:8px', text: 'nada publicado nesta cena — destravado, a estrela num knob o traz pra cá. Abaixo: os knobs do átomo escolhido.' }));
-    if (!s){ box.append(h('div', { class: 'empty', text: 'toque num átomo do canvas' })); return; }
-    box.append(h('div', { class: 'ihead' }, icon(catIcon(catOf(s.file))), h('b', { text: fxName(s.file) })));
-    box.append(h('div', { class: 'kgrid', style: 'margin-top:8px' }, ['opacity', ...knobsOf(s.file)].map((n, i) => h('div', { class: 'kcell' }, pieceCtl(sel.key, sel.j, n, i, 52)))));
+  if (!pubs.length){   // nada publicado: o PRINCIPAL de cada atomo no ar (TOCAR nunca e' um beco; MONTAR ★ escolhe quais)
+    const live = liveKeys(), auto = [];
+    for (const o of rowsVisible()){ const k = chKey(o); if (!live.has(k)) continue;
+      stackOf(k).forEach((s, j) => { if (!s.espelho && !s.off && s.file !== 'ctl') auto.push({ key: k, j, s, n: mainKnob(s) }); }); }
+    $('#ctl-hint').textContent = auto.length ? 'o principal de cada átomo no ar · em MONTAR, ★ escolhe quais' : '';
+    if (!auto.length){ box.append(h('div', { class: 'empty', text: 'nada no ar ainda' })); return; }
+    const grid = h('div', { class: 'kgrid' });
+    for (const p of auto.slice(0, 12)) grid.append(h('div', { class: 'kcell', title: fxName(p.s.file) }, pieceCtl(p.key, p.j, p.n, 0, 60), h('span', { class: 'hint', text: fxName(p.s.file) })));
+    box.append(grid);
     return;
   }
   let last = '';
@@ -3475,10 +3517,13 @@ function renderMixCtl(box, key){   // STAGING / SAIDA: nome, as entradas (camada
   const nm = h('input', { class: 'inp sm', value: mixName(o), title: 'nome' });
   nm.onchange = () => set(x => { const v = nm.value.trim(); if (v) x.nome = v; else delete x.nome; });
   box.append(h('div', { class: 'ihead' }, h('span', { class: 'bno', text: isOut ? 'S' + (o.n || 1) : String(boxNo(key)) }), icon(isOut ? 'tela' : 'mistura'), nm, h('span', { class: 'grow' }),
-    h('button', { class: 'ib del', title: (isOut ? 'tirar esta saída' : 'tirar este staging (quem lia ele passa a ler a 1ª entrada)') + ' · Ctrl+Z volta', onclick: () => {
+    h('button', { class: 'ib del', title: (isOut ? 'tirar esta saída' : 'tirar esta mistura (quem lia ela passa a ler a 1ª entrada)') + ' · Ctrl+Z volta', onclick: () => {
       if (isOut && outRows().length === 1) toast('era a única saída: nada vai pro ar até ligar uma (Ctrl+Z volta)', 'err'); removeRow(key); } }, icon('lixo'))));
+  box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'no palco' }), swEl({ on: isOut, text: isOut ? 'é uma saída' : 'não (mistura)',
+    title: 'NO PALCO: a mistura ganha um lugar no palco e vira o que o público vê (uma SAÍDA). Desligar = volta a ser só mistura (dá pra ligar em outra).',
+    onclick: () => setOnStage(key, !isOut) })));
   box.append(h('div', { class: 'idesc', text: isOut ? 'SAÍDA: uma imagem final. Cada entrada é uma camada (em cima = na frente); o lugar dela no palco fica em Saída → Saídas no palco.'
-    : 'STAGING: junta as entradas (cada uma, uma camada) numa imagem só — os átomos dele agem na mistura. A saída dele vai pra outro staging ou uma saída.' }));
+    : 'MISTURA: junta as entradas (cada uma, uma camada) numa imagem só — os átomos dela agem na imagem junta. Ligue "no palco" e ela vira uma SAÍDA.' }));
   const sect = h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Entradas · em cima = na frente' }));
   const lays = o.layers || [];
   if (!lays.length) sect.append(h('div', { class: 'hint', text: 'nenhuma: puxe a bolinha de saída de um nó até a entrada "+" deste.' }));
@@ -3507,8 +3552,8 @@ function renderSrcCtl(box, key){   // a CAIXA: de onde le, fonte, mascara (e/ou,
     h('button', { class: 'btn sm', onclick: () => setSel(info.mother.key, info.mother.j ?? -1) }, icon('ramo', 'sm'), 'caixa ' + boxNo(info.mother.key) + (info.mother.j != null ? ' · no meio' : '')),
     h('button', { class: 'btn sm', title: 'tira o fio da entrada A: o nó fica sem entrada', onclick: () => cutIn(key) }, 'desligar')));
   const goes = layersOf(key);   // pra onde vai: cada CAMADA que le este no' (staging/saida)
-  box.append(h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Vai para' }), goes.length ? null : h('div', { class: 'hint', text: liveKeys().has(key) ? 'não vai direto pra um staging/saída — está no ar pela corrente (os nós depois dele).'
-    : 'nenhum staging/saída — não está no ar. Puxe a bolinha da direita até a entrada de uma saída.' })));
+  box.append(h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Vai para' }), goes.length ? null : h('div', { class: 'hint', text: liveKeys().has(key) ? 'não vai direto pra uma mistura/saída — está no ar pela corrente (os nós depois dele).'
+    : 'nenhuma mistura/saída — não está no ar. Puxe a bolinha da direita até a entrada de uma saída.' })));
   for (const l of goes) box.lastChild.append(h('div', { class: 'irow' }, h('button', { class: 'btn sm', onclick: () => setSel(chKey(l.node), -1) }, icon(l.node.kind === 'out' ? 'tela' : 'mistura', 'sm'), mixName(l.node) + ' · entrada ' + (l.i + 1))), layerCtl(chKey(l.node), l.i));
   if (!info.tap){
     const med = () => lastMedia.find(x => x.file === info.file);
@@ -3528,7 +3573,7 @@ function renderSrcCtl(box, key){   // a CAIXA: de onde le, fonte, mascara (e/ou,
   }
   // MASCARA DA CAIXA: os atomos de mascara (faixa no pe' da caixa) — como juntam e o que passa fora
   const mt = stackOf(key + MK), setM = fn => { const x = matteOf(key, true); fn(x); sendBindings(true); cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl(); };
-  const sect = h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Máscara da caixa' }));
+  const sect = h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Só onde (máscara)' }));
   if (!mt.length) sect.append(h('div', { class: 'hint', text: 'arraste uma máscara da biblioteca (Assunto, Brilho, Cor) até a caixa: o resultado dela só aparece onde a máscara acha; fora passa a entrada.' }));
   else {
     sect.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'fora dela' }), h('div', { class: 'chips' },
@@ -3540,8 +3585,6 @@ function renderSrcCtl(box, key){   // a CAIXA: de onde le, fonte, mascara (e/ou,
     sect.append(h('div', { class: 'chips' }, mt.map((s, j) => h('button', { class: 'chip', onclick: () => setSel(key + MK, j) }, icon('mascara', 'sm'), fxName(s.file)))));
   }
   box.append(sect);
-  box.append(h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Onde no palco' }), h('div', { class: 'hint', text: 'o lugar é da SAÍDA (e de cada entrada dentro dela): Saída → Saídas no palco; 2 cliques numa saída = as entradas dela.' }),
-    h('button', { class: 'btn sm', onclick: () => { openDrawer('eq', 'telas'); setStgView('fontes'); } }, icon('palco', 'sm'), 'saídas no palco')));
 }
 function renderModCtl(box, key, j, s){   // um ATOMO: o principal grande + ate' 2 detalhes; o resto (modo, entrada crua, batida) em "mais"
   const file = s.file, m = metaOf(file), toggles = togglesOf(file);
@@ -3552,14 +3595,14 @@ function renderModCtl(box, key, j, s){   // um ATOMO: o principal grande + ate' 
     isMk(key) ? null : h('button', { class: 'ib', title: 'ESPELHO: um nó novo com o MESMO átomo (knobs e movimentos daqui, sem knob próprio) — religue o fio dele onde quiser · Alt+arrastar o átomo = espelho onde soltar',
       onclick: () => { const o = rowOf(key), oid = s.espelho || ensureId(s); if (!o || !o.xy) return; sendBindings(true);
         newNode(isNodeKey(key) ? '@' + o.id : o.file, [o.xy[0], o.xy[1] + boxH(key) + 24], { file: s.file, opacity: 1, in: 'chain', id: rid(), espelho: oid }); } }, icon('grupo')),
-    h('button', { class: 'ib', title: 'sortear os knobs (os modulados ficam) — desfaz com Ctrl+Z', onclick: () => dice(key, j) }, icon('dado')),
     h('button', { class: 'ib', title: 'VARIAÇÕES: 4 mutações da caixa, fora do ar', onclick: openVariants }, icon('variar')),
     h('button', { class: 'ib del', title: 'tirar este átomo (Delete) — a corrente se fecha', onclick: () => removeModules(key, [j]) }, icon('lixo'))));
   if (m.desc) box.append(h('div', { class: 'idesc', text: m.desc }));
+  if (atomDecl(m)) box.append(h('div', { class: 'hint', style: 'white-space:pre-line;margin-bottom:6px', text: atomDecl(m).trim() }));   // ♪ / vê / fora do padrao
   box.append(h('div', { class: 'irow' }, knobCell(key, j, s, mainKnob(s), 0, 56)));
   if (m.ins.length || (s.ins || []).length){   // ENTRADA B: um FIO na bolinha B do no' — ou, sem fio, a fonte crua / ele mesmo 1 quadro atras
     const b0 = (s.ins || [])[0] || 'src', wire = isTapKey(b0);
-    box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'entrada B' }), h('div', { class: 'chips' },
+    box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: m.bnome ? 'B · ' + m.bnome : 'entrada B', title: 'a entrada B deste átomo' + (m.bnome ? ': ' + m.bnome : '') }), h('div', { class: 'chips' },
       wire ? h('button', { class: 'chip pick', title: 'o fio na bolinha B — puxe a ponta pra mover/tirar', onclick: () => { const k = nodeKeyOfRef(b0); if (k) setSel(k, -1); } }, icon('ramo', 'sm'), insName(b0)) : null,
       h('button', { class: 'chip' + (b0 === 'src' ? ' pick' : ''), text: 'a fonte crua', onclick: () => set(x => { x.ins = ['src']; }) }),
       h('button', { class: 'chip' + (b0 === 'fb' ? ' pick' : ''), text: '↺ 1 quadro atrás', title: 'feedback: este nó, 1 quadro atrás', onclick: () => set(x => { x.ins = ['fb']; }) }))));
@@ -3581,14 +3624,14 @@ function renderModCtl(box, key, j, s){   // um ATOMO: o principal grande + ate' 
   const more = h('details', { class: 'sect more' }, h('summary', { class: 'lbl', text: 'mais' }));
   more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'mistura' }), h('div', { class: 'chips' }, LAYER_BLENDS.map(([v, t]) => h('button', { class: 'chip' + ((s.blend || 'normal') === v ? ' pick' : ''), text: t,
     title: 'como este átomo mistura com o que vem antes', onclick: () => set(x => { if (v === 'normal') delete x.blend; else x.blend = v; }) })))));
-  more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'lê' }), h('div', { class: 'chips' }, [['chain', 'o que vem antes'], ['src', 'a fonte crua']].map(([v, t]) =>
-    h('button', { class: 'chip' + ((s.in === 'src' ? 'src' : 'chain') === v ? ' pick' : ''), text: t, onclick: () => set(x => { x.in = v; }) })))));
+  if (s.in === 'src') more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'lê' }), h('button', { class: 'chip on', text: 'a fonte crua → ler o fio A',   // cena antiga: o fio A ja' diz de onde le
+    title: 'cena antiga: este átomo lê a fonte crua, não o que chega no fio A. Pra ler a fonte, ligue a fonte no A.', onclick: () => set(x => { x.in = 'chain'; }) })));
   const tg = h('div', { class: 'chips' });
   if (!toggles.includes('on_kick') && s.kick) tg.append(h('button', { class: 'chip on', text: 'só na batida', title: 'cena antiga: a opacidade vai junto com o kick — hoje isso é o movimento “pulsa” na opacidade (clique desliga)',
     onclick: () => set(x => { if (x.kick) delete x.kick; else x.kick = 1; }) }));
   for (const n of toggles){ const on = fxVal(key, s, n) >= 0.5;
     tg.append(swEl({ on, text: n.slice(3), title: 'liga/desliga', onclick: () => set(x => setFxVal(key, x, n, fxVal(key, x, n) >= 0.5 ? 0 : 1)) })); }
-  more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'dispara' }), tg));
+  if (tg.children.length) more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'dispara' }), tg));
   if (s.region) more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'região (v4)' }),
     h('button', { class: 'chip on', title: 'cena antiga: este átomo age só ' + (s.region === 'subject' ? 'no assunto' : 'no fundo') + '. Na v5 isso é a máscara da caixa.', onclick: () => {
       const r = s.region; set(x => delete x.region); addMask(key, 'presets/atomos/Assunto.frag');
@@ -3694,11 +3737,6 @@ function syncMv(){   // sinal VIVO de cada movimento (motor, SSE mv): barras do 
 function syncCtl(a){   // valores vivos sem refazer: knobs (MIDI/outra aba) + marcador do sinal nas faixas
   if (now() - bindTouched >= TOUCH_MS) for (const k of Object.values(devEls)) if (!k.classList.contains('drag') && CTRL[k.dataset.midi]) k._show(CTRL[k.dataset.midi].get());
   for (const m of modLive){ const s = stackOf(m.key)[m.j], md = s && (s.mod || {})[m.n]; if (!md) continue; const [lo, hi] = m.lohi(); m.el._live(lo + (hi - lo) * modLevel(md, a)); }
-}
-function dice(key, j){   // DESCOBERTA: sorteia os knobs (os modulados ficam) — desfaz com Ctrl+Z
-  const x = stackOf(key)[j]; if (!x) return;
-  for (const n of knobsOf(x.file).filter(n => !(x.mod || {})[n])) setFxVal(key, x, n, Math.random());
-  sendBindings(true); ctlSig = ''; renderCtl();
 }
 function applyModulator(key, j, n, spec){   // algo da biblioteca/painel solto num knob
   const s = stackOf(key)[j]; if (!s) return;
@@ -3824,9 +3862,10 @@ function moveModules(fk, js, tk, at){
 // BIBLIOTECA (destravado, embaixo das cenas): fontes, atomos por tipo, mascaras, moduladores.
 // Arrastar = zonas no canvas; clicar = entra depois do atomo escolhido (fonte = caixa nova; mascara = na caixa escolhida).
 // =====================================================================================
-let palSig = '', palCat = LS.get('v5palCat', '');
-const PAL_CATS = [['', 'outros', 'tudo'], ['fonte', 'camera', 'fontes'], ['receita', 'grupo', 'receitas'], ['mascara', 'mascara', 'máscaras'], ['ctl', 'sin', 'controladores'],
-  ...CATS.filter(c => c[0] && c[0] !== 'mascara').map(([c, l]) => [c, c, l])];
+// BIBLIOTECA (v6, PLANO_CONVERSA §8.4): 4 abas com PALAVRAS (eram 15 icones de categoria: dificil de ler) = as 4 coisas que se
+// arrastam pro canvas. A busca procura em TODAS. Dentro de Atomos: grupos por tipo, "Onde" (mascaras) e "Outros" (cat: nova).
+const PAL_TABS = [['fonte', 'Fontes'], ['atomo', 'Átomos'], ['ctl', 'Movimentos'], ['receita', 'Receitas']];
+let palSig = '', palCat = PAL_TABS.some(([t]) => t === LS.get('v5palTab', '')) ? LS.get('v5palTab', '') : 'atomo';
 function ctlItems(){
   return [...Object.keys(VOCAB.presets || {}).map(p => ({ name: (PRESET_TXT[p] || [p])[0], icon: presetIcon(p), spec: { kind: 'preset', name: p }, desc: (PRESET_TXT[p] || ['', ''])[1] })),
     { name: 'Som: grave', icon: 'som', spec: { kind: 'som', b: ['subbass', 'lowmid'] }, desc: 'o grave da música mexe o knob' },
@@ -3842,7 +3881,8 @@ function renderPalette(){
   const sig = JSON.stringify([q, palCat, lastShaderList, Object.keys(lastMeta).length, lastRecipes.length, lastVideoInputs.map(v => v.id), lastMedia.map(m => m.file)]);
   if (sig === palSig) return; palSig = sig;
   const cats = $('#pal-cats'); cats.innerHTML = '';
-  for (const [c, ic, l] of PAL_CATS) cats.append(h('button', { class: palCat === c ? 'on' : '', title: l, onclick: () => { palCat = c; LS.set('v5palCat', c); palSig = ''; renderPalette(); } }, icon(ic, 'sm')));
+  for (const [t, l] of PAL_TABS) cats.append(h('button', { class: palCat === t ? 'on' : '', text: l, onclick: () => { palCat = t; LS.set('v5palTab', t); palSig = ''; renderPalette(); } }));
+  const tab = t => palCat === t || !!q;   // com busca: todas as abas
   const box = $('#pal'); box.innerHTML = '';
   const hit = (...xs) => !q || xs.some(x => String(x || '').toLowerCase().includes(q));
   const group = (title, ic, items) => { if (!items.length) return; box.append(h('div', { class: 'pgt' }, icon(ic, 'sm'), title)); items.forEach(it => box.append(it)); };
@@ -3851,34 +3891,38 @@ function renderPalette(){
     el.onpointerdown = e => startDrag(e, Object.assign({ label: name, icon: ic, click }, spec));
     return el;
   };
-  if (!palCat || palCat === 'fonte'){
+  if (tab('fonte')){
     const srcs = [...lastVideoInputs.filter(x => x.kind !== 'media').map(x => [x.id, x.kind === 'screen' ? 'tela' : 'camera', x.name, x.kind === 'screen' ? 'tela' : 'câmera']),
       ...lastMedia.map(m => [m.file, m.kind === 'video' ? 'video' : 'imagem', m.name, m.kind === 'video' ? 'vídeo' : 'imagem'])].filter(([, , n, k]) => hit(n, k));
     group('Fontes', 'camera', srcs.map(([f, ic, n, k]) => item(ic, n, k, 'fonte: arraste pro canvas (caixa nova) ou em cima de uma caixa (troca a fonte dela) · clique = caixa nova',
       { kind: 'src', file: f }, () => newBox(f, [24, (Math.max(0, ...lastOverlays.map(o => (o.xy || [0, 0])[1] + boxH(chKey(o))))) + 28]))));
   }
   const atoms = lastShaderList.filter(f => f.startsWith('presets/'));
-  if (!palCat || palCat === 'mascara') group('Máscaras', 'mascara', atoms.filter(f => isMaskFile(f) && hit(fxName(f), metaOf(f).desc)).map(f =>
+  const masks = () => tab('atomo') && group('Onde (máscaras)', 'mascara', atoms.filter(f => isMaskFile(f) && hit(fxName(f), metaOf(f).desc)).map(f =>
     item('mascara', fxName(f), '', (metaOf(f).desc || '') + ' — solte numa caixa: ela só aparece onde a máscara acha', { kind: 'mask', file: f }, () => {
       const k = mkBase(sel.key); if (k && rowOf(k)) addMask(k, f); else toast('escolha uma caixa (ou arraste até ela)', 'err'); })));
-  if (!palCat || palCat === 'ctl') group('Controladores', 'sin', ctlItems().filter(c => hit(c.name, c.desc)).map(c =>
+  if (tab('ctl')) group('Movimentos', 'sin', ctlItems().filter(c => hit(c.name, c.desc)).map(c =>
     item(c.icon, c.name, '', c.desc + ' — arraste até um knob (liga direto) ou pro vazio do canvas (controlador solto, ligue depois pelo losango)', { kind: 'ctl', spec: c.spec }, () => {
       const [mk, mj, mn] = modOpen.split('|'), s = selModule();
       if (s && knobsOf(s.file).length) applyModulator(sel.key, sel.j, mn && mk === sel.key && +mj === sel.j ? mn : mainKnob(s) === 'opacity' ? knobsOf(s.file)[0] : mainKnob(s), c.spec);
       else toast('escolha um átomo (ou arraste até ele)', 'err'); })));
-  const modItem = f => item(catIcon(catOf(f)), fxName(f), '', (metaOf(f).desc || fxName(f)) + ' — arraste pra dentro de uma caixa, ou clique (entra depois do átomo escolhido)',
-    { kind: 'mod', file: f }, () => clickInsert(f));
-  const mods = atoms.filter(f => !isMaskFile(f) && metaOf(f).atom && (!palCat || catOf(f) === palCat));   // so' ATOMOS (contrato v2)
+  const modItem = f => { const m = metaOf(f), el = item(catIcon(catOf(f)), fxName(f), '', (m.desc || fxName(f)) + ' — no FIO: age em tudo · no CARD de um átomo: só no que ele faz · clique: depois do escolhido' + atomDecl(m),
+    { kind: 'mod', file: f }, () => clickInsert(f)); el.append(...atomBadges(m)); return el; };
+  const mods = atoms.filter(f => !isMaskFile(f) && metaOf(f).atom);   // ATOMOS: tudo que nao QUEBRA (PLANO_CONVERSA §9.3)
   const tools = atoms.filter(f => TOOLS.includes(f) && hit(fxName(f), metaOf(f).desc));   // classicos: so' o que e' ferramenta (o resto virou RECEITA)
-  if (!palCat || palCat === 'receita') group('Receitas', 'grupo', lastRecipes.filter(r => hit(r.nome, r.desc, r.items.map(x => fxName(x.file)).join(' '))).map(r =>
+  if (tab('receita')) group('Receitas', 'grupo', lastRecipes.filter(r => hit(r.nome, r.desc, r.items.map(x => fxName(x.file)).join(' '))).map(r =>
     item('grupo', r.nome || r.name, r.items.map(x => fxName(x.file)).join(' → '), r.desc + ' — arraste pra dentro de uma caixa (vira uma corrente de átomos' + (r.items.some(x => x.mod) ? ' + controladores' : '') + '), ou clique',
       { kind: 'recipe', r }, () => clickRecipe(r))));
-  if (palCat === 'fonte' || palCat === 'mascara' || palCat === 'ctl' || palCat === 'receita'){ /* so' o grupo da aba */ }
+  if (!tab('atomo')){ /* so' o grupo da aba */ }
   else if (q){
     const rank = f => { const n = fxName(f).toLowerCase(); return n.startsWith(q) ? 0 : n.includes(q) ? 1 : 2; };
     group('Átomos', 'outros', mods.filter(f => hit(fxName(f), metaOf(f).desc, (CATS.find(([c]) => c === catOf(f)) || [])[1])).sort((a, b) => rank(a) - rank(b)).map(modItem));
-  } else for (const [c, l] of CATS) if (c !== 'mascara') group(l, catIcon(c), mods.filter(f => catOf(f) === c).map(modItem));
-  if (!palCat && tools.length){   // FERRAMENTAS: nao e' efeito (padrao de teste do telao)
+  } else {
+    for (const [c, l] of CATS) if (c !== 'mascara') group(l, catIcon(c), mods.filter(f => catOf(f) === c).map(modItem));
+    group('Outros', 'outros', mods.filter(f => !CATS.some(([c]) => c === catOf(f))).map(modItem));   // cat: do desenvolvedor (fora da lista)
+  }
+  masks();
+  if (palCat === 'atomo' && !q && tools.length){   // FERRAMENTAS: nao e' efeito (padrao de teste do telao)
     const d = h('details', { class: 'pclassic' }, h('summary', { class: 'pgt' }, icon('outros', 'sm'), 'Ferramentas (' + tools.length + ')'));
     tools.forEach(f => d.append(modItem(f)));
     if (LS.get('v5classic') === '1') d.open = true;
@@ -3888,6 +3932,12 @@ function renderPalette(){
   if (!box.children.length) box.append(h('div', { class: 'empty', text: q ? 'nada com “' + q + '”' : 'vazio' }));
 }
 $('#pal-q').oninput = () => renderPalette();
+// DECLARAR, NAO PROIBIR (PLANO_CONVERSA §9.3): o que o atomo LE de fora do preludio e o que foge do padrao, a' vista
+const atomDecl = m => (m.ouve ? '\n♪ ouve a música direto: ' + m.ouve.join(', ') : '') + (m.ve ? '\nvê: ' + m.ve.filter(x => !x.endsWith('_on')).join(', ') : '')
+  + (m.avisos ? '\nfora do padrão (roda igual): ' + m.avisos.join(' · ') : '');
+const atomBadges = m => [m.ouve ? h('span', { class: 'abdg', title: 'ouve a música direto: ' + m.ouve.join(', ') }, icon('som', 'sm')) : null,
+  m.ve ? h('span', { class: 'abdg', title: 'vê: ' + m.ve.filter(x => !x.endsWith('_on')).join(', ') }, icon('olho', 'sm')) : null,
+  m.avisos ? h('span', { class: 'abdg warn', title: 'fora do padrão (roda igual): ' + m.avisos.join(' · '), text: '!' }) : null].filter(Boolean);
 function clickInsert(file){   // entra depois do atomo escolhido (ou no fim da caixa escolhida / da da frente)
   const k = mkBase(sel.key), key = k && rowOf(k) ? k : (rowsTopDown()[0] ? chKey(rowsTopDown()[0]) : '');
   if (!key) return toast('ponha uma fonte no canvas primeiro (arraste da biblioteca)', 'err');
@@ -3933,7 +3983,7 @@ function placeZones(){   // mede as zonas de soltura AGORA (comeco do arrasto, e
   const d = drag, R = CVI.getBoundingClientRect(), z = cvZoom();
   for (const zn of d.zones){ if (zn.el) zn.el.remove(); if (zn.cell) zn.cell.classList.remove('drophot'); }
   d.zones = computeZones(d.spec); d.hot = null;
-  for (const zn of d.zones) if (zn.box !== false){ zn.el = h('div', { class: 'zone' + (zn.big ? ' big' : ''), text: zn.label || '' });
+  for (const zn of d.zones) if (zn.box !== false){ zn.el = h('div', { class: 'zone' + (zn.big ? ' big' : '') + (zn.type === 'post' ? ' stkz' : ''), text: zn.label || '' });
     Object.assign(zn.el.style, { left: (zn.x - zn.w / 2 - R.left) / z + 'px', top: (zn.y - zn.h / 2 - R.top) / z + 'px', width: zn.w / z + 'px', height: zn.h / z + 'px' }); CVI.append(zn.el); }
 }
 function computeZones(spec){
@@ -3944,7 +3994,7 @@ function computeZones(spec){
     return Z;
   }
   if (spec.kind === 'mask' || spec.kind === 'mmove'){
-    for (const [k, el, b] of boxes) if (!isNodeKey(k) && (spec.kind === 'mask' || spec.copy || k !== spec.key)) add({ type: 'mask', key: k, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, label: 'máscara desta caixa', big: true });
+    for (const [k, el, b] of boxes) if (!isNodeKey(k) && (spec.kind === 'mask' || spec.copy || k !== spec.key)) add({ type: 'mask', key: k, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, label: 'só onde a máscara acha', big: true });
     return Z;
   }
   if (spec.kind === 'ctl'){   // modulador: os knobs dos Controles + cada atomo (o knob principal dele)
@@ -3969,11 +4019,16 @@ function computeZones(spec){
     if (rowOf(k).fold) continue;
     const ats = $$('.at', el), lrs = $$('.lr', el), hd = (lrs.length ? lrs[lrs.length - 1] : el.querySelector('.bh')).getBoundingClientRect();   // mixer: os atomos vem DEPOIS das entradas
     const edge = i => i === 0 ? hd.bottom : i === ats.length ? ats[ats.length - 1].getBoundingClientRect().bottom : ats[i].getBoundingClientRect().top;
+    if (spec.kind === 'mod' && atomNode(k) && ats.length && !(stackOf(k)[0] || {}).espelho){   // NO' DE ATOMO: o card inteiro = EM CIMA (antes/depois = o "+" do fio)
+      const s0 = stackOf(k)[0];
+      add({ type: 'post', key: k, j: 0, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, big: true, label: 'em cima: só no que ' + fxName(s0.file) + ' faz' });
+      continue;
+    }
     for (let i = 0; i <= ats.length; i++){
       if (spec.kind === 'move' && !spec.copy && spec.key === k && (spec.js.includes(i) || spec.js.includes(i - 1))) continue;   // mesmo lugar (copia pode)
       add({ type: 'ins', key: k, at: i, x: b.left + b.width / 2, y: edge(i), w: b.width - 16, h: 14, label: '' });
     }
-    if (spec.kind === 'mod') ats.forEach((a, j) => { const r = a.getBoundingClientRect();
+    if (spec.kind === 'mod' && !atomNode(k)) ats.forEach((a, j) => { const r = a.getBoundingClientRect();   // caixa antiga com varios atomos
       add({ type: 'post', key: k, j, x: r.left + r.width * 0.42, y: r.top + 15, w: r.width * 0.5, h: 14, label: 'só neste' }); });
   }
   return Z;
@@ -4214,8 +4269,9 @@ function healthDetail(r, d){   // { now, why: [], todo: [], pre, acts: [[rotulo,
     else if (m < 1){ D.why.push('fader MASTER abaixo de 100%'); D.todo.push('duplo-clique no MASTER = 100%'); D.acts.push(['master 100%', () => { delete lastGrade.master; syncMaster(); sendGrade(true); }]); }
   } else if (r.id === 'fps'){
     const last = FPS_HIST.filter(x => now() - x.t < 10000).map(x => x.v);
-    D.now = o.fps_target ? `${(o.fps || 0).toFixed(0)} de ${o.fps_target} fps` + (last.length > 2 ? `\núltimos 10 s: mín ${Math.min(...last).toFixed(0)} · média ${(last.reduce((a, b) => a + b, 0) / last.length).toFixed(0)}` : '') : 'A janela de saída ainda não mandou fps.';
-    if (bad){ D.why = ['módulos pesados (fumaça, fluido, muitos encadeados — veja o custo no canvas destravado)', 'muitas fontes/vídeos ao mesmo tempo', 'janela de saída grande em resolução alta', 'outro programa usando a GPU'];
+    const cost = lastOverlays.reduce((t, x) => t + costOf(chKey(x)), 0);   // o custo mora AQUI (v6: nao fica sempre na tela; so' explica o fps)
+    D.now = o.fps_target ? `${(o.fps || 0).toFixed(0)} de ${o.fps_target} fps · cena ≈ ${cost} passes de GPU` + (last.length > 2 ? `\núltimos 10 s: mín ${Math.min(...last).toFixed(0)} · média ${(last.reduce((a, b) => a + b, 0) / last.length).toFixed(0)}` : '') : 'A janela de saída ainda não mandou fps.';
+    if (bad){ D.why = ['átomos pesados (fluido, reação, muitos encadeados — o custo da cena está acima)', 'muitas fontes/vídeos ao mesmo tempo', 'janela de saída grande em resolução alta', 'outro programa usando a GPU'];
       D.todo = ['baixe o alvo pra 30 fps', 'desligue um módulo pesado e veja se sobe', 'puxe EFEITOS pra 0 (imagem crua) pra ver se o peso é dos módulos'];
       if (outFps > 30) D.acts.push(['alvo 30 fps', () => { outFps = 30; fpsTouched = now(); renderFpsSeg(); post('/output-fps', { fps: 30 }).catch(() => {}); }]);
       D.acts.push(['imagem crua (efeitos 0)', toggleRaw]); }
@@ -6191,8 +6247,8 @@ document.addEventListener('keydown', e => {
 function renderKeys(){
   const fam = MIX_FAMILIES[mixKeys.family];
   const rows = [[fam, 'escolhe o nó N (segurar = liga/desliga nas SAÍDAS)'], ['← →', 'átomo anterior / próximo na caixa'], ['↑ ↓', 'caixa da frente / de trás'],
-    ['Enter', 'liga/desliga a selecionada'], ['Espaço', 'GO (a próxima cena vai pro ar)'], ['Delete', 'tira o átomo/nó/fio escolhido (destravado)'], ['clique na bolinha', 'o fio gruda no cursor: clique numa entrada liga, no vazio abre o menu (Esc cancela)'], ['Alt+arrastar', 'ESPELHO do átomo onde soltar'],
-    ['.', 'BLACKOUT'], ['+ / −', 'zoom do canvas (longe = estrutura, perto = movimentos) · funciona arrastando'], ['Shift', 'com grade: liga/desliga NA HORA'], ['Ctrl+Z', 'desfazer'], ['Ctrl+X / C / V', 'recortar / copiar / colar o átomo (cola depois do escolhido)'], ['Shift+arrastar', 'arrasta uma CÓPIA do átomo/máscara'], ['a–z', 'tecla da cena'], ['F1 / F2', 'trava / destrava'], ['Esc', 'fecha a gaveta · sai do MIDI learn'], ['Esc 3×', 'fecha o prisma']];
+    ['Enter', 'liga/desliga a selecionada'], ['Espaço', 'GO (a próxima cena vai pro ar)'], ['Delete', 'tira o átomo/nó/fio escolhido (em MONTAR)'], ['clique na bolinha', 'o fio gruda no cursor: clique numa entrada liga, no vazio abre o menu (Esc cancela)'], ['Alt+arrastar', 'ESPELHO do átomo onde soltar'],
+    ['.', 'BLACKOUT'], ['+ / −', 'zoom do canvas (longe = estrutura, perto = movimentos) · funciona arrastando'], ['Shift', 'com grade: liga/desliga NA HORA'], ['Ctrl+Z', 'desfazer'], ['Ctrl+X / C / V', 'recortar / copiar / colar o átomo (cola depois do escolhido)'], ['Shift+arrastar', 'arrasta uma CÓPIA do átomo/máscara'], ['a–z', 'tecla da cena'], ['F1 / F2', 'TOCAR / MONTAR'], ['Esc', 'fecha a gaveta · sai do MIDI learn'], ['Esc 3×', 'fecha o prisma']];
   const kh = $('#keyhelp'); kh.innerHTML = '';
   for (const [k, t] of rows) kh.append(h('div', {}, h('b', { text: k }), t));
   const box = $('#keys-cfg'); box.innerHTML = '';

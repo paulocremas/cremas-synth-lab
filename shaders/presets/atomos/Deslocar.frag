@@ -1,6 +1,7 @@
 // fx: forca=0.3, direcao=0.375, angulo=0.25
 // cat: mistura
 // in: src
+// B: quem empurra
 // opcoes: direcao=fixa|relevo|redemoinho|vetor
 // mod: forca=pulsa
 // ATOMOS · Deslocar. Uma imagem ENTORTA a outra (o modulate do Hydra): a entrada B empurra os pixels da corrente.

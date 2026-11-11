@@ -1,10 +1,19 @@
-# Padrão ÁTOMO — v2 (2026-10-31)
+# Padrão ÁTOMO — v2.1 (2026-10-31; em cima + `// B:` em 2026-11-05)
 
 Um átomo é um `.frag` em `shaders/presets/atomos/` que faz **uma coisa só** e encaixa em **qualquer outro**. Não há
 tipos que impedem ligação (o Eurorack: tudo é tensão; o Sandin Image Processor: módulos feitos pra maximizar a
 interligação). Quem garante que a combinação faz sentido são as regras abaixo; o `dash_data.atom_problems` confere o
 texto e a **matriz de emergência** (`src/matriz.py`, no `--selfcheck`) renderiza todo par. Regra que só serve pra um
 átomo = falta uma regra geral.
+
+## 0. Declarar, não proibir (2026-11-05, `PLANO_CONVERSA.md` §9)
+Tudo abaixo é o PADRÃO — o que faz um átomo encaixar bem em qualquer outro. Não é cerca: todo `.frag` que **roda**
+entra na biblioteca. `dash_data.atom_check` separa **QUEBRA** (não compila por redeclarar o prelúdio/`#version`, sem
+`gl_FragColor`, estado sem `// estado:` ou sem `u_vista` — o arquivo não entra) de **FORA DO PADRÃO** (mais de 3 knobs,
+`cat:` nova, sem `ATOMOS ·`, knob sem uso… — roda, a biblioteca mostra ! com o motivo, a matriz só avisa). Ler o som
+(`u_bass`, `u_kick`, faixas, `u_chan`…) ou o rastreio/assunto (`u_rosto`, `u_corpo`, `u_subject`…) em QUALQUER átomo é
+**declarado**: o motor liga, o dash mostra ♪/olho pro leigo saber. Cabeçalhos que CONTRARIAM a dedução: `// entra: troca |
+cima` (como junta na corrente; padrão pela `cat:`) e `// marca: mudanca | alfa` (o que "em cima" pega dele, §7.4).
 
 ## 1. A imagem: uma coisa só corre nos fios
 Todo fio carrega uma imagem **RGBA com alfa direto** (cor sem multiplicar pelo alfa: em 8 bits o pré-multiplicado
@@ -30,6 +39,9 @@ mostrar a escolha. Vetor no fio = RG centrado em 0.5 em 8 bits (o Hydra usa RG s
 // opcoes: direcao=fixa|relevo|redemoinho|vetor (nomes da ESCOLHA)
 // cat: distorcao                               (cor|luz|forma|geometria|distorcao|textura|tempo|mistura|gerador|mascara)
 // in: src                                      (lê a entrada B; padrão ao inserir: src | fb)
+// B: quem empurra                              (o que B SIGNIFICA pra este átomo: o nome que o leigo lê no jack/inspetor)
+// entra: cima                                  (contraria a cat: troca = filtro, cima = desenha por cima)
+// marca: alfa                                  (o que EM CIMA pega: mudanca = onde mudou, alfa = a saída como está)
 // bipolar: angulo                              (knob de dois lados: 0.5 = nada)
 // ritmo: velocidade                            (knob de rapidez: pode travar no BPM — UI no próximo chat)
 // estado: canais=4, passos=8, fases=1, escala=0.35   (átomo com memória, §6)
@@ -96,10 +108,14 @@ Cada ligação é uma **entrada com nome na borda do nó** (cabos como no VCV Ra
 o fio que fecha um laço lê o quadro anterior).
 1. **Corrente (A)**: o nó que este lê (`file: '@<id>'`). 2. **Entrada B** (`ins`: o fio na bolinha B; sem fio = `src` (a crua)
 ou `fb` (ele mesmo 1 quadro atrás)). 3. **Máscara** da caixa (§9; um fio na bolinha "máscara" = átomo Luma).
-4. **Loop do nó** (átomo solto NO MEIO, `post: [ids]`): num nó comum = **pós** (age na camada antes de juntar — o
-efeito de clipe do Resolume); num nó com estado = **retorno** ↻ (age no que recircula, antes de cada passo — o laço do
-Feedback TOP do TouchDesigner: Rodar = espiral, Desfocar = fumaça). O átomo do retorno lê o estado como a corrente
-(`u_agl = 1`) e roda na resolução dele. 5. **Junção** = um **staging** ou uma **saída** (mixer): cada entrada é uma camada
+4. **EM CIMA** (átomo solto NO CARD de outro, `post: [ids]`; `PLANO_CONVERSA.md` §2): age **só no que o de baixo FEZ** —
+a **MARCA** dele, nunca no fundo. Marca de quem desenha = o que desenhou (alfa); de um FILTRO = a saída dele onde difere
+da entrada (`smoothstep(MARCA_LO, MARCA_HI, |saída − entrada|)`, `STACK_SRC` op 0). O de cima lê a marca como `A()` (RGBA) e
+entra pela regra de sempre: filtro TROCA (cor troca, espaço move a cobertura, memória deixa rastro da marca, opacidade =
+quanto vale); quem desenha desenha DENTRO (alpha lock: a cobertura não cresce). A marca volta POR CIMA da entrada: onde
+o de baixo não mexeu, o fundo sai intacto. Em cima de um átomo COM ESTADO = **retorno** ↻ (age no que recircula a cada
+passo — o laço do Feedback TOP: Rodar = espiral, Desfocar = fumaça; lê o estado com `u_agl = 1`). Máscara em cima = ONDE
+(§9). A matriz confere todo par X ↑ Y (fundo intacto, neutro = X sozinho). 5. **Junção** = um **staging** ou uma **saída** (mixer): cada entrada é uma camada
 (opacidade + modo + ordem, `layers`); átomos do mixer agem DEPOIS da mistura, na imagem já junta.
 **Espelho** (`{file, espelho: <id>, id}`): o MESMO átomo noutro lugar — knobs, movimentos e liga/desliga do original; fio e
 estado (um buffer por lugar) são do lugar; `u_seed` = o do original. Vale pra qualquer átomo; a matriz não muda (é o mesmo `.frag`).
@@ -133,6 +149,7 @@ dele). Os presets antigos (`sortidos/`, `default/`) viraram **receitas** (`shade
 movimentos) e saíram da biblioteca; as cenas antigas continuam rodando o `.frag` velho.
 
 ## 11. Verificação
+- **Em cima**: todo par X ↑ Y: sem NaN, cor/luz em cima não toca o fundo, Y no neutro = X sozinho, memória em cima roda.
 - `atom_problems`: cabeçalho, ≤ 3 knobs, nada do prelúdio redeclarado, só imagem + relógio, `// bipolar:`/`// ritmo:`
   em knob que existe, `// estado:` com `u_vista` e sem `u_time`, `E()`/`u_state` só com estado.
 - **Matriz de emergência** (offscreen 64×36, ~2 s): cada átomo sozinho (sem NaN, sem tela chapada, mesma forma em 2

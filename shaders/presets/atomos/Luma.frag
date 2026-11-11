@@ -1,6 +1,7 @@
 // fx: limiar=0.5, borda=0.2, inverter=0
 // cat: mascara
 // in: src
+// B: forma
 // ATOMOS · Luma. Máscara vinda de OUTRA caixa (luma matte do compositing): onde a imagem B é clara, a caixa
 // aparece. Ligue puxando o fio de uma caixa até a faixa de máscara desta. limiar = a partir de que brilho;
 // borda = macia/dura; inverter = onde B é escura.

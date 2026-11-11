@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>PRISMA v6 — mockup (PLANO_CONVERSA §8)</title>
+<!-- MOCKUP ESTATICO: so' pra decidir a direcao visual da v6 (PLANO_CONVERSA.md §8). Nada aqui fala com o motor.
+     ?m=tocar | ?m=montar (ou o seletor no topo). -->
+<style>
+  :root { --bg:#0b0d10; --s1:#111418; --s2:#171b20; --s3:#1f242b; --ln:#252b33; --tx:#e6e9ed; --tx2:#a3aab2; --tx3:#6f7780;
+          --live:#3fd08f; --sel:#ff9d52; --mov:#5eb0ff; --onde:#d77bf0; --bad:#ff5b61;
+          --sans: system-ui, "Segoe UI", Roboto, Ubuntu, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; } html, body { margin:0; height:100%; background:var(--bg); color:var(--tx); font:12px/1.4 var(--sans); overflow:hidden; }
+  .num { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  body { display:grid; grid-template-rows:52px 1fr; }
+  /* TOPO: so' o que vale nos dois modos */
+  #top { display:flex; align-items:center; gap:14px; padding:0 14px; border-bottom:1px solid var(--ln); }
+  .brand { font-weight:800; letter-spacing:.08em; font-size:13px; color:var(--tx2); }
+  .seg { display:inline-flex; background:var(--s1); border-radius:8px; padding:3px; gap:2px; }
+  .seg b { padding:6px 14px; border-radius:6px; color:var(--tx3); font-size:12px; letter-spacing:.06em; cursor:pointer; }
+  .seg b.on { background:var(--s3); color:var(--tx); }
+  .music { display:flex; align-items:center; gap:10px; padding:6px 12px; border-radius:8px; background:var(--s1); }
+  .music .bpm { font:700 18px var(--mono); } .dots { display:flex; gap:4px; } .dots i { width:7px; height:7px; border-radius:50%; background:var(--s3); } .dots i.on { background:var(--sel); }
+  .music .sec { color:var(--tx3); font-size:11px; letter-spacing:.08em; }
+  .grow { flex:1; }
+  .fad { width:132px; height:34px; border-radius:7px; background:var(--s1); position:relative; overflow:hidden; display:flex; align-items:center; padding:0 10px; font-size:11px; letter-spacing:.08em; color:var(--tx2); }
+  .fad i { position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,#20262e,#39414c); z-index:0; } .fad span { position:relative; }
+  .btn { height:34px; padding:0 14px; border-radius:7px; border:1px solid var(--ln); background:none; color:var(--tx2); font:700 11px var(--sans); letter-spacing:.08em; display:inline-flex; align-items:center; }
+  .btn.red { border-color:#5a2a2d; color:#ffb3b6; } .ib { width:34px; height:34px; border-radius:7px; display:grid; place-items:center; color:var(--tx3); border:1px solid var(--ln); }
+  main { display:grid; min-height:0; padding:12px; gap:12px; }
+  .p { background:var(--s1); border-radius:10px; min-height:0; display:flex; flex-direction:column; }
+  .h { padding:12px 14px 8px; font-size:10.5px; letter-spacing:.14em; color:var(--tx3); font-weight:700; }
+  /* ===== TOCAR ===== */
+  body.tocar main { grid-template-columns:260px 1fr 340px; }
+  .pad { margin:0 12px 8px; height:64px; border-radius:10px; background:var(--s2); display:flex; align-items:center; gap:12px; padding:0 16px; font-size:15px; font-weight:600; }
+  .pad kbd { font:600 11px var(--mono); color:var(--tx3); } .pad.live { box-shadow:inset 4px 0 0 var(--live); background:#11241b; } .pad.cue { outline:1px dashed var(--sel); }
+  .pgm { margin:0 14px; flex:1; border-radius:10px; position:relative; overflow:hidden; background:
+         radial-gradient(60% 70% at 55% 45%, #ff3b6b55, transparent 60%), radial-gradient(40% 50% at 30% 60%, #3fd0ff44, transparent 60%),
+         repeating-linear-gradient(115deg, #0000 0 18px, #ffffff0a 18px 20px), #06070a; box-shadow:0 0 0 2px var(--live); }
+  .pgm .tag { position:absolute; left:10px; top:10px; background:var(--live); color:#04130b; font:800 10px var(--sans); letter-spacing:.1em; padding:3px 7px; border-radius:4px; }
+  .next { display:flex; gap:12px; padding:12px 14px 14px; align-items:stretch; }
+  .next .pv { width:200px; height:112px; border-radius:8px; background:radial-gradient(50% 60% at 40% 50%, #ff9d5244, transparent), #08090b; outline:1px dashed var(--sel); }
+  .next .go { flex:1; border-radius:10px; background:#143024; color:#c5f2dc; display:grid; place-items:center; font:800 30px var(--sans); letter-spacing:.2em; }
+  .next .nm { display:flex; flex-direction:column; justify-content:center; gap:4px; width:150px; } .next .nm b { font-size:15px; }
+  .kg { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; padding:6px 16px 16px; }
+  .k { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:11px; color:var(--tx2); }
+  .k svg { width:64px; height:64px; }
+  .src { font-size:10px; color:var(--tx3); }
+  /* ===== MONTAR ===== */
+  body.montar main { grid-template-columns:250px 1fr 300px; }
+  .tabs { display:flex; gap:2px; margin:0 12px 8px; background:var(--bg); border-radius:7px; padding:3px; }
+  .tabs b { flex:1; text-align:center; padding:5px 0; border-radius:5px; color:var(--tx3); font-size:11px; } .tabs b.on { background:var(--s3); color:var(--tx); }
+  .q { margin:0 12px 10px; height:32px; border-radius:7px; background:var(--bg); border:1px solid var(--ln); color:var(--tx3); display:flex; align-items:center; padding:0 10px; }
+  .it { margin:0 12px 4px; height:34px; border-radius:7px; display:flex; align-items:center; gap:10px; padding:0 10px; color:var(--tx2); }
+  .it:hover, .it.hi { background:var(--s2); color:var(--tx); } .it small { margin-left:auto; color:var(--tx3); font-size:10.5px; }
+  .gl { width:16px; text-align:center; color:var(--tx3); }
+  .cv { position:relative; flex:1; margin:0 12px 12px; border-radius:8px; background:
+        radial-gradient(circle, #1a1f25 1px, transparent 1.2px) 0 0/22px 22px, var(--bg); overflow:hidden; }
+  .nd { position:absolute; width:200px; background:var(--s2); border-radius:9px; box-shadow:0 1px 0 #ffffff08 inset; }
+  .nd .t { height:34px; display:flex; align-items:center; gap:8px; padding:0 12px 0 14px; font-weight:600; font-size:12.5px; }
+  .nd .jack { top:13px !important; } .nd .t .led { width:7px; height:7px; border-radius:50%; background:var(--live); }
+  .nd.sel { box-shadow:0 0 0 1.5px var(--sel); }
+  .nk { display:flex; gap:12px; padding:2px 14px 12px; } .nk .k svg { width:38px; height:38px; } .nk .k:first-child svg { width:46px; height:46px; }
+  .up { border-top:1px solid var(--ln); padding:4px 0; }
+  .up .r { height:28px; display:flex; align-items:center; gap:8px; padding:0 12px 0 16px; color:var(--tx2); }
+  .up .r::before { content:'↳'; color:var(--tx3); } .bar { flex:1; height:6px; border-radius:3px; background:var(--s3); position:relative; } .bar i { position:absolute; inset:0 auto 0 0; border-radius:3px; background:#5c6672; }
+  .onde { border-top:1px solid #5b3466; background:#d77bf00d; border-radius:0 0 9px 9px; padding:6px 12px; color:var(--onde); display:flex; gap:6px; align-items:center; }
+  .onde span { border:1px solid #5b3466; border-radius:10px; padding:1px 8px; color:#f0d0f8; }
+  .jack { position:absolute; width:10px; height:10px; border-radius:50%; } .jin { left:-5px; border:1.5px solid #8a939d; background:var(--bg); } .jout { right:-5px; background:#8a939d; }
+  svg.w { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .mini { position:absolute; right:12px; top:12px; width:220px; height:124px; border-radius:7px; box-shadow:0 0 0 1.5px var(--live); background:
+          radial-gradient(60% 70% at 55% 45%, #ff3b6b55, transparent 60%), #06070a; }
+  .mini b { position:absolute; left:6px; top:6px; font:800 9px var(--sans); letter-spacing:.1em; color:var(--live); }
+  .drop { position:absolute; border:1.5px dashed var(--sel); border-radius:10px; background:#ff9d5212; color:var(--sel); font:700 10px var(--sans); letter-spacing:.08em; display:grid; place-items:center; text-transform:uppercase; }
+  .ghost { position:absolute; padding:6px 10px; border-radius:7px; background:var(--s3); box-shadow:0 6px 20px #0008; font-weight:600; }
+  .ins .sec { padding:4px 14px 12px; border-bottom:1px solid var(--ln); } .ins .sec:last-child { border:0; }
+  .ins .ttl { display:flex; align-items:center; gap:8px; padding:14px 14px 6px; font-size:14px; font-weight:600; }
+  .ins .d { color:var(--tx3); padding:0 14px 10px; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; } .chip { padding:4px 10px; border-radius:12px; background:var(--s2); color:var(--tx2); font-size:11.5px; } .chip.mv { color:#cfe6ff; box-shadow:inset 0 0 0 1px #2c5a86; }
+  .lab { font-size:10.5px; letter-spacing:.12em; color:var(--tx3); font-weight:700; margin:8px 0 6px; }
+  .note { position:fixed; bottom:10px; left:50%; transform:translateX(-50%); background:#000c; padding:6px 12px; border-radius:6px; color:var(--tx3); font-size:11px; }
+  body.tocar .only-m, body.montar .only-t { display:none !important; }
+</style>
+<body class="tocar">
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="kn" viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="none" stroke="#252b33" stroke-width="4" stroke-dasharray="70 30" transform="rotate(126 20 20)"/></symbol>
+</defs></svg>
+<header id="top">
+  <span class="brand">PRISMA</span>
+  <span class="seg" id="mode"><b data-m="tocar">TOCAR</b><b data-m="montar">MONTAR</b></span>
+  <span class="music" title="clique no BPM = TAP · segurar = ×2 ÷2 “1”"><span class="bpm num">124</span><span class="dots"><i class="on"></i><i></i><i></i><i></i></span><span class="sec">SOBE · Lá menor</span></span>
+  <span class="grow"></span>
+  <span class="fad"><i style="width:100%"></i><span>EFEITOS</span></span>
+  <span class="fad"><i style="width:86%"></i><span>MASTER</span></span>
+  <span class="btn">SOCORRO</span><span class="btn red">BLACKOUT</span>
+  <span class="ib" title="equipamento">⚙</span>
+</header>
+
+<main class="only-t" style="display:grid">
+  <section class="p"><div class="h">CENAS</div>
+    <div class="pad live"><kbd>A</kbd>Abertura</div><div class="pad cue"><kbd>B</kbd>Neon no rosto</div><div class="pad"><kbd>C</kbd>Coral na frase</div><div class="pad"><kbd>D</kbd>Drop</div>
+  </section>
+  <section class="p"><div class="h">PROGRAMA · o que o público vê</div>
+    <div class="pgm"><span class="tag">NO AR</span></div>
+    <div class="next"><div class="pv"></div><div class="nm"><span class="src">PRÓXIMA</span><b>Neon no rosto</b><span class="src">entra no compasso</span></div><div class="go">GO</div></div>
+  </section>
+  <section class="p"><div class="h">NA MÃO · knobs publicados</div>
+    <div class="kg">
+      <div class="k"><svg><use href="#kn"/><circle cx="32" cy="32" r="24" fill="none" stroke="#ff9d52" stroke-width="6" stroke-dasharray="90 200" transform="rotate(126 32 32)"/></svg>brilho<span class="src">Brilhar</span></div>
+      <div class="k"><svg><circle cx="32" cy="32" r="24" fill="none" stroke="#252b33" stroke-width="6"/><circle cx="32" cy="32" r="24" fill="none" stroke="#5eb0ff" stroke-width="6" stroke-dasharray="60 200" transform="rotate(126 32 32)"/></svg>cor<span class="src">anda · 16 batidas</span></div>
+      <div class="k"><svg><circle cx="32" cy="32" r="24" fill="none" stroke="#252b33" stroke-width="6"/><circle cx="32" cy="32" r="24" fill="none" stroke="#ff9d52" stroke-width="6" stroke-dasharray="40 200" transform="rotate(126 32 32)"/></svg>rastro<span class="src">Feedback</span></div>
+    </div>
+    <div class="h">MOVIMENTOS · M1–M4</div>
+    <div class="kg"><div class="k"><svg><circle cx="32" cy="32" r="24" fill="none" stroke="#252b33" stroke-width="6"/></svg>M1</div><div class="k"><svg><circle cx="32" cy="32" r="24" fill="none" stroke="#252b33" stroke-width="6"/></svg>M2</div><div class="k"><svg><circle cx="32" cy="32" r="24" fill="none" stroke="#252b33" stroke-width="6"/></svg>M3</div></div>
+  </section>
+</main>
+
+<main class="only-m" style="display:grid">
+  <section class="p"><div class="h">BIBLIOTECA</div>
+    <div class="tabs"><b>Fontes</b><b class="on">Átomos</b><b>Movimentos</b><b>Receitas</b></div>
+    <div class="q">procurar…</div>
+    <div class="it"><span class="gl">◐</span>Tingir<small>cor</small></div>
+    <div class="it hi"><span class="gl">✦</span>Brilhar<small>luz</small></div>
+    <div class="it"><span class="gl">∿</span>Onda<small>espaço</small></div>
+    <div class="it"><span class="gl">◎</span>Contornar<small>desenha</small></div>
+    <div class="it"><span class="gl">↺</span>Feedback<small>memória</small></div>
+    <div class="it"><span class="gl">☺</span>Rosto<small>onde</small></div>
+  </section>
+  <section class="p"><div class="h">CANVAS</div>
+    <div class="cv">
+      <svg class="w"><path d="M214 92 C 250 92, 250 92, 286 92" stroke="#3a424c" stroke-width="1.5" fill="none"/><path d="M486 92 C 540 92, 540 150, 596 150" stroke="#3a424c" stroke-width="1.5" fill="none"/><path d="M486 342 C 540 342, 540 170, 596 170" stroke="#3a424c" stroke-width="1.5" fill="none"/><path d="M214 92 C 250 92, 250 342, 286 342" stroke="#3a424c" stroke-width="1.5" fill="none"/></svg>
+      <div class="nd" style="left:14px;top:60px;width:200px"><div class="t"><span class="led"></span>câmera</div><span class="jack jout" style="top:27px"></span></div>
+      <div class="nd sel" style="left:286px;top:60px"><div class="t"><span class="led"></span>✦ Brilhar</div><span class="jack jin" style="top:27px"></span><span class="jack jout" style="top:27px"></span>
+        <div class="nk"><div class="k"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="none" stroke="#252b33" stroke-width="4"/><circle cx="20" cy="20" r="15" fill="none" stroke="#ff9d52" stroke-width="4" stroke-dasharray="50 100" transform="rotate(126 20 20)"/></svg>força</div><div class="k"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="none" stroke="#252b33" stroke-width="4"/></svg>limiar</div><div class="k"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="none" stroke="#252b33" stroke-width="4"/></svg>tamanho</div></div>
+        <div class="up"><div class="r">◐ Tingir <span class="bar"><i style="width:80%;background:#5eb0ff"></i></span></div></div>
+        <div class="onde">só onde <span>☺ Rosto</span></div></div>
+      <div class="nd" style="left:286px;top:315px"><div class="t"><span class="led"></span>◎ Contornar</div><span class="jack jin" style="top:27px"></span><span class="jack jout" style="top:27px"></span>
+        <div class="nk"><div class="k"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="none" stroke="#252b33" stroke-width="4"/></svg>limiar</div><div class="k"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="none" stroke="#252b33" stroke-width="4"/></svg>borda</div></div>
+        <div class="up"><div class="r">↺ Feedback <span class="bar"><i style="width:60%"></i></span></div><div class="r">∿ Onda <span class="bar"><i style="width:30%"></i></span></div></div></div>
+      <div class="nd" style="left:596px;top:126px;width:180px"><div class="t"><span class="led"></span>▭ mistura · no palco</div><span class="jack jin" style="top:24px"></span><span class="jack jin" style="top:44px"></span>
+        <div style="padding:0 12px 10px;color:var(--tx3)">1 · Brilhar<br>2 · Contornar (soma)</div></div>
+      <div class="drop" style="left:279px;top:308px;width:214px;height:196px"><span style="position:absolute;top:-22px;left:0;white-space:nowrap">em cima: só no que Contornar faz</span></div>
+      <div class="ghost" style="left:430px;top:400px">∿ Onda</div>
+      <div class="mini"><b>NO AR</b></div>
+    </div>
+  </section>
+  <section class="p ins">
+    <div class="ttl">✦ Brilhar</div><div class="d">o claro vaza e acende em volta</div>
+    <div class="sec"><div class="lab">MOVIMENTO · força</div><div class="chips"><span class="chip mv">segue o grave</span><span class="chip">pulsa</span><span class="chip">respira</span><span class="chip">no drop</span><span class="chip">…</span></div></div>
+    <div class="sec"><div class="lab">NA MÃO</div><div class="chips"><span class="chip">★ força</span><span class="chip">☆ limiar</span></div></div>
+    <div class="sec"><div class="lab">EM CIMA</div><div class="d" style="padding:0">◐ Tingir — só no halo, o fundo fica</div></div>
+    <div class="sec"><div class="chips"><span class="chip">liga</span><span class="chip">variações</span><span class="chip">tirar</span><span class="chip">mais…</span></div></div>
+  </section>
+</main>
+<div class="note">mockup estático · PLANO_CONVERSA.md §8 · clique em TOCAR / MONTAR</div>
+<script>
+const set = m => { document.body.className = m; document.querySelectorAll('#mode b').forEach(b => b.classList.toggle('on', b.dataset.m === m)); };
+document.querySelectorAll('#mode b').forEach(b => b.onclick = () => set(b.dataset.m));
+set(new URLSearchParams(location.search).get('m') || 'tocar');
+</script>
+</body>
+</html>

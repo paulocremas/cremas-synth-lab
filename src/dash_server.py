@@ -367,7 +367,17 @@ def _shader_meta(names):
         try:
             with open(os.path.join(_SHADERS, rel), encoding='utf-8', errors='replace') as f:
                 src = f.read()
-            out[rel] = dict(dash_data.parse_meta(src[:4000]), atom=not dash_data.atom_problems(src))   # padrao ATOMO
+            m = dict(dash_data.parse_meta(src[:4000]))
+            if dash_data.is_atom_path(rel):   # DECLARAR, NAO PROIBIR (PLANO_CONVERSA §9.3): so' QUEBRA tira da biblioteca
+                ck = dash_data.atom_check(src)
+                m['atom'] = not ck['quebra']
+                for k in ('quebra', 'avisos', 'ouve', 've'):
+                    if ck[k]:
+                        m[k] = ck[k]
+                m['marca'] = dash_data.atom_marca(rel, src)
+            else:
+                m['atom'] = False
+            out[rel] = m
         except OSError:
             out[rel] = dash_data.parse_meta('')
     return out

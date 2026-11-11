@@ -2,6 +2,7 @@
 // opcoes: padrao=coral|mitose|labirinto|bolhas
 // cat: gerador
 // in: src
+// B: semente
 // estado: canais=2, passos=8, escala=0.35
 // mod: forca=respira
 // ATOMOS · Reação. Duas "tintas" que reagem e se espalham (Gray-Scott, Karl Sims): onde há semente CRESCE uma forma
