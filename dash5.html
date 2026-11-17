@@ -37,7 +37,7 @@
     Cena antiga: o que estava no ar vira entrada da "saida 1" (migrateGraph = dash_data.migrate_graph).
   - ESPELHO de um atomo: o MESMO atomo (knobs e movimentos do original) agindo em outro lugar (corrente, staging, saida):
     chip com o icone + a marca de cor do original, sem knob nem texto; nome no title; clique leva ao original. Cria: menu do
-    vazio ("espelho ·"), botao no inspetor, Alt+arrastar o atomo. Original tirado = o 1o espelho vira o original.
+    vazio ("espelho ·"), botao no inspetor, Alt+Shift+arrastar o atomo. ALT+ARRASTAR (2026-11-16) = COPIA SOLTA (sem fio nenhum); soltar um no' (ou copia) NUM FIO = entra no meio dele. Original tirado = o 1o espelho vira o original.
   - NÓ = ÁTOMO (2026-10-28, aprovado): cada atomo e' um NO' do canvas (estilo TouchDesigner): no' de FONTE (sem atomo) ->
     no' de EFEITO (1 atomo, le o anterior '@id') -> ... -> SAIDA. Todos os knobs do atomo ficam SEMPRE abertos no no'.
     normalizeNodes() mantem a forma: caixa com varios atomos (cena antiga, colar, inserir) vira corrente; a PONTA herda a
@@ -303,6 +303,8 @@
   #cv-wires .w.off { opacity: .35; }
   #cv-wires .w.dim { opacity: .18; }
   #cv-wires .w.hl { stroke-width: 5; filter: drop-shadow(0 0 3px currentColor); }
+  #cv-wires .w.drop { stroke-width: 7; stroke-dasharray: 10 6; }
+  .bx.onwire { outline: 2px dashed var(--sel); outline-offset: 3px; }
   #cv-wires .w.sel { stroke-width: 5.5; filter: drop-shadow(0 0 4px var(--sel)); }
   #cv-wires .w.drag { stroke-width: 3.5; stroke-dasharray: 6 4; opacity: 1; }
   #cv-wires .hit { stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
@@ -323,6 +325,14 @@
   .bx .bh { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px 0 24px; cursor: pointer; }   /* 24 = o vao dos jacks de entrada */
   body[data-mode="montar"] .bx .bh { cursor: grab; }
   .bx .bh .n { font: 600 11px var(--mono); color: var(--tx3); }
+  .bx .bh .nb { width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--tx3); cursor: pointer;
+                display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .bx .bh .nb:hover { background: var(--s3); color: var(--tx); }
+  .bx .bh .nb.pw.on { color: var(--live); }
+  .bx.offn { opacity: .55; } .bx.offn .bh .nb.pw { color: var(--sel); }
+  .stk .sr .tonode { margin-left: auto; flex: none; height: 20px; padding: 0 6px; border: 1px solid var(--line2); border-radius: 5px; background: none; color: var(--tx3);
+                     font-size: 10.5px; cursor: pointer; }
+  .stk .sr .tonode:hover { color: var(--tx); border-color: var(--tx3); }
   .bx .bh .th { position: relative; width: 48px; height: 27px; flex: none; border-radius: 4px; background: #07080a; overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--s4); }
   .bx .bh .th canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; } .bx .bh .th canvas.ok { opacity: 1; }
   .bx .bh .nm { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -394,7 +404,24 @@
            border: none; border-radius: 6px; background: none; color: var(--tx2); cursor: pointer; }
   .nm-it .mchip { grid-row: span 2; } .nm-it .nm-t { font-weight: 600; color: var(--tx); font-size: 12.5px; }
   .nm-it .hint { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .nm-it.pick { background: var(--sel-d); }
+  .nm-it.pick { background: var(--sel-d); } .nm-it.cur .nm-t { color: var(--sel); }
+  .bh .nm.swp { cursor: pointer; } .bh .nm.swp:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+  /* RODA DA BIBLIOTECA (2 cliques no vazio do canvas) */
+  .wheel { position: fixed; z-index: 96; width: 0; height: 0; }
+  .wheel::before { content: ''; position: absolute; left: calc(-1 * var(--wr)); top: calc(-1 * var(--wr)); width: calc(2 * var(--wr)); height: calc(2 * var(--wr)); border-radius: 50%;
+                   background: radial-gradient(closest-side, rgba(6,6,10,.82) 70%, rgba(6,6,10,0)); pointer-events: none; }
+  .wheel .wh-mid { position: absolute; left: -54px; top: -54px; width: 108px; height: 108px; border-radius: 50%; display: grid; place-items: center; text-align: center;
+                   background: rgba(10,10,14,.92); border: 1px solid var(--sel); color: var(--tx); font-weight: 600; font-size: 13px; padding: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.65); }
+  .wheel .wh-s { position: absolute; width: 78px; height: 78px; margin: -39px 0 0 -39px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+                 background: rgba(22,22,28,.94); border: 1px solid var(--line2); color: var(--tx2); font-size: 11px; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+                 animation: whin .14s ease-out; }
+  .wheel .wh-s:hover { background: var(--sel-d); border-color: var(--sel); color: var(--tx); transform: scale(1.08); }
+  .wheel .wh-s.on { background: var(--sel-d); border-color: var(--sel); color: var(--tx); }
+  .wheel .wh-s .ico { width: 20px; height: 20px; }
+  @keyframes whin { from { opacity: 0; transform: scale(.6); } }
+  .wheel.ghosty, .wh-list.ghosty { opacity: .15; pointer-events: none; }
+  /* a biblioteca fixa saiu da esquerda: 2 cliques no canvas = a roda */
+  #lib-p { display: none !important; }
   .at .port.aout { top: 50%; margin-top: -6px; right: -7px; width: 11px; height: 11px; display: none; }   /* saida do ATOMO (ramo) */
   .at.mir .al { gap: 6px; } .at.mir { cursor: pointer; }
   body[data-mode="montar"] .at:hover .port.aout, #cv-in.zl-near .port.aout, .at .port.aout.used, body.wiring .at .port.aout.from { display: block; cursor: crosshair; }
@@ -510,6 +537,40 @@
   #try-grid .mon:hover { border-color: var(--sel); }
   #try-grid .mon.pick { border: 2px solid var(--sel); }
   #ctl-p { flex: none; }
+  .bx.msel { outline: 2px solid var(--midi); outline-offset: 3px; }
+  .rband { position: absolute; z-index: 9; border: 1px dashed var(--midi); background: color-mix(in srgb, var(--midi) 12%, transparent); pointer-events: none; }
+  /* MONTAR (2026-11-16): sem coluna da direita — tudo no canvas. PROGRAMA = janelinha flutuante (ou o FUNDO do canvas);
+     CONTROLES = painel ao lado do nó escolhido (#insp); Movimentos M1-M4 e PRÓXIMA/GO só no TOCAR */
+  body[data-mode="montar"] #grid { grid-template-columns: minmax(0, 1fr); }
+  /* MONTAR: a coluna das CENAS so' quando pedida (botao "cenas" no topo do canvas), flutuando por cima do canvas; clicar fora fecha */
+  body[data-mode="montar"] #left, body[data-mode="montar"] .split[data-side="L"] { display: none; }
+  body[data-mode="montar"].cn-open #left { display: flex; position: fixed; z-index: 45; left: 18px; top: calc(var(--toph) + 52px); width: 250px;
+    max-height: calc(100vh - var(--toph) - 70px); overflow-y: auto; border-radius: var(--r); box-shadow: 0 18px 50px rgba(0,0,0,.65); }
+  #cn-btn b { font-weight: 600; color: var(--tx); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.cn-open #cn-btn { border-color: var(--sel); }
+  body[data-mode="montar"] #right, body[data-mode="montar"] .split[data-side="R"] { display: none; }
+  #cvw { position: relative; }
+  #cv { z-index: 1; }
+  #pvw { position: absolute; z-index: 6; top: 12px; width: 340px; min-width: 200px; max-width: calc(100% - 20px); background: var(--s1);
+         border: 1px solid var(--line2); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.55); padding: 0 8px 8px; resize: horizontal; overflow: hidden; }
+  #pvw .pvh { display: flex; align-items: center; gap: 6px; height: 30px; cursor: move; user-select: none; touch-action: none; }
+  #pvw .panel { background: none; border: 0; border-radius: 0; }
+  #pvw .panel > .ph, #pvw #next-box { display: none !important; }
+  #pvw .panel > .pb { padding: 0; }
+  #pvw #next-p .pb:not([hidden]) { margin-top: 8px; }
+  #pvw.bg { inset: 0; top: 0; width: auto !important; max-width: none; z-index: 0; border: 0; border-radius: 0; box-shadow: none; resize: none; padding: 0;
+            pointer-events: none; background: #000; opacity: .5; }
+  #pvw.bg .pvh, #pvw.bg #next-p { display: none; }
+  #pvw.bg #pvw-body, #pvw.bg #pgm-p, #pvw.bg #pgm-p > .pb { height: 100%; }
+  #pvw.bg .mon { height: 100%; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  #pvw.bg .mon .tag { display: none; }
+  #pvw-back { position: absolute; right: 12px; top: 12px; z-index: 7; }
+  #pv-btn.on { color: var(--live); border-color: var(--live); }
+  #insp { position: absolute; z-index: 8; width: 330px; max-height: calc(100% - 16px); overflow: auto; background: var(--s1); border: 1px solid var(--line2);
+          border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.55); }
+  #insp .panel { background: none; border: 0; }
+  #insp #ctl-p > .ph { display: none; }
+  #insp-x { position: sticky; top: 6px; float: right; margin: 6px 6px 0 0; z-index: 1; }
   .kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px 4px; }
   .kcell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; border-radius: 8px; padding: 2px 0 4px; }
   .kcell.droppable { outline: 2px dashed var(--line2); }
@@ -520,6 +581,15 @@
   .kcell .kb button:hover { background: var(--s3); color: var(--tx); }
   .kcell .kb button.on { color: var(--sel); }
   .kcell .kb button.mod.on { color: var(--midi); }
+  /* NÓ DE ÁTOMO: os knobs ja' estao no CARD — na lateral, uma linha por knob (o que o card nao tem: movimento e publicar) */
+  .krows { display: grid; gap: 2px; }
+  .krow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; }
+  .krow:hover { background: var(--s2); }
+  .krow .t { color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .krow .chip.on { color: var(--midi); border-color: var(--midi); }
+  .krow .ib.on { color: var(--sel); }
+  .krow.droppable { outline: 2px dashed var(--line2); }
+  .krow.drophot { outline: 2px dashed var(--sel); background: var(--sel-d); }
   .kcell.pub::before { content: ''; position: absolute; top: 2px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--sel); }
   .sect { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
   .sect > .lbl { display: block; margin-bottom: 6px; }
@@ -625,6 +695,21 @@
   .knob.nk { min-width: 53px; min-height: 67px; padding: 2px 0 0; justify-content: flex-end; }
   .knob.nk .k-lb { font-size: 11px; max-width: 53px; } .knob.nk .k-val { font-size: 10.5px; }
   .knob.nk.main .k-lb { color: var(--tx); font-weight: 600; max-width: 58px; }
+  /* KNOBS EM COLUNA (2026-11-16): uma LINHA por knob — knob pequeno · nome · valor — e o JACK de controle na borda
+     esquerda do card, na altura dele (o cabo do LFO/controlador chega NESTE knob). Linha = KROW_H (principal KROW_MAIN_H) */
+  .anode .nks.vert { padding: 0 8px 4px 18px; display: grid; }
+  .nkr { position: relative; display: flex; align-items: center; height: 34px; }
+  .nkr.main { height: 40px; }
+  .nkr .knob.nk { flex-direction: row; width: 100%; min-width: 0; min-height: 0; padding: 0; gap: 8px; justify-content: flex-start; }
+  .nkr .knob.nk .k-lb { flex: 1; max-width: none; text-align: left; font-size: 12px; }
+  .nkr .knob.nk .k-val { font-size: 11px; min-width: 34px; text-align: right; }
+  .nkr .knob.nk.main .k-lb { font-size: 12.5px; }
+  .kj { position: absolute; left: -25px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: var(--bg);
+        border: 2px solid var(--line2); z-index: 4; cursor: pointer; }
+  .kj.on { background: var(--pc); border-color: var(--pc); }
+  .bx:hover .kj { border-color: var(--tx3); } .bx:hover .kj.on { border-color: var(--pc); }
+  body.wiring .kj { border-color: var(--midi); }
+  .nkr.drophot { outline: 2px solid var(--sel); outline-offset: 0; border-radius: 6px; background: var(--sel-d); }
   /* ESCOLHA no no' (ate' 4) = um seletor curto em linha; mais = lista */
   .chseg { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 4px; }
   .chseg .chl { font-size: 11.5px; color: var(--tx2); white-space: nowrap; }
@@ -1039,10 +1124,17 @@
         <span id="cable-cfg" title="CABOS (como as configurações do VCV), lembrados por modo: tensão = quanto o cabo cai (reta ↔ funda) · opacidade"><button class="btn sm" id="cable-btn" title="CABOS: tensão e opacidade — preferência de vista, guardada por modo (fica escondida até precisar)">cabos</button><span id="cable-rs" hidden>
           <input type="range" id="cable-t" min="0" max="1" step="0.05" title="tensão: quanto o cabo cai (0 = reta, 1 = curva funda) · 2 cliques = padrão">
           <input type="range" id="cable-o" min="0.15" max="1" step="0.05" title="opacidade dos cabos · 2 cliques = padrão"></span></span>
+        <button class="btn sm ed" id="cn-btn" title="CENAS: a lista (trocar, criar, transição) — abre por cima do canvas; clicar fora fecha">cenas · <b id="cn-name"></b></button>
+        <button class="btn sm ed" id="pv-btn" title="PROGRAMA (o que o público vê): janelinha ↔ escondido · na janelinha, “fundo” põe atrás do canvas"><svg class="ico sm"><use href="#i-tela"/></svg>programa</button>
         <button class="btn sm ed" id="add-mix" title="MISTURA nova: junta várias entradas (cada uma, uma camada) numa imagem; átomos nela agem na imagem já junta"><svg class="ico sm"><use href="#i-mistura"/></svg>mistura</button>
         <button class="btn sm ed" id="tidy-btn" title="arrumar os nós da esquerda pra direita (coluna = quantos nós antes; saídas no fim)">arrumar</button>
         <button class="btn sm ed" id="undo-btn" title="desfazer a última mudança nesta cena (Ctrl+Z)"><svg class="ico sm"><use href="#i-desfazer"/></svg>desfazer</button></div>
-      <div id="cvw"><div id="cv"><div id="cv-in"><svg id="cv-wires"></svg></div></div></div>
+      <div id="cvw"><div id="cv"><div id="cv-in"><svg id="cv-wires"></svg></div></div>
+        <div id="pvw" hidden><div class="pvh" title="arraste pra mover · o canto de baixo muda o tamanho"><span class="lbl">Programa</span><span class="hint">no ar</span><span class="grow"></span>
+          <button class="btn sm" id="pvw-bg" title="vira o FUNDO do canvas (os nós por cima)">fundo</button><button class="x" id="pvw-x" title="esconder (o botão “programa” no topo traz de volta)">×</button></div>
+          <div id="pvw-body"></div></div>
+        <button class="btn sm" id="pvw-back" hidden title="o preview volta a ser uma janelinha">↗ janela</button>
+        <div id="insp" hidden><button class="x" id="insp-x" title="fechar (clicar no nó de novo abre)">×</button><div id="insp-body"></div></div></div>
     </div>
   </section>
   <div class="split" data-side="R" title="arraste pra mudar a largura · 2 cliques = padrão"></div>
@@ -1314,12 +1406,13 @@ let mode = LS.get('v5mode', 'show') === 'montar' ? 'montar' : 'show';
 const isShow = () => mode === 'show';
 function setMode(m){
   mode = m === 'montar' ? 'montar' : 'show'; LS.set('v5mode', mode);
-  document.body.dataset.mode = mode;
+  document.body.dataset.mode = mode; document.body.classList.remove('cn-open');
   applyLayout();
   $$('#mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
   const ctr = $('#center'), rt = $('#right');   // TOCAR: o PROGRAMA e a PROXIMA vao pro centro (no lugar do canvas); MONTAR: de volta a' direita
-  if (isShow()){ ctr.insertBefore($('#pgm-p'), $('#cv-p')); ctr.insertBefore($('#next-p'), $('#cv-p')); }
-  else { rt.prepend($('#next-p')); rt.prepend($('#pgm-p')); }
+  if (isShow()){ ctr.insertBefore($('#pgm-p'), $('#cv-p')); ctr.insertBefore($('#next-p'), $('#cv-p')); rt.insertBefore($('#ctl-p'), $('#mac-p')); }
+  else { $('#pvw-body').append($('#pgm-p'), $('#next-p')); $('#insp-body').append($('#ctl-p')); }   // MONTAR: tudo no canvas
+  placePvw();
   selWire = null;
   if (drag) dragCancel();
   stopTry(); closeVariants();
@@ -1327,6 +1420,58 @@ function setMode(m){
   renderScenes(); renderBoxes(); renderCtl(); renderPalette(); renderNext(); syncCableCfg();
 }
 $$('#mode-seg button').forEach(b => b.onclick = () => setMode(b.dataset.m));
+// ---- PROGRAMA flutuante (MONTAR): janela arrastavel/redimensionavel | FUNDO do canvas | escondido — lembrado (v5pvw) ----
+const PVW0 = { x: null, y: 12, w: 340, st: 'win' };
+const pvwCfg = () => Object.assign({}, PVW0, LS.get('v5pvw', {}) || {});
+function placePvw(){
+  const p = pvwCfg(), el = $('#pvw'), W = $('#cvw'), on = !isShow();
+  el.hidden = !on || p.st === 'off'; el.classList.toggle('bg', p.st === 'bg');
+  $('#pvw-back').hidden = !on || p.st !== 'bg'; $('#pv-btn').classList.toggle('on', p.st !== 'off');
+  if (p.st === 'win' && on){ const cw = W.clientWidth || 800, ch = W.clientHeight || 600, w = Math.min(p.w, cw - 20);
+    el.style.width = w + 'px'; el.style.left = (p.x == null ? cw - w - 12 : Math.max(0, Math.min(cw - 80, p.x))) + 'px'; el.style.top = Math.max(0, Math.min(ch - 40, p.y)) + 'px'; }
+  else { el.style.left = el.style.top = el.style.width = ''; }
+}
+function setPvw(patch){ LS.set('v5pvw', Object.assign(pvwCfg(), patch)); placePvw(); }
+$('#pvw-bg').onclick = () => setPvw({ st: 'bg' });
+$('#pvw-x').onclick = () => setPvw({ st: 'off' });
+$('#pvw-back').onclick = () => setPvw({ st: 'win' });
+$('#pv-btn').onclick = () => setPvw({ st: pvwCfg().st === 'win' ? 'off' : 'win' });
+$('#pvw .pvh').onpointerdown = e => {
+  if (e.button !== 0 || e.target.closest('button')) return;
+  e.preventDefault(); const el = $('#pvw'), x0 = el.offsetLeft, y0 = el.offsetTop, p0 = [e.clientX, e.clientY];
+  follow(e, { move: ev => { el.style.left = x0 + ev.clientX - p0[0] + 'px'; el.style.top = Math.max(0, y0 + ev.clientY - p0[1]) + 'px'; },
+    up: () => setPvw({ x: el.offsetLeft, y: el.offsetTop }), cancel: () => placePvw() });
+};
+new ResizeObserver(() => { const el = $('#pvw'); if (el.hidden || el.classList.contains('bg') || !el.offsetWidth) return;
+  const w = el.offsetWidth; if (Math.abs(w - pvwCfg().w) > 2){ clearTimeout(placePvw._t); placePvw._t = setTimeout(() => LS.set('v5pvw', Object.assign(pvwCfg(), { w })), 200); } }).observe($('#pvw'));
+window.addEventListener('resize', () => { placePvw(); placeInsp(); });
+// ---- CONTROLES ao lado do NÓ escolhido (MONTAR); × fecha ate' escolher de novo ----
+var inspClosed = '';   // var: o drawBoxWires pode rodar antes desta linha
+const selSig = () => sel.key + '|' + sel.j;
+$('#insp-x').onclick = () => { inspClosed = selSig(); placeInsp(); };
+// CLICAR FORA FECHA (2026-11-17, pedido do usuario: o inspetor ficava "grudado"): clique esquerdo fora dele e fora do no' escolhido
+// (e fora de menu/roda/popup que ele abriu) = fecha; clicar no no' de novo (ou noutro) abre. Meio/direito (mover a vista) nao fecham.
+window.addEventListener('pointerdown', e => {
+  const ip = $('#insp'); if (!ip || ip.hidden || e.button !== 0) return;
+  const t = e.target; if (!(t instanceof Element) || ip.contains(t) || t.closest('.nmenu, .wheel, #tpop, .drawer, header, dialog')) return;
+  const b = t.closest('.bx'), mine = b && (b.dataset.key === mkBase(sel.key) || (sel.key === CTL_KEY && b.dataset.ctl === (ctlStore()[sel.j] || {}).id));
+  if (mine) return;
+  inspClosed = selSig(); placeInsp();
+}, true);
+function placeInsp(){
+  const ip = $('#insp'); if (!ip) return;
+  if (isShow()){ ip.hidden = true; return; }
+  const box = $('#ctl'), only = box.children.length === 1 && box.firstElementChild.classList.contains('empty');
+  let el = null;
+  if (sel.key === CTL_KEY){ const c = ctlStore()[sel.j]; el = c && ctlEls[c.id]; }
+  else if (sel.key === POST_KEY){ const u = postUsers((stackOf(POST_KEY)[sel.j] || {}).id)[0]; el = u && boxEls[u.key]; }
+  else if (sel.key) el = boxEls[mkBase(sel.key)];
+  if (!el || !box.children.length || only || inspClosed === selSig()){ ip.hidden = true; return; }
+  ip.hidden = false;
+  const W = $('#cvw').getBoundingClientRect(), r = el.getBoundingClientRect(), iw = ip.offsetWidth || 330, ih = Math.min(ip.offsetHeight, W.height - 16);
+  let x = r.right - W.left + 16; if (x + iw > W.width - 8) x = r.left - W.left - iw - 16; if (x < 8) x = Math.max(8, W.width - iw - 8);
+  ip.style.left = x + 'px'; ip.style.top = Math.max(8, Math.min(W.height - ih - 8, r.top - W.top)) + 'px';
+}
 
 // TAMANHOS: largura das colunas (divisorias) e zoom do canvas, por modo (travado/montando), so' neste navegador
 const LAYOUT_LIM = { L: [200, 600], R: [260, 1200] }, CVZ_LIM = [0.4, 2], CENTER_MIN = 360;
@@ -1376,8 +1521,8 @@ function setCvZoom(z, ev){   // ev (roda do mouse) = o ponto embaixo do cursor f
 $('#cvz-in').onclick = () => setCvZoom(cvZoom() + 0.1);
 $('#cvz-out').onclick = () => setCvZoom(cvZoom() - 0.1);
 $('#cvz-n').onclick = () => setCvZoom(null);
-// NAVEGAR NO CANVAS (como TouchDesigner/Figma): RODA = zoom no ponto do cursor (sem barras de rolagem); ARRASTAR O VAZIO (ou o
-// botao do meio em qualquer lugar) = mover a vista. Clique parado no vazio continua tirando a selecao do fio.
+// NAVEGAR NO CANVAS: RODA = zoom no ponto do cursor (sem barras de rolagem); BOTAO DO MEIO (em qualquer lugar) = mover a vista;
+// ESQUERDO NO VAZIO (MONTAR) = retangulo de SELECAO (varios nos; Shift soma). Clique parado no vazio limpa a selecao.
 $('#cv').addEventListener('wheel', e => {
   e.preventDefault();
   const d = (e.deltaY || e.deltaX) * (e.deltaMode ? 33 : 1);
@@ -1385,17 +1530,23 @@ $('#cv').addEventListener('wheel', e => {
 }, { passive: false });
 $('#cv').addEventListener('pointerdown', e => {   // (CV/CVI/WIRES sao declarados mais abaixo: so' usados dentro do handler)
   const empty = e.target === CV || e.target === CVI || e.target === WIRES || e.target.id === 'cv-empty';
-  if (!(e.button === 1 || (e.button === 0 && empty))) return;
+  if (!(e.button === 1 || e.button === 2 || (e.button === 0 && empty))) return;   // MEIO ou DIREITO = mover a vista (em qualquer lugar)
   e.preventDefault();
+  if (e.button === 0 && !isShow()) return rubberBand(e);
   let lx = e.clientX, ly = e.clientY, moved = 0;
   follow(e, { move: ev => {
       const dx = ev.clientX - lx, dy = ev.clientY - ly; lx = ev.clientX; ly = ev.clientY; moved += Math.abs(dx) + Math.abs(dy);
       if (moved > 3) CV.classList.add('panning');
-      CV.scrollLeft -= dx; CV.scrollTop -= dy;
+      // SEM LIMITE A ESQUERDA/EM CIMA: passou do 0 = o mundo anda pro outro lado (cvShift), a vista fica no 0
+      const wl = CV.scrollLeft - dx, wt = CV.scrollTop - dy, z = cvZoom();
+      if (wl < 0 || wt < 0) cvShift(wl < 0 ? -wl / z : 0, wt < 0 ? -wt / z : 0);
+      CV.scrollLeft = Math.max(0, wl); CV.scrollTop = Math.max(0, wt);
     },
-    up: () => { CV.classList.remove('panning'); if (moved > 3) swallowClick(); },
+    up: () => { CV.classList.remove('panning'); if (moved > 3) swallowClick();
+      if (cvGrew){ cvGrew = false; sendOverlays(true); sendBindings(true); } },
     cancel: () => CV.classList.remove('panning') });
 });
+$('#cv').addEventListener('contextmenu', e => e.preventDefault());   // o direito e' mover a vista
 $('#tidy-btn').onclick = () => tidy();
 $('#add-mix').onclick = () => newMixHere('mix');
 $('#cable-btn').onclick = () => { const r = $('#cable-rs'); r.hidden = !r.hidden; $('#cable-btn').classList.toggle('on', !r.hidden); };
@@ -1603,6 +1754,7 @@ function dragCtl(w, o, axis, dflt, io){
     const v = { ArrowUp: g + st, ArrowRight: g + st, ArrowDown: g - st, ArrowLeft: g - st, PageUp: g + 0.1, PageDown: g - 0.1,
                 Home: 0, End: 1, Delete: dflt, Backspace: dflt }[e.key];
     if (v === undefined) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && (selWire || hoverWire)) return;   // fio escolhido/embaixo do mouse: o Delete e' DELE
     e.preventDefault(); e.stopPropagation(); nudge(v);
   });
   if (o.id) reg(o.id, { kind: 'cont', get: o.get, set: v => { put(v); io.live(); }, commit: io.commit, label: o.mlabel || o.label, el: w });
@@ -2013,14 +2165,28 @@ function newCtl(spec, xy){   // controlador solto (sem cabo): o sinal fica pront
   sendBindings(true); setSel(CTL_KEY, ctlStore().length - 1, true);
   toast(`controlador “${ctlName(m)}”: puxe o losango dele até um knob`);
 }
+function dropMod(w){   // tira UMA ligacao (w de forEachMod): ativador extra sai da lista; o principal da' lugar ao 1o extra
+  const x = stackOf(w.key)[w.j]; if (!x || !x.mod || !x.mod[w.n]) return;
+  const cur = x.mod[w.n];
+  if (w.extra != null){ cur.mais = (cur.mais || []).filter((_, i) => i !== w.extra); if (!cur.mais.length) delete cur.mais; return; }
+  const rest = cur.mais || [];
+  if (rest.length){ x.mod[w.n] = Object.assign({}, rest[0]); if (rest.length > 1) x.mod[w.n].mais = rest.slice(1); } else delete x.mod[w.n];
+  if (!Object.keys(x.mod).length) delete x.mod;
+}
 function removeCtl(j){   // tira o controlador: os knobs que ele movia voltam ao valor deles
   const c = ctlStore()[j]; if (!c) return;
-  forEachMod((m, w) => { if (m.id === c.id && !w.ctl && !w.row){ const x = stackOf(w.key)[w.j]; if (x && x.mod){ delete x.mod[w.n]; if (!Object.keys(x.mod).length) delete x.mod; } } });
+  forEachMod((m, w) => { if (m.id === c.id && !w.ctl && !w.row) dropMod(w); });
   ctlStore().splice(j, 1); if (sel.key === CTL_KEY) sel = { key: '', j: -1 };
   sendBindings(true); cvSig = ''; ctlSig = ''; mvSig = ''; renderBoxes(); renderCtl(); renderMvList();
   toast('controlador tirado (Ctrl+Z volta)');
 }
-function unlinkCv(w){ const s = stackOf(w.key)[w.j]; if (!s) return; selWire = null; modOpen = ''; editMod(w.key, w.j, mm => delete mm[w.n]); toast(`${knobLabel(w.n)} de ${fxName(s.file)} solto do controlador`); }
+function unlinkCv(w){   // tira SO' esta ligacao controlador -> knob (os outros ativadores do knob ficam)
+  const s = stackOf(w.key)[w.j]; if (!s) return; selWire = null; modOpen = '';
+  editMod(w.key, w.j, mm => { const cur = mm[w.n]; if (!cur) return;
+    if (w.mid && cur.id !== w.mid){ const r = (cur.mais || []).filter(e => e.id !== w.mid); mm[w.n] = Object.assign({}, cur); if (r.length) mm[w.n].mais = r; else delete mm[w.n].mais; return; }
+    const rest = cur.mais || [];   // tirou o 1o: o proximo ativador vira o principal
+    if (rest.length){ mm[w.n] = Object.assign({}, rest[0]); if (rest.length > 1) mm[w.n].mais = rest.slice(1); } else delete mm[w.n]; });
+  toast(`${knobLabel(w.n)} de ${fxName(s.file)}: ligação tirada`); }
 function findModule(id){
   for (const [k, b] of Object.entries(lastBindings)){ const j = (b.shaders || []).findIndex(s => s.id === id); if (j >= 0) return { key: k, j, s: b.shaders[j] }; }
   return null;
@@ -2146,7 +2312,7 @@ function topoOrder(){
   if (out.length === lastOverlays.length && out.every((o, i) => o === lastOverlays[i])) return false;
   lastOverlays = out; return true;
 }
-function graphFix(){ const g = migrateGraph(), a = normalizeNodes(), b = topoOrder(), c = syncCtls(true); if (g || a || b || c){ cvSig = ''; ctlSig = ''; } return g || a || b || c; }
+function graphFix(){ const g = migrateGraph(), a = normalizeNodes(), f = flattenPosts(), b = topoOrder(), c = syncCtls(true); if (g || a || f || b || c){ cvSig = ''; ctlSig = ''; } return g || a || f || b || c; }
 function promoteMirrors(ids){   // o ORIGINAL sumiu: o 1o espelho vira o original (herda knobs/movimento), os outros seguem ele
   for (const id of ids){
     const orig = findModule(id), ms = [];
@@ -2158,18 +2324,22 @@ function promoteMirrors(ids){   // o ORIGINAL sumiu: o 1o espelho vira o origina
   }
 }
 function healRemove(o){   // tira o no' e FECHA a corrente: quem lia ele le o que ELE lia (staging: a 1a camada); camada sem isso sai
+  promoteMirrors(stackOf(chKey(o)).map(s => s.id).filter(Boolean));
+  spliceOut(o, true);
+  lastOverlays = lastOverlays.filter(x => x !== o);
+}
+function spliceOut(o, gone){   // FECHA a corrente em volta do no' (quem lia ele passa a ler o que ELE lia). gone = ele vai sumir
+  // (a mascara Luma que lia ele sai junto); sem gone = so' mudou de lugar (arrastado pra um fio): os fios laterais ficam
   const key = chKey(o), ids = new Set(stackOf(key).map(s => s.id).filter(Boolean));
   const up = o.kind ? ((o.layers || [])[0] || {}).from : o.file;
-  promoteMirrors([...ids]);
   if (o.id) ids.add(o.id);
   // quem lia ele passa a ler o que ELE lia; se ele era a FONTE (ou um staging vazio), fica SEM ENTRADA — nunca vira uma fonte nova
   for (const k of lastOverlays.filter(x => x !== o && !x.kind && isTapKey(x.file) && ids.has(x.file.slice(1)))) renameRowKey(k, isTapKey(up) ? up : NO_IN);
   for (const x of lastOverlays) if (x.kind && x !== o)
     x.layers = (x.layers || []).flatMap(L => !ids.has(refId(L.from)) ? [L] : isTapKey(up) ? [Object.assign(L, { from: up })] : []);
-  for (const b of Object.values(lastBindings)) if (b.matte){   // mascara Luma que vinha deste no' some junto
+  if (gone) for (const b of Object.values(lastBindings)) if (b.matte){   // mascara Luma que vinha deste no' some junto
     b.matte.items = b.matte.items.filter(x => !(isTapKey((x.ins || [])[0] || '') && ids.has(x.ins[0].slice(1))));
     if (!b.matte.items.length) delete b.matte; }
-  lastOverlays = lastOverlays.filter(x => x !== o);
 }
 function dropEmptyNode(key){   // no' de efeito que ficou sem atomo (atomo movido/recortado/tirado) some e a corrente se fecha
   const o = rowOf(key); if (!o || !isTapKey(o.file) || stackOf(key).length || stackOf(key + MK).length) return false;
@@ -2259,7 +2429,17 @@ function loadScenes(){ fetch('/scenes').then(r => r.json()).then(gotScenes).catc
 function gotScenes(d){ lastScenes = d.list || []; if ((d.active || '') !== activeScene) sceneLeft(activeScene); activeScene = d.active || ''; sceneSig = ''; renderScenes(); syncSGrade(); }
 const scenePost = (url, body) => post(url, body).then(gotScenes);
 function goScene(name){ scenePost('/scene', { name }).catch(e => toast('cena: ' + e, 'err')); }
+// botao "cenas" (MONTAR): a coluna da esquerda sob demanda
+$('#cn-btn').onclick = e => { e.stopPropagation();
+  const on = document.body.classList.toggle('cn-open'), r = $('#cn-btn').getBoundingClientRect(), L = $('#left');
+  if (on){ L.style.left = Math.max(10, Math.min(innerWidth - 260, r.left)) + 'px'; L.style.top = r.bottom + 8 + 'px'; } };
+window.addEventListener('pointerdown', e => {
+  if (!document.body.classList.contains('cn-open') || !(e.target instanceof Element)) return;
+  if (e.target.closest('#left, #cn-btn, .nmenu, #tpop, dialog')) return;
+  document.body.classList.remove('cn-open');
+}, true);
 function renderScenes(){
+  $('#cn-name').textContent = activeScene || '—';
   const sig = JSON.stringify([lastScenes.map(s => [s.name, s.key, s.transition]), activeScene, sceneOpen, lastTrans, lastTransDefault, sceneAdding, mode, lastCue]);
   if (sig === sceneSig) return;
   sceneSig = sig;
@@ -2439,7 +2619,7 @@ function costOf(key){   // passes de GPU por quadro (native render_mix): fonte 1
   return n + (m ? 2 * m + 3 : 0);
 }
 function setSel(key, j, quiet){
-  sel = { key, j: j ?? -1 }; LS.set('v5sel', sel);
+  sel = { key, j: j ?? -1 }; LS.set('v5sel', sel); inspClosed = '';
   const k = mkBase(key);
   if (k && k !== lastSelected && k !== POST_KEY && !isNodeKey(k)) selectSource(k);   // staging/saida nao e' fonte
   cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl();
@@ -2479,7 +2659,8 @@ function renderBoxes(){
   if (!rows.some(o => !o.kind)) CVI.append(h('div', { id: 'cv-empty', text: isShow()
     ? 'Nada no canvas — vá em MONTAR e arraste uma FONTE da biblioteca pra cá.'
     : 'Arraste uma FONTE da biblioteca (câmera, vídeo, imagem) pra cá: vira um nó. Clique na bolinha da direita dele: o fio gruda no cursor — clique numa entrada (A, B, máscara, camada de uma mistura/saída) ou no vazio pro menu.' }));
-  $('#cv-hint').textContent = isShow() ? '' : 'bolinha: clique = o fio gruda (Esc cancela) · arrastar também · entrada ligada: puxe pra mover ou soltar no vazio';
+  $('#cv-hint').textContent = '';   // tudo a vista sem texto: a dica fica no title do topo do canvas
+  $('#cv-h').title = isShow() ? '' : 'bolinha: clique = o fio gruda (Esc cancela) · arrastar também · entrada ligada: puxe pra mover ou soltar no vazio · mouse num fio + Delete = tira só ele';
   requestAnimationFrame(drawBoxWires);
 }
 function srcThumb(key, info){   // miniatura ao vivo da FONTE no cabecalho do no'
@@ -2512,6 +2693,14 @@ function outPort(key, j){   // SAIDA na borda direita: aceita VARIOS fios (puxar
   if (!isShow()) p.onpointerdown = e => wireStart(e, key, j);
   return p;
 }
+// CLICAR NO NOME = TROCAR (2026-11-17): atomo -> a lista de atomos; fonte -> a lista de fontes. Arrastar o cabecalho continua movendo.
+function nameEl(key, an, nm, info){
+  const el = h('span', { class: 'nm' + (isShow() ? '' : ' swp'), text: nm });
+  if (!isShow() && (an || (!info.tap && !(rowOf(key) || {}).kind)))
+    el.onclick = e => { e.stopPropagation(); setSel(key, an ? 0 : -1, true); if (an) swapAtomMenu(e, key); else swapSourceMenu(e, key); };
+  if (!isShow()) el.title = an ? 'clique: TROCAR por outro átomo (os fios ficam; as ligações dos knobs se desfazem)' : 'clique: TROCAR a fonte';
+  return el;
+}
 function boxEl(o, live, mirrored){
   const key = chKey(o), info = srcInfo(key), on = live.has(key), selB = mkBase(sel.key) === key;
   const an = atomNode(key) && stackOf(key)[0], mir = an && an.espelho, el = h('div', { class: 'bx' + (selB ? ' sel' : '') + (on ? ' live' : '') + (o.fold ? ' fold' : '') + (mir ? ' mirror' : ''),
@@ -2521,12 +2710,17 @@ function boxEl(o, live, mirrored){
   const hd = h('div', { class: 'bh' + (an ? ' atom' : ''), title: `nó ${boxNo(key)} · ${nm}` + (an ? ` (${info.name})` : '') + (mir ? ' — ESPELHO: knobs e movimentos do original (clique leva até ele)' : '') + (isShow() ? '' : ' — arraste pra mover · 2 cliques dobra') });
   if (mir){   // ESPELHO: um chip — LED, o icone + a marca de cor do original, o numero; o nome so' no title
     hd.append(led, h('span', { class: 'mchip', style: `--mc:${origColor(an)}` }, icon(catIcon(catOf(an.file)), 'sm')), h('span', { class: 'grow' }), h('span', { class: 'n', text: String(boxNo(key)) }));
-  } else hd.append(...[led, an ? h('span', { class: 'ai' }, icon(catIcon(catOf(an.file)), 'sm')) : srcThumb(key, info), h('span', { class: 'nm', text: nm }),
+  } else hd.append(...[led, an ? h('span', { class: 'ai' }, icon(catIcon(catOf(an.file)), 'sm')) : srcThumb(key, info), nameEl(key, an, nm, info),
     an && metaOf(an.file).estado ? h('i', { class: 'led on lst', title: 'tem ESTADO (// estado:): lembra os quadros anteriores' }) : null,
     nodeLate(o) ? h('i', { class: 'led lp', title: 'LAÇO: uma entrada deste nó lê o quadro anterior (fio tracejado)' }) : null,
     an && an.id && mirrored.has(an.id) ? h('span', { class: 'mdot', style: `--mc:${nodeColor(o.id || key)}`, title: 'tem espelhos (a mesma cor marca cada um)' }) : null,
+    an && !isShow() ? h('button', { class: 'nb swap', title: 'TROCAR este átomo por outro (os fios ficam)', onclick: e => { e.stopPropagation(); swapAtomMenu(e, key); },
+      onpointerdown: e => e.stopPropagation() }, icon('recarregar', 'sm')) : null,
+    an ? h('button', { class: 'nb pw' + (an.off ? '' : ' on'), title: an.off ? 'DESLIGADO: a imagem passa direto (clique liga)' : 'ligado (clique desliga: a imagem passa direto)',
+      onclick: e => { e.stopPropagation(); toggleAtom(key, 0); }, onpointerdown: e => e.stopPropagation() }, icon('power', 'sm')) : null,
     h('span', { class: 'n', text: String(boxNo(key)) })].filter(Boolean));
   if (an) el.classList.add('anode');
+  if (an && an.off) el.classList.add('offn');
   hd.onclick = e => { e.stopPropagation(); if (mir){ const t = origOf(an); if (t){ setSel(t.key, t.j); return; } } setSel(key, an ? 0 : -1, true); };
   hd.ondblclick = e => { e.stopPropagation(); if (isShow()) return; const x = rowOf(key); if (!x) return; if (x.fold) delete x.fold; else x.fold = 1; sendOverlays(true); cvSig = ''; renderBoxes(); };
   if (!isShow()) hd.onpointerdown = e => boxDragStart(e, key, el);
@@ -2666,15 +2860,18 @@ function ctlDragStart(e, id, el){   // mover o controlador (o mesmo gesto do box
   if (e.button !== 0) return;
   const c0 = ctlStore().find(x => x.id === id); if (!c0) return;
   const a0 = canvasPt(e), grab = [a0[0] - c0.xy[0], a0[1] - c0.xy[1]];
-  let moved = false, c = c0, last = e;
+  let moved = false, c = c0, last = e, grp = null;
+  const cx0 = c0.xy.slice();
   const mv = ev => { last = ev;
     const a = canvasPt(ev); if (!moved && Math.hypot(a[0] - a0[0], a[1] - a0[1]) * cvZoom() < 4) return;
-    if (!moved){ c = ctlStore().find(x => x.id === id); if (!c) return; moved = true; boxDrag = 'ctl'; boxDragMv = () => mv(last); el.classList.add('moving'); document.body.classList.add('dragging'); }
+    if (!moved){ c = ctlStore().find(x => x.id === id); if (!c) return; grp = groupOf('ctl:' + id); moved = true; boxDrag = 'ctl'; boxDragMv = () => mv(last); el.classList.add('moving'); document.body.classList.add('dragging'); }
     c.xy = [Math.max(0, Math.round((a[0] - grab[0]) / SNAP) * SNAP), Math.max(0, Math.round((a[1] - grab[1]) / SNAP) * SNAP)];
     el.style.left = c.xy[0] + 'px'; el.style.top = c.xy[1] + 'px'; bindTouched = now();
-    drawBoxWires(); edgeTrack(ev, () => mv(last)); };
+    if (grp){ grpMove(grp, c.xy[0] - cx0[0], c.xy[1] - cx0[1]); mediaTouched = now(); }
+    drawBoxWires(); edgeTrack(ev, () => mv(last), true); edge.onShift = (dx, dy) => { if (grp) grp.forEach(m => { m.xy0 = [m.xy0[0] + dx, m.xy0[1] + dy]; }); }; };
+  cvGrew = false;
   const up = () => { if (!moved) return; boxDrag = null; boxDragMv = null; el.classList.remove('moving'); document.body.classList.remove('dragging');
-    swallowClick(); sendBindings(true); cvSig = ''; renderBoxes(); };
+    swallowClick(); sendBindings(true); if (cvGrew || (grp && grp.some(m => !m.ctl))) sendOverlays(true); cvGrew = false; cvSig = ''; renderBoxes(); };
   follow(e, { move: mv, up, cancel: up });
 }
 function cvTarget(ev){   // o KNOB embaixo do ponteiro: {el, key, j, n} — knob do no', barra de caixa antiga, celula dos Controles ou o atomo (= o principal)
@@ -2683,8 +2880,8 @@ function cvTarget(ev){   // o KNOB embaixo do ponteiro: {el, key, j, n} — knob
   if (kc){ const s = stackOf(kc.dataset.k)[+kc.dataset.j]; if (!s || kc.dataset.k === CTL_KEY) return null; return { el: kc, key: kc.dataset.k, j: +kc.dataset.j, n: kc.dataset.knob || 'opacity' }; }
   const at = t.closest('.at[data-k]'); if (!at) return null;
   const s = stackOf(at.dataset.k)[+at.dataset.j]; if (!s || s.espelho) return null;
-  const kn = t.closest('[data-kn]'), main = mainKnob(s) === 'opacity' && knobsOf(s.file)[0] ? knobsOf(s.file)[0] : mainKnob(s);
-  return { el: kn || at, key: at.dataset.k, j: +at.dataset.j, n: kn ? kn.dataset.kn : main };
+  const kr = t.closest('[data-kr]'), kn = t.closest('[data-kn]') || (kr && kr.querySelector('[data-kn]')), main = mainKnob(s) === 'opacity' && knobsOf(s.file)[0] ? knobsOf(s.file)[0] : mainKnob(s);
+  return { el: kr || kn || at, key: at.dataset.k, j: +at.dataset.j, n: kn ? kn.dataset.kn : main };
 }
 function cvWireStart(e, id){   // CABO DE CONTROLE: do losango do controlador ate' um knob (soltar fora = nada)
   if (e.button !== 0) return;
@@ -2694,14 +2891,20 @@ function cvWireStart(e, id){   // CABO DE CONTROLE: do losango do controlador at
   tmp.setAttribute('class', 'w cv drag'); tmp.style.stroke = nodeColor(id); WIRES.append(tmp);
   wireDrag = 'cv'; document.body.classList.add('wiring');
   const p0 = [e.clientX, e.clientY]; let moved = false, hot = null, last = e;
+  const picked = new Map(), sigOf = t => `${t.key}|${t.j}|${t.n}`;   // SHIFT: os knobs por onde o cabo passou (todos ligam ao soltar)
   const mv = ev => { last = ev; if (!moved && Math.hypot(ev.clientX - p0[0], ev.clientY - p0[1]) > 5) moved = true;
     const p = canvasPt(ev); tmp.setAttribute('d', curve(a[0], a[1], p[0], p[1])); edgeTrack(ev, () => mv(last));
-    const t = cvTarget(ev), te = t && t.el; if (te !== hot){ if (hot) hot.classList.remove('drophot'); hot = te; if (hot) hot.classList.add('drophot'); } };
-  const stop = () => { tmp.remove(); if (hot) hot.classList.remove('drophot'); wireDrag = null; wireDragMv = null; edgeStop(); document.body.classList.remove('wiring'); };
+    const t = cvTarget(ev), te = t && t.el;
+    if (t && ev.shiftKey && !picked.has(sigOf(t))){ picked.set(sigOf(t), t); te.classList.add('drophot'); }
+    if (te !== hot){ if (hot && ![...picked.values()].some(x => x.el === hot)) hot.classList.remove('drophot'); hot = te; if (hot) hot.classList.add('drophot'); } };
+  const stop = () => { tmp.remove(); if (hot) hot.classList.remove('drophot'); for (const x of picked.values()) x.el.classList.remove('drophot');
+    wireDrag = null; wireDragMv = null; edgeStop(); document.body.classList.remove('wiring'); };
   wireDragMv = () => mv(last);
   follow(e, { move: mv, cancel: () => { stop(); cvSig = ''; renderBoxes(); },
     up: ev => { stop(); const t = moved && ev && cvTarget(ev);
-      if (t){ swallowClick(); return linkMv(t.key, t.j, t.n, id); }
+      if (t) picked.set(sigOf(t), t);
+      if (moved && picked.size){ swallowClick(); for (const x of picked.values()) linkMv(x.key, x.j, x.n, id);
+        if (picked.size > 1) toast(`${picked.size} knobs seguem este controlador (×${mvUses(id).length})`); return; }
       if (!moved) toast('arraste o losango até um knob: ele passa a andar com este sinal');
       cvSig = ''; renderBoxes(); } });
 }
@@ -2745,7 +2948,7 @@ function atomRow(key, j, s){
     if (det.length) r.append(h('div', { class: 'dt' }, det.map(n => h('div', { class: 'al' }, h('span', { class: 'dn', text: n === 'opacity' ? 'opacidade' : n }), barCtl(key, j, s, n)))));
   }
   const ps = postOf(s);
-  if (ps.length) r.append(node ? h('div', { class: 'stk' }, ps.map(p => stackRow(p))) : h('div', { class: 'posts' }, ps.map(p => postChip(p))));
+  if (ps.length) r.append(node ? h('div', { class: 'stk' }, ps.map(p => stackRow(p, key, j))) : h('div', { class: 'posts' }, ps.map(p => postChip(p))));
   r.onclick = e => { e.stopPropagation(); if (isSel && !node){ openAt = openAt === key + '|' + j ? '' : key + '|' + j; LS.set('v5openAt', openAt); } setSel(key, j, true); };
   if (!isShow()) r.onpointerdown = e => atomPointerDown(e, key, j, r);
   return r;
@@ -2762,23 +2965,29 @@ function nodeKnobs(key, j, s){   // NO' = ATOMO: todos os knobs dele REDONDOS no
   const one = n => {
     const isMain = n === L.main, md = (s.mod || {})[n];
     const k = n === 'opacity'
-      ? knob({ id: `bar:${key}:${id}:opacity`, size: isMain ? 44 : 32, cls: 'nk' + (isMain ? ' main' : '') + (md ? ' modded' : ''), label: isMain ? 'opacidade' : 'opac.', title: 'opacidade — arraste ↕ (Shift = fino) · roda · duplo-clique = padrão', mlabel: `${fxName(file)} · opacidade`, dflt: 1, io: KNOB_BIND,
+      ? knob({ id: `bar:${key}:${id}:opacity`, size: isMain ? 34 : 28, cls: 'nk' + (isMain ? ' main' : '') + (md ? ' modded' : ''), label: 'opacidade', title: 'opacidade — arraste ↕ (Shift = fino) · roda · duplo-clique = padrão', mlabel: `${fxName(file)} · opacidade`, dflt: 1, io: KNOB_BIND,
           get: () => (cur() || {}).opacity ?? 1, set: v => { const x = cur(); if (x) x.opacity = Math.round(v * 1000) / 1000; } })
-      : knob({ id: `bar:${key}:${id}:${n}`, size: isMain ? 44 : 32, cls: 'nk' + (isMain ? ' main' : '') + (md ? ' modded' : ''), label: knobLabel(n),
-          mlabel: `${fxName(file)} · ${n}`, dflt: fxDefault(file, n), io: KNOB_BIND, ...(bipL.includes(n) ? { bip: true } : {}),
+      : knob({ id: `bar:${key}:${id}:${n}`, size: isMain ? 34 : 28, cls: 'nk' + (isMain ? ' main' : '') + (md ? ' modded' : ''), label: knobLabel(n),
+          mlabel: `${fxName(file)} · ${n}`, dflt: fxDefault(file, n), io: KNOB_BIND, bip: metaOf(file).atom ? bipL.includes(n) : (bipL.includes(n) || undefined),   // ATOMO: so' o '// bipolar:' tem dois lados (padrao 0.5 nao basta)
           title: `${knobLabel(n)}${md ? ' ← ' + modSrcText(md) : ''} — arraste ↕ (Shift = fino) · roda · duplo-clique = padrão`,
           get: () => { const x = cur(); return x ? fxVal(key, x, n) : fxDefault(file, n); }, set: v => { const x = cur(); if (x) setFxVal(key, x, n, v); } });
     k.dataset.bar = '1'; k.dataset.kn = n;
-    return k;
+    // JACK do knob: cheio na cor do controlador quando um movimento move este knob; clique = abre o movimento dele
+    const kj = h('span', { class: 'kj' + (md ? ' on' : ''), style: md ? `--pc:${nodeColor(md.id || '')}` : '',
+      title: md ? `${knobLabel(n)} ← ${modSrcText(md)}${(md.mais || []).length ? ` + ${md.mais.length} ativador(es) somando` : ''} — clique escolhe a ligação (Delete tira) e abre o movimento` : `${knobLabel(n)}: puxe o losango de um controlador até aqui (Shift = vários knobs de uma vez)` });
+    kj.onclick = e => { e.stopPropagation(); if (document.activeElement) document.activeElement.blur();
+      modOpen = `${key}|${j}|${n}`; setSel(key, j, true); if (md) selWire = { t: 'cv', key, j, n, mid: md.id || null }; cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl(); };
+    return h('div', { class: 'nkr' + (isMain ? ' main' : ''), 'data-kr': n }, kj, k);
   };
-  return h('div', { class: 'nks' }, h('div', { class: 'nkg' }, L.knobs.map(one)),
+  return h('div', { class: 'nks vert' }, L.knobs.map(one),
     L.wide.length ? h('div', { class: 'nkw' }, L.wide.map(n => { const c = barCtl(key, j, s, n, true);
       return c.classList.contains('chseg') ? c : h('div', { class: 'al' }, h('span', { class: 'dn', text: knobLabel(n) }), c); })) : null);
 }
 const wideH = (file, n) => isChoice(file, n) && segFits(metaOf(file).escolha[n]) ? 34 : 30;
 function nodeKnobH(s){   // = altura do corpo do no' de atomo (boxH): linha da alca/selos + knobs (76 a 1a linha, 68 as outras) + escolhas/chaves
-  const L = nodeKnobList(s), rows = Math.ceil(L.knobs.length / 4), al = s.mod && Object.keys(s.mod).length || (s.ins || [])[0] || (s.pub || []).length ? 26 : 12;
-  return al + 8 + (rows ? 76 + (rows - 1) * 68 : 0) + L.wide.reduce((a, n) => a + wideH(s.file, n), 0); }
+  const L = nodeKnobList(s), al = s.mod && Object.keys(s.mod).length || (s.ins || [])[0] || (s.pub || []).length ? 26 : 12;
+  return al + 4 + (L.knobs.length ? KROW_MAIN_H + (L.knobs.length - 1) * KROW_H : 0) + L.wide.reduce((a, n) => a + wideH(s.file, n), 0); }
+const KROW_H = 34, KROW_MAIN_H = 40;   // = .nkr / .nkr.main
 function barCtl(key, j, s, n, node){   // barra fina de um knob DENTRO da caixa (arrasta direto; MIDI learn tambem); node = no' de atomo (escolha com LED, chave alavanca)
   const file = s.file, cur = () => { const x = stackOf(key)[j]; return x && x.file === file ? x : null; }, id = s.id || j;
   if (isChoice(file, n) && !(s.mod || {})[n]){   // ESCOLHA: lista curta (no no', ate' 4 = posicoes com LED)
@@ -2814,15 +3023,122 @@ function postChip(p){   // MODIFICADOR PARALELO embaixo do atomo: clique = contr
   return el;
 }
 const STK_H = 30;   // uma linha EM CIMA no card (boxH conta)
-function stackRow(p){   // EM CIMA (no card do no'): ↳ icone Nome [knob principal] — clique = controles; arrastar ate' outro atomo = ele tambem usa
+function stackRow(p, key, j){   // EM CIMA (no card do no'): ↳ icone Nome [knob principal] — clique = controles; arrastar ate' outro atomo = ele tambem usa
   const idx = postStore().indexOf(p), n = postUsers(p.id).length, c = catOf(p.file), main = mainKnob(p), base = (postUsers(p.id)[0] || {}).s;
   const el = h('div', { class: 'sr' + (sel.key === POST_KEY && sel.j === idx ? ' sel' : '') + (p.off ? ' off' : ''), 'data-post': p.id,
     title: `${fxName(p.file)} EM CIMA${base ? ' de ' + fxName(base.file) : ''}: age só no que ele faz, não no fundo${n > 1 ? ` (o mesmo em mais ${n - 1})` : ''} — clique: controles · arraste até outro átomo: ele também usa` },
-    icon(catIcon(c), 'sm'), h('span', { class: 'nm', text: fxName(p.file) }), n > 1 ? h('b', { text: '×' + n }) : null, barCtl(POST_KEY, idx, p, main));
+    icon(catIcon(c), 'sm'), h('span', { class: 'nm', text: fxName(p.file) }), n > 1 ? h('b', { text: '×' + n }) : null, barCtl(POST_KEY, idx, p, main),
+    key != null && !isShow() ? h('button', { class: 'tonode', text: 'vira nó', title: 'tira daqui de dentro e vira um NÓ ligado na saída deste (age na imagem toda, não só no que ele faz)',
+      onclick: e => { e.stopPropagation(); postToNode(p, key, j); }, onpointerdown: e => e.stopPropagation() }) : null);
   el.onclick = e => { e.stopPropagation(); setSel(POST_KEY, idx, true); };
   el.onpointerdown = e => { if (e.target.closest('.fader, .sw, .chseg, .choice')) return; e.stopPropagation(); if (isShow()) return;
     startDrag(e, { kind: 'postlink', id: p.id, label: fxName(p.file), icon: catIcon(c), click: () => setSel(POST_KEY, idx, true) }); };
   return el;
+}
+function nodeAfter(key, items){   // NÓ NOVO DEPOIS do no' key: le a saida dele, e quem lia ele passa a ler o novo
+  const ov = nodeAfterQ(key, items); if (!ov) return null;
+  declutter([ov]); sendOverlays(true); sendBindings(true); setSel(chKey(ov), 0, true);
+  toast(`${fxName(items[0].file)}: nó novo depois de ${nodeTitle(key) || ''}`);
+  return ov;
+}
+function nodeAfterQ(key, items){   // = nodeAfter sem gravar (o flattenPosts encadeia varios de uma vez)
+  const o = rowOf(key); if (!o || !items.length) return null; ensureRowId(o);
+  const ids = new Set([o.id, ...stackOf(key).map(s => s.id)].filter(Boolean));
+  const readers = lastOverlays.filter(x => x !== o && !x.kind && isTapKey(x.file) && ids.has(x.file.slice(1)));
+  const lays = []; for (const x of lastOverlays) if (x.kind) for (const L of x.layers || []) if (ids.has(refId(L.from))) lays.push(L);
+  const ref = '@' + o.id, same = lastOverlays.filter(x => x.file === ref);
+  const ov = { file: ref, opacity: 1, id: 'c' + rid(), xy: snapXY([(o.xy || [0, 0])[0] + BOX_W + 60, (o.xy || [0, 0])[1]]), n: nextNo() };
+  if (same.length) ov.dup = Math.max(...same.map(x => x.dup || 1)) + 1;
+  lastOverlays.push(ov); binding(chKey(ov), true).shaders.push(...items); items.forEach(m => ensurePool('shaders', m.file));
+  for (const r of readers) renameRowKey(r, '@' + ov.id);
+  for (const L of lays) L.from = '@' + ov.id;
+  return ov;
+}
+function nodeParallel(key, items){   // RAMO PARALELO ("cru"): le a MESMA entrada do no' key e entra nas MESMAS misturas/saidas onde a
+  // corrente dele chega (camada nova, na frente) — ex.: Vinheta crua do lado do Contorno, nao em cima dele
+  const o = rowOf(key); if (!o || !items.length) return null;
+  const down = new Set([o]), q = [o], mixes = new Set();
+  while (q.length){ const x = q.shift(), ids = new Set([x.id, ...stackOf(chKey(x)).map(s => s.id)].filter(Boolean));
+    for (const y of lastOverlays){
+      if (y.kind){ if ((y.layers || []).some(L => ids.has(refId(L.from)))) mixes.add(y); }
+      else if (!down.has(y) && isTapKey(y.file) && ids.has(y.file.slice(1))){ down.add(y); q.push(y); } } }
+  const same = lastOverlays.filter(x => x.file === o.file);
+  const ov = { file: o.file, opacity: 1, id: 'c' + rid(), xy: snapXY([(o.xy || [0, 0])[0], (o.xy || [0, 0])[1] + boxH(key) + 40]), n: nextNo() };
+  if (same.length) ov.dup = Math.max(...same.map(x => x.dup || 1)) + 1;
+  lastOverlays.push(ov); binding(chKey(ov), true).shaders.push(...items); items.forEach(m => ensurePool('shaders', m.file));
+  for (const m of mixes) (m.layers = m.layers || []).push({ from: '@' + ov.id });
+  declutter([ov]); sendOverlays(true); sendBindings(true); setSel(chKey(ov), 0, true);
+  toast(`${fxName(items[0].file)} em PARALELO a ${nodeTitle(key) || ''}` + (mixes.size ? ` → ${[...mixes].map(mixName).join(', ')}` : ' (ligue a saída dele numa mistura/saída)'));
+  return ov;
+}
+function flattenPosts(){   // SEM "EM CIMA" (2026-11-16): cada ↳ vira um NÓ na cadeia, depois do atomo, na ordem em que estavam
+  let ch = false; const made = [];
+  for (const o of [...lastOverlays]){
+    if (o.kind) continue;
+    const k0 = chKey(o), s = stackOf(k0)[0]; if (!s || !(s.post || []).length) continue;
+    let cur = k0;
+    for (const p of postOf(s)){
+      const shared = postUsers(p.id).length > 1, it = JSON.parse(JSON.stringify(p));
+      it.in = 'chain'; delete it.post; if (shared) it.id = rid();
+      s.post = s.post.filter(id => id !== p.id);
+      if (!shared){ const ps = postStore(), i = ps.indexOf(p); if (i >= 0) ps.splice(i, 1); }
+      const ov = nodeAfterQ(cur, [it]); if (ov){ cur = chKey(ov); ch = true; made.push(ov); }
+    }
+    if (!(s.post || []).length) delete s.post;
+  }
+  if (made.length) declutter(made);
+  return ch;
+}
+function postToNode(p, key, j){   // linha ↳ (EM CIMA) -> NÓ depois do card
+  const s = stackOf(key)[j]; if (!s) return;
+  const shared = postUsers(p.id).length > 1, it = JSON.parse(JSON.stringify(p));
+  it.in = 'chain'; if (shared) it.id = rid();
+  s.post = (s.post || []).filter(id => id !== p.id); if (!s.post.length) delete s.post;
+  if (!shared){ const ps = postStore(), k = ps.indexOf(p); if (k >= 0) ps.splice(k, 1); }
+  nodeAfter(key, [it]);
+}
+function swapAtomMenu(ev, key){   // TROCAR o atomo do no' por outro: a lista dos atomos (busca), os fios e o lugar ficam
+  $$('.nmenu').forEach(x => x.remove());
+  const s0 = stackOf(key)[0]; if (!s0) return;
+  const menu = h('div', { class: 'nmenu', role: 'dialog' }), q = h('input', { class: 'inp', placeholder: 'trocar por… (nome, tipo, o que faz)', autocomplete: 'off' }), list = h('div', { class: 'nm-list' });
+  menu.append(h('div', { class: 'nm-h' }, h('span', { class: 'lbl', text: 'trocar' }), h('b', { text: fxName(s0.file) })), q, list);
+  document.body.append(menu);
+  const W = 300, Hh = 380; Object.assign(menu.style, { left: Math.min(innerWidth - W - 8, ev.clientX) + 'px', top: Math.max(8, Math.min(innerHeight - Hh - 8, ev.clientY - 20)) + 'px' });
+  const c0 = catOf(s0.file), all = lastShaderList.filter(f => isAtomFile(f) && catOf(f) !== 'mascara' && f !== s0.file)
+    .sort((a, b) => (catOf(b) === c0) - (catOf(a) === c0));   // a mesma familia primeiro
+  let pick = 0, shown = [];
+  const nrm = x => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const close = () => { menu.remove(); window.removeEventListener('pointerdown', away, true); };
+  const go = f => { close(); swapAtom(key, f); };
+  const draw = () => { const sq = nrm(q.value.trim());
+    shown = all.filter(f => !sq || nrm(fxName(f) + ' ' + (metaOf(f).desc || '') + ' ' + catOf(f)).includes(sq)).slice(0, 80);
+    pick = Math.min(pick, Math.max(0, shown.length - 1)); list.innerHTML = '';
+    shown.forEach((f, i) => { const r = h('button', { class: 'nm-it' + (i === pick ? ' pick' : ''), title: metaOf(f).desc || '' }, h('span', { class: 'mchip sm' }, icon(catIcon(catOf(f)), 'sm')),
+      h('span', { class: 'nm-t', text: fxName(f) }), h('span', { class: 'hint', text: metaOf(f).desc || '' }));
+      r.onclick = e => { e.stopPropagation(); go(f); }; list.append(r); });
+    if (!shown.length) list.append(h('div', { class: 'empty', text: 'nada com esse nome' })); };
+  const away = e => { if (!menu.contains(e.target)) close(); };
+  q.oninput = () => { pick = 0; draw(); };
+  q.onkeydown = e => { if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); pick = Math.max(0, Math.min(shown.length - 1, pick + (e.key === 'ArrowDown' ? 1 : -1))); draw(); }
+    else if (e.key === 'Enter' && shown[pick]){ e.preventDefault(); go(shown[pick]); } };
+  setTimeout(() => window.addEventListener('pointerdown', away, true), 0);
+  draw(); q.focus();
+}
+function swapAtom(key, file){   // o MESMO item (id, liga/desliga, opacidade, fios, "em cima") com outro .frag; knobs do novo no padrao
+  const s = stackOf(key)[0]; if (!s) return;
+  const knobs = new Set([...knobsOf(file), 'opacity']), ins = metaOf(file).ins;
+  // OS FIOS DOS KNOBS SE DESFAZEM (2026-11-17, decisao do usuario): o knob de outro efeito nao e' o mesmo knob; os CONTROLADORES
+  // que estavam ligados ficam no canvas, soltos (syncCtls garante que cada movimento tem o seu antes de soltar). Opacidade fica.
+  syncCtls(true);
+  const cut = s.mod ? Object.keys(s.mod).filter(n => n !== 'opacity').length : 0;
+  const old = s.file; s.file = file; s.fx = {};
+  if (s.mod){ for (const n of Object.keys(s.mod)) if (n !== 'opacity') delete s.mod[n]; if (!Object.keys(s.mod).length) delete s.mod; }
+  if (s.pub){ s.pub = s.pub.filter(n => knobs.has(n)); if (!s.pub.length) delete s.pub; }
+  if (!ins.length && !isTapKey((s.ins || [])[0] || '')) delete s.ins; else if (ins.length && !s.ins) s.ins = ins.slice();
+  if (!metaOf(file).estado) delete s.estado;
+  ensurePool('shaders', file); sendBindings(true); cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl();
+  toast(`${fxName(old)} → ${fxName(file)}${cut ? ` · ${cut} ligaç${cut > 1 ? 'ões' : 'ão'} desfeita${cut > 1 ? 's' : ''} (os controladores ficam soltos)` : ''}`);
 }
 function syncBoxes(){   // valores sem refazer (outra aba, MIDI, cena nova com a mesma estrutura)
   if (now() - bindTouched >= TOUCH_MS)
@@ -2864,8 +3180,9 @@ function feeds(aKey, bKey){   // a alimenta b (b le a, direto ou por outros, por
 }
 let hoverKey = '', hoverWire = null;
 function hoverNode(k){ if (cable || boxDrag || drag) return; if (k === hoverKey) return; hoverKey = k; drawBoxWires(); }
-const wireSig = w => JSON.stringify([w.t, w.key, w.j ?? null, w.i ?? null, w.n ?? null]);
+const wireSig = w => JSON.stringify([w.t, w.key, w.j ?? null, w.i ?? null, w.n ?? null, w.mid ?? null]);
 function drawBoxWires(){
+  placeInsp(); paintMsel();
   if (!WIRES.isConnected) return;
   const W = CVI.scrollWidth, H = CVI.scrollHeight, cfg = cableCfg();
   WIRES.setAttribute('width', W); WIRES.setAttribute('height', H); WIRES.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -2887,7 +3204,7 @@ function drawBoxWires(){
       for (const p of [from, to]){ p.classList.add('con'); p.style.setProperty('--pc', col); if (lit || isSel) p.classList.add('hl'); }
       if (!isShow()){
         const hit = path(d, 'hit');
-        hit.onclick = e => { e.stopPropagation(); selWire = isSel ? null : wid; cvSig = ''; renderBoxes(); };
+        hit.onclick = e => { e.stopPropagation(); if (document.activeElement) document.activeElement.blur(); selWire = isSel ? null : wid; cvSig = ''; renderBoxes(); };
         hit.onpointerenter = () => { hoverWire = wid; drawBoxWires(); }; hit.onpointerleave = () => { hoverWire = null; drawBoxWires(); };
         const tt = document.createElementNS(NS, 'title'); tt.textContent = `${sk ? nodeTitle(sk) : '?'} → ${nodeTitle(key)} · ${({ a: 'A', b: 'B', m: 'máscara', L: 'entrada ' + ((w.i || 0) + 1) })[w.port]}`
           + (late ? ' · fecha um LAÇO: lê o quadro anterior' : '') + ' — clique escolhe (Delete tira)'; hit.append(tt);
@@ -2901,13 +3218,13 @@ function drawBoxWires(){
     if (uses.length){ from.classList.add('con'); from.style.setProperty('--pc', col); }
     for (const u of uses){
       const end = cvEnd(u); if (!end) continue;
-      const wid = { t: 'cv', key: u.key, j: u.j ?? null, n: u.n }, isSel = selWire && wireSig(selWire) === wireSig(wid);
+      const wid = { t: 'cv', key: u.key, j: u.j ?? null, n: u.n, mid: c.id }, isSel = selWire && wireSig(selWire) === wireSig(wid);
       const lit = hoverKey === mkBase(u.key) || (hoverWire && wireSig(hoverWire) === wireSig(wid)), d = curve(x0, y0, end[0], end[1]);
       path(d, 'w cv' + (isSel ? ' sel' : '') + (lit ? ' hl' : (hoverKey || hoverWire) ? ' dim' : ''), col);
       const dot = document.createElementNS(NS, 'circle'); dot.setAttribute('cx', end[0]); dot.setAttribute('cy', end[1]); dot.setAttribute('r', 4); dot.setAttribute('class', 'cvdot'); dot.style.fill = col; WIRES.append(dot);
       if (!isShow() && !u.row && !isMk(u.key)){
         const hit = path(d, 'hit');
-        hit.onclick = e => { e.stopPropagation(); selWire = isSel ? null : wid; cvSig = ''; renderBoxes(); };
+        hit.onclick = e => { e.stopPropagation(); if (document.activeElement) document.activeElement.blur(); selWire = isSel ? null : wid; cvSig = ''; renderBoxes(); };
         hit.onpointerenter = () => { hoverWire = wid; drawBoxWires(); }; hit.onpointerleave = () => { hoverWire = null; drawBoxWires(); };
         const tt = document.createElementNS(NS, 'title'); tt.textContent = `controlador “${ctlName(c.mod.sinal)}” → ${knobLabel(u.n)} de ${fxName(u.s.file)} — clique escolhe (Delete tira)`; hit.append(tt);
       }
@@ -2923,6 +3240,55 @@ function wireX(x, y, fn){   // fio escolhido: um x perto da entrada tira a ligac
   g.onclick = e => { e.stopPropagation(); fn(); }; CVI.append(g);
 }
 CV.addEventListener('scroll', () => requestAnimationFrame(drawBoxWires), { passive: true });
+// ---- SELECAO DE VARIOS NOS (MONTAR): retangulo no vazio, Shift+clique no cabecalho soma/tira; arrastar um = o grupo anda ----
+var msel = new Set();   // chaves de no' + 'ctl:<id>' (controlador)
+function paintMsel(){
+  for (const [k, el] of Object.entries(boxEls)) el.classList.toggle('msel', msel.has(k));
+  for (const [id, el] of Object.entries(ctlEls)) el.classList.toggle('msel', msel.has('ctl:' + id));
+}
+function groupOf(self){   // os OUTROS da selecao (com o lugar de partida), se `self` faz parte de uma selecao de 2+
+  if (!msel.has(self) || msel.size < 2) return null;
+  return [...msel].filter(k => k !== self).map(k => {
+    if (k.startsWith('ctl:')){ const c = ctlStore().find(x => x.id === k.slice(4)); return c && c.xy ? { obj: c, el: ctlEls[c.id], xy0: c.xy.slice(), ctl: true } : null; }
+    const o = rowOf(k); return o && o.xy ? { obj: o, el: boxEls[k], xy0: o.xy.slice() } : null; }).filter(Boolean);
+}
+function grpMove(grp, dx, dy){
+  for (const m of grp){ m.obj.xy = [Math.max(0, Math.round((m.xy0[0] + dx) / SNAP) * SNAP), Math.max(0, Math.round((m.xy0[1] + dy) / SNAP) * SNAP)];
+    if (m.el){ m.el.style.left = m.obj.xy[0] + 'px'; m.el.style.top = m.obj.xy[1] + 'px'; } }
+}
+function rubberBand(e){   // RETANGULO: o que ele toca fica selecionado (Shift = soma ao que ja' estava)
+  const a = canvasPt(e), base = e.shiftKey ? new Set(msel) : new Set(), rb = h('div', { class: 'rband' });
+  let moved = false, last = e;
+  const mv = ev => { last = ev; const b = canvasPt(ev);
+    if (!moved && Math.hypot(b[0] - a[0], b[1] - a[1]) * cvZoom() < 4) return;
+    if (!moved){ moved = true; CVI.append(rb); }
+    const x0 = Math.min(a[0], b[0]), y0 = Math.min(a[1], b[1]), x1 = Math.max(a[0], b[0]), y1 = Math.max(a[1], b[1]);
+    Object.assign(rb.style, { left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px' });
+    const hit = (xy, el) => xy && el && xy[0] < x1 && xy[0] + el.offsetWidth > x0 && xy[1] < y1 && xy[1] + el.offsetHeight > y0;
+    msel = new Set(base);
+    for (const [k, el] of Object.entries(boxEls)) if (hit((rowOf(k) || {}).xy, el)) msel.add(k);
+    for (const c of ctlStore()) if (hit(c.xy, ctlEls[c.id])) msel.add('ctl:' + c.id);
+    paintMsel(); edgeTrack(ev, () => mv(last)); };
+  follow(e, { move: mv, up: () => { rb.remove(); edgeStop(); if (moved){ swallowClick(); if (msel.size) toast(`${msel.size} selecionados — arraste um pra mover todos · Delete apaga`); }
+      else if (!e.shiftKey){ msel.clear(); paintMsel(); } },
+    cancel: () => { rb.remove(); edgeStop(); } });
+}
+CVI.addEventListener('click', e => {   // Shift+clique no cabecalho de um no' = soma/tira da selecao; clique comum fora dela = limpa
+  if (isShow()) return;
+  const bx = e.target.closest('.bx'); if (!bx) return;
+  const k = bx.dataset.key || (bx.dataset.ctl ? 'ctl:' + bx.dataset.ctl : ''); if (!k) return;
+  if (e.shiftKey && e.target.closest('.bh')){ e.stopPropagation(); e.preventDefault(); if (msel.has(k)) msel.delete(k); else msel.add(k); paintMsel(); return; }
+  if (!msel.has(k) && msel.size){ msel.clear(); paintMsel(); }
+}, true);
+function removeMsel(){   // Delete com varios selecionados: tira todos (as correntes se fecham)
+  const ks = [...msel]; msel.clear();
+  const ctls = ks.filter(k => k.startsWith('ctl:')).map(k => k.slice(4));
+  for (const k of ks.filter(k => !k.startsWith('ctl:'))){ const o = rowOf(k); if (o) healRemove(o); }
+  for (const id of ctls){ const c = ctlStore().find(x => x.id === id); if (!c) continue;
+    forEachMod((m, w) => { if (m.id === id && !w.ctl && !w.row) dropMod(w); }); ctlStore().splice(ctlStore().indexOf(c), 1); }
+  sel = { key: '', j: -1 }; sendOverlays(true); sendBindings(true); cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl();
+  toast(`${ks.length} tirados (Ctrl+Z volta)`);
+}
 let cvView = [0, 0];
 new ResizeObserver(() => { cvView = [CV.clientWidth, CV.clientHeight]; drawBoxWires(); }).observe(CV);
 CV.addEventListener('click', e => { if (e.target === CV || e.target === CVI || e.target === WIRES){ if (selWire){ selWire = null; cvSig = ''; renderBoxes(); } } });
@@ -2952,21 +3318,42 @@ function swallowClick(){
 // ROLAGEM NA BORDA: arrastando perto da beira do canvas, ele rola; rolou (borda ou roda do mouse) = quem arrasta
 // refaz as medidas (onScroll). Antes as zonas ficavam onde estavam no comeco e o atomo caia no lugar errado.
 let edge = null;
-function edgeTrack(ev, onScroll){
-  edge = Object.assign(edge || {}, { x: ev.clientX, y: ev.clientY, onScroll });
+function edgeTrack(ev, onScroll, grow){
+  edge = Object.assign(edge || {}, { x: ev.clientX, y: ev.clientY, onScroll, grow: !!grow });
   if (!edge.raf) edge.raf = requestAnimationFrame(edgeTick);
 }
 function edgeTick(){
   if (!edge) return;
   edge.raf = 0;
-  const C = CV.getBoundingClientRect(), M = 32, v = d => Math.ceil((M - d) / M * 16), { x, y } = edge;
-  if (x < C.left || x > C.right || y < C.top || y > C.bottom) return;   // fora do canvas: nao rola
+  const C = CV.getBoundingClientRect(), M = 40, { x, y, grow } = edge, v = d => Math.ceil(Math.min(2, (M - d) / M) * 14);
+  // arrastando NO' (grow): fora do canvas continua rolando (mais rapido quanto mais longe); o resto (biblioteca, cabo) so' dentro
+  if (!grow && (x < C.left || x > C.right || y < C.top || y > C.bottom)) return;
   const dx = x - C.left < M ? -v(x - C.left) : C.right - x < M ? v(C.right - x) : 0;
   const dy = y - C.top < M ? -v(y - C.top) : C.bottom - y < M ? v(C.bottom - y) : 0;
   if (!dx && !dy) return;
   const l0 = CV.scrollLeft, t0 = CV.scrollTop;
   CV.scrollLeft += dx; CV.scrollTop += dy;
-  if (CV.scrollLeft !== l0 || CV.scrollTop !== t0) edge.raf = requestAnimationFrame(edgeTick);
+  let moved = CV.scrollLeft !== l0 || CV.scrollTop !== t0;
+  if (grow){   // SEM LIMITE A ESQUERDA/EM CIMA: chegou no 0 = TUDO anda pro outro lado (o no' arrastado fica sob o ponteiro)
+    const gx = dx < 0 && CV.scrollLeft === 0 ? -dx : 0, gy = dy < 0 && CV.scrollTop === 0 ? -dy : 0;
+    if (gx || gy){ cvShift(gx / cvZoom(), gy / cvZoom()); moved = true; if (edge.onScroll) edge.onScroll(); }
+    if (dx > 0 || dy > 0){   // a direita/embaixo: abre espaco (o no' segue o ponteiro e o canvas cresce no mv)
+      CVI.style.width = Math.max(parseFloat(CVI.style.width) || 0, (CV.scrollLeft + CV.clientWidth) / cvZoom() + 60) + 'px';
+      CVI.style.height = Math.max(parseFloat(CVI.style.height) || 0, (CV.scrollTop + CV.clientHeight) / cvZoom() + 60) + 'px';
+      if (CV.scrollLeft !== l0 || CV.scrollTop !== t0) moved = true;
+    }
+  }
+  if (moved && !edge.raf) edge.raf = requestAnimationFrame(edgeTick);   // (o onScroll acima pode ja' ter pedido)
+}
+let cvGrew = false;   // o canvas cresceu pra esquerda/cima neste arrasto: todo mundo andou (grava overlays + controladores)
+function cvShift(dx, dy){   // todos os nos e controladores andam (dx, dy) no canvas; quem esta' sendo arrastado e' reposto pelo mv
+  dx = Math.round(dx); dy = Math.round(dy); if (!dx && !dy) return;
+  for (const o of lastOverlays) if (o.xy){ o.xy = [o.xy[0] + dx, o.xy[1] + dy]; const el = boxEls[chKey(o)]; if (el){ el.style.left = o.xy[0] + 'px'; el.style.top = o.xy[1] + 'px'; } }
+  for (const c of ctlStore()) if (c.xy){ c.xy = [c.xy[0] + dx, c.xy[1] + dy]; const el = ctlEls[c.id]; if (el){ el.style.left = c.xy[0] + 'px'; el.style.top = c.xy[1] + 'px'; } }
+  if (edge && edge.onShift) edge.onShift(dx, dy);
+  CVI.style.width = (parseFloat(CVI.style.width) || 0) + dx + 'px'; CVI.style.height = (parseFloat(CVI.style.height) || 0) + dy + 'px';
+  cvGrew = true; mediaTouched = now(); bindTouched = now();
+  drawBoxWires();
 }
 function edgeStop(){ if (edge && edge.raf) cancelAnimationFrame(edge.raf); edge = null; }
 CV.addEventListener('scroll', () => { if (edge && edge.onScroll) edge.onScroll(); });
@@ -2977,22 +3364,67 @@ function boxDragStart(e, key, el){
   let o = rowOf(key); if (!o) return;
   const cpt = ev => { const R = CVI.getBoundingClientRect(), z = cvZoom(); return [(ev.clientX - R.left) / z, (ev.clientY - R.top) / z]; };   // ponteiro no canvas
   const a0 = cpt(e), p0 = o.xy.slice(), grab = [a0[0] - p0[0], a0[1] - p0[1]];   // onde a caixa foi pega (sobrevive a rolar e a dar ZOOM no meio)
-  let moved = false, last = e;
+  let moved = false, last = e, hotW = null, copied = false, grp = null;
+  // ALT (ou Ctrl) + ARRASTAR = DUPLICA como no Figma: QUALQUER no' (fonte, atomo, mistura, saida) e, se ele faz parte de uma
+  // selecao, a selecao inteira (controladores juntos). As copias nascem SEM FIOS e sao elas que andam; o original fica.
+  const dup = e.altKey || e.ctrlKey;
   const mv = ev => { last = ev;
     const a = cpt(ev); if (!moved && Math.hypot(a[0] - a0[0], a[1] - a0[1]) * cvZoom() < 4) return;
     if (!moved){   // a fileira e' buscada AGORA: entre apertar e mover o SSE (20 Hz) troca lastOverlays por objetos novos, e
                    // mexer no velho fazia a caixa voltar pro lugar ao soltar (so' quem segura um instante antes de arrastar)
       o = rowOf(key); if (!o) return;
+      if (dup){
+        const members = msel.has(key) && msel.size > 1 ? [key, ...[...msel].filter(k => k !== key)] : [key];
+        const made = members.map(dupNode);
+        if (!made[0]) return;
+        if (members.length > 1){ msel = new Set(made.filter(Boolean)); }
+        cvSig = ''; ctlSig = ''; renderBoxes(); paintMsel();
+        key = made[0]; o = rowOf(key); el = boxEls[key]; copied = true; if (!o || !el) return;
+      }
+      grp = groupOf(key);   // no' selecionado junto com outros: o GRUPO anda junto
       moved = true; boxDrag = key; boxDragMv = () => mv(last); el.classList.add('moving'); document.body.classList.add('dragging'); }
     o.xy = [Math.max(0, Math.round((a[0] - grab[0]) / SNAP) * SNAP), Math.max(0, Math.round((a[1] - grab[1]) / SNAP) * SNAP)];
     el.style.left = o.xy[0] + 'px'; el.style.top = o.xy[1] + 'px';
+    if (grp) grpMove(grp, o.xy[0] - p0[0], o.xy[1] - p0[1]);
     CVI.style.width = Math.max(parseFloat(CVI.style.width) || 0, o.xy[0] + BOX_W + 80) + 'px';   // da' pra levar alem da borda
     CVI.style.height = Math.max(parseFloat(CVI.style.height) || 0, o.xy[1] + boxH(key) + 80) + 'px';
-    drawBoxWires(); edgeTrack(ev, () => mv(last)); };
+    drawBoxWires();
+    // EM CIMA DE UM FIO (so' no' de atomo): o fio acende; soltar = o no' entra no meio dele
+    hotW = !grp && atomNode(key) ? wireNear(a, key) : null;
+    if (hotW){ const hp = [...WIRES.querySelectorAll('path.w')].find(p => p._w && p._w.key === hotW.key && p._w.port === hotW.port && p._w.idx === hotW.idx); if (hp) hp.classList.add('hl', 'drop'); }
+    el.classList.toggle('onwire', !!hotW);
+    edgeTrack(ev, () => mv(last), true); edge.onShift = (dx, dy) => { if (grp) grp.forEach(m => { m.xy0 = [m.xy0[0] + dx, m.xy0[1] + dy]; }); }; };
+  cvGrew = false;
   const up = () => {
-    if (!moved) return; boxDrag = null; boxDragMv = null; el.classList.remove('moving'); document.body.classList.remove('dragging');
-    swallowClick(); sendOverlays(true); cvSig = ''; renderBoxes(); };
-  follow(e, { move: mv, up, cancel: up });
+    if (!moved) return; boxDrag = null; boxDragMv = null; el.classList.remove('moving', 'onwire'); document.body.classList.remove('dragging');
+    swallowClick();
+    const plugged = hotW && nodeOnWire(o, hotW);
+    if (copied || plugged || cvGrew || (grp && grp.some(m => m.ctl))) sendBindings(true);
+    cvGrew = false; sendOverlays(true); cvSig = ''; renderBoxes();
+    if (plugged) toast(`${fxName(stackOf(chKey(o))[0].file)} no meio do fio${copied ? ' (cópia)' : ''}`);
+    else if (copied) toast(`cópia${msel.size > 1 ? ` (${msel.size})` : ''} — sem fios${atomNode(chKey(o)) ? ' (solte num fio pra ligar)' : ''}`); };
+  follow(e, { move: mv, up, cancel: () => { hotW = null; up(); } });
+}
+function dupNode(k){   // COPIA SEM FIOS de um no' (ou 'ctl:<id>'): mesmo lugar, mesmos knobs/movimentos, ids novos; devolve a chave nova
+  if (k.startsWith('ctl:')){
+    const c = ctlStore().find(x => x.id === k.slice(4)); if (!c) return null;
+    const n = JSON.parse(JSON.stringify(c)), id = 'v' + rid(); n.id = id; if (n.mod && n.mod.sinal) n.mod.sinal.id = id;
+    ctlStore().push(n); return 'ctl:' + id;
+  }
+  const o = rowOf(k); if (!o) return null;
+  let c;
+  if (o.kind){
+    c = { kind: o.kind, id: (o.kind === 'out' ? 'o' : 'm') + rid(), xy: (o.xy || [0, 0]).slice(), layers: [] };
+    if (o.kind === 'out'){ c.n = Math.max(0, ...outRows().map(x => x.n || 0)) + 1; c.nome = 'saída ' + c.n; if (o.rect) c.rect = o.rect.slice(); } else c.n = nextNo();
+  } else {
+    const file = isTapKey(k) ? NO_IN : o.file, same = lastOverlays.filter(x => x.file === file);
+    c = { file, opacity: 1, id: 'c' + rid(), xy: (o.xy || [0, 0]).slice(), n: nextNo() };
+    if (same.length) c.dup = Math.max(...same.map(x => x.dup || 1)) + 1;
+    if (!isTapKey(k)) ensurePool('sources', file);
+  }
+  lastOverlays.push(c);
+  const st = stackOf(k); if (st.length) binding(chKey(c), true).shaders.push(...freshCopy(st));
+  return chKey(c);
 }
 function boxAt(ev){ const b = document.elementFromPoint(ev.clientX, ev.clientY); return b && b.closest('.bx'); }
 // GESTO DO CABO (VCV): da SAIDA sai sempre um fio NOVO; da ENTRADA ligada sai a PONTA do fio que esta' la' (mover; solto no vazio =
@@ -3152,6 +3584,122 @@ function nodeMenu(ev, ref, who){
   draw(); q.focus();
 }
 const isAtomFile = f => /^presets\/atomos\//.test(f);
+// RODA DA BIBLIOTECA (2026-11-17, decisao do usuario: a biblioteca saiu da coluna da esquerda): 2 CLIQUES no vazio do canvas
+// (MONTAR) = roda de TIPOS em volta do ponteiro (fontes, os tipos de atomo, movimentos, receitas, misturas); clique num tipo =
+// a lista dele ao lado; clique num item = nasce ALI (2 cliques em cima de um fio = atomo/receita entra no meio do fio).
+// Item tambem se arrasta (ate' um knob, um fio, um card — o mesmo startDrag da biblioteca). Digitar = procura em tudo.
+function looseNode(xy, items){   // no' SEM ENTRADA no ponto (atomo ou receita); liga puxando um fio ate' a bolinha A
+  const same = lastOverlays.filter(o => o.file === NO_IN);
+  const ov = { file: NO_IN, opacity: 1, id: 'c' + rid(), xy: snapXY(xy), n: nextNo() };
+  if (same.length) ov.dup = Math.max(...same.map(o => o.dup || 1)) + 1;
+  lastOverlays.push(ov); binding(chKey(ov), true).shaders.push(...items); items.forEach(m => ensurePool('shaders', m.file));
+  declutter([ov]); sendOverlays(true); sendBindings(true); setSel(chKey(ov), 0, true);
+  toast(`${items.length > 1 ? items.length + ' átomos' : fxName(items[0].file)} — puxe um fio até a entrada`);
+  return ov;
+}
+function srcItems(){   // [arquivo/id, icone, nome, tipo] de toda fonte (camera, tela, midia)
+  return [...lastVideoInputs.filter(x => x.kind !== 'media').map(x => [x.id, x.kind === 'screen' ? 'tela' : 'camera', x.name, x.kind === 'screen' ? 'tela' : 'câmera']),
+    ...lastMedia.map(m => [m.file, m.kind === 'video' ? 'video' : 'imagem', m.name, m.kind === 'video' ? 'vídeo' : 'imagem'])];
+}
+function wheelSectors(){
+  const atoms = lastShaderList.filter(f => isAtomFile(f) && !isMaskFile(f) && metaOf(f).atom);
+  const at = list => list.map(f => ({ t: fxName(f), d: metaOf(f).desc || '', ic: catIcon(catOf(f)), spec: { kind: 'mod', file: f },
+    go: (xy, w) => w ? insertOnWire(w, prepItems([{ file: f }]), w.ev) : looseNode(xy, prepItems([{ file: f }])) }));
+  const S = [{ id: 'fonte', l: 'Fontes', ic: 'camera', items: () => srcItems().map(([f, ic, n, k]) =>
+      ({ t: n, d: k, ic, spec: { kind: 'src', file: f }, go: xy => newBox(f, xy) })) }];
+  for (const [c, l] of CATS){ if (c === 'mascara') continue;
+    const fs = atoms.filter(f => catOf(f) === c); if (fs.length) S.push({ id: 'cat:' + c, l, ic: catIcon(c), items: () => at(fs) }); }
+  S.push({ id: 'ctl', l: 'Movimentos', ic: 'sin', items: () => ctlItems().map(c => ({ t: c.name, d: c.desc, ic: c.icon, spec: { kind: 'ctl', spec: c.spec }, go: xy => newCtl(c.spec, xy) })) });
+  if (lastRecipes.length) S.push({ id: 'receita', l: 'Receitas', ic: 'grupo', items: () => lastRecipes.map(r => ({ t: r.nome || r.name, d: r.items.map(x => fxName(x.file)).join(' → '), ic: 'grupo',
+    spec: { kind: 'recipe', r }, go: (xy, w) => w ? insertOnWire(w, recipeItems(r), w.ev) : looseNode(xy, recipeItems(r)) })) });
+  S.push({ id: 'mix', l: 'Misturas', ic: 'mistura', items: () => [
+    { t: 'mistura', d: 'junta várias entradas, cada uma uma camada', ic: 'mistura', go: xy => newMix('mix', null, xy) },
+    { t: 'saída (no palco)', d: 'o que o público vê', ic: 'tela', go: xy => newMix('out', null, xy) }] });
+  return S;
+}
+// LISTA FLUTUANTE (a da roda e a do "trocar"): itens {t, d, ic, spec?, go}; spec = tambem arrasta (startDrag)
+function floatList(x, y, title, items, onPick){
+  const list = h('div', { class: 'nmenu wh-list' }), q = h('input', { class: 'inp', placeholder: 'procurar…', autocomplete: 'off' }), box = h('div', { class: 'nm-list' });
+  list.append(h('div', { class: 'nm-h' }, h('span', { class: 'lbl', text: title })), q, box); document.body.append(list);
+  Object.assign(list.style, { left: Math.max(8, Math.min(innerWidth - 308, x)) + 'px', top: Math.max(8, Math.min(innerHeight - 388, y)) + 'px' });
+  let pick = 0, shown = [];
+  const n = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const draw = () => {
+    const s = n(q.value.trim()), rank = it => !s ? 0 : n(it.t).startsWith(s) ? 0 : n(it.t).includes(s) ? 1 : n(it.d).includes(s) ? 2 : 9;
+    shown = items.map((it, i) => [rank(it), i, it]).filter(z => z[0] < 9).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(z => z[2]);
+    pick = Math.min(pick, Math.max(0, shown.length - 1)); box.innerHTML = '';
+    shown.forEach((it, i) => { const r = h('button', { class: 'nm-it' + (i === pick ? ' pick' : '') + (it.cur ? ' cur' : ''), title: it.d }, h('span', { class: 'mchip sm' }, icon(it.ic, 'sm')),
+      h('span', { class: 'nm-t', text: it.t }), h('span', { class: 'hint', text: it.d }));
+      if (it.spec) r.onpointerdown = e => { if (e.button) return; e.stopPropagation(); onPick(it, e); };
+      else r.onclick = e => { e.stopPropagation(); onPick(it, null); };
+      r.onpointerenter = () => { pick = i; $$('.nm-it', box).forEach((z, k) => z.classList.toggle('pick', k === pick)); };
+      box.append(r); });
+    if (!shown.length) box.append(h('div', { class: 'empty', text: 'nada' }));
+  };
+  q.oninput = () => { pick = 0; draw(); };
+  q.onkeydown = e => {
+    if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeWheel(); }
+    else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && shown.length){ e.preventDefault(); pick = Math.max(0, Math.min(shown.length - 1, pick + (e.key === 'ArrowDown' ? 1 : -1))); draw(); }
+    else if (e.key === 'Enter' && shown[pick]){ e.preventDefault(); onPick(shown[pick], null); } };
+  draw();
+  return { el: list, q };
+}
+let wheelOff = null;
+function closeWheel(){ if (wheelOff){ const f = wheelOff; wheelOff = null; f(); } }
+function popup(els){   // fecha clicando fora / Esc; um aberto por vez (a roda, a lista do trocar)
+  closeWheel(); $$('.nmenu').forEach(x => x.remove());
+  const away = e => { if (!els().some(el => el && el.contains(e.target))) closeWheel(); };
+  setTimeout(() => window.addEventListener('pointerdown', away, true), 0);
+  return extra => { wheelOff = () => { els().forEach(el => el && el.remove()); window.removeEventListener('pointerdown', away, true); if (extra) extra(); }; };
+}
+function openWheel(ev){
+  let list = null, wh = null;
+  const arm = popup(() => [wh, list && list.el]);
+  const p = canvasPt(ev), xy = [p[0] - BOX_W / 2, p[1] - 18];
+  const w0 = wireNear(p, ''), wire = w0 ? Object.assign(w0, { ev: { clientX: ev.clientX, clientY: ev.clientY } }) : null;
+  const S = wheelSectors(), R = Math.max(118, Math.ceil(S.length * 86 / (2 * Math.PI))), cx = Math.max(R + 50, Math.min(innerWidth - R - 50, ev.clientX)), cy = Math.max(R + 50, Math.min(innerHeight - R - 50, ev.clientY));
+  wh = h('div', { class: 'wheel', style: `left:${cx}px;top:${cy}px;--wr:${R + 52}px` });
+  const lbl = h('div', { class: 'wh-mid', text: wire ? 'no fio' : 'novo' }); wh.append(lbl);
+  let cur = null;
+  const make = it => { closeWheel(); it.go(xy, it.spec && (it.spec.kind === 'mod' || it.spec.kind === 'recipe') ? wire : null); };
+  const pickIt = (it, e) => {
+    if (!e) return make(it);
+    wh.classList.add('ghosty'); list.el.classList.add('ghosty');   // arrastando um item: a roda some ao soltar
+    startDrag(e, Object.assign({ label: it.t, icon: it.ic, click: () => make(it) }, it.spec));
+    window.addEventListener('pointerup', () => setTimeout(closeWheel, 0), { capture: true, once: true });
+  };
+  const show = (s, typed) => {
+    if (list) list.el.remove();
+    const right = cx + R + 60 + 300 <= innerWidth;
+    list = floatList(right ? cx + R + 60 : cx - R - 60 - 300, cy - 190, s ? s.l : 'tudo', s ? s.items() : S.flatMap(x => x.items()), pickIt);
+    if (typed){ list.q.value = typed; list.q.oninput(); } list.q.focus();
+  };
+  S.forEach((s, i) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / S.length, b = h('button', { class: 'wh-s', style: `left:${Math.cos(a) * R}px;top:${Math.sin(a) * R}px` }, icon(s.ic), h('span', { text: s.l }));
+    b.onpointerenter = () => { lbl.textContent = s.l; }; b.onpointerleave = () => { lbl.textContent = cur ? cur.l : wire ? 'no fio' : 'novo'; };
+    b.onclick = e => { e.stopPropagation(); cur = s; $$('.wh-s', wh).forEach(x => x.classList.toggle('on', x === b)); show(s); };
+    wh.append(b); });
+  // digitar com a roda aberta (sem tipo escolhido) = procurar em TUDO
+  const kd = e => { if (list || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Escape'){ e.preventDefault(); closeWheel(); return; }
+    if (e.key.length === 1){ e.preventDefault(); show(null, e.key); } };
+  window.addEventListener('keydown', kd, true);
+  document.body.append(wh);
+  arm(() => window.removeEventListener('keydown', kd, true));
+}
+$('#cv').addEventListener('dblclick', e => {
+  if (isShow() || !(e.target === CV || e.target === CVI || e.target === WIRES || e.target.id === 'cv-empty' || (e.target.closest && e.target.closest('#cv-wires')))) return;
+  e.preventDefault(); openWheel(e);
+});
+// TROCAR A FONTE de um no' de fonte: clique no nome dela (a lista de fontes; o resto da corrente fica)
+function swapSourceMenu(ev, key){
+  const o = rowOf(key); if (!o) return;
+  let L = null; const arm = popup(() => [L && L.el]);
+  L = floatList(ev.clientX, ev.clientY + 12, 'trocar a fonte', srcItems().map(([f, ic, n, k]) => ({ t: n, d: k, ic, cur: f === o.file, go: () => setBoxSource(key, f) })),
+    it => { closeWheel(); it.go(); });
+  arm(); L.q.focus();
+}
+
 const snapXY = xy => xy.map(v => Math.max(0, Math.round(v / SNAP) * SNAP));
 const nextNo = () => { boxNos(); return Math.max(0, ...lastOverlays.filter(o => o.kind !== 'out').map(o => o.n || 0)) + 1; };
 function newNode(ref, xy, item){   // no' novo lendo ref (com 1 atomo, ou vazio)
@@ -3171,14 +3719,35 @@ function insertOnWire(z, items, ev){   // ATOMO SOLTO NO FIO: no' novo lendo o q
   const ov = { file: z.ref, opacity: 1, id: 'c' + rid(), xy: snapXY([p[0] - BOX_W / 2, p[1] - 18]), n: nextNo() };
   if (same.length) ov.dup = Math.max(...same.map(o => o.dup || 1)) + 1;
   lastOverlays.push(ov); binding(chKey(ov), true).shaders.push(...items); items.forEach(m => ensurePool('shaders', m.file));
-  const nr = '@' + ov.id;
-  if (z.port === 'a') renameRowKey(t, nr);
-  else if (z.port === 'L'){ if (t.layers && t.layers[z.idx]) t.layers[z.idx].from = nr; }
-  else if (z.port === 'b'){ const s = stackOf(z.key)[z.idx]; if (s) s.ins = [nr]; }
-  else if (z.port === 'm'){ const lu = ((matteOf(z.key) || {}).items || []).find(x => isTapKey((x.ins || [])[0] || '')); if (lu) lu.ins = [nr]; }
+  plugWire(z, t, '@' + ov.id);
   declutter([ov]);
   sendOverlays(true); sendBindings(true); selWire = null; setSel(chKey(ov), 0, true);
   toast(`${items.length > 1 ? items.length + ' átomos' : fxName(items[0].file)} no meio do fio → ${nodeTitle(chKey(t)) || ''}`);
+}
+function plugWire(z, t, nr){   // a ponta de CHEGADA do fio z (no' t, porta z.port) passa a ler nr
+  if (z.port === 'a') renameRowKey(t, nr);
+  else if (z.port === 'L'){ if (t.layers && t.layers[z.idx]) t.layers[z.idx].from = nr; }
+  else if (z.port === 'b'){ const s = stackOf(chKey(t))[z.idx]; if (s) s.ins = [nr]; }
+  else if (z.port === 'm'){ const lu = ((matteOf(chKey(t)) || {}).items || []).find(x => isTapKey((x.ins || [])[0] || '')); if (lu) lu.ins = [nr]; }
+}
+function nodeOnWire(o, z){   // NO' JA' EXISTENTE solto num fio: sai de onde estava (a corrente de la' se fecha) e entra no meio deste
+  const t = rowOf(z.key); if (!t || t === o) return false;
+  spliceOut(o);
+  renameRowKey(o, z.ref);           // le o que o fio trazia
+  plugWire(z, t, '@' + o.id);       // e quem recebia o fio le ele
+  return true;
+}
+// fio de imagem mais perto do ponto p (coordenadas do canvas), que NAO toca no no' `key` (nem entra nem sai dele): {..._w, path}
+function wireNear(p, key, R = 22){
+  const o = rowOf(key), mine = new Set([key, ...(o && o.id ? ['@' + o.id] : []), ...stackOf(key).map(s => '@' + s.id)]);
+  let best = null, bd = R;
+  for (const path of WIRES.querySelectorAll('path.w')){ const w = path._w; if (!w || mine.has(w.key) || mine.has(w.ref)) continue;
+    const L = path.getTotalLength(); if (L < 30) continue;
+    for (let s = 0; s <= L; s += 10){ const q = path.getPointAtLength(s), dd = Math.hypot(q.x - p[0], q.y - p[1]); if (dd < bd){ bd = dd; best = { ...w, path }; } } }
+  return best;
+}
+function freshCopy(items){   // COPIA SOLTA (Alt+arrastar): id novo, mesmos knobs/movimentos — sem entrada B nem "em cima" de ninguem
+  return prepItems(items).map(s => { delete s.ins; delete s.post; return s; });
 }
 function freeScreenRect(){   // a 1a tela do palco que nenhuma saida ocupa (a saida nova cai nela)
   const st = canvasOf(); if (!st || !st.rects.length) return null;
@@ -3325,7 +3894,8 @@ function editMod(key, j, fn){ const x = stackOf(key)[j]; if (!x) return; x.mod =
 // MESMO id = O MESMO MOVIMENTO (regra 7): todo knob com esse id recebe a receita nova; a FAIXA (lo/hi) de cada um fica
 function forEachMod(cb){
   for (const o of lastOverlays){ const k = chKey(o);
-    for (const kk of [k, k + MK]) stackOf(kk).forEach((s, j) => { for (const [n, m] of Object.entries(s.mod || {})) cb(m, { key: kk, j, n, s }); });
+    for (const kk of [k, k + MK]) stackOf(kk).forEach((s, j) => { for (const [n, m] of Object.entries(s.mod || {})){ cb(m, { key: kk, j, n, s });
+      (m.mais || []).forEach((e, x) => cb(e, { key: kk, j, n, s, extra: x })); } });   // + os OUTROS ativadores do mesmo knob (somam)
     for (const [n, m] of Object.entries(o.mod || {})) cb(m, { row: k, n, s: o }); }
   postStore().forEach((s, j) => { for (const [n, m] of Object.entries(s.mod || {})) cb(m, { key: POST_KEY, j, n, s }); });
   ctlStore().forEach((s, j) => { const m = (s.mod || {}).sinal; if (m) cb(m, { key: CTL_KEY, j, n: 'sinal', s, ctl: true }); });   // o CONTROLADOR = a receita
@@ -3333,8 +3903,9 @@ function forEachMod(cb){
 function shareMv(src){   // devolve true se mexeu num movimento de CAIXA (fader na SAIDA: vai no /overlays)
   let rows = false;
   forEachMod((m, w) => { if (m === src || m.id !== src.id) return;
-    for (const k of Object.keys(m)) if (!['lo', 'hi'].includes(k)) delete m[k];
-    Object.assign(m, JSON.parse(JSON.stringify(src)), { lo: m.lo, hi: m.hi }); if (w.row) rows = true; });
+    for (const k of Object.keys(m)) if (!['lo', 'hi', 'mais'].includes(k)) delete m[k];   // a receita viaja; a faixa e os OUTROS ativadores ficam
+    const c = JSON.parse(JSON.stringify(src)); delete c.mais;
+    Object.assign(m, c, { lo: m.lo, hi: m.hi }); if (w.row) rows = true; });
   return rows;
 }
 function mvList(){   // um por id: uses = os knobs que ele move (o controlador nao conta), ctl = o no' dele
@@ -3362,8 +3933,11 @@ function linkMv(key, j, n, id){   // este knob passa a seguir um movimento que j
   const x = mvList().find(q => q.id === id), s = stackOf(key)[j]; if (!x || !s) return;
   const v = knobV(key, s, n), [lo, hi] = x.m.nome && (VOCAB.presets || {})[x.m.nome] ? presetRange(x.m.nome, v) : [r3(v - 0.3), r3(v + 0.3)];
   modOpen = `${key}|${j}|${n}`;
-  editMod(key, j, mm => { const m = JSON.parse(JSON.stringify(x.m)); m.lo = lo; m.hi = hi; mm[n] = m; });
-  ensureId(s); toast(`${knobLabel(n)} de ${fxName(s.file)} segue “${x.m.nome || 'movimento'}” (×${mvUses(id).length})`);
+  const cur0 = (s.mod || {})[n], plus = cur0 && cur0.id !== id;   // o knob JA' tem outro: este SOMA (mais um ativador), nao troca
+  if (cur0 && (cur0.id === id || (cur0.mais || []).some(e => e.id === id))) return toast(`${knobLabel(n)} já segue este controlador`);
+  editMod(key, j, mm => { const m = JSON.parse(JSON.stringify(x.m)); delete m.mais; m.lo = lo; m.hi = hi;
+    if (plus) mm[n] = Object.assign({}, mm[n], { mais: (mm[n].mais || []).concat([m]) }); else mm[n] = m; });
+  ensureId(s); toast(`${knobLabel(n)} de ${fxName(s.file)} ${plus ? 'também ' : ''}segue “${x.m.nome || 'movimento'}”${plus ? ' (os ativadores SOMAM)' : ''} (×${mvUses(id).length})`);
 }
 function selEl(opts, val, on, title){ const e = h('select', { class: 'inp sm', title: title || '' }); for (const [v, t] of opts) e.append(h('option', { value: String(v), text: t }));
   e.value = String(val); e.onchange = () => on(e.value); return e; }
@@ -3377,7 +3951,7 @@ function togglePub(key, j, n){
 }
 // um controle da peca (knob, faixa modulada ou opacidade) — mesmo construtor no Show e no Montar
 function pieceCtl(key, j, n, slot, size){
-  const s = stackOf(key)[j], file = s.file, id = s.id || j, bip = n !== 'opacity' && fxDefault(file, n) === 0.5;
+  const s = stackOf(key)[j], file = s.file, id = s.id || j, bip = n !== 'opacity' && (metaOf(file).atom ? (metaOf(file).bipolar || []).includes(n) : fxDefault(file, n) === 0.5);
   const cur = () => { const x = stackOf(key)[j]; return x && x.file === file ? x : null; };
   const md0 = (s.mod || {})[n];
   if (!md0 && isChoice(file, n)) return choiceCtl({ id: slot ? 'dev:' + slot : `k:${key}:${id}:${n}`, label: knobLabel(n), mlabel: `${fxName(file)} · ${n}`, io: KNOB_BIND,
@@ -3531,7 +4105,7 @@ function renderMixCtl(box, key){   // STAGING / SAIDA: nome, as entradas (camada
   box.append(sect);
   box.append(h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Átomos depois da mistura' }), h('div', { class: 'hint', text: stackOf(key).length
     ? stackOf(key).map(s => (s.espelho ? 'espelho · ' : '') + fxName(s.file)).join(' → ') + ' — clique no átomo no nó pra ver os knobs'
-    : 'arraste um átomo da biblioteca até este nó: ele age na imagem já misturada (espelho: Alt+arrastar um átomo).' })));
+    : 'arraste um átomo da biblioteca até este nó: ele age na imagem já misturada (espelho: Alt+Shift+arrastar um átomo).' })));
   if (isOut){
     const st = canvasOf(), r = o.rect, same = q => r && q.every((v, k) => Math.abs(v - r[k]) < 0.002);
     const ms = h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'No palco' }), h('div', { class: 'chips' },
@@ -3592,14 +4166,15 @@ function renderModCtl(box, key, j, s){   // um ATOMO: o principal grande + ate' 
   const set = fn => { const x = cur(); if (!x) return; fn(x); sendBindings(true); cvSig = ''; ctlSig = ''; renderBoxes(); renderCtl(); };
   box.append(h('div', { class: 'ihead' }, icon(catIcon(catOf(file))), h('b', { text: fxName(file) }), h('span', { class: 'hint', text: CAT_NAME[catOf(file)] + ' · caixa ' + boxNo(key) }), h('span', { class: 'grow' }),
     h('button', { class: 'ib' + (s.off ? '' : ' on'), title: (s.off ? 'desligado (clique liga)' : 'ligado (clique desliga)') + ' · Enter · com grade: espera a batida/compasso (Shift = na hora)', onclick: () => toggleAtom(key, j) }, icon('power')),
-    isMk(key) ? null : h('button', { class: 'ib', title: 'ESPELHO: um nó novo com o MESMO átomo (knobs e movimentos daqui, sem knob próprio) — religue o fio dele onde quiser · Alt+arrastar o átomo = espelho onde soltar',
+    isMk(key) ? null : h('button', { class: 'ib', title: 'ESPELHO: um nó novo com o MESMO átomo (knobs e movimentos daqui, sem knob próprio) — religue o fio dele onde quiser · Alt+Shift+arrastar o átomo = espelho onde soltar (Alt sozinho = cópia solta)',
       onclick: () => { const o = rowOf(key), oid = s.espelho || ensureId(s); if (!o || !o.xy) return; sendBindings(true);
         newNode(isNodeKey(key) ? '@' + o.id : o.file, [o.xy[0], o.xy[1] + boxH(key) + 24], { file: s.file, opacity: 1, in: 'chain', id: rid(), espelho: oid }); } }, icon('grupo')),
     h('button', { class: 'ib', title: 'VARIAÇÕES: 4 mutações da caixa, fora do ar', onclick: openVariants }, icon('variar')),
     h('button', { class: 'ib del', title: 'tirar este átomo (Delete) — a corrente se fecha', onclick: () => removeModules(key, [j]) }, icon('lixo'))));
   if (m.desc) box.append(h('div', { class: 'idesc', text: m.desc }));
   if (atomDecl(m)) box.append(h('div', { class: 'hint', style: 'white-space:pre-line;margin-bottom:6px', text: atomDecl(m).trim() }));   // ♪ / vê / fora do padrao
-  box.append(h('div', { class: 'irow' }, knobCell(key, j, s, mainKnob(s), 0, 56)));
+  const onCard = atomNode(key) && !isMk(key);   // NÓ DE ÁTOMO: os knobs estao no card — aqui nao se repetem
+  if (!onCard) box.append(h('div', { class: 'irow' }, knobCell(key, j, s, mainKnob(s), 0, 56)));
   if (m.ins.length || (s.ins || []).length){   // ENTRADA B: um FIO na bolinha B do no' — ou, sem fio, a fonte crua / ele mesmo 1 quadro atras
     const b0 = (s.ins || [])[0] || 'src', wire = isTapKey(b0);
     box.append(h('div', { class: 'irow' }, h('span', { class: 't', text: m.bnome ? 'B · ' + m.bnome : 'entrada B', title: 'a entrada B deste átomo' + (m.bnome ? ': ' + m.bnome : '') }), h('div', { class: 'chips' },
@@ -3620,8 +4195,8 @@ function renderModCtl(box, key, j, s){   // um ATOMO: o principal grande + ate' 
     sect.append(h('div', { class: 'hint', text: 'átomos soltos NO MEIO deste agem a cada volta (↻): Rodar = espiral, Desfocar = fumaça' }));
     box.append(sect);
   }
-  knobSection(box, key, j, s);
-  const more = h('details', { class: 'sect more' }, h('summary', { class: 'lbl', text: 'mais' }));
+  if (onCard) knobRows(box, key, j, s); else knobSection(box, key, j, s);
+  const more = onCard ? h('div', { class: 'sect' }) : h('details', { class: 'sect more' }, h('summary', { class: 'lbl', text: 'mais' }));   // nó: tudo à vista
   more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'mistura' }), h('div', { class: 'chips' }, LAYER_BLENDS.map(([v, t]) => h('button', { class: 'chip' + ((s.blend || 'normal') === v ? ' pick' : ''), text: t,
     title: 'como este átomo mistura com o que vem antes', onclick: () => set(x => { if (v === 'normal') delete x.blend; else x.blend = v; }) })))));
   if (s.in === 'src') more.append(h('div', { class: 'irow' }, h('span', { class: 't', text: 'lê' }), h('button', { class: 'chip on', text: 'a fonte crua → ler o fio A',   // cena antiga: o fio A ja' diz de onde le
@@ -3660,6 +4235,21 @@ function knobSection(box, key, j, s){
     names.forEach((n, i) => grid.append(knobCell(key, j, s, n, i + 1, 48)));
     box.append(h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Knobs' }), grid));
   }
+  const [mk, mj, mn] = modOpen.split('|');
+  if (mk === key && +mj === j && mn && (mn === 'opacity' || knobsOf(s.file).includes(mn)))
+    box.append((s.mod || {})[mn] ? modEditor(key, j, mn, s.mod[mn]) : presetBox(key, j, mn));
+}
+function knobRows(box, key, j, s){   // NÓ DE ÁTOMO: cada knob em UMA linha — nome · movimento (∿) · publicar (☆); o knob em si fica no card
+  const names = knobsOf(s.file).concat(['opacity']), rows = h('div', { class: 'krows' });
+  for (const n of names){
+    const pub = (s.pub || []).includes(n), md = (s.mod || {})[n], open = modOpen === `${key}|${j}|${n}`;
+    rows.append(h('div', { class: 'krow', 'data-k': key, 'data-j': j, ...(n !== 'opacity' ? { 'data-knob': n } : {}) },
+      h('span', { class: 't', text: knobLabel(n) }),
+      h('button', { class: 'chip' + (md ? ' on' : '') + (open ? ' pick' : ''), title: md ? 'movimento: ' + modSrcText(md) + ' — clique edita' : 'MOVIMENTO: pulsa, respira, segue o grave… (ou arraste um movimento até aqui)',
+        onclick: () => { modOpen = open ? '' : `${key}|${j}|${n}`; ctlSig = ''; renderCtl(); } }, icon(md ? modIcon(md) : 'sin', 'sm'), md ? (md.nome ? (PRESET_TXT[md.nome] || [md.nome])[0] : 'movimento') : 'parado'),
+      h('button', { class: 'ib' + (pub ? ' on' : ''), title: pub ? 'publicado: aparece no TOCAR (clique tira)' : 'publicar no TOCAR', onclick: () => togglePub(key, j, n) }, icon(pub ? 'estrela-on' : 'estrela', 'sm'))));
+  }
+  box.append(h('div', { class: 'sect' }, h('span', { class: 'lbl', text: 'Movimento e publicar' }), rows));
   const [mk, mj, mn] = modOpen.split('|');
   if (mk === key && +mj === j && mn && (mn === 'opacity' || knobsOf(s.file).includes(mn)))
     box.append((s.mod || {})[mn] ? modEditor(key, j, mn, s.mod[mn]) : presetBox(key, j, mn));
@@ -3967,7 +4557,8 @@ function startDrag(e, spec){
 function atomPointerDown(e, key, j, el){
   if (e.button !== 0) return;
   const s = stackOf(key)[j];
-  startDrag(e, { kind: 'move', key, js: [j], label: fxName(s.file), icon: catIcon(catOf(s.file)), el, copy: e.shiftKey || e.altKey, mirror: e.altKey });   // Shift = COPIA · Alt = ESPELHO
+  startDrag(e, { kind: 'move', key, js: [j], label: fxName(s.file), icon: catIcon(catOf(s.file)), el, copy: e.shiftKey || e.altKey || e.ctrlKey,
+                 loose: (e.altKey || e.ctrlKey) && !e.shiftKey, mirror: (e.altKey || e.ctrlKey) && e.shiftKey });   // Shift = COPIA · Alt = COPIA SOLTA (sem fios) · Alt+Shift = ESPELHO
 }
 function dragBegin(spec, ev){
   drag = { spec, zones: [], hot: null, ghost: null };
@@ -3976,7 +4567,7 @@ function dragBegin(spec, ev){
   document.body.classList.add('dragging');
   if (spec.el) spec.el.style.opacity = '.35';
   placeZones();
-  if (spec.kind === 'ctl') $$('#ctl .kcell[data-knob]').forEach(c => c.classList.add('droppable'));
+  if (spec.kind === 'ctl') $$('#ctl .kcell[data-knob], #ctl .krow[data-knob]').forEach(c => c.classList.add('droppable'));
   if (spec.kind === 'move') $('#pal').title = 'solte aqui pra tirar';
 }
 function placeZones(){   // mede as zonas de soltura AGORA (comeco do arrasto, e de novo quando o canvas rola)
@@ -3998,7 +4589,7 @@ function computeZones(spec){
     return Z;
   }
   if (spec.kind === 'ctl'){   // modulador: os knobs dos Controles + cada atomo (o knob principal dele)
-    $$('#ctl .kcell[data-knob]').forEach(c => { const b = c.getBoundingClientRect(); Z.push({ type: 'knob', key: c.dataset.k, j: +c.dataset.j, n: c.dataset.knob, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, cell: c, box: false }); });
+    $$('#ctl .kcell[data-knob], #ctl .krow[data-knob]').forEach(c => { const b = c.getBoundingClientRect(); Z.push({ type: 'knob', key: c.dataset.k, j: +c.dataset.j, n: c.dataset.knob, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, cell: c, box: false }); });
     $$('.at[data-j]', CVI).forEach(c => { const j = +c.dataset.j, s = stackOf(c.dataset.k)[j]; if (!s) return; const n = mainKnob(s) === 'opacity' ? knobsOf(s.file)[0] : mainKnob(s); if (!n) return;
       const b = c.getBoundingClientRect(); add({ type: 'knob', key: c.dataset.k, j, n, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, label: n }); });
     $$('.at[data-j] [data-kn]', CVI).forEach(k => { const at = k.closest('.at'), s = stackOf(at.dataset.k)[+at.dataset.j]; if (!s || s.espelho) return;   // cada knob do no' (zona menor ganha)
@@ -4010,9 +4601,10 @@ function computeZones(spec){
       const b = c.getBoundingClientRect(); add({ type: 'post', key: c.dataset.k, j, x: b.left + b.width / 2, y: b.top + 15, w: b.width * 0.8, h: 24, label: 'usar aqui também' }); });
     return Z;
   }
-  if (spec.kind === 'mod' || spec.kind === 'recipe'){   // EM CIMA DO FIO: o meio de cada cabo de imagem = um no' novo ali, no meio da ligacao
+  if (spec.kind === 'mod' || spec.kind === 'recipe' || spec.kind === 'move'){   // EM CIMA DO FIO: o meio de cada cabo de imagem = um no' novo ali
     const R = CVI.getBoundingClientRect(), z = cvZoom();
-    for (const p of WIRES.querySelectorAll('path.w')) if (p._w){ const L = p.getTotalLength(); if (L < 30) continue;
+    const mine = spec.kind === 'move' && !spec.copy ? new Set([spec.key, ...stackOf(spec.key).map(s => '@' + s.id), ...((rowOf(spec.key) || {}).id ? ['@' + rowOf(spec.key).id] : [])]) : new Set();
+    for (const p of WIRES.querySelectorAll('path.w')) if (p._w && !mine.has(p._w.key) && !mine.has(p._w.ref)){ const L = p.getTotalLength(); if (L < 30) continue;
       const m = p.getPointAtLength(L / 2); add({ type: 'wire', ...p._w, x: R.left + m.x * z, y: R.top + m.y * z, w: 34, h: 34, label: '+' }); }
   }
   for (const [k, el, b] of boxes){   // atomo / mover: entre dois = inserir; em cima de um = paralelo (so' nele); caixa vazia = no fim
@@ -4021,14 +4613,14 @@ function computeZones(spec){
     const edge = i => i === 0 ? hd.bottom : i === ats.length ? ats[ats.length - 1].getBoundingClientRect().bottom : ats[i].getBoundingClientRect().top;
     if (spec.kind === 'mod' && atomNode(k) && ats.length && !(stackOf(k)[0] || {}).espelho){   // NO' DE ATOMO: o card inteiro = EM CIMA (antes/depois = o "+" do fio)
       const s0 = stackOf(k)[0];
-      add({ type: 'post', key: k, j: 0, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, big: true, label: 'em cima: só no que ' + fxName(s0.file) + ' faz' });
+      add({ type: 'after', key: k, j: 0, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height, big: true, label: 'depois de ' + fxName(s0.file) + ' · Shift = paralelo (cru)' });
       continue;
     }
     for (let i = 0; i <= ats.length; i++){
       if (spec.kind === 'move' && !spec.copy && spec.key === k && (spec.js.includes(i) || spec.js.includes(i - 1))) continue;   // mesmo lugar (copia pode)
       add({ type: 'ins', key: k, at: i, x: b.left + b.width / 2, y: edge(i), w: b.width - 16, h: 14, label: '' });
     }
-    if (spec.kind === 'mod' && !atomNode(k)) ats.forEach((a, j) => { const r = a.getBoundingClientRect();   // caixa antiga com varios atomos
+    if (false) ats.forEach((a, j) => { const r = a.getBoundingClientRect();   // (sem "em cima" desde 2026-11-16: tudo e' no')
       add({ type: 'post', key: k, j, x: r.left + r.width * 0.42, y: r.top + 15, w: r.width * 0.5, h: 14, label: 'só neste' }); });
   }
   return Z;
@@ -4104,10 +4696,22 @@ function dragDrop(ev){
       const oid = o0.espelho || ensureId(o0);
       insertItems(z.key, z.at, [{ file: o0.file, opacity: 1, in: 'chain', id: rid(), espelho: oid }]); return toast(`espelho de ${fxName(o0.file)} — os knobs ficam no original`); }
     if (!d.copy) return moveModules(sp.key, sp.js, z.key, z.at);
-    const items = prepItems(sp.js.map(j => stackOf(sp.key)[j]).filter(Boolean));   // copia: id novo, mesmos knobs/movimentos
+    const pick = sp.js.map(j => stackOf(sp.key)[j]).filter(Boolean), items = sp.loose ? freshCopy(pick) : prepItems(pick);   // copia: id novo, mesmos knobs/movimentos
     insertItems(z.key, z.at, items); return toast(`cópia de ${fxName(items[0].file)} na caixa ${boxNo(z.key)}`); }
+  if (sp.kind === 'move' && z.type === 'wire'){   // ATOMO ARRASTADO PRO FIO: copia/espelho = no' novo ali; o proprio = SAI de onde estava e entra
+    const pick = sp.js.map(j => stackOf(sp.key)[j]).filter(Boolean); if (!pick.length) return;
+    if (sp.mirror){ const o0 = pick[0]; return insertOnWire(z, [{ file: o0.file, opacity: 1, in: 'chain', id: rid(), espelho: o0.espelho || ensureId(o0) }], ev); }
+    if (d.copy) return insertOnWire(z, sp.loose ? freshCopy(pick) : prepItems(pick), ev);
+    const o = rowOf(sp.key);
+    if (o && atomNode(sp.key) && !o.kind){   // no' de 1 atomo: o NO' inteiro muda de lugar (posicao junto)
+      if (!nodeOnWire(o, z)) return;
+      const p = canvasPt(ev); o.xy = snapXY([p[0] - BOX_W / 2, p[1] - 18]); declutter([o]);
+      sendOverlays(true); sendBindings(true); selWire = null; return toast(`${fxName(pick[0].file)} no meio do fio`); }
+    removeModules(sp.key, sp.js, true); return insertOnWire(z, pick, ev); }
   if (sp.kind === 'postlink' && z.type === 'post') return linkPost(sp.id, z.key, z.j);
   if (sp.kind === 'mod' && z.type === 'post') return attachPost(z.key, z.j, sp.file);
+  if ((sp.kind === 'mod' || sp.kind === 'recipe') && z.type === 'after'){ const its = sp.kind === 'mod' ? prepItems([{ file: sp.file }]) : recipeItems(sp.r);
+    return ev && ev.shiftKey ? nodeParallel(z.key, its) : nodeAfter(z.key, its); }
   if (sp.kind === 'mod' && z.type === 'ins') return insertItems(z.key, z.at, prepItems([{ file: sp.file }]));
   if ((sp.kind === 'mod' || sp.kind === 'recipe') && z.type === 'wire') return insertOnWire(z, sp.kind === 'mod' ? prepItems([{ file: sp.file }]) : recipeItems(sp.r), ev);
   if (sp.kind === 'recipe' && z.type === 'ins'){ insertItems(z.key, z.at, recipeItems(sp.r)); return toast(`receita ${sp.r.nome || sp.r.name} na caixa ${boxNo(z.key)}`); }
@@ -5685,6 +6289,7 @@ function applyRow(i, lo, hi){
 // comeca E pras que passam a se tocar no meio dele (encostou = grudou). Soltar mantem a costura:
 // no proximo arrasto elas ja comecam grudadas. O limite: nenhuma faixa grudada fica com lo >= hi.
 const opp = e => e === 'lo' ? 'hi' : 'lo';
+const BAND_MIN_R = 2 ** (1 / 8);   // 1/8 de oitava
 const edgeVal = (j, e) => +rangeRows[j][e].value || (e === 'lo' ? HZ_LO : HZ_HI);
 // DESCOLADAS (duplo-clique na alca): par "a>b" = hi da faixa a com o lo da faixa b. Vale enquanto
 // elas continuarem se tocando; se separarem, o par sai da lista (encostou de novo = gruda de novo).
@@ -5727,15 +6332,17 @@ function paintSeams(){   // alca grudada = cheia; descolada = vazada (so' contor
 function moveSeam(i, edge, hz, linked){
   const lim = [i, ...linked];
   // a propria faixa e as grudadas: a borda que anda nao pode passar da outra borda de cada uma
+  // largura MINIMA (BAND_MIN_OCT): empurrar nao espreme ninguem ate sumir (1 Hz = faixa morta)
   let lo = HZ_LO, hi = HZ_HI;
   const own = edgeVal(i, opp(edge));
-  if (edge === 'lo') hi = Math.min(hi, own - 1); else lo = Math.max(lo, own + 1);
+  if (edge === 'lo') hi = Math.min(hi, own / BAND_MIN_R); else lo = Math.max(lo, own * BAND_MIN_R);
   for (const j of linked){
     const other = edgeVal(j, edge);             // a borda de j que NAO e' a costura
-    if (edge === 'lo') lo = Math.max(lo, other + 1);   // costura = hi de j: tem que ficar acima do lo de j
-    else hi = Math.min(hi, other - 1);                   // costura = lo de j: tem que ficar abaixo do hi de j
+    if (edge === 'lo') lo = Math.max(lo, other * BAND_MIN_R);   // costura = hi de j: tem que ficar acima do lo de j
+    else hi = Math.min(hi, other / BAND_MIN_R);                   // costura = lo de j: tem que ficar abaixo do hi de j
   }
-  hz = Math.max(lo, Math.min(hi, Math.round(hz)));
+  const cur = edgeVal(i, edge);                 // faixa que JA esta mais estreita: o limite nao puxa, so' nao deixa piorar
+  hz = Math.max(Math.min(Math.ceil(lo), cur), Math.min(Math.max(Math.floor(hi), cur), Math.round(hz)));
   rangeRows[i][edge].value = hz;
   for (const j of linked) rangeRows[j][opp(edge)].value = hz;
   return hz;
@@ -5745,18 +6352,18 @@ function beginDrag(thumb, i, edge, ev, snap){
   dragRow = i;
   const rr = rangeRows[i], rect = rr.bar.getBoundingClientRect();
   const linked = new Set(seamOf(i, edge, edgeVal(i, edge)));
-  const rk = []; specOrder(rangeRows.map((_, j) => [edgeVal(j, 'lo')])).forEach((j, k) => { rk[j] = k; });   // posicao no espectro
+  // VIZINHA no espectro do lado que a borda anda (so' ela: um clique longe / arrasto rapido atravessava VARIAS faixas
+  // de uma vez, grudava em todas e as esmagava em faixas de 1 Hz fora de ordem). Solta (descolada/Alt) = parede.
+  const ord = specOrder(rangeRows.map((_, j) => [edgeVal(j, 'lo'), edgeVal(j, 'hi')]));
+  const nb = ord[ord.indexOf(i) + (edge === 'hi' ? 1 : -1)];
   const move = e => {
     rangesTouched = now(); moved = true;
-    const prev = edgeVal(i, edge);
     let hz = Math.round(pctHz((e.clientX - rect.left) / rect.width * 100));
-    // encostou (ou passou por cima) na borda oposta de outra faixa no caminho -> gruda nela
     if (e.altKey) linked.clear();                // Alt = descola: so' esta borda anda
-    else if (!isOv()) for (let j = 0; j < rangeRows.length; j++){   // sobreposicao: nada gruda
-      if (j === i || linked.has(j) || isFree(i, edge, j)) continue;
-      const v = edgeVal(j, opp(edge));
-      if (((v - prev) * (v - hz) <= 0 && v !== prev || v === hz) &&
-          ((edge === 'hi' && rk[j] > rk[i]) || (edge === 'lo' && rk[j] < rk[i]))) linked.add(j);   // crossover: vizinhas no espectro
+    if (!isOv() && nb !== undefined && !linked.has(nb)){   // sobreposicao: nada gruda nem bloqueia
+      const v = edgeVal(nb, opp(edge)), reach = edge === 'hi' ? hz >= v : hz <= v;
+      if (reach && !e.altKey && !isFree(i, edge, nb) && edgeVal(i, edge) === v) linked.add(nb);   // encostou = gruda
+      else if (reach) hz = v;                    // ainda nao encostou (ou solta): para NA borda dela, sem atravessar
     }
     hz = moveSeam(i, edge, hz, [...linked]);
     rr.hint.textContent = kfmt(hz) + ' Hz' + (linked.size ? ' · grudada' : ''); rr.hint.style.left = hzPct(hz) + '%'; rr.hint.hidden = false;
@@ -6218,6 +6825,7 @@ document.addEventListener('keydown', e => {
     if (drag){ dragCancel(); return; }
     if (drawer){ openDrawer(''); return; }
     if (selWire){ selWire = null; cvSig = ''; renderBoxes(); return; }
+    if (msel.size){ msel.clear(); paintMsel(); return; }
     if (varOpen()){ closeVariants(); return; }
   }
   if (typingInField(e.target)) return;
@@ -6232,8 +6840,10 @@ document.addEventListener('keydown', e => {
   if (e.repeat) return;
   if (e.key === ' '){ e.preventDefault(); cueGo(); return; }
   if (e.key === 'Enter'){ e.preventDefault(); toggleSel(); return; }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && !isShow() && (sel.key || selWire)){
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !isShow() && msel.size > 1 && !selWire && !hoverWire){ e.preventDefault(); return removeMsel(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !isShow() && (sel.key || selWire || hoverWire)){
     e.preventDefault(); if (selWire) return cutWire(selWire);
+    if (hoverWire){ const w = hoverWire; hoverWire = null; return cutWire(w); }   // mouse EM CIMA de um fio = tira so' ele
     if (sel.key === CTL_KEY) return removeCtl(sel.j);
     if (sel.j >= 0) removeModules(sel.key, [sel.j]); else removeRow(mkBase(sel.key)); return; }
   if (navKey(e)){ e.preventDefault(); return; }
@@ -6247,7 +6857,7 @@ document.addEventListener('keydown', e => {
 function renderKeys(){
   const fam = MIX_FAMILIES[mixKeys.family];
   const rows = [[fam, 'escolhe o nó N (segurar = liga/desliga nas SAÍDAS)'], ['← →', 'átomo anterior / próximo na caixa'], ['↑ ↓', 'caixa da frente / de trás'],
-    ['Enter', 'liga/desliga a selecionada'], ['Espaço', 'GO (a próxima cena vai pro ar)'], ['Delete', 'tira o átomo/nó/fio escolhido (em MONTAR)'], ['clique na bolinha', 'o fio gruda no cursor: clique numa entrada liga, no vazio abre o menu (Esc cancela)'], ['Alt+arrastar', 'ESPELHO do átomo onde soltar'],
+    ['Enter', 'liga/desliga a selecionada'], ['Espaço', 'GO (a próxima cena vai pro ar)'], ['Delete', 'tira o átomo/nó/fio escolhido (em MONTAR)'], ['clique na bolinha', 'o fio gruda no cursor: clique numa entrada liga, no vazio abre o menu (Esc cancela)'], ['Ctrl+arrastar', 'CÓPIA SOLTA do nó (sem fios; solte num fio pra ligar no meio) — Alt também, se o sistema deixar'], ['Ctrl+Shift+arrastar', 'ESPELHO do átomo onde soltar'], ['mouse num fio + Delete', 'tira só aquela ligação'],
     ['.', 'BLACKOUT'], ['+ / −', 'zoom do canvas (longe = estrutura, perto = movimentos) · funciona arrastando'], ['Shift', 'com grade: liga/desliga NA HORA'], ['Ctrl+Z', 'desfazer'], ['Ctrl+X / C / V', 'recortar / copiar / colar o átomo (cola depois do escolhido)'], ['Shift+arrastar', 'arrasta uma CÓPIA do átomo/máscara'], ['a–z', 'tecla da cena'], ['F1 / F2', 'TOCAR / MONTAR'], ['Esc', 'fecha a gaveta · sai do MIDI learn'], ['Esc 3×', 'fecha o prisma']];
   const kh = $('#keyhelp'); kh.innerHTML = '';
   for (const [k, t] of rows) kh.append(h('div', {}, h('b', { text: k }), t));

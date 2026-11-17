@@ -14,6 +14,8 @@ entra na biblioteca. `dash_data.atom_check` separa **QUEBRA** (não compila por 
 (`u_bass`, `u_kick`, faixas, `u_chan`…) ou o rastreio/assunto (`u_rosto`, `u_corpo`, `u_subject`…) em QUALQUER átomo é
 **declarado**: o motor liga, o dash mostra ♪/olho pro leigo saber. Cabeçalhos que CONTRARIAM a dedução: `// entra: troca |
 cima` (como junta na corrente; padrão pela `cat:`) e `// marca: mudanca | alfa` (o que "em cima" pega dele, §7.4).
+`// montagem: <o que descreve>` = átomo de AJUSTE DO LUGAR (geometria do telão, ex. Lente): mexe uma vez, não no show
+— pode ter até 6 knobs (`ATOM_MAX_KNOBS_MONTAGEM`).
 
 ## 1. A imagem: uma coisa só corre nos fios
 Todo fio carrega uma imagem **RGBA com alfa direto** (cor sem multiplicar pelo alfa: em 8 bits o pré-multiplicado
@@ -35,7 +37,7 @@ mostrar a escolha. Vetor no fio = RG centrado em 0.5 em 8 bits (o Hydra usa RG s
 
 ## 2. Cabeçalho (nesta ordem; só a linha ATOMOS é obrigatória)
 ```glsl
-// fx: forca=0.3, direcao=0.375, angulo=0.25   (≤ 3 knobs 0..1; o 1º = PRINCIPAL)
+// fx: forca=0.3, direcao=0.375, angulo=0.25   (≤ 3 knobs 0..1; o 1º = PRINCIPAL; ESCOLHA e CHAVE não contam)
 // opcoes: direcao=fixa|relevo|redemoinho|vetor (nomes da ESCOLHA)
 // cat: distorcao                               (cor|luz|forma|geometria|distorcao|textura|tempo|mistura|gerador|mascara)
 // in: src                                      (lê a entrada B; padrão ao inserir: src | fb)
@@ -44,6 +46,7 @@ mostrar a escolha. Vetor no fio = RG centrado em 0.5 em 8 bits (o Hydra usa RG s
 // marca: alfa                                  (o que EM CIMA pega: mudanca = onde mudou, alfa = a saída como está)
 // bipolar: angulo                              (knob de dois lados: 0.5 = nada)
 // ritmo: velocidade                            (knob de rapidez: pode travar no BPM — UI no próximo chat)
+// montagem: a geometria dos telões             (ajuste do LUGAR, não do show: até 6 knobs)
 // estado: canais=4, passos=8, fases=1, escala=0.35   (átomo com memória, §6)
 // mod: forca=pulsa                             (movimento SUGERIDO)
 // ATOMOS · Deslocar. Uma frase do que faz. Depois, o que cada knob faz.

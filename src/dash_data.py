@@ -44,7 +44,7 @@ def parse_meta(src):
     src = src or ''
     m = re.search(r'(?m)^//\s*cat:\s*(\S+)', src)
     i = re.search(r'(?m)^//\s*in:\s*(.+)$', src)
-    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala|B|entra|marca):)\s*(.+)$', src)
+    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala|B|entra|marca|montagem):)\s*(.+)$', src)
     mo = re.search(r'(?m)^//\s*mod:\s*(.+)$', src)
     desc = d.group(1).strip() if d else ''
     nome = ''
@@ -72,6 +72,9 @@ def parse_meta(src):
     est = parse_estado(src)
     if est:                            # ATOMO v2: atomo com MEMORIA (o dash oferece semear/limpar)
         out['estado'] = est
+    mt = re.search(r'(?m)^//\s*montagem:\s*(.+)$', src)
+    if mt:   # DECLARADO de montagem (ajusta uma vez pro lugar, ex. Lente): pode ter ate' ATOM_MAX_KNOBS_MONTAGEM knobs
+        out['montagem'] = mt.group(1).strip()[:80]
     return out
 
 
@@ -152,6 +155,7 @@ def atom_marca(rel, src):
 MASK_UNIFORMS = {'u_subject', 'u_subject_on'}   # so' atomo de MASCARA (dash v5): a mascara do assunto (U2-Net) da fonte
 MASK_UNIFORMS |= {'u_rosto', 'u_olhos', 'u_rosto_on', 'u_corpo', 'u_corpo_on', 'u_obj', 'u_obj_p', 'u_obj_on', 'u_olho', 'u_olho_on'}   # + o RASTREIO (src/rastreio.py)
 ATOM_MAX_KNOBS = 3   # minimalismo: o principal + ate' 2 detalhes essenciais; mais que isso = dividir em atomos
+ATOM_MAX_KNOBS_MONTAGEM = 6   # "// montagem: <o que descreve>" = ajuste de LUGAR (geometria do telao), mexe uma vez, nao no show
 ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_phrase', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
 
 # PRELUDIO do ATOMO v2 (shaders/ATOMO.md §3): o motor poe ISTO antes de todo .frag de presets/atomos/ (atom_source).
@@ -260,8 +264,10 @@ def atom_check(src):
     q, w, ouve, ve = [], [], [], []
     fx, meta = parse_fx_defaults(src), parse_meta(src)
     code = re.sub(r'//[^\n]*', '', src)
-    if len(fx) > ATOM_MAX_KNOBS:
-        w.append(f'{len(fx)} knobs: o padrao e\' ate\' {ATOM_MAX_KNOBS} (o card mostra todos; mais = mais dificil pro leigo)')
+    mx = ATOM_MAX_KNOBS_MONTAGEM if meta.get('montagem') else ATOM_MAX_KNOBS
+    nk = len([k for k in fx if k not in (meta.get('escolha') or {}) and k not in (meta.get('chave') or [])])   # ESCOLHA/CHAVE nao sao knob
+    if nk > mx:
+        w.append(f'{nk} knobs: o padrao e\' ate\' {mx} (o card mostra todos; mais = mais dificil pro leigo)')
     if meta['cat'] not in ATOM_CATS:
         e = _header_word(src, 'entra')
         w.append(f"// cat: '{meta['cat']}' nao e' um tipo conhecido ({', '.join(ATOM_CATS)}): entra "
@@ -1075,6 +1081,8 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     for frag in ("cat: 'luzes'", 'ATOMOS', 'knob layer', 'knob z', 'sem "// in:"', 'u_zz'):
         assert frag in pr, (frag, pr)
     assert any('ate\' 3' in x for x in atom_avisos('// fx: a, b, c, d\n' + ok)) and not atom_problems('// fx: a, b, c, d\n' + ok)
+    assert not any('knobs:' in x for x in atom_avisos('// fx: a, b, c, d, e\n// montagem: telao\n' + ok)) and parse_meta('// montagem: x\n' + ok)['montagem'] == 'x'
+    assert any('ate\' 6' in x for x in atom_avisos('// fx: a, b, c, d, e, f, g\n// montagem: telao\n' + ok))
     mk = '// cat: mascara\n// ATOMOS · M. x\nuniform sampler2D u_subject;\nuniform float u_subject_on;\nvoid main(){ gl_FragColor = vec4(u_subject_on); }\n'
     assert atom_problems(mk) == [] and atom_avisos(mk) == [] and atom_check(mk)['ve'] == ['subject', 'subject_on']
     assert atom_check(mk.replace('mascara', 'cor', 1))['avisos'] == [], 'rastreio/assunto em QUALQUER atomo (ve)'

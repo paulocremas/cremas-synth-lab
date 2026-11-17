@@ -319,8 +319,8 @@ class Matriz:
                 self.bad(n, f'forma muda com a resolucao (diferenca {d:.3f}: pixel fixo?)')
         for n in flt:                                     # NEUTRO = identidade
             rel, src, meta, fx = self.at[n]
-            if not fx or meta['cat'] == 'gerador' or solo[n][..., 3].mean() < 0.98:
-                continue                                  # sem knob / gerador / quem desenha: o "quanto" e' a opacidade
+            if not fx or meta['cat'] == 'gerador' or not self.troca(n) or solo[n][..., 3].mean() < 0.98:
+                continue                                  # sem knob / gerador / quem desenha (POR CIMA, mesmo opaco): o "quanto" e' a opacidade
             k = next(iter(fx))
             if k in (meta.get('escolha') or {}) or k in (meta.get('chave') or []):
                 continue
@@ -342,7 +342,7 @@ class Matriz:
             o = self.render(n, TA, B)
             if not self.check_img(f'{n} na transparencia', o, flat_ok=True):
                 continue
-            if self.at[n][2]['cat'] == 'cor' and np.abs(o[..., 3] - TA[..., 3]).max() > 0.01:
+            if self.at[n][2]['cat'] == 'cor' and not draws and np.abs(o[..., 3] - TA[..., 3]).max() > 0.01:   # (cor que DESENHA — // entra: cima, ex. Só a cor — faz a propria cobertura)
                 self.bad(n, 'cor mexeu na cobertura (transparente nao continuou transparente)')
             self.check_img(f'{n} na transparencia (junto)', self.comp(n, TA, o), flat_ok=True)
         readers = [n for n in flt if self.at[n][2]['ins']]

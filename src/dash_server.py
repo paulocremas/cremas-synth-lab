@@ -932,9 +932,10 @@ MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_h
 NO_SRC = re.compile(r'no:[A-Za-z0-9_-]{1,24}')   # ATOMO v2 §8: brilho medio da saida do no' <id> (native grab_no)
 
 
-def _norm_mod1(v):
-    """Um MOVIMENTO num knob -> {b, lo?, hi?, lfo?, modo?, ev?, env?, seg?, q?, id?, nome?} | None (dash_data: MOV_MODES).
-    Lista solta = formato velho (so' b). 'disparo' pode vir sem b (a fonte e' o evento)."""
+def _norm_mod1(v, extra=True):
+    """Um MOVIMENTO num knob -> {b, lo?, hi?, lfo?, modo?, ev?, env?, seg?, q?, id?, nome?, mais?} | None (dash_data: MOV_MODES).
+    Lista solta = formato velho (so' b). 'disparo' pode vir sem b (a fonte e' o evento). mais = OUTROS ativadores no mesmo
+    knob (cada um normalizado igual, sem 'mais' dentro; ate' 7): o motor soma (native _mod_total)."""
     v = {'b': v} if isinstance(v, list) else v
     if not isinstance(v, dict) or not isinstance(v.get('b', []), list):
         return None
@@ -982,6 +983,10 @@ def _norm_mod1(v):
         d['id'] = str(v['id'])
     if isinstance(v.get('nome'), str) and v['nome'].strip():
         d['nome'] = v['nome'].strip()[:24]
+    if extra and isinstance(v.get('mais'), list):
+        mais = [x for x in (_norm_mod1(e, False) for e in v['mais'][:7]) if x]
+        if mais:
+            d['mais'] = mais
     return d if d['b'] or 'ev' in d else None
 
 

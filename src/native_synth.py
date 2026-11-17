@@ -936,6 +936,19 @@ def _mod_value(v, m, levels, trk=None):
     return lo + (hi - lo) * x
 
 
+def _mod_total(v, m, levels, trk=None):
+    """VARIOS ATIVADORES no mesmo knob (2026-11-16): m = o 1o movimento; m['mais'] = [outros movimentos] — cada um SOMA
+    o empurrao dele, (hi - lo) * sinal, em cima do 1o (como CVs somando num modulo); o total fica em 0..1."""
+    r = _mod_value(v, m, levels, trk)
+    extra = (m or {}).get('mais') if isinstance(m, dict) else None
+    if not extra:
+        return r
+    for e in extra:
+        if isinstance(e, dict) and (e.get('b') or e.get('ev')):
+            r += _mod_value(v, e, levels, trk) - e.get('lo', v)
+    return min(1.0, max(0.0, r))
+
+
 def _music_events(st, tp, mem, bars=PHRASE_BARS):
     """EVENTOS do quadro -> st['ev'] = contadores que sobem (o movimento dispara quando o seu muda): batida, compasso,
     frase (do relogio), kick, golpe (do som), secao:<nome> (ritmo.Secao), pad:N e o que o dash disparou (ev_man).
@@ -1410,8 +1423,9 @@ def _no_wants(sc):
     rows = list((sc.get('bindings') or {}).values())
     for b in rows:
         for o in (b.get('shaders') or []) + ((b.get('matte') or {}).get('items') or []):
-            for m in (o.get('mod') or {}).values():
-                out.update(x[3:] for x in [*(m.get('b') or ()), m.get('q')] if str(x).startswith('no:'))
+            for m0 in (o.get('mod') or {}).values():
+                for m in [m0, *(m0.get('mais') or ())]:   # + os OUTROS ativadores do mesmo knob
+                    out.update(x[3:] for x in [*(m.get('b') or ()), m.get('q')] if str(x).startswith('no:'))
     for o in sc.get('overlays') or []:
         for L in [o] + list(o.get('layers') or ()):   # opacidade da caixa (cena antiga) e de cada CAMADA de staging/saida
             for m in (L.get('mod') or {}).values():
@@ -3406,6 +3420,10 @@ void main() {
         return;
     }
     vec4 T = texture2D(u_top, uv);
+    if (u_op == 3) {   // CORRENTE (2026-11-16): quem desenha cria a marca NOVA = o desenho dele, dentro da marca de baixo
+        gl_FragColor = vec4(T.rgb, clamp(T.a * L.a * u_a, 0.0, 1.0));
+        return;
+    }
     if (u_op == 1) {
         gl_FragColor = vec4(mix(L.rgb, T.rgb, clamp(T.a * u_a, 0.0, 1.0)), L.a);
         return;
@@ -3720,6 +3738,14 @@ def main():
     poly_tex = [None, None]   # textura dos poligonos das telas (_poly_tex) + o que ela tem
     lane_out = {}   # canal -> saida da raia (topo->baixo), so' das que algum modulo le ('ins'; 'fb' = a propria)
     tap_tex = {}    # id do modulo -> saida dele (topo->baixo), so' dos que alguem le (ramo '@id', 'ins' '@id'; dash v4)
+    # CORRENTE = UM SOBRE O OUTRO (2026-11-16, decisao do usuario): cada no' de atomo guarda a MARCA (o que ele fez, topo->baixo)
+    # e o FUNDO (textura do que fica por baixo; None = nada). O no' seguinte age SO' na marca: filtro transforma a marca (o fundo
+    # segue); quem desenha cria marca nova = o desenho dentro da marca (o fundo vira a saida inteira do de antes). Saida = marca
+    # POR CIMA do fundo. Fonte (e mistura) = marca e' a imagem inteira, sem fundo. Ex.: fonte -> Contornar -> Vinheta = a vinheta
+    # SO' nas linhas, a camera intacta por baixo.
+    mark_tex = {}   # id do no' (e do atomo dele) -> marca (topo->baixo)
+    mark_fundo = {}   # id -> textura do fundo (topo->baixo) | None
+    mark_ok = set()   # ids com marca VALIDA (o no' rodou como atomo neste quadro; no' que virou outra coisa sai)
     node_tex = {}   # GRAFO: textura da mistura (pair[0]) -> {id do staging/saida: [3 x RGBA pre-multiplicada, a pronta]}
     lay_tex = {}    # GRAFO: textura da mistura -> {chave da fileira: FIM dela em RGBA} (so' das que uma camada le)
     live_taps = [set()]   # taps que a cena AO VIVO pede (o resto e' apagado no fim do frame)
@@ -4197,7 +4223,7 @@ def main():
                 vals = {}
                 for n, loc, d in uniforms['fx']:   # sk = chave da suavizacao (None = valor cru)
                     v = fx.get(n, d)
-                    vals[n] = _mod_value(smv(sk + (n,), v) if sk else v, mod.get(n), state, trk)
+                    vals[n] = _mod_total(smv(sk + (n,), v) if sk else v, mod.get(n), state, trk)
             for n, loc, d in uniforms['fx']:
                 glUniform1f(loc, vals.get(n, d))
             return vals
@@ -4529,6 +4555,7 @@ def main():
                 """Um no' de FONTE/ATOMO (ou os atomos DEPOIS da mistura de um staging/saida, com ftex = a mistura virada):
                 a pilha, a mascara da caixa e os taps. -> textura do resultado (RGBA, alfa DIRETO: a transparencia da fonte
                 e o recorte da mascara ja' estao no alfa e seguem pelo fio) | None."""
+                given = ftex is not None             # (os atomos DEPOIS da mistura: a crua deles e' a mistura)
                 if ftex is not None:
                     pass
                 elif frame is None:                     # RAMO (fileira '@id'): a fonte e' a saida do modulo id
@@ -4537,6 +4564,17 @@ def main():
                         return None
                 else:
                     ftex = src_texture(key, frame)
+                pid = re.sub(r'#\d+$', '', key)[1:] if (not given and frame is None) else None
+                rb = bindings.get(key) or {}
+                mk_on = pid is not None and len(rb.get('shaders') or ()) == 1   # no' de 1 atomo lendo outro no': UM SOBRE O OUTRO
+                for i in (src_id.get(key), ((rb.get('shaders') or [{}])[0]).get('id')):
+                    mark_ok.discard(i)                  # (refeita abaixo se este no' e' de atomo)
+                if mk_on:
+                    p_full = ftex                       # a saida inteira do de antes (o fundo de quem desenha)
+                    has_mk = pid in mark_ok
+                    p_fundo = mark_fundo.get(pid) if has_mk else None
+                    ftex = mark_tex[pid] if has_mk else ftex   # o atomo le SO' a marca do de antes (fonte/mistura: a imagem inteira)
+                drew = False
                 si = 0
                 lv = (1.0, 0.0)
                 steps_img = dict((state.get('steps_small') or {}).get('img') or {}) \
@@ -4562,6 +4600,9 @@ def main():
                     blend_into(own_tex('m_in', rgba=True), lt['src'][0], lt['src'][0], 1.0, 0, aout=2)
                 # ASSUNTO: pilha com region (ou previa da mascara aberta) -> pede a mascara dessa fonte
                 bk, tframe = _track_root(key, frame, src_id, bindings, frames)   # caixa que le outra: rastreia a FONTE de origem
+                # A FONTE CRUA de um no' no meio da corrente = a fonte de VERDADE la' do comeco (antes era a entrada do proprio no':
+                # Misturar/Deslocar/Mascara sem fio no B misturavam a imagem com ela mesma = nao faziam nada). A ENTRADA continua ftex.
+                raw = src_texture(bk, tframe) if (not given and frame is None and tframe is not None) else ftex
                 trk_ = row_trk[key] = _trk(bk, tframe)
                 if tframe is not None and (any(o.get('region') for o in b.get('shaders') or []) or
                                           time.time() - (state.get('mask_want') or {}).get(key, 0) < 1.5):
@@ -4594,7 +4635,7 @@ def main():
                         a *= state['kick']
                     om = (o.get('mod') or {}).get('opacity')
                     if om and a > 0.002:                    # MOVIMENTO na opacidade do atomo (pulsa, abaixa no kick...)
-                        a = _mod_value(a / max(fx_amt, 1e-3), om, state, trk_) * fx_amt
+                        a = _mod_total(a / max(fx_amt, 1e-3), om, state, trk_) * fx_amt
                     h = layer_program(o['file']) if a > 0.002 else None
                     if not h:                               # nao desenha: a corrente passa direto (o tap tambem)
                         after_module(key, oj, o, lt['src'][si])
@@ -4604,19 +4645,19 @@ def main():
                     if chain:                               # (sem 'in' = pilha antiga: le a fonte crua)
                         blend_into(lt['chain'], lt['src'][si], lt['src'][si], 1.0, 0, flip=1, aout=2)   # A(st).a = a cobertura do fio
                     fxv = o['fx'] if isinstance(o.get('fx'), dict) else (b.get('fx') or {}).get(o['file']) or {}   # forcas da ENTRADA
-                    a_tex = lt['chain'] if chain else ftex
+                    a_tex = lt['chain'] if chain else raw
                     seed = _atom_seed(o, key, oj)
                     posts = _post_items(o, bindings)
                     est = h[4]['estado']
                     vals = None
                     if est:                                 # ATOMO COM ESTADO: passos fixos no buffer 16F dele; o loop
-                        vals, stex = run_state(h, o, key, oj, fxv, sk, trk_, a_tex, seed, posts, live, bk, tframe, ftex)
+                        vals, stex = run_state(h, o, key, oj, fxv, sk, trk_, a_tex, seed, posts, live, bk, tframe, raw)
                         posts = ()                          # (post) dele e' RETORNO, ja' rodou dentro de cada passo
                     glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer'], 0)
                     use_program(h)
                     set_uniforms(fxv, o.get('mod'), sk, trk_, seed=seed, vals=vals)
-                    bind_inputs(o, a_tex, key, bk, tframe, ftex)
+                    bind_inputs(o, a_tex, key, bk, tframe, raw)
                     bind_subject(bk, tframe, sjt)
                     if est:                                 # VISTA do estado (u_vista = 1): o que vai pro fio
                         glUniform1f(uniforms['vista'], 1.0)
@@ -4634,7 +4675,7 @@ def main():
                         pa = sv(pk and pk + ('a',), min(1.0, float(pm.get('opacity', 1.0))) * fx_amt, 0.0)
                         om = (pm.get('mod') or {}).get('opacity')
                         if om and pa > 0.002:
-                            pa = _mod_value(pa / max(fx_amt, 1e-3), om, state, trk_) * fx_amt
+                            pa = _mod_total(pa / max(fx_amt, 1e-3), om, state, trk_) * fx_amt
                         ph = layer_program(pm['file']) if pa > 0.002 else None
                         if ph:
                             tops.append((pj, pm, pk, pa, ph))
@@ -4650,12 +4691,12 @@ def main():
                         pfx, pseed = pm.get('fx') or {}, _atom_seed(pm, key, 200 + pj)
                         pvals = pst = None
                         if ph[4]['estado']:                 # com MEMORIA em cima: o rastro da marca (Feedback = a linha deixa rastro)
-                            pvals, pst = run_state(ph, pm, key, oj, pfx, pk, trk_, lt['chain'], pseed, (), live, bk, tframe, ftex)
+                            pvals, pst = run_state(ph, pm, key, oj, pfx, pk, trk_, lt['chain'], pseed, (), live, bk, tframe, raw)
                         glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
                         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lt['layer3'], 0)
                         use_program(ph)
                         set_uniforms(pfx, pm.get('mod'), pk, trk_, seed=pseed, vals=pvals)
-                        bind_inputs(pm, lt['chain'], key, bk, tframe, ftex)
+                        bind_inputs(pm, lt['chain'], key, bk, tframe, raw)
                         bind_subject(bk, tframe, sjt)
                         if pst is not None:
                             glUniform1f(uniforms['vista'], 1.0)
@@ -4674,6 +4715,10 @@ def main():
                         glActiveTexture(GL_TEXTURE0 + LAYER_BLEND_UNIT_MASK)
                         glBindTexture(GL_TEXTURE_2D, sjt[0])
                         um = 2 if rg == 'subject' else 3
+                    if mk_on and not h[4].get('troca'):   # QUEM DESENHA na corrente: a marca nova = o desenho, dentro da de baixo
+                        glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                        stack_into(own_tex('mk_d', rgba=True), 3, lt['src'][si], top=cur_l, a=a)
+                        drew = True
                     blend_into(lt['src'][1 - si], lt['src'][si], cur_l, a, mode, mask=um, mth=_subject_params(b), dith=1,
                                aout=5 if h[4].get('troca') and not stacked else 3)   # com algo EM CIMA: a marca POR CIMA da entrada
                     si = 1 - si
@@ -4692,7 +4737,7 @@ def main():
                             if loc >= 0:
                                 r = (x.get('ins') or [None])[i] if i < len(x.get('ins') or ()) else None
                                 glActiveTexture(GL_TEXTURE0 + unit)
-                                glBindTexture(GL_TEXTURE_2D, _ins_tex(r, key, lane_out, tap_tex, ftex))
+                                glBindTexture(GL_TEXTURE_2D, _ins_tex(r, key, lane_out, tap_tex, raw))
                         if uniforms['track']:               # Rosto, Olhos, Corpo, Maos, Objeto
                             _bind_track(uniforms, bk, tframe)
                         if uniforms['subject_on'] >= 0:
@@ -4703,7 +4748,7 @@ def main():
                             glBindTexture(GL_TEXTURE_2D, sjt[0] if sjt is not None else 0)
                         if uniforms['src'] >= 0:
                             glActiveTexture(GL_TEXTURE0 + SRC_UNIT)
-                            glBindTexture(GL_TEXTURE_2D, ftex)
+                            glBindTexture(GL_TEXTURE_2D, raw)
                         glActiveTexture(GL_TEXTURE0)
                         glBindTexture(GL_TEXTURE_2D, ftex)
                         glClear(GL_COLOR_BUFFER_BIT)
@@ -4723,6 +4768,26 @@ def main():
                         else:                               # fora da mascara passa a ENTRADA da caixa
                             blend_into(lt['src'][1 - si], own['m_in'], lt['src'][si], 1.0, 0, mask=1, aout=5)
                         si = 1 - si
+                if mk_on:                               # UM SOBRE O OUTRO: guarda marca + fundo; a saida = marca POR CIMA do fundo
+                    m_lt = own['mk_d'] if drew else lt['src'][si]
+                    fundo = p_full if drew else p_fundo
+                    ids_ = [i for i in (src_id.get(key), ((rb.get('shaders') or [{}])[0]).get('id')) if i]
+                    if live and any(i in tap_want for i in ids_):
+                        for i in ids_:
+                            copy_flip(mark_tex, i, m_lt)
+                            mark_fundo[i] = fundo
+                            mark_ok.add(i)
+                    glBindFramebuffer(GL_FRAMEBUFFER, lt['fbo'])
+                    if fundo is not None:
+                        blend_into(own_tex('mk_f', rgba=True), fundo, fundo, 1.0, 0, flip=1, aout=2)   # o fundo em orientacao GL
+                        blend_into(lt['src'][1 - si], own['mk_f'], m_lt, 1.0, 0, aout=3)
+                        si = 1 - si
+                    elif drew:
+                        blend_into(lt['src'][1 - si], m_lt, m_lt, 1.0, 0, aout=2)
+                        si = 1 - si
+                    for i in ids_[1:]:                  # quem le o ATOMO ('@id do atomo') tambem recebe a saida inteira
+                        if live and i in tap_want:
+                            copy_flip(tap_tex, i, lt['src'][si])
                 if live and src_id.get(key) in tap_want:    # dash v5: alguem le o FIM desta caixa
                     copy_flip(tap_tex, src_id[key], lt['src'][si])
                 if live and src_id.get(key) in no_want:     # o FIM da caixa como sinal (no:<id da caixa>)
@@ -4769,7 +4834,7 @@ def main():
                 a = sv(('lay', key, L['from']) if live else None, 0.0 if L.get('off') else min(1.0, float(L.get('opacity', 1.0))), 0.0)
                 om = (L.get('mod') or {}).get('opacity')
                 if om and a > 0.002:                    # MOVIMENTO na opacidade da camada (ducking: abaixa no kick)
-                    a = _mod_value(a, om, state, row_trk.get(k))
+                    a = _mod_total(a, om, state, row_trk.get(k))
                 if a <= 0.002:
                     return None
                 mode = dash_server.LAYER_BLENDS.index(L['blend']) if L.get('blend') in dash_server.LAYER_BLENDS else 0
@@ -5447,6 +5512,10 @@ def _selfcheck():
     assert abs(_mod_value(0.3, {'b': ['subbass', 'air'], 'lo': 1.0, 'hi': 0.0}, lv) - 0.1) < 1e-9, '♪ mais forte vale; hi<lo inverte'
     assert abs(_mod_value(0.5, {'b': ['kick']}, lv) - 0.5) < 1e-9, '♪ formato velho = do knob ate 1'
     assert abs(_mod_value(0.0, {'b': ['m1'], 'lo': 0.2, 'hi': 0.8}, {'m1': 0.5}) - 0.5) < 1e-9, 'macro = fonte do ♪'
+    two = {'b': ['subbass'], 'lo': 0.2, 'hi': 0.6, 'mais': [{'b': ['air'], 'lo': 0.5, 'hi': 0.7}]}
+    assert abs(_mod_total(0.3, two, lv) - (0.4 + 0.2 * 0.9)) < 1e-9, 'varios ativadores: o 2o SOMA (hi-lo)*sinal'
+    assert _mod_total(0.3, dict(two, mais=[{'b': ['air'], 'lo': 0.0, 'hi': 1.0}]), lv) == 1.0, 'soma fica em 0..1'
+    assert _mod_total(0.3, None, lv) == 0.3 and abs(_mod_total(0.3, {'b': ['subbass'], 'lo': 0.2, 'hi': 0.6}, lv) - 0.4) < 1e-9
     near = lambda a, b: abs(a - b) < 1e-9
     assert near(_mod_value(0.0, {'b': ['lfo'], 'lo': 0.2, 'hi': 0.6, 'lfo': {'f': 'saw', 'r': 4}}, {'bpos': 2.0}), 0.4), 'lfo: serra no meio'
     assert near(_mod_value(0.0, {'b': ['lfo', 'kick'], 'lo': 0, 'hi': 1, 'lfo': {'f': 'sq', 'r': 4}}, {'bpos': 3.0, 'kick': 0.7}), 0.7), \
