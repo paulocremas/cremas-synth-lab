@@ -1055,10 +1055,16 @@ def _smooth(store, key, target, k, frame, start=None):
     e = store.get(key)
     if e is None:
         e = store[key] = [target if start is None else start, frame]
+    elif e[1] == frame and len(e) > 2 and e[2] == target:   # a mesma chave lida 2x no quadro (ex.: previa isolada da SAIDA): anda UMA vez
+        return e[0]
     v = target if k >= 1.0 else e[0] + (target - e[0]) * k
     if abs(target - v) < 1e-4:
         v = target
     e[0], e[1] = v, frame
+    if len(e) > 2:
+        e[2] = target
+    else:
+        e.append(target)
     return v
 
 
@@ -3884,7 +3890,7 @@ def main():
     limiter, lim_g = Limiter(), [1.0]
     # previa de cada FONTE JA COM OS EFEITOS (canvas do Palco v2: GET /frame?which=fx): a textura
     # da fonte depois da pilha (lt['src']) reduzida por blit, so' das pedidas (state['fx_want'])
-    FX_PV_HZ, FX_PV_W = 10, 240
+    FX_PV_HZ, FX_PV_W = 10, 360   # 360 (era 240): a tela da mini TV do dash5 aparece grande no zoom
     fx_pv = {'fbo': None, 'tex': None, 'wh': None, 't': {}}
     # leitura ASSINCRONA das previas: glReadPixels pra um PBO (volta na hora, a copia corre na GPU) e
     # o resultado e' pego na PROXIMA leitura do mesmo key (~1/HZ depois, ja pronto). O glReadPixels
@@ -4910,7 +4916,7 @@ def main():
                     blend_into(pair[1 - oi], pair[oi], q[0], q[1], q[2], flip=q[3], rect=_rect_uv(sr, cbox), clip=clip, scr=scr_uv, pre=q[4], snap=q[5])
                     oi = 1 - oi
                 if live and time.time() - (state.get('fx_want') or {}).get(_chkey(o), 0) < 1.5:
-                    fx_preview(_chkey(o), pair[oi])     # previa do no' SAIDA = o palco ate' aqui
+                    mix_node(o, _chkey(o))              # previa do no' SAIDA = a imagem DELA sozinha (antes: o palco ate' aqui); so' enquanto o dash pede
             # IMAGEM DA CENA (campo 'grade' do set; knobs no Palco do v2): o mesmo calibrar.frag na MISTURA
             # da cena -> antes da transicao (cada cena cruza com a sua) e da calibracao do telao. Neutro = sem passe.
             sg = sc.get('grade') or {}
@@ -5644,6 +5650,8 @@ def _selfcheck():
     for f in range(3, 200):
         v = _smooth(st_, 'a', 0.9, 0.2, f)
     assert v == 0.9, 'chega exatamente no alvo (sem ficar rastejando pra sempre)'
+    assert _smooth(st_, 'c', 1.0, 0.5, 300, start=0.0) == 0.5 and _smooth(st_, 'c', 1.0, 0.5, 300) == 0.5, 'lida 2x no MESMO quadro: anda uma vez so (previa da saida)'
+    assert _smooth(st_, 'c', 1.0, 0.5, 301) == 0.75, 'quadro seguinte: anda de novo'
     print('native_synth smooth self-check ok')
     # protecao: estrobo a 8 Hz (preto/branco) e' contido; pulso a 1 Hz passa; imagem clara com teto 0.6 desce
     L = Limiter()

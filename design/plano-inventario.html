@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRISMA — plano da mini TV + inventário</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#0b0c0e; --s1:#131519; --s2:#1a1d22; --s3:#23272e; --line:#2a2f37; --tx:#e6e9ed; --tx2:#a7b0ba; --tx3:#6f7884;
+  --sel:#ff9d52; --ok:#3fd08f; --bad:#ff5b61; --warn:#e8c14a; --blue:#5eb0ff; --pur:#c56bff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--tx); font: 14px/1.45 "IBM Plex Sans", system-ui, sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 28px 22px 80px; }
+h1 { font: 700 34px/1.1 "Barlow Condensed", sans-serif; letter-spacing: .02em; margin: 0 0 6px; }
+h2 { font: 700 24px "Barlow Condensed", sans-serif; letter-spacing: .03em; margin: 38px 0 4px; }
+h3 { font: 700 17px "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--tx2); margin: 26px 0 8px; }
+p.lead, .sub { color: var(--tx2); max-width: 860px; margin: 4px 0 10px; }
+code, .mono { font: 500 12.5px "IBM Plex Mono", monospace; color: #cfd6de; }
+.bar { position: sticky; top: 0; z-index: 5; background: #0b0c0eee; border-bottom: 1px solid var(--line); padding: 8px 22px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.bar b { font: 700 16px "Barlow Condensed", sans-serif; letter-spacing: .06em; }
+.bar a { color: var(--tx2); text-decoration: none; font-size: 13px; } .bar a:hover { color: var(--tx); }
+.save { margin-left: auto; font-size: 12px; color: var(--tx3); } .save.ok { color: var(--ok); } .save.err { color: var(--warn); }
+.count { font: 500 12px "IBM Plex Mono", monospace; color: var(--tx2); }
+.card { background: var(--s1); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 8px 0; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+.row + .row { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.what b { font-weight: 600; } .what .k { color: var(--tx3); font-size: 12px; }
+.what .map { color: var(--tx2); margin-top: 3px; }
+.opts { display: flex; flex-wrap: wrap; gap: 5px; }
+.opt { min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--line); background: var(--s2); color: var(--tx2); cursor: pointer; font: 600 12.5px "IBM Plex Sans", sans-serif; }
+.opt:hover { color: var(--tx); border-color: #444b55; }
+.opt:focus-visible { outline: 2px solid var(--sel); outline-offset: 1px; }
+.opt.on { background: #33210f; border-color: var(--sel); color: #ffd7b8; }
+.opt.rec::after { content: ' ★'; color: var(--sel); }
+.opt[data-v="manter"].on, .opt[data-v="ok"].on, .opt[data-v="aprovo"].on { background: #143024; border-color: var(--ok); color: #c5f2dc; }
+.opt[data-v="tirar"].on, .opt[data-v="não"].on { background: #3a1517; border-color: var(--bad); color: #ffc9cb; }
+textarea.nota { width: 100%; margin-top: 6px; min-height: 30px; height: 30px; resize: vertical; background: var(--bg); color: var(--tx); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 8px; font: 13px "IBM Plex Sans", sans-serif; }
+textarea.nota:focus { outline: none; border-color: var(--sel); height: 64px; }
+textarea.nota:not(:placeholder-shown) { height: 64px; }
+.warn { display: none; margin-top: 5px; font-size: 12px; color: var(--warn); } .warn.on { display: block; }
+/* inventario */
+.filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+.filters input[type=search] { min-height: 32px; min-width: 240px; background: var(--s1); border: 1px solid var(--line); border-radius: 7px; color: var(--tx); padding: 0 10px; font: inherit; }
+.inv .row { grid-template-columns: minmax(0, 1fr) 150px 330px; }
+.tag { display: inline-block; font: 700 11px "IBM Plex Mono", monospace; padding: 1px 6px; border-radius: 4px; margin-right: 4px; vertical-align: 1px; }
+.tag.P { background: #143024; color: #8fe8bd; } .tag.S { background: #3a1517; color: #ffb3b6; } .tag.C { background: #12263a; color: #a8d2ff; } .tag.x { background: var(--s3); color: var(--tx3); }
+.meta { font-size: 12px; color: var(--tx3); }
+.meta .u { color: var(--tx2); }
+.sug { font-size: 12.5px; color: var(--tx2); margin-top: 4px; }
+.sug i { font-style: normal; font-weight: 700; padding: 0 6px; border-radius: 4px; margin-right: 5px; font-size: 11px; }
+.sug i.manter { background: #143024; color: #8fe8bd; } .sug i.tirar { background: #3a1517; color: #ffb3b6; } .sug i.juntar, .sug i.mudar { background: #33210f; color: #ffcf9f; } .sug i.gesto { background: #2a1a3a; color: #e0b8ff; }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px; font-size: 13px; color: var(--tx2); }
+.hide { display: none !important; }
+@media (max-width: 900px) { .row, .inv .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="bar"><b>PRISMA · plano + inventário</b>
+  <a href="#plano">1 · plano</a><a href="#perguntas">perguntas</a><a href="#pele">4 · pele do resto</a><a href="#inventario">5 · inventário</a><a href="#geral">comentário geral</a>
+  <span class="count" id="count"></span><span class="save" id="save">conectando…</span></div>
+<main>
+<h1>Mini TV no dash5: plano + inventário de botões e telas</h1>
+<p class="lead">Marque clicando e comente em cada linha; grava sozinho. ★ = a minha recomendação. Nada é implementado antes de você aprovar.
+  Elemento com <span class="tag S">S</span> (segurança) só sai se você marcar “tirar”.</p>
+
+<h2 id="plano">1 · Peças do mockup → elementos do dash5</h2>
+<p class="sub">O motor não muda. Os ids dos controles (<code>bar:</code>, <code>sel:</code>, MIDI aprendido) e os gestos ficam os mesmos; muda o desenho.</p>
+<div class="card" id="plano-list"></div>
+
+<h2 id="perguntas">Perguntas que o mockup não responde</h2>
+<p class="sub">Coisas do dash5 que não aparecem no mockup, ou em que o mockup e o motor discordam.</p>
+<div class="card" id="perg-list"></div>
+
+<h2 id="pele">4 · Pele do resto do programa</h2>
+<p class="sub">Proposto no fim do mockup e ainda não aprovado item a item.</p>
+<div class="card" id="pele-list"></div>
+
+<h2 id="inventario">5 · Inventário: cada botão, painel e tela</h2>
+<div class="legend">
+  <div><span class="tag P">P</span>palco: usado tocando</div><div><span class="tag S">S</span>segurança: salva o show</div><div><span class="tag C">C</span>montagem: criar e configurar</div>
+  <div><b>uso</b> = estimativa minha, corrija no comentário</div>
+</div>
+<div class="filters">
+  <input type="search" id="q" placeholder="procurar…">
+  <button class="opt" data-f="P">só P</button><button class="opt" data-f="S">só S</button><button class="opt" data-f="C">só C</button>
+  <button class="opt" data-f="muda">só onde eu sugiro mudar</button><button class="opt" data-f="falta">só os sem marca</button>
+</div>
+<div class="inv" id="inv-list"></div>
+
+<h2 id="geral">Comentário geral</h2>
+<div class="card"><textarea class="nota" data-id="geral" data-sec="geral" style="height:110px" placeholder="o que faltou, ordem das etapas, qualquer coisa"></textarea></div>
+</main>
+
+<script>
+// ---------- 1 · PLANO: [id, peca do mockup, elemento do dash5, como] ----------
+const PLANO = [
+ ['p-bx', 'atom() + body() — gabinete de plástico', '.bx (card do nó, boxEl)', 'Gabinete com o material da família (classe pela cat do átomo: cor, luz, forma…). --cc continua como a cor da família e vira o --fc do mockup. Largura fixa; a altura = título + tela + linha de conexões + knobs. Fonte, mistura e saída = prata neutro.'],
+ ['p-lv', 'screen() — a tela da TV', '.lv (imagem viva, which=fx)', 'O canvas da prévia vai DENTRO da .crt, com aspect-ratio = a proporção da FONTE que alimenta a corrente (a raiz). LIVE_H/boxH passam a calcular a altura pela proporção. Cel: o filtro #toon só na imagem; a prévia anda a 4 quadros/s, então o filtro só refaz quando chega um quadro.'],
+ ['p-ttl', '.ttl — nome, família, nº de série', '.bh (cabeçalho), nameEl, número do nó', 'Nome grande em silkscreen + família pequena + o número do nó como nº de série. O pictograma i-at-* fica gravado ao lado do nome. Clicar no nome continua só ESCOLHENDO (trocar = o ↻, como hoje); arrastar pelo título continua = mover.'],
+ ['p-led', 'rockerSVG / rockerCel — esfera de vidro', 'LED liga/desliga do átomo (led.pw)', 'Esfera vermelha com xadrez, acesa = ligado. Família cor: a roda de cores girando (parada e apagada se desligado). Fonte/mistura/saída: lâmpada pequena “no ar” (tally), sem clique. Estado, laço e espelho = lâmpadas pequenas serigrafadas.'],
+ ['p-port', 'edgeJack() + jackProfile() — porca rente à borda', '.port (A, B, másc, saída, “+”)', 'IN e MÁSC empilhados na borda esquerda (B entre os dois quando o átomo tem), OUT na direita. A área de clique continua invisível e grande (≥ 24 px): o desenho fica fino, o alvo não encolhe. Nome do jack em silkscreen por dentro (some no TOCAR, como hoje).'],
+ ['p-fader', 'fader() — opacidade entre os jacks', 'opacidade do átomo (hoje só no inspetor)', 'Fader horizontal na linha de conexões: arrastar ↔, 2 cliques = 100%, aceita movimento (punho na cor do controlador). Mesmo id de controle de hoje, então o MIDI segue.'],
+ ['p-knob', 'knobSVG / knobCel + edgeJack(down)', 'nodeKnobs + .kj (jack do knob)', 'Knobs rente ao pé, rótulo em cima e valor embaixo em silkscreen. O jack de CV de cada knob sai por BAIXO do gabinete. Knob com movimento: a TAMPA brilha na cor do controlador (sai o azul). dragCtl e o arrasto infinito não mudam.'],
+ ['p-cable', 'cable() + plugProfile()', 'drawBoxWires (fios do canvas)', 'Uma curva só, que cai com o peso, com o plugue-disco na cor do cabo nas duas pontas. Laço continua tracejado; o hover continua acendendo o fio e as pontas. Foto-real: 3 traços sem blur (a sombra vira um traço deslocado e translúcido) no lugar dos 6 traços com filtro do mockup; modo leve: 1 traço.'],
+ ['p-ctl', 'envMod() — caixinha do envelope', 'controlador (~ctl), ctlSpot', 'Osciloscópio com o sinal VIVO do motor (SSE mv), faixa de/até em faders, jack de CV em cima. O cabo vai até o jack do knob, embaixo do nó. ctlSpot passa a procurar lugar ABAIXO do nó, alinhado com o knob (ver pergunta).'],
+ ['p-out', 'a “saída 1” do mockup', 'nó SAÍDA (mixEl, kind out)', 'Prata, a tela com o que sai, e por entrada um jack “in N” + fader de opacidade (o layerRow de hoje). Alça de ordem, modo e olho continuam só no MONTAR, mais discretos. “+ entrada” = um jack vazio. “mapear” vira o nome da tela em silkscreen, clicável.'],
+ ['p-mix', '(sem peça no mockup)', 'MISTURA (staging, kind mix)', 'O mesmo gabinete da saída, num prata mais escuro, com o jack OUT na direita.'],
+ ['p-src', 'a “câmera 1” do mockup', 'nó de FONTE (srcn)', 'Prata, tela com a imagem da fonte na proporção dela, OUT na direita, lâmpada no ar. Trocar a fonte = o ↻, como hoje.'],
+ ['p-mir', '(sem peça)', 'ESPELHO (chip)', 'Gabinete pequeno no material do original, só com o pictograma e a marca de cor. Sem tela e sem knobs, como hoje.'],
+ ['p-mask', 'família máscara (preto fosco, moldura roxa)', 'nó de máscara (maskn) e a faixa .mk', 'O nó de máscara usa a família máscara. A faixa .mk do pé (só aparece em cena antiga) vira uma etiqueta no rodapé.'],
+ ['p-fold', '(sem peça)', 'nó dobrado (Shift + 2 cliques)', 'Só a faixa do título com os jacks: sem tela e sem knobs.'],
+ ['p-sel', '(sem peça)', 'escolhido / seleção múltipla', 'Contorno laranja por fora do gabinete, como hoje (vence o material).'],
+ ['p-anim', 'roda de cores, VU, eco respirando', 'animação', 'Só em átomo LIGADO e só em nó que está na vista; parada no modo leve e com prefers-reduced-motion.'],
+ ['p-tex', 'feTurbulence / feDiffuseLighting do CSS', 'texturas', 'Cada textura vira PNG gerado UMA vez na abertura (SVG → canvas → data-URL, guardado) e reusado por classe. Nada de filtro SVG ao vivo por nó; sem backdrop-filter no canvas (o desfoque de foco do mockup sai do canvas).'],
+ ['p-perf', '—', 'medição', 'Antes de mexer: uma cena fixa com ~40 nós no tests/dash_gestos.py (Chromium headless via CDP), medindo o tempo de quadro com zoom/arrasto e o renderBoxes. Repito depois com foto-real, cel e leve; vai num teste para não regredir.'],
+ ['p-tema', 'menu VISUAL do mockup', 'tema do programa', 'Menu Foto-real | Cel, e um interruptor “leve”. Guardo no localStorage do perfil do Chromium do app (o perfil é fixo, então sobrevive a reabrir), no mesmo lugar do zoom, dos cabos e do MIDI. Motivo: é preferência DESTA tela, não do show; o tuning é o estado do show e viaja com as cenas. A troca refaz o desenho das peças (renderBoxes do zero), não só o CSS.'],
+];
+// ---------- PERGUNTAS: [id, pergunta, opcoes, indice recomendado] ----------
+const PERG = [
+ ['q-size', 'Tamanho do módulo. No mockup ele tem 270–360 px de largura e ~400 px de altura; o card de hoje tem ~230 px de largura. Com dezenas de nós isso pesa.',
+   ['largura 240 px, tudo proporcional (cabe como hoje)', 'largura 300 px, como o mockup pequeno', 'largura do mockup e o zoom resolve'], 0],
+ ['q-main', 'Knob principal. Hoje o 1º knob é maior (44 px, os outros 32); no mockup são todos iguais (36).', ['principal continua maior', 'todos iguais'], 0],
+ ['q-ctrl', 'Chave (liga/desliga) e escolha (um entre N) não aparecem no mockup. Onde e como?',
+   ['chave = alavanca pequena, escolha = fileira de teclas, numa linha logo acima dos knobs', 'os dois na mesma linha dos knobs, como knobs de clique'], 0],
+ ['q-b', 'Entrada B (os átomos que leem uma segunda imagem).', ['3º jack na borda esquerda, entre IN e MÁSC', 'jack no topo do gabinete'], 0],
+ ['q-range', 'Faixa de/até. No motor a faixa é de cada KNOB (um controlador mexe vários knobs, cada um com a sua). O mockup a desenha no controlador.',
+   ['controlador com 1 knob: os faders de/até são dele; com vários, uma fileira de/até por knob ligado', 'a faixa fica num anel em volta do knob; o controlador mostra só o osciloscópio'], 0],
+ ['q-trig', 'Jack “gatilho” do controlador. Hoje o evento (kick, compasso…) é escolhido na receita, sem fio.',
+   ['vira etiqueta serigrafada com o evento, sem jack', 'jack de verdade (o evento vira um fio, precisa de nó de evento)'], 0],
+ ['q-spot', 'Onde nasce o controlador novo. Hoje: à esquerda do nó, na altura do knob.', ['embaixo do nó, alinhado com o knob (o CV sai por baixo)', 'continua à esquerda'], 0],
+ ['q-light', 'Modo leve (sem grão, foco e animação).', ['interruptor junto do menu de tema', 'automático quando o quadro passa de 16 ms, com interruptor'], 0],
+];
+// ---------- 4 · PELE DO RESTO ----------
+const PELE = [
+ ['s-top', 'Barra de cima', 'TOCAR/MONTAR como teclas de TV antiga, liga geral de vidro, nome da cena num visor VFD.'],
+ ['s-pgm', 'PROGRAMA (#pvw e o grande do TOCAR)', 'Monitor de estúdio com a luz vermelha de “no ar” (tally).'],
+ ['s-insp', 'Inspetor (#insp)', 'A “tampa traseira” do módulo escolhido: o mesmo material, por dentro.'],
+ ['s-wheel', 'Roda da biblioteca', 'Catálogo com a miniatura do gabinete de cada átomo.'],
+ ['s-scenes', 'Cenas', 'Cartuchos; a transição numa alavanca T-bar.'],
+ ['s-mix', 'Som / master', 'Faders de mesa de corte e VU de agulha; BLACKOUT como chave com tampa.'],
+ ['s-stage', 'Palco (Equipamento › Saída)', 'As telas desenhadas como painéis de LED.'],
+];
+// ---------- 5 · INVENTARIO: [id, elemento, onde, motivo, uso, sugestao, texto] ----------
+const INV = [
+ ['Barra de cima (os dois modos)', [
+  ['top-brand', 'Marca PRISMA', 'topo, à esquerda', 'x', 'nunca se clica', 'manter', 'vira o logo do fabricante; já some em tela estreita'],
+  ['top-mode', 'TOCAR / MONTAR (F1 / F2)', 'topo', 'S', 'a cada troca de fase', 'manter', 'teclas de TV antiga'],
+  ['top-music', 'Bloco da música: kick, 8 faixas, BPM, batidas, frase, seção, tom', 'topo', 'P', 'olhado o tempo todo', 'manter', 'visor VFD + VU'],
+  ['top-tempo', 'Popup Tempo (clique no bloco): ×2 ÷2 auto · “1” ◀ ▶ 1 da frase · forçar seção · grade · tamanho da frase · áudio e tom…', 'abre sob o bloco', 'P', 'quando o BPM erra', 'juntar', 'a “grade” daqui e a das Cenas são o mesmo ajuste: fica só aqui'],
+  ['top-tap', 'TAP', 'topo', 'P', 'algumas vezes por show', 'manter', 'tecla grande; tem MIDI'],
+  ['top-ann', 'Avisos (texto ao vivo)', 'topo', 'S', 'aparece sozinho', 'manter', 'dentro do visor'],
+  ['top-eq', 'Equipamento', 'topo', 'C', 'setup', 'mudar', 'encolhe pra só o ícone ⚙ (libera espaço pros faders)'],
+  ['top-faders', 'Faders EFEITOS e MASTER', 'topo', 'P', 'toda música', 'manter', 'faders de mesa de corte. MASTER também é S'],
+  ['top-sos', 'SOCORRO (a cor mostra a saúde)', 'topo, à direita', 'S', 'raro, vital', 'manter', ''],
+  ['top-blk', 'BLACKOUT (tecla .)', 'topo, à direita', 'S', 'raro, vital', 'manter', 'chave com tampa'],
+ ]],
+ ['Cenas (coluna esquerda no TOCAR; janela pelo botão “cenas” no MONTAR)', [
+  ['sc-pads', 'Cartão de cena: clique = no ar · direito / segurar / Alt = próxima · letra = tecla', 'lista', 'P', 'toda música', 'manter', 'cartucho'],
+  ['sc-gear', 'Engrenagem da cena: renomear, tecla, apagar', 'no cartão (só MONTAR)', 'C', 'raro', 'manter', ''],
+  ['sc-add', '+ cena nova com o estado atual', 'cabeçalho', 'C', 'por montagem', 'manter', ''],
+  ['sc-img', 'Imagem da cena: luz, cor, temperatura (ligada, zerar, knobs)', 'botão ☀ no cabeçalho → caixa', 'C', 'raro', 'mudar', 'entra na engrenagem da cena (é uma propriedade da cena)'],
+  ['sc-quant', 'grade: na hora / batida / compasso / frase', 'opções das cenas (MONTAR)', 'P', 'raro', 'juntar', 'duplicado do popup Tempo'],
+  ['sc-dura', 'dura: transição em batidas', 'opções das cenas (MONTAR)', 'P', 'raro', 'mudar', 'vai pra T-bar'],
+  ['sc-trans', 'transição de entrada da cena no ar', 'opções das cenas (MONTAR)', 'C', 'raro', 'mudar', 'vai pra T-bar (ou pro cartucho)'],
+ ]],
+ ['TOCAR: centro e direita', [
+  ['pl-pgm', 'PROGRAMA grande (NO AR, BLACKOUT por cima, aviso da proteção, resolução)', 'centro', 'S', 'olhado o tempo todo', 'manter', 'monitor de estúdio com tally'],
+  ['pl-next', 'PRÓXIMA: prévia aquecendo, nome, × desmarcar', 'centro, embaixo', 'P', 'a cada troca', 'manter', ''],
+  ['pl-go', 'GO (Espaço, MIDI)', 'ao lado da próxima', 'P', 'a cada troca', 'manter', 'ideia: a T-bar ao lado faz a transição na mão; GO continua botão'],
+  ['pl-ctl', 'Controles publicados (★ no inspetor)', 'direita', 'P', 'toda música', 'manter', ''],
+  ['pl-mac', 'Movimentos: M1–M4 + lista dos movimentos vivos (mouse acende, arrastar até um knob)', 'direita', 'P', 'às vezes', 'manter', ''],
+  ['pl-try', 'Prévia fora do ar (ao arrastar)', 'no lugar da próxima', 'S', 'ao arrastar', 'manter', ''],
+  ['pl-var', 'Variações: 4 mutações, distância, outras 4, guardar achado, fechar', 'no lugar da próxima', 'C', 'raro', 'manter', ''],
+  ['pl-split', 'Divisórias das colunas (arrastar, 2 cliques = padrão)', 'entre as colunas', 'C', 'raro', 'manter', ''],
+ ]],
+ ['MONTAR: barra do canvas e janelas', [
+  ['cv-lbl', 'Título “Canvas” + dica', 'barra do canvas', 'x', 'nunca', 'tirar', 'a dica vai pro title; sobra lugar'],
+  ['cv-zoom', 'Zoom − 100% + (Ctrl + roda; clique no número = 100%)', 'barra do canvas', 'C', 'às vezes', 'mudar', 'fica só o número (a roda já faz o zoom)'],
+  ['cv-cable', 'cabos: tensão e opacidade', 'barra do canvas', 'C', 'quase nunca', 'mudar', 'vai pro menu do tema (é preferência de vista)'],
+  ['cv-cn', 'cenas · nome da cena (abre a lista flutuante)', 'barra do canvas', 'P', 'por montagem', 'manter', 'nome no visor VFD'],
+  ['cv-pv', 'programa (janelinha ↔ escondido)', 'barra do canvas', 'S', 'às vezes', 'manter', ''],
+  ['cv-mix', '+ mistura', 'barra do canvas', 'C', 'por montagem', 'gesto', 'já está na roda e no menu do fio: o botão sai'],
+  ['cv-tidy', 'arrumar', 'barra do canvas', 'C', 'raro', 'manter', ''],
+  ['cv-undo', 'desfazer (Ctrl+Z)', 'barra do canvas', 'S', 'às vezes', 'manter', ''],
+  ['pv-win', 'Janelinha PROGRAMA: arrastar, redimensionar, “fundo”, ×', 'flutua no canvas', 'S', 'o tempo todo', 'manter', 'monitor com tally'],
+  ['pv-back', '↗ janela (volta do fundo)', 'canto do canvas', 'S', 'raro', 'manter', ''],
+  ['cv-nav', 'Navegar: roda = zoom, meio/direito = vista, esquerdo no vazio = seleção', 'canvas', 'C', 'o tempo todo', 'manter', ''],
+  ['cv-wheel', 'Roda da biblioteca (2 cliques no vazio)', 'canvas', 'C', 'por montagem', 'manter', 'catálogo com a miniatura do gabinete'],
+  ['cv-libold', 'Painel Biblioteca lateral (busca, abas, lista)', 'coluna esquerda', 'C', 'NUNCA aparece: escondido por CSS desde a roda', 'tirar', 'código morto'],
+ ]],
+ ['Nó no canvas (átomo e fonte)', [
+  ['nd-led', 'LED liga/desliga do átomo (clique)', 'canto do nó', 'P', 'toda música', 'manter', 'esfera de vidro'],
+  ['nd-onair', 'LED “no ar” da fonte', 'canto do nó', 'S', 'olhado', 'manter', 'tally'],
+  ['nd-icon', 'Pictograma do átomo / miniatura da fonte', 'cabeçalho', 'C', 'identidade', 'manter', 'gravado no gabinete'],
+  ['nd-name', 'Nome (clique = só escolhe)', 'cabeçalho', 'C', 'por montagem', 'manter', ''],
+  ['nd-swap', 'Botão ↻ trocar (átomo ou fonte)', 'cabeçalho', 'C', 'por montagem', 'manter', 'CORRIGIDO: é o único jeito de trocar (o nome só escolhe)'],
+  ['nd-no', 'Número do nó (teclas 1–9)', 'cabeçalho', 'P', 'às vezes', 'manter', 'nº de série'],
+  ['nd-lst', 'LED “tem estado”', 'cabeçalho', 'C', 'só informa', 'manter', ''],
+  ['nd-loop', 'LED de laço', 'cabeçalho', 'S', 'só informa', 'manter', ''],
+  ['nd-mdot', 'Marca de “tem espelhos”', 'cabeçalho', 'C', 'só informa', 'manter', ''],
+  ['nd-lv', 'Imagem viva', 'corpo', 'P', 'o tempo todo', 'manter', 'a tela da TV'],
+  ['nd-ja', 'Jack A (entrada)', 'borda esquerda', 'C', 'por montagem', 'manter', 'porca'],
+  ['nd-jb', 'Jack B', 'borda esquerda', 'C', 'raro', 'manter', ''],
+  ['nd-jm', 'Jack máscara', 'canto de baixo', 'C', 'raro', 'mudar', 'sobe pra borda esquerda, embaixo do IN'],
+  ['nd-jo', 'Jack saída', 'borda direita', 'C', 'por montagem', 'manter', ''],
+  ['nd-op', 'Opacidade do átomo', 'só no inspetor', 'P', 'às vezes', 'mudar', 'fader no próprio nó (mockup)'],
+  ['nd-knobs', 'Knobs (até 3, ou 6 com montagem)', 'corpo', 'P', 'toda música', 'manter', 'rente ao pé'],
+  ['nd-kj', 'Jack do knob (.kj)', 'ao lado do knob', 'C', 'por montagem', 'mudar', 'sai por baixo do gabinete'],
+  ['nd-ch', 'Escolha / chave numa linha', 'pé', 'P', 'às vezes', 'manter', 'desenho na pergunta “chave e escolha”'],
+  ['nd-mk', 'Faixa da máscara no pé (cena antiga)', 'pé', 'C', 'raro (legado)', 'manter', 'enquanto houver cena antiga'],
+  ['nd-fold', 'Dobrar (Shift + 2 cliques no título)', 'gesto', 'C', 'raro', 'manter', ''],
+ ]],
+ ['Mistura e Saída (card)', [
+  ['mx-thumb', 'Miniatura no cabeçalho', 'cabeçalho', 'P', 'olhado', 'mudar', 'vira a tela grande da TV'],
+  ['mx-lay', 'Por entrada: jack numerado + fader', 'corpo', 'P', 'toda música', 'manter', ''],
+  ['mx-grip', 'Alça de ordem (arrastar)', 'por entrada (MONTAR)', 'C', 'raro', 'manter', ''],
+  ['mx-blend', 'Modo de mistura (lista)', 'por entrada (MONTAR)', 'C', 'raro', 'mudar', 'só no inspetor (já está lá); o card fica limpo'],
+  ['mx-eye', 'Olho: liga/desliga a entrada', 'por entrada (MONTAR)', 'P', 'às vezes', 'manter', ''],
+  ['mx-slot', '“+ entrada” (solte um fio)', 'pé', 'C', 'por montagem', 'manter', 'jack vazio'],
+  ['mx-map', 'Onde no palco + mapear', 'pé da SAÍDA', 'C', 'raro', 'manter', 'silkscreen clicável'],
+ ]],
+ ['Fios, controladores e menus', [
+  ['w-cable', 'Fio (cor do nó, laço tracejado, hover acende)', 'canvas', 'C', 'o tempo todo', 'manter', 'cabo com peso + plugue'],
+  ['w-x', '× perto da entrada / fio escolhido + Delete', 'fio', 'C', 'por montagem', 'manter', ''],
+  ['w-stick', 'Clicar na bolinha = o fio gruda no cursor', 'jack', 'C', 'por montagem', 'manter', ''],
+  ['w-menu', 'Menu ao soltar o fio no vazio (átomos, nó vazio, mistura, saída, espelho)', 'canvas', 'C', 'por montagem', 'juntar', 'a mesma lista da roda (catálogo), já ligada na origem'],
+  ['n-swapmenu', 'Menus “trocar átomo” / “trocar fonte”', 'botão ↻', 'C', 'por montagem', 'juntar', 'o mesmo catálogo, filtrado'],
+  ['c-node', 'Controlador no canvas (losango de saída, sinal)', 'canvas', 'P', 'por montagem', 'manter', 'caixinha com osciloscópio'],
+  ['c-presets', 'Botão do knob → presets (pulsa, respira…) + abrir…', 'knob', 'C', 'por montagem', 'manter', ''],
+ ]],
+ ['Inspetor (painel do nó, MONTAR)', [
+  ['in-x', '× fechar (e clique fora)', 'canto', 'C', 'o tempo todo', 'manter', ''],
+  ['in-power', 'Liga/desliga', 'cabeça', 'P', 'às vezes', 'manter', 'repete o LED do nó, de propósito'],
+  ['in-var', 'Variações', 'cabeça', 'C', 'raro', 'manter', ''],
+  ['in-mirror', 'Espelho', 'cabeça', 'C', 'raro', 'manter', ''],
+  ['in-del', 'Apagar (lixo; Delete também)', 'cabeça', 'C', 'por montagem', 'manter', ''],
+  ['in-knobs', 'Knobs grandes + o movimento de cada um', 'corpo', 'P', 'por montagem', 'manter', ''],
+  ['in-pub', 'Publicar o knob (★ aparece no TOCAR)', 'por knob', 'P', 'por montagem', 'manter', ''],
+  ['in-b', 'Entrada B: fonte crua / quadro anterior / outra', 'corpo', 'C', 'raro', 'manter', 'o jack B também liga'],
+  ['in-more', '“mais”: modo de mistura, lê a crua, só na batida, região (legado)', 'dobrável', 'C', 'raro', 'manter', ''],
+  ['in-estado', 'Estado: limpar, limpa em (evento), semeia em', 'átomo com estado', 'P', 'raro', 'manter', ''],
+  ['in-src', 'Fonte: preencher/caber, auto-nível, som do vídeo, rebate…, máscara', 'corpo', 'C', 'por montagem', 'manter', ''],
+  ['in-mix', 'Mistura/Saída: nome, entradas (olho, modo, ir até), átomos depois, chave “No palco”, telas', 'corpo', 'C', 'por montagem', 'manter', ''],
+  ['in-ctl', 'Controlador: receita, abrir… (modo, forma, evento, fontes, quantidade), knobs que ele move com a faixa de cada um', 'corpo', 'C', 'por montagem', 'manter', ''],
+  ['in-mask', 'Máscara: e/ou, recortar, tirar', 'corpo', 'C', 'raro', 'manter', ''],
+  ['in-cut', 'Ramo / cortar a entrada / ir até', 'corpo (fonte, mistura)', 'C', 'raro', 'manter', ''],
+ ]],
+ ['Socorro (gaveta)', [
+  ['sos-blk', 'BLACKOUT / voltar', 'na hora', 'S', 'raro, vital', 'manter', 'repete o do topo, de propósito'],
+  ['sos-raw', 'IMAGEM CRUA (EFEITOS 0%)', 'na hora', 'S', 'raro', 'manter', ''],
+  ['sos-prev', 'Cena anterior', 'na hora', 'S', 'raro', 'manter', ''],
+  ['sos-undo', 'Desfazer', 'na hora', 'S', 'raro', 'manter', ''],
+  ['sos-freeze', 'CONGELAR MOVIMENTOS', 'na hora', 'S', 'raro', 'manter', ''],
+  ['sos-prob', 'Problemas agora (o que é, por que, o que fazer, botões)', 'meio', 'S', 'quando dá problema', 'manter', ''],
+  ['sos-reload', 'Recarregar listas', 'consertar', 'S', 'raro', 'manter', ''],
+  ['sos-det', 'Detectar telão', 'consertar', 'S', 'raro', 'manter', ''],
+  ['sos-page', 'Recarregar painel', 'consertar', 'S', 'raro', 'manter', ''],
+  ['sos-v3', 'Abrir a v3', 'consertar', 'S', 'quase nunca (painel antigo)', 'tirar', 'é S: só sai se você marcar'],
+ ]],
+ ['Equipamento › Entrada', [
+  ['eq-tabs', 'Abas: Entrada, Saída, Luzes, Biblioteca, Controle', 'topo da gaveta', 'C', 'setup', 'manter', ''],
+  ['au-src', 'Fonte de áudio + recarregar', 'Áudio', 'C', 'setup', 'manter', ''],
+  ['au-flags', '“faixas ativas” e “sobreposição”', 'Áudio', 'C', 'quase nunca', 'mudar', 'pra “Mais ajustes”'],
+  ['au-spec', 'Espectro com faixas arrastáveis', 'Áudio', 'C', 'setup', 'manter', ''],
+  ['au-cols', 'Coluna por faixa (limiar, teto)', 'Áudio', 'C', 'setup', 'manter', 'faders de mesa'],
+  ['au-tempo', 'Tempo e tom: BPM, automático, tom, cor do tom (quintas | Scriabin)', 'Áudio', 'C', 'raro', 'juntar', 'BPM e “automático” já estão no popup Tempo: fica só o tom e a cor'],
+  ['au-chan', 'Canais por instrumento (+ canal)', 'Áudio', 'C', 'raro', 'manter', ''],
+  ['au-more', 'Mais ajustes (knobs que gravam o tuning)', 'Áudio', 'C', 'raro', 'manter', ''],
+  ['im-io', 'Imagem: entrada e saída (analisar ~10×/s)', 'Entrada', 'C', 'raro', 'manter', ''],
+ ]],
+ ['Equipamento › Saída e telas', [
+  ['o-win', 'Janela de saída: monitor, tamanho, = mídia, tela cheia', 'Saída', 'C', 'setup', 'manter', ''],
+  ['o-pin', 'Fixada por cima do PRISMA: onde, tamanho P/M/G', 'Saída', 'C', 'raro', 'manter', ''],
+  ['o-fps', 'Quadros por segundo: número, escolha, gráfico', 'Saída', 'S', 'setup', 'manter', ''],
+  ['o-lim', 'Proteção: anti-estrobo, teto de brilho, ligada', 'Saída', 'S', 'setup', 'manter', ''],
+  ['o-vcam', 'Webcam virtual: ligada, tamanho, fps', 'Saída', 'C', 'raro', 'manter', ''],
+  ['o-grade', 'Calibração do telão: ligada, padrão de teste, zerar, knobs', 'Saída', 'C', 'setup', 'manter', ''],
+  ['t-views', 'Telas do palco: Palco | Pixel map | Saídas no palco', 'Saída', 'C', 'setup', 'manter', 'painéis de LED'],
+  ['t-pm', 'Pixel map ligado + detectar telão', 'Saída', 'C', 'setup', 'manter', ''],
+  ['t-add', 'Adicionar telas', 'Palco', 'C', 'setup', 'manter', ''],
+  ['t-grid', 'Dividir em grade / desenhar bloco', 'Pixel map', 'C', 'setup', 'manter', ''],
+  ['t-outs', 'Saídas no palco: arrastar, 2 cliques = entrar, saída nova, máscara do assunto', 'Saídas no palco', 'C', 'por montagem', 'manter', ''],
+  ['t-sgr', 'Calibração por tela', 'Saída', 'C', 'setup', 'manter', ''],
+ ]],
+ ['Equipamento › Luzes, Biblioteca, Controle', [
+  ['lz-net', 'Luzes · Rede: procurar', 'Luzes', 'C', 'setup', 'manter', ''],
+  ['lz-scan', 'Luzes · Mapear com a câmera (câmera, universos, canais, espera, mapear, usar)', 'Luzes', 'C', 'setup', 'manter', ''],
+  ['lz-map', 'Luzes · Mapa do palco + “luzes seguindo a saída”', 'Luzes', 'P', 'setup', 'manter', ''],
+  ['lz-dev', 'Luzes · Aparelhos (IP, + aparelho, lista)', 'Luzes', 'C', 'setup', 'manter', ''],
+  ['lib-media', 'Biblioteca · Mídia (recarregar, grade, arrastar/escolher arquivo)', 'Biblioteca', 'C', 'por montagem', 'manter', ''],
+  ['lib-frag', 'Biblioteca · Módulos .frag (recarregar, lista, criar)', 'Biblioteca', 'C', 'raro', 'manter', ''],
+  ['lib-grupos', 'Biblioteca · Grupos (peças compostas guardadas)', 'Biblioteca', 'C', 'quase nunca: a v5 trocou grupo por nó/receita', 'tirar', 'confirmar se ainda usa alguma'],
+  ['lib-trans', 'Biblioteca · Transições .glsl (recarregar, padrão, lista, criar)', 'Biblioteca', 'C', 'raro', 'manter', ''],
+  ['ctl-midi', 'Controle · MIDI (aprender, mapa)', 'Controle', 'P', 'setup', 'manter', ''],
+  ['ctl-keys', 'Controle · Teclas (ajuda)', 'Controle', 'C', 'raro', 'manter', ''],
+  ['ctl-rows', 'Controle · “Seleção das fileiras” (o que os números 1–9 escolhem)', 'Controle', 'C', 'quase nunca', 'mudar', 'renomear: “fileira” não existe mais na v5'],
+ ]],
+ ['Teclado (sem botão)', [
+  ['k-all', '1–9 nó (segurar = liga/desliga na saída), setas, Enter, Espaço = GO, Delete, “.”, Ctrl+Z, letras = cenas, + / − zoom, Shift = na hora, F1/F2, Esc, Ctrl+A / Ctrl+D', 'global', 'P', 'o tempo todo', 'manter', ''],
+ ]],
+];
+
+// ---------- monta ----------
+const $ = s => document.querySelector(s), esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const SUGL = { manter: 'manter', juntar: 'juntar', mudar: 'mudar de lugar', gesto: 'virar gesto', tirar: 'tirar' };
+const opts = (id, sec, list, rec) => `<div class="opts">${list.map((o, i) => `<button class="opt${i === rec ? ' rec' : ''}" data-id="${id}" data-sec="${sec}" data-v="${esc(o)}">${esc(o)}</button>`).join('')}</div>`;
+const nota = (id, sec, ph) => `<textarea class="nota" data-id="${id}" data-sec="${sec}" placeholder="${ph || 'comentário'}"></textarea>`;
+$('#plano-list').innerHTML = PLANO.map(([id, a, b, c]) => `<div class="row" data-id="${id}"><div class="what"><b>${esc(b)}</b> <span class="k">← ${esc(a)}</span><div class="map">${esc(c)}</div></div>
+  <div>${opts(id, 'plano', ['ok', 'mudar'], -1)}${nota(id, 'plano')}</div></div>`).join('');
+$('#perg-list').innerHTML = PERG.map(([id, q, os, rec]) => `<div class="row" data-id="${id}"><div class="what">${esc(q)}</div>
+  <div>${opts(id, 'pergunta', os, rec)}${nota(id, 'pergunta')}</div></div>`).join('');
+$('#pele-list').innerHTML = PELE.map(([id, a, b]) => `<div class="row" data-id="${id}"><div class="what"><b>${esc(a)}</b><div class="map">${esc(b)}</div></div>
+  <div>${opts(id, 'pele', ['aprovo', 'não', 'outra ideia'], -1)}${nota(id, 'pele')}</div></div>`).join('');
+const ALLINV = [];
+$('#inv-list').innerHTML = INV.map(([g, items]) => `<h3>${esc(g)}</h3><div class="card">${items.map(([id, el, onde, mot, uso, sug, txt]) => {
+  ALLINV.push({ id, mot, sug, text: (g + ' ' + el + ' ' + onde + ' ' + txt).toLowerCase() });
+  return `<div class="row" data-id="${id}" data-mot="${mot}" data-sug="${sug}"><div class="what"><b>${esc(el)}</b>
+    <div class="sug"><i class="${sug}">${SUGL[sug]}</i>${esc(txt)}</div></div>
+    <div class="meta"><span class="tag ${mot}">${mot === 'x' ? '—' : mot}</span>${esc(onde)}<br><span class="u">${esc(uso)}</span></div>
+    <div>${opts(id, 'inventario', Object.values(SUGL), Object.keys(SUGL).indexOf(sug))}${mot === 'S' ? `<div class="warn" data-w="${id}">S — sai só porque você marcou. Confirme no comentário.</div>` : ''}${nota(id, 'inventario')}</div></div>`; }).join('')}</div>`).join('');
+
+// ---------- estado + db ----------
+const ST = {}, timers = {}, saveEl = $('#save');
+const st = id => ST[id] || (ST[id] = { sel: '', nota: '' });
+let db = null;
+const flag = (t, c) => { saveEl.textContent = t; saveEl.className = 'save ' + (c || ''); };
+function paint(){
+  document.querySelectorAll('.opt[data-id]').forEach(o => { const on = st(o.dataset.id).sel === o.dataset.v; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+  document.querySelectorAll('textarea.nota').forEach(t => { if (document.activeElement !== t) t.value = st(t.dataset.id).nota || ''; });
+  document.querySelectorAll('.warn').forEach(w => w.classList.toggle('on', st(w.dataset.w).sel === 'tirar'));
+  const n = ALLINV.filter(x => st(x.id).sel).length, m = [...PLANO, ...PERG, ...PELE].filter(x => st(x[0]).sel).length;
+  $('#count').textContent = `plano ${m}/${PLANO.length + PERG.length + PELE.length} · inventário ${n}/${ALLINV.length}`;
+  filter();
+}
+const secOf = {}; document.querySelectorAll('[data-sec]').forEach(e => secOf[e.dataset.id] = e.dataset.sec);
+function persist(id){
+  clearTimeout(timers[id]); flag('salvando…');
+  timers[id] = setTimeout(async () => {
+    const d = { id, sec: secOf[id] || '', sel: st(id).sel, nota: st(id).nota, quando: new Date().toISOString() };
+    try { if (db) await db.doc('marcas/' + id).set(d); else localStorage.setItem('prisma-inv', JSON.stringify(ST));
+      flag(db ? 'salvo ✓' : 'salvo só neste navegador', db ? 'ok' : 'err'); }
+    catch (e) { flag('não salvou: ' + (e.message || e), 'err'); } }, 500);
+}
+document.addEventListener('click', e => {
+  const o = e.target.closest('.opt[data-id]');
+  if (o){ const x = st(o.dataset.id); x.sel = x.sel === o.dataset.v ? '' : o.dataset.v; paint(); persist(o.dataset.id); return; }
+  const f = e.target.closest('.opt[data-f]'); if (f){ f.classList.toggle('on'); filter(); }
+});
+document.addEventListener('input', e => { const t = e.target;
+  if (t.classList.contains('nota')){ st(t.dataset.id).nota = t.value; persist(t.dataset.id); }
+  if (t.id === 'q') filter(); });
+function filter(){
+  const q = $('#q').value.trim().toLowerCase(), on = [...document.querySelectorAll('.opt[data-f].on')].map(b => b.dataset.f);
+  const mots = on.filter(f => 'PSC'.includes(f));
+  ALLINV.forEach(x => { const r = document.querySelector(`#inv-list .row[data-id="${x.id}"]`);
+    const ok = (!q || x.text.includes(q)) && (!mots.length || mots.includes(x.mot)) && (!on.includes('muda') || x.sug !== 'manter') && (!on.includes('falta') || !st(x.id).sel);
+    r.classList.toggle('hide', !ok); });
+  document.querySelectorAll('#inv-list .card').forEach(c => { const vis = c.querySelector('.row:not(.hide)'); c.classList.toggle('hide', !vis); c.previousElementSibling.classList.toggle('hide', !vis); });
+}
+try { Object.assign(ST, JSON.parse(localStorage.getItem('prisma-inv') || '{}')); } catch (e) {}
+paint();
+(async () => {
+  const to = setTimeout(() => { if (!db) flag('sem conexão: salva só neste navegador', 'err'); }, 10000);
+  try { db = await window.claude?.use?.('db'); } catch (e) { db = null; }
+  clearTimeout(to);
+  if (!db){ flag('sem conexão: salva só neste navegador', 'err'); return; }
+  db.collection('marcas').onSnapshot(snap => {
+    (snap.docs || snap).forEach(d => { const v = typeof d.data === 'function' ? d.data() : d.data; if (v && v.id) ST[v.id] = { sel: v.sel || '', nota: v.nota || '' }; });
+    paint(); flag('salvo ✓', 'ok'); }, err => flag('erro ao ler: ' + (err.message || err), 'err'));
+})();
+</script>
+</body>
+</html>

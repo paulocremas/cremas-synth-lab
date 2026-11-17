@@ -1092,6 +1092,8 @@ def _norm_layer(L):
         o['blend'] = L['blend']
     if L.get('off'):
         o['off'] = 1
+    if isinstance(L.get('slot'), int) and 0 <= L['slot'] < 32:   # MIXER (mini TV): em qual jack o cabo esta' (0 = o de cima = na frente)
+        o['slot'] = L['slot']
     if isinstance(L.get('mod'), dict):   # so' a opacidade da camada aceita movimento
         m = {'opacity': d for n, v in L['mod'].items() if n == 'opacity' and (d := _norm_mod1(v))}
         if m:
@@ -1123,6 +1125,8 @@ def _norm_node(it):
         pass
     if it.get('fold'):
         o['fold'] = 1
+    if it['kind'] == 'mix' and isinstance(it.get('jacks'), int) and 2 <= it['jacks'] <= 16:   # MIXER de N jacks (versoes 2/4/8)
+        o['jacks'] = it['jacks']
     if it['kind'] == 'out':   # lugar da saida no PALCO (0..1, origem em cima); ausente = o palco inteiro
         r = _norm_rect(it.get('rect'))
         if r:
@@ -3353,6 +3357,9 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert gn[1] == {'kind': 'out', 'id': 'o1', 'nome': 'saída 1', 'xy': [9, 9], 'rect': [0.5, 0, 0.5, 1],
                      'layers': [{'from': '@c1', 'opacity': 0.4, 'blend': 'soma', 'mod': {'opacity': {'b': ['kick']}}}, {'from': '@m1', 'off': 1}]}, gn[1]
     assert [_chkey(o) for o in gn] == ['a.png', '+o1', '+m1'], 'staging/saida = +<id>; id invalido ou repetido sai'
+    mx = _norm_overlays([{'kind': 'mix', 'id': 'm2', 'jacks': 4, 'layers': [{'from': '@c1', 'slot': 2}, {'from': '@c1', 'slot': 'x'}]},
+                         {'kind': 'mix', 'id': 'm3', 'jacks': 99}, {'kind': 'out', 'id': 'o2', 'jacks': 4}])
+    assert mx[0]['jacks'] == 4 and mx[0]['layers'] == [{'from': '@c1', 'slot': 2}, {'from': '@c1'}] and 'jacks' not in mx[1] and 'jacks' not in mx[2], mx
     assert _norm_overlays([{'file': 'M.frag', 'id': 'h2', 'espelho': 'h1'}], dedupe=False)[0]['espelho'] == 'h1'
     mb = _norm_bindings({'cam': {'shaders': [], 'matte': {'items': [{'file': 'presets/atomos/Assunto.frag', 'fx': {'limiar': 0.4}}],
                                                          'op': 'ou', 'cut': 1}},

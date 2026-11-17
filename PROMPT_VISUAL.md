@@ -1,3 +1,5 @@
+> **SUPERADO (2026-11-17)** pelo [PROMPT_ESTETICA.md](PROMPT_ESTETICA.md): a estética aprovada é a mini TV (`design/mini-tv.html`).
+
 # Prompt — PRISMA: o canvas com cara de módulos de synth (estilo VCV) — cole num chat novo, na pasta do repo
 
 Você vai revisar a ESTÉTICA do dash v5 (`dash5.html`) pra cada nó do canvas parecer um **módulo de sintetizador**

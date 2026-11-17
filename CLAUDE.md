@@ -118,10 +118,22 @@ Cada ferramenta isolada, depois comparar, só então compor.
   (`mod[knob].id`), extras em `mod[knob].mais` (somam: `_mod_total`; `forEachMod`/`dropMod` tratam igual). `syncCtls` cria
   um controlador por movimento e NUNCA apaga. Trocar o átomo (`swapAtom`) desfaz as ligações, os controladores ficam soltos.
 - **dash5** (`/v5`, o que o app abre; decisões no topo do `dash5.html`): TOCAR | MONTAR (`mode` 'show'|'montar', `setMode`).
-  Nó = card com knobs em coluna (`nodeKnobs`, jack `.kj`); `normalizeNodes`/`graphFix` mantêm 1 átomo por nó; `topoOrder`.
-  MONTAR: canvas inteiro; Cenas pelo `#cn-btn` (`body.cn-open`), PROGRAMA = janelinha `#pvw`, inspetor `#insp` (`placeInsp`)
+  Nó = MINI TV (`.bx.tv`, mockup `design/mini-tv.html`): gabinete = família (`fam-<cat>`, `tvSkin`), tela `.win>.crt>canvas.lv` na proporção
+  do PALCO (`tvAR`), IN/B/MÁSC à esquerda, OUT à direita, fader de opacidade (`tvConn`), knobs no pé (`nodeKnobs` 'row', `.kb` girado por
+  `--ka`) com o CV `.kj` saindo por BAIXO; altura = `tvH` (= `boxH`, vai como height). Fonte/mistura/saída = prata; controlador = osciloscópio
+  (`SCOPE`) + faixa de/até (`ctlRange`), nasce EMBAIXO (`ctlSpot`), jack no meio do topo. Jack VISTO DE CIMA; cabo como o VCV (`cableD`,
+  plugue `.pg`) POR CIMA dos nós, clique no `#cv-hits` por baixo; clique na saída PEGA o cabo, Shift = novo. Cor do cabo = aleatória por cabo (`cableColor`). MIXER = `kind: 'mix'` com `jacks` (2/4/8),
+  camada no jack (`slot`; jack de cima = frente); SAÍDA = UMA entrada (saída antiga com várias vira mixer: `outOneInput`). Enter (MONTAR) = a lista de
+  módulos onde está o mouse. Próximo passo: `PROMPT_VCV_LAYOUT.md` (distribuição estilo VCV + módulos "filho"). Prévia: `liveCv` (o mesmo
+  canvas entre renders, só as visíveis); prévia do nó SAÍDA = ela sozinha (native `mix_node`).
+  Tema (botão "visual"): `body.cel` | foto + `body.leve`, em `localStorage v5tema`; texturas = PNG uma vez (`texturas()` → `--t-*`).
+  Rolar a vista NÃO refaz fios. Pictograma `i-at-<Nome>` (`atomIcon`; átomo novo = desenhar o símbolo, o teste `cards` acusa);
+  `normalizeNodes`/`graphFix` mantêm 1 átomo por nó; `topoOrder`.
+  Escolher ≠ abrir (painel = direito parado ou 2 cliques, contados em `lastTap`); o ACESO é o que o Delete apaga; Esc/vazio = nada;
+  Ctrl+A/Ctrl+D. Saídas = telas do palco (`screenOuts`, uma por tela). Pele do resto (barra, PROGRAMA, inspetor, cenas…) e revisão de
+  botões: `PROMPT_ESTETICA.md` passos 4–5, marcas no artefato "PRISMA — plano da mini TV + inventário" (db `marcas`). MONTAR: canvas inteiro; Cenas pelo `#cn-btn` (`body.cn-open`), PROGRAMA = janelinha `#pvw`, inspetor `#insp` (`placeInsp`)
   — os dois fecham com clique fora. Biblioteca = RODA (2 cliques no vazio: `openWheel` → `floatList`; `looseNode`/`insertOnWire`).
-  Clicar no nome = trocar (`nameEl`). Ctrl+arrastar = `dupNode` sem fios (nó ou seleção; Alt também, mas no
+  Clicar no nome só ESCOLHE (`nameEl`); trocar = ↻ (aparece no mouse). Ctrl+arrastar = `dupNode` sem fios (nó ou seleção; Alt também, mas no
   Linux o Cinnamon pega o Alt). Fio escolhido (`selWire`) solta com qualquer clique fora dele. Navegar: roda = zoom, meio/direito = vista, esquerdo no vazio = seleção (`msel`); à esquerda/em
   cima sem limite (`cvShift`, também no `edgeTrack(…, grow)`). Arrasto = `follow()`/`swallowClick()` (o click sintético logo
   após um arrasto é engolido — em teste, chamar o handler). Knob = `dragCtl` relativo + arrasto infinito (`POST /warp` →
@@ -148,7 +160,9 @@ Cada ferramenta isolada, depois comparar, só então compor.
 ## Testes
 `.venv/bin/python src/dash_server.py` e `.venv/bin/python src/native_synth.py --selfcheck` (+ `src/plat.py`,
 `src/dash_data.py`, `src/telao_sim.py --selfcheck`, `packaging/updater.py`, `packaging/check_imports.py` — o CI roda
-todos; `src/matriz.py [pasta]` sozinho = a matriz + PNG por átomo). Build local fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning.py`
+todos; `src/matriz.py [pasta]` sozinho = a matriz + PNG por átomo). GESTOS do dash5: `tests/dash_gestos.py [palavra]` (dash real
+em Chromium/Brave headless via CDP, mouse de verdade, tuning temporário na porta 8799, cena fixa própria) — todo bug de
+usabilidade vira um teste aqui; rodar antes de entregar mudança no dash5. Build local fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning.py`
 temporário (`tuning_path`). Rodar o native do repo migra/auto-salva o `src/tuning.py` do repo; porta 8765 pode
 estar com o prisma aberto; simulador aberto = telão virtual anunciado (teste que lê saídas isola o
 `VIRTUAL_OUTPUTS`). Arrastar/clicar no dash do app aberto GRAVA no `tuning.py` vivo — backup antes.
