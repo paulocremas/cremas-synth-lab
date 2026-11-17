@@ -3291,7 +3291,14 @@ function removeMsel(){   // Delete com varios selecionados: tira todos (as corre
 }
 let cvView = [0, 0];
 new ResizeObserver(() => { cvView = [CV.clientWidth, CV.clientHeight]; drawBoxWires(); }).observe(CV);
-CV.addEventListener('click', e => { if (e.target === CV || e.target === CVI || e.target === WIRES){ if (selWire){ selWire = null; cvSig = ''; renderBoxes(); } } });
+// FIO ESCOLHIDO: QUALQUER clique esquerdo fora dele (vazio, no', painel) solta a escolha. Antes so' o clique no vazio exato do
+// canvas soltava — e o esquerdo no vazio virou retangulo de selecao, entao o fio ficava escolhido "pra sempre". O fio e' redesenhado
+// na hora; o resto (renderBoxes) so' depois de soltar, pra nao recriar o no' no meio de um arrasto.
+window.addEventListener('pointerdown', e => {
+  if (!selWire || e.button !== 0 || !(e.target instanceof Element) || e.target.closest('path.hit')) return;
+  selWire = null; drawBoxWires();
+  window.addEventListener('pointerup', () => setTimeout(() => { if (!boxDrag && !drag){ cvSig = ''; renderBoxes(); } }, 0), { capture: true, once: true });
+}, true);
 
 // ---------- ARRASTO: seguir o ponteiro ate' soltar ----------
 // Um jeito so' pra todo arrasto do canvas: solta tambem com pointercancel (touchpad/toque/gesto do sistema), com a

@@ -121,8 +121,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
   Nó = card com knobs em coluna (`nodeKnobs`, jack `.kj`); `normalizeNodes`/`graphFix` mantêm 1 átomo por nó; `topoOrder`.
   MONTAR: canvas inteiro; Cenas pelo `#cn-btn` (`body.cn-open`), PROGRAMA = janelinha `#pvw`, inspetor `#insp` (`placeInsp`)
   — os dois fecham com clique fora. Biblioteca = RODA (2 cliques no vazio: `openWheel` → `floatList`; `looseNode`/`insertOnWire`).
-  Clicar no nome = trocar (`nameEl`). Alt/Ctrl+arrastar = `dupNode` sem fios (nó ou seleção; no Cinnamon o Alt é do WM:
-  `mouse-button-modifier`). Navegar: roda = zoom, meio/direito = vista, esquerdo no vazio = seleção (`msel`); à esquerda/em
+  Clicar no nome = trocar (`nameEl`). Ctrl+arrastar = `dupNode` sem fios (nó ou seleção; Alt também, mas no
+  Linux o Cinnamon pega o Alt). Fio escolhido (`selWire`) solta com qualquer clique fora dele. Navegar: roda = zoom, meio/direito = vista, esquerdo no vazio = seleção (`msel`); à esquerda/em
   cima sem limite (`cvShift`, também no `edgeTrack(…, grow)`). Arrasto = `follow()`/`swallowClick()` (o click sintético logo
   após um arrasto é engolido — em teste, chamar o handler). Knob = `dragCtl` relativo + arrasto infinito (`POST /warp` →
   `plat.warp_pointer`); segurando knob, `renderCtl`/`renderBoxes` esperam. `plug`/`unplug` = fios (`connect()` é o SSE!).
