@@ -480,26 +480,33 @@ def screen_input_args(r):
 
 
 _VAAPI = ['-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi']
-_hw_ok = {}   # arquivo -> a GPU decodificou 1 frame dele (testa 1x por arquivo)
+_HWAUTO = ['-hwaccel', 'auto']
+_hw_ok = {}   # (arquivo, modo) -> a GPU decodificou 1 frame dele (testa 1x por arquivo)
+
+
+def _hw_probe(path, args, vf):
+    k = (path, args[1])
+    if k not in _hw_ok:
+        try:
+            _hw_ok[k] = subprocess.run(
+                ['ffmpeg', '-loglevel', 'error', *args, '-i', path, '-frames:v', '1', *(['-vf', vf] if vf else []),
+                 '-f', 'null', '-'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            _hw_ok[k] = False
+    return _hw_ok[k]
 
 
 def hw_decode(path, vf):
-    """(args de ENTRADA, -vf) pra decodificar um VIDEO na GPU: Linux com VAAPI = decode e
-    escala la, so' o frame ja pequeno volta pra CPU (1080p60 em software come ~2.5 nucleos).
-    Testa 1 frame do arquivo antes (codec que a GPU nao tem = erro); falhou = ([], vf) igual
-    antes. ponytail: Windows fica no software — d3d11va quando alguem medir la."""
+    """(args de ENTRADA, -vf) pra decodificar um VIDEO na GPU. 1o: VAAPI (Linux Intel/AMD) = decode E escala
+    la, so' o frame ja pequeno volta. 2o: `-hwaccel auto` (NVIDIA = cuda/vdpau, Windows = d3d11va/dxva2,
+    Mac = videotoolbox) = so' o decode na GPU, a escala segue na CPU — 1080p60 h264 numa RTX 3060: ~4x menos
+    CPU que o software. Testa 1 frame do arquivo antes (codec que a GPU nao tem = erro); falhou = ([], vf)."""
     head, _, rest = vf.partition(',')
-    if IS_WIN or not head.startswith('scale=') or not os.path.exists('/dev/dri/renderD128'):
-        return [], vf
-    gvf = f'scale_vaapi={head[6:]},hwdownload,format=nv12' + (',' + rest if rest else '')
-    if path not in _hw_ok:
-        try:
-            _hw_ok[path] = subprocess.run(
-                ['ffmpeg', '-loglevel', 'error', *_VAAPI, '-i', path, '-frames:v', '1', '-vf', gvf, '-f', 'null', '-'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
-            _hw_ok[path] = False
-    return (_VAAPI, gvf) if _hw_ok[path] else ([], vf)
+    if not IS_WIN and head.startswith('scale=') and os.path.exists('/dev/dri/renderD128'):
+        gvf = f'scale_vaapi={head[6:]},hwdownload,format=nv12' + (',' + rest if rest else '')
+        if _hw_probe(path, _VAAPI, gvf):
+            return _VAAPI, gvf
+    return (_HWAUTO, vf) if _hw_probe(path, _HWAUTO, None) else ([], vf)
 
 
 # ---------------------------------------------------------------- audio (Windows: WASAPI)

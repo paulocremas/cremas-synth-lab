@@ -1130,7 +1130,11 @@ def _spawn_ffmpeg(v):
         vf = _fit_vf(v.get('fit', 'fill'), *(_probe_dims(v['path']) or (0, 0)))
         if v.get('media_kind') == 'video':  # loop infinito, em tempo real
             src = _bounce_source(v['path']) if v.get('bounce') else v['path']
-            hw, vf = plat.hw_decode(src, vf)   # GPU decodifica + escala quando da
+            hw, vf = plat.hw_decode(src, vf)   # GPU decodifica (+ escala, com VAAPI) quando da
+            if vf.startswith('scale='):        # escala na CPU: 'area' = media de caixa (reduz sem serrilhar, mais barata que o bicubico)
+                head, _, rest = vf.partition(',')
+                vf = head + ':flags=area' + (',' + rest if rest else '')
+            vf = 'fps=30,' + vf                # 30 fps ANTES de escalar: video de 60 escalava o dobro e o -r jogava metade fora
             cmd = ['ffmpeg', '-loglevel', 'error', *_FAST_IN, '-stream_loop', '-1', '-re', *hw,
                    '-i', src, '-map', '0:v:0', '-vf', vf, '-r', '30', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']
             if v.get('audio') and plat.IS_WIN:   # sem pass_fds no Windows: 2o ffmpeg so' pro audio
@@ -1658,6 +1662,7 @@ def _preview_frame(which, key='', max_w=320):
         a = (s[..., None] * np.array([228, 108, 255])).astype(np.uint8)
         return np.ascontiguousarray(a).tobytes(), SUBJECT_DET, SUBJECT_DET
     if which == 'comp':                        # mistura crua das fontes NO AR (so' opacidade/alpha, sem efeitos)
+        state['comp_want'] = time.time()       # painel Imagem aberto: a analise completa da entrada roda
         f = state.get('frame_comp')
         if f is None:
             f = state.get('frame')
@@ -2005,11 +2010,11 @@ def frame_downsample(frame, w, h, max_side=96):
     histograma, brilho medio...) que nao precisa de resolucao cheia. None se o frame ainda
     nao bate com w*h (acontece bem no instante de um resize/troca de fonte de video)."""
     try:
-        arr = frame.reshape(h, w, 3).astype(np.float32)
+        arr = frame.reshape(h, w, 3)
     except ValueError:
         return None
     stride = max(1, max(w, h) // max_side)
-    return arr[::stride, ::stride]
+    return arr[::stride, ::stride].astype(np.float32)   # pula pixel ANTES de converter (o frame cheio em float = 15/16 jogado fora)
 
 
 def frame_color_spectrum(frame, w, h, bars=20, max_side=96):
@@ -2038,15 +2043,17 @@ def frame_color_spectrum(frame, w, h, bars=20, max_side=96):
         r = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
         max_r = min(cx, cy)
         edges = np.linspace(1.0, max_r, bars + 1)  # comeca em 1 (pula o DC em r=0)
-        masks = [(r >= edges[i]) & (r < edges[i + 1]) for i in range(bars)]
-        _RADIAL_MASK_CACHE[key] = (edges, masks)
-    edges, masks = _RADIAL_MASK_CACHE[key]
+        # anel de cada pixel (bars = fora de todos) -> um bincount por canal no lugar de 20 mascaras
+        ring = np.where((r >= edges[0]) & (r < edges[-1]), np.searchsorted(edges, r, side='right') - 1, bars).ravel()
+        cnt = np.bincount(ring, minlength=bars + 1)[:bars].astype(np.float64)
+        _RADIAL_MASK_CACHE[key] = (edges, ring, cnt)
+    edges, ring, cnt = _RADIAL_MASK_CACHE[key]
 
+    spec = np.abs(np.fft.fftshift(np.fft.fft2(arr, axes=(0, 1)), axes=(0, 1)))   # os 3 canais numa FFT so'
     mags = np.zeros((3, bars))
     for c in range(3):
-        spec = np.abs(np.fft.fftshift(np.fft.fft2(arr[:, :, c])))
-        for i, m in enumerate(masks):
-            mags[c, i] = spec[m].mean() if m.any() else 0.0
+        sm = np.bincount(ring, weights=spec[:, :, c].ravel(), minlength=bars + 1)[:bars]
+        mags[c] = np.divide(sm, cnt, out=np.zeros(bars), where=cnt > 0)
 
     peak_db = 20 * np.log10(mags.max() + 1e-6)
     db = 20 * np.log10(mags + 1e-6)
@@ -2102,7 +2109,9 @@ def brightness_entropy(val, bins=32):
     brilho espalhado por todas as faixas por igual (o mais "cheio de informacao" possivel).
     Diferente de nitidez: uma imagem borrada mas com MUITOS tons de cinza ainda tem entropia
     alta — sao medidas de coisas diferentes (foco vs. variedade tonal)."""
-    counts, _ = np.histogram(val.ravel(), bins=bins, range=(0.0, 1.0))
+    v = val.ravel()
+    v = v[(v >= 0.0) & (v <= 1.0)]                    # = o range do np.histogram (1.0 cai no ultimo)
+    counts = np.bincount(np.minimum((v * bins).astype(np.int64), bins - 1), minlength=bins)
     total = counts.sum()
     if total == 0:
         return 0.0
@@ -2126,7 +2135,7 @@ def unique_colors(arr):
     `dominant_color`) — mede complexidade da paleta sem precisar de k-means."""
     quant = arr.astype(np.uint32) >> 3
     packed = (quant[..., 0] << 10) | (quant[..., 1] << 5) | quant[..., 2]
-    return int(np.unique(packed).size)
+    return int(np.count_nonzero(np.bincount(packed.ravel(), minlength=1 << 15)))
 
 
 def hue_range_fraction(hue, sat, lo_deg=0.0, hi_deg=50.0, sat_min=0.15):
@@ -2154,6 +2163,36 @@ def cell_reduce(fn, h, w, grid=3):
     return out
 
 
+def _grid(name, cells, bipolar=False):
+    total = (float(np.clip(cells.mean(), -1.0, 1.0)) if bipolar
+             else float(np.clip(np.abs(cells).mean(), 0.0, 1.0)))
+    return {'name': name, 'bipolar': bipolar, 'total': round(total, 3),
+            'cells': [[round(float(v), 3) for v in row] for row in cells]}
+
+
+def _light_cells(val, peaks, prev_val, grid=3):
+    """BRILHO e MOVIMENTO por celula (os dois que movem knob: dash_data.img_mod_levels). Anda o estado
+    do movimento (pico + frame anterior) — a analise completa e a leve passam por aqui, igual."""
+    vh, vw = val.shape
+    prev = prev_val[0] if prev_val[0] is not None and prev_val[0].shape == val.shape else None
+    motion_raw = float(np.abs(val - prev).mean()) if prev is not None else 0.0
+    peaks['motion'] = max(motion_raw, peaks['motion'] * tuning.PEAK_DECAY, 1e-6)
+    prev_val[0] = val
+    brilho = cell_reduce(lambda y0, y1, x0, x1: val[y0:y1, x0:x1].mean(), vh, vw, grid)
+    if prev is None:
+        return brilho, np.zeros((grid, grid))
+    return brilho, np.minimum(1.0, cell_reduce(lambda y0, y1, x0, x1: float(np.abs(
+        val[y0:y1, x0:x1] - prev[y0:y1, x0:x1]).mean()), vh, vw, grid) / peaks['motion'])
+
+
+def image_levels_lite(arr, peaks, prev_val, grid=3):
+    """So' o que a IMAGEM manda pros knobs (luz/mov) — o painel Imagem fechado nao paga FFT, histogramas,
+    nitidez/entropia por celula etc. (era ~14x/s no audio e 10x/s DENTRO do loop de render, a da saida)."""
+    val = arr.max(axis=2) / 255.0                     # = o V do rgb_to_hsv_np
+    brilho, motion_c = _light_cells(val, peaks, prev_val, grid)
+    return {'grids': [_grid('BRILHO', brilho), _grid('MOVIMENTO', motion_c)], 'lite': 1}
+
+
 def image_dash_data(arr, hue, sat, val, gx, gy, frame, w, h, dominant, peaks, prev_val, prev_mean, grid=3):
     """Fonte unica de verdade do dash de imagem: dict de numeros (resumo escalar + grid 3x3
     por metrica + 4 histogramas). `peaks` (auto-gain), `prev_val` e `prev_mean` (deltas de
@@ -2165,11 +2204,7 @@ def image_dash_data(arr, hue, sat, val, gx, gy, frame, w, h, dominant, peaks, pr
 
     peaks['sharpness'] = max(laplacian_variance(val), peaks['sharpness'] * tuning.PEAK_DECAY, 1e-6)
     peaks['edge'] = max(float(np.sqrt(gx ** 2 + gy ** 2).mean()), peaks['edge'] * tuning.PEAK_DECAY, 1e-6)
-    motion_raw = (float(np.abs(val - prev_val[0]).mean())
-                  if prev_val[0] is not None and prev_val[0].shape == val.shape else 0.0)
-    peaks['motion'] = max(motion_raw, peaks['motion'] * tuning.PEAK_DECAY, 1e-6)
-    prev_before = prev_val[0]
-    prev_val[0] = val
+    brilho, motion_c = _light_cells(val, peaks, prev_val, grid)
 
     over = float((val > 0.95).mean())
     under = float((val < 0.05).mean())
@@ -2198,7 +2233,6 @@ def image_dash_data(arr, hue, sat, val, gx, gy, frame, w, h, dominant, peaks, pr
     # --- grids 3x3 por metrica (brilho/saturacao/temp/contraste/nitidez/entropia/bordas/movimento) ---
     vh, vw = val.shape
     gh, gw = gx.shape
-    brilho = cell_reduce(lambda y0, y1, x0, x1: val[y0:y1, x0:x1].mean(), vh, vw, grid)
     sat_c = cell_reduce(lambda y0, y1, x0, x1: sat[y0:y1, x0:x1].mean(), vh, vw, grid)
     temp_c = cell_reduce(lambda y0, y1, x0, x1: (arr[y0:y1, x0:x1, 0].mean()
                                                   - arr[y0:y1, x0:x1, 2].mean()) / 255.0, vh, vw, grid)
@@ -2208,18 +2242,6 @@ def image_dash_data(arr, hue, sat, val, gx, gy, frame, w, h, dominant, peaks, pr
     entropy_c = cell_reduce(lambda y0, y1, x0, x1: brightness_entropy(val[y0:y1, x0:x1]), vh, vw, grid)
     edge_c = np.minimum(1.0, cell_reduce(lambda y0, y1, x0, x1: np.sqrt(
         gx[y0:y1, x0:x1] ** 2 + gy[y0:y1, x0:x1] ** 2).mean(), gh, gw, grid) / peaks['edge'])
-    if prev_before is not None and prev_before.shape == val.shape:
-        motion_c = np.minimum(1.0, cell_reduce(lambda y0, y1, x0, x1: float(np.abs(
-            val[y0:y1, x0:x1] - prev_before[y0:y1, x0:x1]).mean()), vh, vw, grid) / peaks['motion'])
-    else:
-        motion_c = np.zeros((grid, grid))
-
-    def _grid(name, cells, bipolar=False):
-        total = (float(np.clip(cells.mean(), -1.0, 1.0)) if bipolar
-                 else float(np.clip(np.abs(cells).mean(), 0.0, 1.0)))
-        return {'name': name, 'bipolar': bipolar, 'total': round(total, 3),
-                'cells': [[round(float(v), 3) for v in row] for row in cells]}
-
     grids = [_grid('BRILHO', brilho), _grid('SATURAÇÃO', sat_c), _grid('TEMP.', temp_c, True),
              _grid('CONTRASTE', contrast_c), _grid('NITIDEZ', sharp_c), _grid('ENTROPIA', entropy_c),
              _grid('BORDAS', edge_c), _grid('MOVIMENTO', motion_c)]
@@ -2782,13 +2804,16 @@ def audio_thread(device):
 
                 arr_s = frame_downsample(state.get('frame_comp', state['frame']), WIDTH, HEIGHT) \
                     if monitor_frame[0] % DASH_EVERY_N_CHUNKS == 0 else None
-                if arr_s is not None:
+                if arr_s is not None and time.time() - state.get('comp_want', 0) >= 1.5:
+                    state['image'] = image_levels_lite(arr_s, html_img['peaks'], html_img['prev_val'])
+                elif arr_s is not None:
                     hue_s, sat_s, val_s = rgb_to_hsv_np(arr_s)
                     gx_s, gy_s = gradient(val_s)
                     state['image'] = image_dash_data(arr_s, hue_s, sat_s, val_s, gx_s, gy_s,
                                                      state.get('frame_comp', state['frame']), WIDTH, HEIGHT, state['dominant'],
                                                      html_img['peaks'], html_img['prev_val'],
                                                      html_img['prev_mean'])
+                if arr_s is not None:
                     for k_, v_ in dash_data.img_mod_levels(state['image']).items():   # knob modulado pela IMAGEM
                         state[k_] = state.get(k_, 0.0) * 0.5 + v_ * 0.5          # ponytail: ~14 Hz, meia suavizacao
     finally:
@@ -2847,10 +2872,11 @@ def dominant_color(frame, w, h):
     """Cor mais frequente do frame — quantiza cada canal pra 32 niveis (5 bits) e conta
     qual combinacao aparece mais. Rapido: e so um unique/count num array de inteiros."""
     arr = frame.reshape(h, w, 3)
+    if max(w, h) > 160:                   # moda de cor: 1 pixel em 4x4 da' a mesma resposta, 16x menos conta
+        arr = arr[::4, ::4]
     quant = (arr >> 3).astype(np.uint32)  # 0..255 -> 0..31 por canal
     packed = (quant[..., 0] << 10) | (quant[..., 1] << 5) | quant[..., 2]
-    vals, counts = np.unique(packed, return_counts=True)
-    top = int(vals[np.argmax(counts)])
+    top = int(np.argmax(np.bincount(packed.ravel(), minlength=1 << 15)))   # bincount: O(n), sem ordenar
     r = ((top >> 10) & 31) << 3
     g = ((top >> 5) & 31) << 3
     b = (top & 31) << 3
@@ -3873,6 +3899,28 @@ def main():
     # em cima da mesma leitura. Tudo por TEMPO (o fps da saida muda ao vivo, tuning.OUTPUT_FPS).
     CV_PV_MAX = 480       # previa do canvas: o lado maior (canvas do palco costuma ser bem largo)
     OUT_ANALYSIS_HZ = 10
+    out_an_q = {'job': None, 'ev': threading.Event()}
+
+    def out_analysis_thread():
+        while running:
+            if not out_an_q['ev'].wait(0.5):
+                continue
+            out_an_q['ev'].clear()
+            job, out_an_q['job'] = out_an_q['job'], None
+            if job is None:
+                continue
+            small_, sw_, sh_ = job
+            out_frame = small_.reshape(-1)
+            arr_s = frame_downsample(out_frame, sw_, sh_)
+            if arr_s is None:
+                continue
+            hue_s, sat_s, val_s = rgb_to_hsv_np(arr_s)
+            gx_s, gy_s = gradient(val_s)
+            out_dom = dominant_color(arr_s.astype(np.uint8), arr_s.shape[1], arr_s.shape[0])
+            state['out_image'] = image_dash_data(arr_s, hue_s, sat_s, val_s, gx_s, gy_s, out_frame, sw_, sh_, out_dom,
+                                                 out_img['peaks'], out_img['prev_val'], out_img['prev_mean'])
+
+    threading.Thread(target=out_analysis_thread, daemon=True, name='out_analysis').start()
     OUT_PREVIEW_HZ = 15
     OUT_PV_W = int(os.environ.get('PRISMA_PV_W') or 320)   # testes: prints maiores do /frame?which=out
     out_an_t = [0.0]
@@ -3945,6 +3993,8 @@ def main():
     src_tex = {}          # chave do canal -> [textura, frame subido]
     subj_tex = {}         # fonte base -> [textura, mascara subida] (subject_thread)
     comp_last = [None, None]   # [assinatura das fontes da mistura na CPU, frame_in]
+    pace_t = [time.perf_counter()]   # prazo do ultimo quadro (ritmo da saida, fim do loop)
+    comp_t = [0.0]             # quando a mistura da CPU foi refeita (sem a sim: no maximo 15x/s)
     out_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
                'prev_val': [None], 'prev_mean': [None]}
     esc_t = []   # instantes dos ultimos Esc: 3 em ESC_QUIT_S fecha o app (no dash: POST /quit)
@@ -4043,16 +4093,21 @@ def main():
         prev_sig = comp_last[0]
         comp_changed = prev_sig is None or len(prev_sig) != len(comp_sig) or any(
             x[0] != y[0] or x[1] != y[1] or x[2] is not y[2] or x[3] is not y[3] for x, y in zip(prev_sig, comp_sig))
-        if comp_changed:
-            frame_in = _composite(src_frames)
-            comp_last[0], comp_last[1] = comp_sig, frame_in
-        else:
-            frame_in = comp_last[1]
-        state['frame_comp'] = frame_in
         # SIM DE FLUIDO + FUMACA so' com algum shader no ar que le u_texture_smoke/_fumaca (sim_want,
         # visto no frame anterior): sao ~27 passes + 1 na resolucao do conteudo por frame. Parada, a
         # sim congela onde estava; `tex`/`tex_prev` re-sobem quando ela volta (tex_fresh).
         run_sim, sim_want[0] = sim_want[0], False
+        # sem a sim, quem le a mistura da CPU (analise, cor dominante, previa 'comp') anda a <=14 Hz: refazer
+        # a cada frame novo (2 videos a 30 fps fora de fase = ate' 60x/s, uint16 640x480) era CPU no loop GL.
+        # Adiada = comp_last fica velho -> o proximo frame ainda ve "mudou" e refaz.
+        comp_due = run_sim or comp_last[0] is None or time.perf_counter() - comp_t[0] >= 1.0 / 15
+        if comp_changed and comp_due:
+            frame_in = _composite(src_frames)
+            comp_last[0], comp_last[1] = comp_sig, frame_in
+            comp_t[0] = time.perf_counter()
+        else:
+            frame_in = comp_last[1]
+        state['frame_comp'] = frame_in
         if not run_sim and comp_changed:
             tex_fresh[0] = False
         if run_sim:
@@ -5131,18 +5186,12 @@ def main():
                 small = np.ascontiguousarray(small)
                 sh_, sw_ = small.shape[:2]
                 state['out_small'] = (small.tobytes(), sw_, sh_)
-            if small is not None and tuning.OUT_ANALYSIS_ENABLED and t_pv - out_an_t[0] >= 1.0 / OUT_ANALYSIS_HZ:
+            # analise da SAIDA (painel Imagem aberto + "analisar" ligado): numa thread — no loop GL era
+            # mais da metade do tempo de CPU dele (FFT, histogramas...) e roubava quadro
+            if small is not None and want_pv and tuning.OUT_ANALYSIS_ENABLED and t_pv - out_an_t[0] >= 1.0 / OUT_ANALYSIS_HZ:
                 out_an_t[0] = t_pv
-                out_frame = small.reshape(-1)
-                arr_s = frame_downsample(out_frame, sw_, sh_)
-                if arr_s is not None:
-                    hue_s, sat_s, val_s = rgb_to_hsv_np(arr_s)
-                    gx_s, gy_s = gradient(val_s)
-                    out_dom = dominant_color(arr_s.astype(np.uint8), arr_s.shape[1], arr_s.shape[0])
-                    state['out_image'] = image_dash_data(arr_s, hue_s, sat_s, val_s, gx_s, gy_s,
-                                                          out_frame, sw_, sh_, out_dom,
-                                                          out_img['peaks'], out_img['prev_val'],
-                                                          out_img['prev_mean'])
+                out_an_q['job'] = (small, sw_, sh_)
+                out_an_q['ev'].set()
 
         def read_canvas():
             """liga o READ framebuffer no CANVAS pronto (o palco, sem o raster) e devolve a regiao (x0, y0,
@@ -5319,7 +5368,20 @@ def main():
             fps_t = max(10, min(240, int(getattr(tuning, 'OUTPUT_FPS', 60) or 60)))
         except (TypeError, ValueError):
             fps_t = 60
-        clock.tick(fps_t)
+        # RITMO com prazo absoluto: o clock.tick do pygame conta em ms inteiros (16 em vez de 16,67 -> ~62 fps num
+        # monitor de 60 = um tranco a cada meio segundo). Dorme ate' perto do prazo e fecha o ultimo pedaco no relogio
+        # (o sleep do SO erra uns 0,1-1 ms). Atrasou mais de 1 quadro = recomeca daqui (sem rajada pra "recuperar").
+        per = 1.0 / fps_t
+        nxt = pace_t[0] + per
+        t_now = time.perf_counter()
+        if nxt < t_now - per:
+            nxt = t_now
+        if nxt - t_now > 0.0012:
+            time.sleep(nxt - t_now - 0.0008)
+        while time.perf_counter() < nxt:
+            pass
+        pace_t[0] = nxt
+        clock.tick()                            # so' registra (get_fps); sem limite aqui
         frame_n += 1
         if frame_n % 15 == 0:
             state['output']['fps'] = round(clock.get_fps(), 1)

@@ -2433,7 +2433,7 @@ def _payload():
     return {
         'audio': _state.get('audio_dash', {}),   # kick / bands / spectrum — ver dash_data.audio_dash_data
         'image': _state.get('image', {}),
-        'out_image': _state.get('out_image', {}),
+        'out_image': _state.get('out_image', {}) if time.time() - _state.get('out_want', 0) < 1.5 else {},   # so' com o painel na tela (4 KB a 30/s)
         'out_analysis_enabled': int(getattr(_tuning, 'OUT_ANALYSIS_ENABLED', 0)),
         'output_grade': _current_output_grade(),   # calibracao da saida (knobs em /output-grade)
         'scene_grade': _current_scene_grade(),     # imagem da cena ativa (knobs no Palco, /scene-grade)
@@ -2443,6 +2443,7 @@ def _payload():
         'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3), phrase=round(_state.get('phrase', 0.0), 3)),
         'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)
         'mv': {k: round(v, 3) for k, v in list((_state.get('mv') or {}).items())},   # sinal VIVO de cada movimento (id)
+        'mv_t': round(time.monotonic() * 1000, 1),   # QUANDO o sinal foi lido (ms): o osciloscopio do dash espaca pelo servidor, nao pela chegada (rajadas)
         'mv_freeze': int(_state.get('mv_freeze') or 0),
         'grid': [{k: g.get(k) for k in ('op', 'key', 'j', 'off', 'name', 'unit')} for g in list(_state.get('grid_q') or [])],
         'cue': _state.get('scene_cue') or '',                         # PROXIMA cena (preview/GO)
@@ -2531,7 +2532,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, 'text/html; charset=utf-8', open(_HTML3, 'rb').read())
         elif path in ('/v4', '/dash4.html'):
             self._send(200, 'text/html; charset=utf-8', open(_HTML4, 'rb').read())
-        elif path in ('/v5', '/dash5.html'):
+        elif path in ('/v5', '/dash5.html', '/v6'):   # /v6 = o mesmo dash5 com o canvas dos modulos como jogo (prova)
             self._send(200, 'text/html; charset=utf-8', open(_HTML5, 'rb').read())
         elif path == '/groups':   # atomos compostos (dash v4)
             self._send(200, 'application/json', json.dumps({'list': _list_groups()}).encode())
@@ -3214,7 +3215,7 @@ def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mod
     url = f'http://127.0.0.1:{port}'
     print(f'dash: {url}  (tabs Audio/Image no header, ou ?panel=audio | ?panel=image p/ popup)')
     if open_browser:
-        _open_dash_window(url + '/v5')   # v5 (canvas de caixas) e' o dash principal; v4 em /v4, v3 em /v3, v2 em /v2, v1 em /
+        _open_dash_window(url + '/v6')   # o dash principal: dash5 com o canvas de JOGO (/v5?html = o canvas HTML de reserva); v4 em /v4, v3 em /v3, v2 em /v2, v1 em /
 
 
 # navegadores com --app/--user-data-dir (familia Chromium), na ordem de preferencia

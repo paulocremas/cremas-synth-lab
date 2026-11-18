@@ -5,6 +5,7 @@ vocabulário (oscilador, frequência, fase, ruído, filtro, feedback): **GLSL pu
 imagem, na GPU) e **SuperCollider** (síntese de áudio).
 
 - **[Como instalar o PRISMA! (Linux e Windows)](INSTALAR.md)**
+- **[Como o PRISMA funciona](https://paulocremas.github.io/cremas-synth-lab/como-funciona.html)** — a síntese e os módulos explicados de forma simples, com o porquê de cada decisão
 - **[Fluxo técnico navegável](https://paulocremas.github.io/cremas-synth-lab/)** — diagrama clicável (cada bloco pula pra explicação)
 - Plano de estudo e estado do ambiente: [CLAUDE.md](CLAUDE.md)
 - Índice das fontes (Book of Shaders + tutoriais Fieldsteel): [MAPA.md](MAPA.md)

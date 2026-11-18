@@ -74,6 +74,11 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - Canal `file#N` = mesma fonte 2× (`_chkey`/`_base_key`); pilha por canal em `BINDINGS`, pela POSIÇÃO.
   Fora do `pool` some da mesa/saída mas fica lembrado.
 - 60 fps (`OUTPUT_FPS`): `src_tex`/`comp_last` só refazem se o frame é OUTRO objeto (`is`, guardando o frame).
+- FLUIDEZ (medido 2026-11-18, py-spy + CDP): ritmo da saída = prazo absoluto (`pace_t`, sleep + fim no relógio; o `clock.tick` arredondava
+  pra ms = ~62 fps). Análise de imagem COMPLETA só com o painel Imagem na tela (`comp_want`/`out_want`, via `/frame`); fora dele
+  `image_levels_lite` (só BRILHO/MOVIMENTO = luz/mov); a da saída roda em thread (`out_analysis_thread`), nunca no loop GL. Mistura da
+  CPU (`_composite`) ≤15×/s sem a sim. Vídeo: `plat.hw_decode` VAAPI → `-hwaccel auto` → software, e `fps=30` ANTES do `scale` (`flags=area`).
+  dash5: escolher nó/fio NÃO entra no `cvSig` (`paintSel`/`painted`); `drawBoxWires` lê todo o layout antes e escreve no fim (fragmentos).
 - Passes: mistura → `SCENE_GRADE` → transição (`from` antes da calibração) → `OUTPUT_GRADE` (`master` →
   `u_dim`) → com telão, `OUTPUT_MAP_SRC`; os dois grades usam `calibrar.frag`.
 - Canvas (`_stage` no native = `stageOf`/`canvasOf` no dash) = SEMPRE o palco: contorno das telas `SCREENS` com os
@@ -117,7 +122,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - **Movimento no knob**: controlador = item de `~ctl` `{file: 'ctl', id, xy, mod: {sinal}}`; o knob guarda receita + faixa
   (`mod[knob].id`), extras em `mod[knob].mais` (somam: `_mod_total`; `forEachMod`/`dropMod` tratam igual). `syncCtls` cria
   um controlador por movimento e NUNCA apaga. Trocar o átomo (`swapAtom`) desfaz as ligações, os controladores ficam soltos.
-- **dash5** (`/v5`, o que o app abre; decisões no topo do `dash5.html`): TOCAR | MONTAR (`mode` 'show'|'montar', `setMode`).
+- **dash5** (decisões no topo do `dash5.html`): TOCAR | MONTAR (`mode` 'show'|'montar', `setMode`). O app abre `/v6`; o canvas é o JOGO em qualquer
+  endereço (`GAME`), o HTML abaixo só em `?html` (RESERVA de emergência, testes antigos via `load()`; apagar depois de um ensaio).
   Nó = MINI TV (`.bx.tv`, mockup `design/mini-tv.html`): gabinete = família (`fam-<cat>`, `tvSkin`), tela `.win>.crt>canvas.lv` na proporção
   do PALCO (`tvAR`). Distribuição (`tvGeo`/`tvJacks`, rodada 4): linha 1 = liga + fader de opacidade EM CIMA da tela (`.r1`, `tvConn`); TELA na
   largura toda; nome (`.bh`) logo abaixo; IN/B/MÁSC numa coluna à esquerda dos knobs (IN na altura do knob, o de baixo na dos CVs), OUT à
@@ -148,6 +154,37 @@ Cada ferramenta isolada, depois comparar, só então compor.
   nem `body.x *` no CSS — restyle da página toda) /`swallowClick()` (o click sintético logo
   após um arrasto é engolido — em teste, chamar o handler). Knob = `dragCtl` relativo + arrasto infinito (`POST /warp` →
   `plat.warp_pointer`); segurando knob, `renderCtl`/`renderBoxes` esperam. `plug`/`unplug` = fios (`connect()` é o SSE!).
+- **/v6** = o canvas dos módulos como JOGO — PRINCIPAL desde 2026-11-18 (barra de zoom, +/-, H, Ctrl+A, Enter, revelar, grade pendente: ganchos `G6.*`): o MESMO `dash5.html` (`GAME` = caminho `/v6`); bloco `G6` no fim:
+  `<canvas id="gcv">`, câmera, sprite por módulo em cache + LOD, vivos por cima, culling. Geometria = `tvGeo`/`tvJacks`/`filKids`; `renderBoxes`
+  /`drawBoxWires` desviam pro `G6`. Alvo = `G6.pick` (jack › módulo › cabo › vazio, sem DOM); o que MEXE nos dados é o código do dash5
+  (`plug`/`unplug`/`cableEnd(ev, alvo)`/`linkMv`/`dupNode`/`nodeMenu`; `canvasPt` = `G6.world`). Migrado: ARRASTAR (nó, grupo, retângulo, Ctrl
+  copia, filho, borda rola após 200 ms; `normalize` = cvShift) e CABOS (saída pega o último/Shift novo, entrada solta a ponta, grudado,
+  vazio = menu, controlador → knob, escolher fio + Delete) e CONTROLES (`n.ctrls`: knob/fader/liga/olho com os MESMOS ids/get/set do dash5 →
+  `reg` no `CTRL` dentro do `build`, o MIDI segue; `knobSpec` = o `one` do `nodeKnobs`, alcance incluso; gesto = `dragCtl` portado: relativo, `/warp`,
+  2 cliques/Ctrl = padrão, roda no controle) e INSPETOR (o `#insp` do dash5; `placeInsp` pega o lugar em `G6.selRect`, "clicar fora" usa
+  `G6.isSel`, `inspFollow` no quadro = acompanha a câmera; abre com 2 cliques no corpo ou direito parado) e RODA (2 cliques no vazio/cabo = `dblOpen`
+  → `openWheel`; `wireNear`/`boxAt`/`placeZones` desviam pro G6: `G6.wireNear`, `G6.zones` = `computeZones` na tela, `drawZones` no canvas).
+  SEM FILHOS no /v6 (decisão 2026-11-18): escolha/chave = TECLAS no card (`tvWide`, entra no `tvH`/`tvW` só com `GAME`; `filKids` = [] no /v6;
+  mesmo id `bar:` como trig). O /v5 segue com filhos até a troca. MÓDULO HORIZONTAL (2026-11-18): geometria = `hzLayout(key)` (só /v6; `boxW`/`boxH`
+  passam por ela → arrumar/declutter batem): tela à esquerda (liga+fader em cima), nome/teclas/knobs à direita, entradas na borda esq., OUT na dir.
+  na altura do IN; fonte = nome em cima da tela; mixer/saída = entradas empilhadas + tela à dir. Posições do v5 se sobrepõem no v6 → "arrumar".
+  MATERIAL (2026-11-18): `body()` do G6 = a `.skin` do dash5 no sprite (grão/piso/martelo = os mesmos SVG de `TEXTURAS` como padrão; `TILE`
+  = senos, chapa, xadrez; foto | cel | leve); vivo só o que anda (`liveSkin`: arco-íris do cor, agulha do VU; liga do cor = roda de cores).
+  Controlador = mini TV prata (osciloscópio + faixa de/até de até 2 knobs). RODADA 5: liga no canto sup. esq.; fader de opacidade HORIZONTAL embaixo da
+  tela, jack dele na coluna do in/másc (`hfader`); de longe o módulo inteiro (sem bloco liso); KNOB = JACK do cabo de controle (cabo só DE FORA pra dentro:
+  knob livre não solta cabo; ligado não gira: apertar PEGA o cabo; sem fileira de CV); fader de opacidade do átomo e da
+  ENTRADA do mixer/saída recebem oscilador (camada = `L.mod.opacity`, no `forEachMod` como `{row, layer}`; `linkLayerMv`/`unlinkLayerMv`).
+  ARRASTO x STREAM: o arrasto trava o stream NO APERTO (`boxDrag`) e busca a peça pela chave a cada passo (teste `t6_ritmo_humano`).
+  OSCILOSCÓPIO: amostra = hora do SERVIDOR (`mv_t` no SSE → `scopeIn`, offset = menor demora); a hora da chegada dava degraus/retas nas rajadas.
+  RODADA 6 (diário `RODADA6_PROGRESSO.md`, PNGs `design/rodada6/`, foto do canvas = `tests/v6_foto.py <prefixo> <cena>`): `hzLayout` = GRADE
+  de colunas centradas, OUT no meio; tudo na ÁREA ÚTIL (`hzUseful` = gabinete − bisel − 8 px; teste `t6_dentro_do_relevo`); grade 4 px.
+  Fader de opacidade COMPRIDO colado na tela + jack (`cvj`) embaixo; mixer/saída: `cvj` na ponta do fader (o cabo chega NO jack: `n.cvj[n]`).
+  KNOB-JACK (A; `KSTYLE`, B só no book): saia gira, CENTRO = jack (`pick` → `zone: 'jack'`; livre puxa AO CONTRÁRIO até um alterador =
+  `cvHand.rev`); knob ligado só mostra (sem "alcance"). FAIXA de/até = nas LINHAS do alterador (`ctlLay`, uma por ligação; `rowHit` →
+  `rangeStart`: pontas, meio, roda, 2 cliques = `rgDefault`, Shift fino); o `rangeCtl` do painel é `ro` no /v6. RODA (`wheelSectors`) =
+  famílias dos gabinetes + máscaras + alteradores + mistura e saída (+ receitas), disco com o material (`G6.swatch`). SELETORES (`tvWide`,
+  `selSty`): chave = tecla S3; 2–4 = fader de entalhes S2 (`notch` + `cvj`); 5+ = rotativo S1 (`rot`, jack no centro); no /v6 a escolha
+  ligada CONTINUA seletor (`nodeKnobList`). `SEL_FORCE` = só pro book.
 - v3/v4 (`dash3.html`, `dash4.html`): legado; decisões no topo de cada arquivo. Prévias: `/frame?which=out|cv|sel|comp|src|fx|
   mask|steps|try` (`_preview_frame`, só enquanto pedidas). LFO = fonte `'lfo'` com `mod[k].lfo`; `luz`/`mov` = `img_mod_levels`.
 - Elemento recriado a cada SSE perde clique/pointer capture — atualizar no lugar. Classe no `body` não pode colidir com
@@ -178,7 +215,7 @@ estar com o prisma aberto; simulador aberto = telão virtual anunciado (teste qu
 `VIRTUAL_OUTPUTS`). Arrastar/clicar no dash do app aberto GRAVA no `tuning.py` vivo — backup antes.
 
 ## Docs
-- Fluxo técnico: <https://paulocremas.github.io/cremas-synth-lab/> (`docs/index.html`) — respeitar
+- Fluxo técnico: <https://paulocremas.github.io/cremas-synth-lab/> (`docs/index.html`); explicação leiga: `docs/como-funciona.html` — respeitar
   glossário `GLOSS` + `linkify`, cores por região + linhagem, `<details>` retraído, `.maybe` separado da cor.
 - [MAPA.md](MAPA.md) = índice dos currículos. [BACKLOG.md](BACKLOG.md) = combinado e ainda não feito.
 
