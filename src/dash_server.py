@@ -1066,6 +1066,14 @@ def _norm_overlays(items, dedupe=True):
                and it['estado'].get(k) in dash_data.EVENTS and not it['estado'][k].endswith('.on')}
         if est:             # ATOMO COM ESTADO (v2 §6): evento que semeia / zera a memoria dele
             o['estado'] = est
+        if isinstance(it.get('filhos'), dict):   # MODULOS FILHO (dash v5): lugar de cada escolha/chave, [dx, dy] RELATIVO ao no' (so' desenho)
+            fi = {}
+            for n, v in list(it['filhos'].items())[:12]:
+                if re.fullmatch(r'[A-Za-z0-9_]{1,32}', str(n)) and isinstance(v, (list, tuple)) and len(v) == 2 \
+                        and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v):
+                    fi[str(n)] = [round(max(-1e4, min(1e4, float(x)))) for x in v]
+            if fi:
+                o['filhos'] = fi
         if it.get('fold'):  # caixa dobrada (so' o cabecalho, dash v5)
             o['fold'] = 1
         if isinstance(it.get('n'), int) and 1 <= it['n'] <= 999:   # numero ESTAVEL da caixa (dash v5; a ordem e' a da SAIDA)
@@ -3348,6 +3356,8 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     ac = _norm_overlays([{'file': 'x.mp4', 'acao': {'liga': 'secao:drop', 'desliga': 'mao.on', 'x': 'kick'}}])[0]
     assert ac['acao'] == {'liga': 'secao:drop'}, ac
     assert not ({'id', 'grp', 'pub', 'gname'} & set(v4[1])), 'id/grp invalidos e pub que nao e lista somem'
+    fl = _norm_overlays([{'file': 'x.frag', 'filhos': {'fundo': [-200.4, 30], 'x y': [1, 2], 'modo': [True, 1], 'sentido': [1e9, -5]}}], dedupe=False)[0]
+    assert fl['filhos'] == {'fundo': [-200, 30], 'sentido': [10000, -5]}, fl
     v5 = _norm_overlays([{'file': 'webcam:/dev/video0', 'id': 'c1', 'xy': [12.4, '30'], 'fold': 1, 'n': 3}, {'file': '@c1', 'xy': 'x', 'n': '2'}])
     assert (v5[0]['xy'], v5[0]['fold'], v5[0]['id'], v5[0]['n']) == ([12, 30], 1, 'c1', 3) and not {'xy', 'n'} & set(v5[1]), v5
     gn = _norm_overlays([{'file': 'a.png', 'id': 'c1'}, {'kind': 'out', 'id': 'o1', 'nome': ' saída 1 ', 'rect': [0.5, 0, 0.5, 1], 'xy': [9, 9],

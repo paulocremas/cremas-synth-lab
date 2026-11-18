@@ -27,7 +27,7 @@
     osciloscopio (SCOPE, sinal vivo) + a faixa de/ate de ate' 2 knobs ligados (ctlRange = rangeCtl, a faixa continua MORANDO NO KNOB);
     jack de CV em cima; nasce EMBAIXO do no' com o jack sob o knob (ctlSpot). Clicar no NOME so' escolhe; trocar = ↻ (aparece no mouse).
     TEMA (botao "visual" do canvas): foto-real | cel (body.cel: desenho chapado proprio de cada peca, contorno, 3 tons, recorte frio,
-    sombra roxa, reticula, tela posterizada com #toon) + LEVE (body.leve: sem grao, decoracao, sombra grande, animacao; cabo = 1 traco).
+    sombra roxa, reticula; a IMAGEM das telas nunca muda com o tema — 2026-11-17, pedido) + LEVE (body.leve: sem grao, decoracao, sombra grande, animacao; cabo = 1 traco).
     Fica no localStorage v5tema (preferencia desta tela, como zoom/cabos/MIDI; o tuning e' o show). Animacao so' em modulo LIGADO.
     DESEMPENHO: texturas = PNG gerado uma vez (texturas() -> --t-*), nenhum filtro SVG ao vivo por no'; rolar a vista NAO refaz os fios
     (so' reposiciona o inspetor). Medido no teste "desempenho" (tests/dash_gestos.py).
@@ -54,6 +54,49 @@
     refazer os fios). MIXER mais comprido (linha de 52 px, MIX_ROW_H; tela igual) com a SAIDA no canto de BAIXO a' direita (MIX_FOOT).
     ENTER no MONTAR = a lista de modulos (a roda) onde o mouse esta' (como o VCV; digitar procura); no TOCAR continua liga/desliga.
     Proximo: PROMPT_VCV_LAYOUT.md (distribuicao inspirada no VCV + modulos "filho").
+  2026-11-17 RODADA VCV (PROMPT_VCV_LAYOUT.md; design book "PRISMA — design book: distribuição e filhos" = design/vcv-layout.html, db
+    `escolhas`; a rodada 2 do book ficou sem marcas -> usadas as opcoes padrao dele). SUBSTITUI a distribuicao da MINI TV acima (a pele
+    nao muda). C COMPACTA (tvGeo): LINHA 1 = liga + FADER de opacidade EM CIMA da tela (.r1); a TELA entre o TRILHO de jacks a' esquerda
+    (in, b, másc, rotulo embaixo; TV_RAILX/TV_RAIL0/TV_RAILD) e a ABA escura da saida a' direita (.otab, OUT no pe' dela); o NOME logo
+    abaixo da tela (.bh, 16 px, numero a' direita; arrastar continua por ele); os knobs (rotulo 11 px minusculo, nunca cortado; CV
+    embaixo de cada um). Sem parafuso. Fonte/mistura/mixer/saida: tela em cima (sem a linha 1), aba a' direita, nome embaixo. VU do
+    gerador = na linha 1. TV_W = 252 (COL_W 324).
+    MODULOS FILHO (filKids/filSpec/filEl): toda ESCOLHA e toda CHAVE sem movimento sai do card; 2 opcoes = duas TECLAS, 3+ = SELETOR com
+    a lista acesa (knob aponta, clique avanca, Shift volta, clique no nome escolhe), chave = uma TECLA. O FILHO e' a ENTRADA e o PAI a
+    SAIDA: cabo PRESO (curto, grosso, na cor da familia, plugue com anel de trava; sem alvo de clique) da aba OUT do filho ate' o jack da
+    OPCAO no trilho do pai (.port.opj, rotulo em cima, na linha dos CVs). Motor igual: o valor e' o fx do atomo, mesmo id de controle
+    (bar:<no>:<id>:<knob>, o MIDI segue). O filho mora DENTRO do elemento do pai (left/top relativos): arrastar o pai/a selecao leva
+    junto; arrastar o filho grava s.filhos[knob] = [dx, dy] (servidor: _norm_overlays). Sem lugar = a' esquerda, o OUT na altura do jack.
+    A PEGADA do no' (rectOfNode: sem sobrepor, arrumar em colunas que abrem espaco pros filhos, ctlSpot, caber tudo) inclui os filhos.
+    ZOOM 2%..200% (CVZ_LIM), SUAVE (zoomFrame em rAF: so' --cvz, tamanho do mundo e rolagem; nada refeito) e centrado no cursor. NIVEIS
+    (zlOf): perto >= 130% | normal | longe <= 70% | BLOCO < 28% (no' = bloco liso na cor da familia --blk, nome que encolhe ate' caber
+    e some se nem a 8 px couber, a tela PARADA no ultimo quadro) | PONTO < 9% (so' a cor). De longe: pecas display:none, cabos finos
+    (2 px na tela via --cvzi = 1/zoom), sem plugue; o cabo vai pra borda do bloco (portXY/cvEnd sem o jack); nenhuma previa pedida.
+    CABER TUDO = H (a tecla de cena no H vem antes) ou o botao ⤢: enquadra o patch; de novo = volta pro zoom e o lugar de antes.
+  2026-11-18 RODADA 3 (pedidos do usuario sobre a rodada VCV; SUBSTITUI o que contradiz acima):
+    FILHO NA CORRENTE: o filho e' a ENTRADA de verdade — a corrente (fio A do pai) chega no IN do filho mais longe (filKids head; o
+    IN dele E' o inPort 'a' do pai, dentro do .fil: inPortEl/cableTarget acham), passa filho a filho e chega no IN do pai. Saiu o jack
+    da opcao (.port.opj) e o cabo preso: no lugar, a LIGACAO FIXA = trilha rigida (reta, cotovelo reto, sulco no meio, terminais
+    QUADRADOS; .lkb/.lkc/.lkg) sem area de clique; as pontas (OUT do filho, IN do filho seguinte, IN do pai .lk) engolem o clique (antes
+    pegar a "ponta" arrastava o pai ou o filho). Lugar padrao: em linha, a' esquerda, na altura do IN do pai (TV_RAIL0).
+    ZOOM SEM RELAYOUT: a animacao so' mexe no transform do #cv-in (zTf/zoomVis; o zoom do CSS refazia o layout inteiro, ~80 ms por
+    quadro, e o dash todo — envelopes, knobs vivos — parava junto). O zoom de verdade entra UMA vez no fim, sem pulo. Arrastando
+    algo, o zoom anda do jeito antigo.
+    ARRASTO LEVE: drawBoxWires guarda cada cabo em WLIVE (pontas + geometria + elementos); arrastar no'/controlador/filho so' refaz os
+    cabos de quem anda (wiresFollow), um passo por quadro (rafMove); wireNear amostra os fios uma vez (wnCache). O cursor de arrasto
+    nao usa mais 'body.dragging *' (refazia o estilo da pagina inteira ao pegar, ~60 ms).
+    LEITURA: todo texto do gabinete numa ETIQUETA lisa na cor clara do painel (--lbl = --pl1; cel = branco): nome, rotulos e valores
+    dos knobs, rotulos dos jacks, entradas do mixer. Fileira dos knobs 82 px (TV_KROW) e pe' 38 (TV_FOOT): o valor nunca embaixo do
+    jack de CV. MIXER: jack dentro do gabinete, o NOME da entrada (vazia = "livre") na etiqueta, sem numero (pedido), linhas lisas. NOMES sem o numero do no' no
+    canvas (mixShow/visName: "MIXER", nao "mixer 16"; a saida fica com o dela = a tela); o numero continua no canto, avisos e MIDI.
+  2026-11-18 RODADA 4 (SUBSTITUI o trilho ao lado da tela): atomo/fonte = TELA NA LARGURA TODA (tvGeo low); os jacks de imagem descem pra
+    linha dos knobs (tvJacks): IN/B/MÁSC numa coluna a' ESQUERDA dos knobs, de baixo pra cima (o de baixo na linha dos CVs, o IN na altura
+    do knob; RAILD 48), rotulo EM CIMA de cada jack; OUT a' DIREITA na altura do knob, no pe' da aba escura; fonte: másc ... OUT na
+    ultima linha. Jacks a' 31 px das bordas (RAILX/OUTX, pe' TV_FOOT 50; mixer/saida: jack a 18 px). Knob SEM porcentagem (o valor so'
+    girando, plaqueta solta). ETIQUETAS REALISTAS: plaqueta em relevo (chanfro, sombra curta) e letra gravada (--lbt). ARRASTAR POR
+    QUALQUER PARTE (nodeGrab; so' os controles de NODRAG fazem a coisa deles; a tela inclusive). ARRUMAR POR SETOR (tidyPlace): uma
+    faixa por RAIZ (fonte/gerador, na ordem de cima pra baixo), cada no' na media dos setores de onde vem (as duas = entre), colunas
+    centradas na faixa (a fonte no meio do setor), saidas na ultima coluna.
   Pesquisa e desenhos: Claude Doc "PRISMA v5 — canvas de camadas de átomos". Decisoes aprovadas (2026-10-24):
   - QUATRO PALAVRAS: fonte, CAIXA, ATOMO, SAIDA (a mascara e' parte da caixa). CAIXA = uma fileira do OVERLAYS
     (o Rack do Ableton / um COMP do TouchDesigner): uma entrada (fonte ou o FIM de outra caixa, file '@<id da caixa>')
@@ -390,7 +433,7 @@
   .bx.moving { opacity: .85; box-shadow: 0 14px 40px rgba(0,0,0,.6); z-index: 8; }
   .bx.drophot { box-shadow: 0 0 0 2px var(--sel); }
   .bx .bh { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px 0 24px; cursor: default; }   /* 24 = o vao dos jacks de entrada */
-  body.dragging, body.dragging * { cursor: grabbing !important; }
+  body.dragging { cursor: grabbing !important; } .moving, .moving * { cursor: grabbing !important; }   /* (rodada 3: 'body.dragging *' refazia o estilo da pagina INTEIRA ao pegar, ~60 ms) */
   .bx .bh .n { font: 600 11px var(--mono); color: var(--tx3); }
   .bx .bh .nb { width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--tx3); cursor: pointer;
                 display: inline-flex; align-items: center; justify-content: center; flex: none; }
@@ -581,7 +624,6 @@
   .ghost.pit { background: var(--s3); border-color: var(--sel); color: var(--tx); }
   .ghost.copy::after { content: '+'; position: absolute; right: -8px; top: -8px; width: 18px; height: 18px; border-radius: 50%;
                        background: var(--sel); color: var(--bg); font: 800 14px/18px var(--sans); text-align: center; }
-  body.dragging, body.dragging * { cursor: grabbing !important; }
   #mode-seg button { min-height: 32px; padding: 0 14px; font-size: 12px; letter-spacing: .08em; font-weight: 800; }
   #mode-seg button.on[data-m="show"] { background: var(--live-d); color: #c5f2dc; }
   #mode-seg button.on[data-m="montar"] { background: var(--sel-d); color: #ffd7b8; }
@@ -1116,8 +1158,8 @@
   #cv .bx.tv::after { content: ""; position: absolute; z-index: -1; left: 5%; right: 5%; bottom: -18px; height: 22px; pointer-events: none; background: radial-gradient(ellipse 50% 60% at 50% 25%, #000000b0, transparent 100%); }   /* sombra de CONTATO: gradiente, sem desfoque (barato) */
   body.cel #cv .bx.tv::after, body.leve #cv .bx.tv::after { display: none; }
   #cv .bx.tv.sel, #cv .bx.tv.msel { box-shadow: 0 0 0 1px #3b3e41, 0 0 0 1px var(--sel), 0 0 26px color-mix(in srgb, var(--sel) 45%, transparent); }
-  #cv .bx.tv > .bh { position: relative; z-index: 2; height: 40px; flex: none; padding: 0 12px; gap: 7px; background: none; border-radius: 18px 18px 0 0; }
-  #cv .bx.tv > .bh .nm { flex: 0 1 auto; min-width: 3.2em; font: 700 15px/1 var(--tvf); letter-spacing: .07em; text-transform: uppercase; color: var(--silk); text-shadow: 0 1px 0 #ffffff80; }
+  #cv .bx.tv > .bh { position: absolute; z-index: 2; height: 24px; flex: none; padding: 0; gap: 6px; background: none; border-radius: 0; }
+  #cv .bx.tv > .bh .nm { flex: 0 1 auto; min-width: 3.2em; font: 700 16px/1 var(--tvf); letter-spacing: .07em; text-transform: uppercase; color: var(--silk); text-shadow: 0 1px 0 #ffffff80; }
   #cv .bx.tv > .bh .fam { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: clip; white-space: nowrap; font: 600 8.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: #fff; padding: 3px 5px 2px; border-radius: 3px;
     background: color-mix(in srgb, var(--cc) 70%, #222); box-shadow: inset 0 -1px 0 #0003; }
   #cv .bx.tv > .bh .ai { color: color-mix(in srgb, var(--cc) 45%, #111); }
@@ -1139,23 +1181,32 @@
   @keyframes tvspin { to { transform: rotate(1turn); } }
   body:not(.leve) #cv .bx.tv.fam-cor:not(.offn) .led.pw::before { animation: tvspin 5s linear infinite; }
   /* TELA: moldura funda e chanfrada + o vidro (a imagem viva .lv dentro, na proporcao --ar) */
-  #cv .bx.tv .win { position: relative; z-index: 1; flex: none; margin: 0 14px 6px; border-radius: 12px; background: #0b0c0d; border: 10px solid; border-color: var(--bez);
+  #cv .bx.tv .win { position: absolute; z-index: 1; margin: 0; border-radius: 10px; background: #0b0c0d; border: 7px solid; border-color: var(--bez);
     box-shadow: 0 0 0 1px #5d6165, 0 -1px 0 1px #ffffff70, inset 0 0 0 2px #1a1b1c; }
   #cv .bx.tv .crt { position: relative; aspect-ratio: var(--ar, 16 / 9); border-radius: 8% / 12%; overflow: hidden; background: #000; }
   #cv .bx.tv .crt .lv { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: cover; }
   #cv .bx.tv .crt::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 10px 2px #000a; }   /* SEM reflexo e sem linhas (2026-11-17: atrapalhavam a imagem) */
   #cv .bx.tv.offn .crt .lv { opacity: .3; filter: grayscale(1); }
   /* LINHA DE CONEXOES: fader de opacidade entre os jacks */
-  #cv .bx.tv .cr { position: relative; flex: none; display: flex; align-items: center; padding: 0 58px; }
-  #cv .bx.tv .cr .fader { flex: 1; height: 30px; min-width: 0; overflow: visible; background: none; border: 0; border-radius: 0; }
-  #cv .bx.tv .cr .fader::before { content: ''; position: absolute; left: 0; right: 0; top: 11px; height: 8px; border-radius: 5px; background: #141516; box-shadow: inset 0 2px 3px #000, 0 1px 0 #ffffff90; }
-  #cv .bx.tv .cr .fader .f-fill { top: 13px; bottom: auto; height: 4px; left: 2px; right: 2px; border-radius: 3px; opacity: .9; background: color-mix(in srgb, var(--cc) 75%, #fff); }
-  #cv .bx.tv .cr .fader::after { content: ''; position: absolute; top: 2px; left: calc(var(--v, 1) * (100% - 14px)); width: 14px; height: 26px; border-radius: 3px; pointer-events: none;
+  #cv .bx.tv > .r1 { position: absolute; left: 0; right: 0; top: 0; height: 38px; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 9px; }   /* LINHA 1: liga + fader */
+  #cv .bx.tv > .otab { position: absolute; z-index: 2; width: 30px; border-radius: 9px; background: linear-gradient(#2a2e33, #16181b); box-shadow: inset 0 2px 4px #000c, 0 1px 0 #ffffff80; pointer-events: none; }
+  #cv .bx.tv > .otab::before { content: 'out'; position: absolute; left: 0; right: 0; top: 8px; text-align: center; font: 700 10px/1 var(--tvf); letter-spacing: .1em; text-transform: uppercase; color: #eef1f4; }
+  body.cel #cv .bx.tv > .otab { background: #23262b; box-shadow: 0 0 0 2px var(--ink); }
+  #cv .bx.tv > .port { z-index: 3; }
+  #cv .bx.tv > .port[data-l]::after { left: 50%; top: -19px; transform: translateX(-50%); font-size: 10px; color: var(--silk); }   /* rotulo EM CIMA do jack (o de baixo fica na linha dos CVs, rente ao pe') */
+  #cv .bx.tv > .bh { position: absolute; height: 24px; padding: 0; z-index: 2; }
+  #cv .bx.tv.fold > .bh { left: 14px; right: 14px; top: 10px; }
+  #cv .bx.tv > .at, #cv .bx.tv > .mk { margin-left: 44px; margin-right: 40px; }   /* os knobs entre a coluna dos jacks (TV_RL) e a do OUT (TV_RR) */
+  #cv .bx.tv.mix > .at, #cv .bx.tv.mix > .mk { margin-left: 0; }
+  #cv .bx.tv .r1 .fader { flex: 1; height: 30px; min-width: 0; overflow: visible; background: none; border: 0; border-radius: 0; }
+  #cv .bx.tv .r1 .fader::before { content: ''; position: absolute; left: 0; right: 0; top: 11px; height: 8px; border-radius: 5px; background: #141516; box-shadow: inset 0 2px 3px #000, 0 1px 0 #ffffff90; }
+  #cv .bx.tv .r1 .fader .f-fill { top: 13px; bottom: auto; height: 4px; left: 2px; right: 2px; border-radius: 3px; opacity: .9; background: color-mix(in srgb, var(--cc) 75%, #fff); }
+  #cv .bx.tv .r1 .fader::after { content: ''; position: absolute; top: 2px; left: calc(var(--v, 1) * (100% - 14px)); width: 14px; height: 26px; border-radius: 3px; pointer-events: none;
     background: linear-gradient(90deg, #4f565e, #f2f4f6 40%, #b5bdc5 62%, #5a6169); box-shadow: 0 3px 4px #000c, 0 1px 1px #000; }
-  #cv .bx.tv .cr .fader .f-lb { display: none; }   /* SIMPLES: "opacidade" nao precisa estar escrito (o title diz) */
-  #cv .bx.tv .cr .fader .f-val { position: absolute; left: 0; right: 0; top: -8px; text-align: center; font: 600 10px/1 var(--mono); color: var(--silk); display: none; }
-  #cv .bx.tv .cr .fader:hover .f-val, #cv .bx.tv .cr .fader.drag .f-val, #cv .bx.tv .lr .fader:hover .f-val, #cv .bx.tv .lr .fader.drag .f-val { display: block; }   /* o valor: so' ao mexer */
-  #cv .bx.tv .cr .fader.drag::after { background: linear-gradient(90deg, #8a4a14, #ffd2a8 40%, var(--sel) 62%, #8a4a14); }
+  #cv .bx.tv .r1 .fader .f-lb { display: none; }   /* SIMPLES: "opacidade" nao precisa estar escrito (o title diz) */
+  #cv .bx.tv .r1 .fader .f-val { position: absolute; left: 0; right: 0; top: -8px; text-align: center; font: 600 10px/1 var(--mono); color: var(--silk); display: none; }
+  #cv .bx.tv .r1 .fader:hover .f-val, #cv .bx.tv .r1 .fader.drag .f-val, #cv .bx.tv .lr .fader:hover .f-val, #cv .bx.tv .lr .fader.drag .f-val { display: block; }   /* o valor: so' ao mexer */
+  #cv .bx.tv .r1 .fader.drag::after { background: linear-gradient(90deg, #8a4a14, #ffd2a8 40%, var(--sel) 62%, #8a4a14); }
   /* JACK VISTO DE CIMA (2026-11-17, pedido: "o jack visto de cima e os cabos iguais do VCV"): porca + furo NO PAINEL, um pouco pra
      dentro da borda; ligado ou nao o jack e' o MESMO — o plugue e' do CABO (desenhado na camada dos cabos, por cima). Alvo de 26 px */
   #cv .bx .port:not(.aout), #cv .bx.tv .kj { width: 26px; height: 26px; border: 0; border-radius: 50%; transform: none; box-shadow: none;
@@ -1173,13 +1224,14 @@
   /* KNOBS rente ao pe' (uma fileira); o jack de CV de cada um sai por BAIXO do gabinete */
   #cv .bx.tv > .at { margin-top: auto; border: 0; background: none; }
   #cv .bx.tv > .mk { flex: none; height: 34px; min-height: 0; margin: 0 14px 6px; border-radius: 6px; overflow: hidden; }
-  #cv .bx.tv .nks.row { display: flex; flex-direction: column; padding: 0 14px 32px; }   /* 32 = TV_FOOT: a fileira dos jacks de CV */
+  #cv .bx.tv .nks.row { display: flex; flex-direction: column; padding: 0 14px 50px; }   /* 50 = TV_FOOT: a fileira dos jacks de CV, longe da borda */
   #cv .bx.tv .nks.row .nkw { order: -1; }
   #cv .bx.tv .nkw .chl, #cv .bx.tv .nkw .dn { font: 700 9.5px/1 var(--tvf); letter-spacing: .1em; text-transform: uppercase; color: var(--silk); }   /* legivel no plastico */
-  #cv .bx.tv .nkg2 { display: grid; grid-template-columns: repeat(var(--kn, 3), minmax(0, 1fr)); height: 72px; align-items: end; }
-  #cv .bx.tv .nkr, #cv .bx.tv .nkr.main { height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+  #cv .bx.tv .nkg2 { display: grid; grid-template-columns: repeat(var(--kn, 3), minmax(0, 1fr)); height: 66px; align-items: end; }
+  #cv .bx.tv .nkr, #cv .bx.tv .nkr.main { height: 66px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
   #cv .bx.tv .nkr .knob.nk { flex-direction: column; width: 100%; min-width: 0; min-height: 0; padding: 0; gap: 3px; justify-content: flex-end; }
-  #cv .bx.tv .knob.nk .k-lb, #cv .bx.tv .knob.nk.main .k-lb { order: -1; flex: none; max-width: 100%; text-align: center; font: 700 9.5px/1 var(--tvf); letter-spacing: .12em; text-transform: uppercase; color: var(--silk); }
+  #cv .bx.tv .knob.nk .k-lb, #cv .bx.tv .knob.nk.main .k-lb { order: -1; flex: none; max-width: none; overflow: visible; text-overflow: clip; text-align: center; font: 600 11px/1 var(--sans); letter-spacing: 0; text-transform: lowercase; color: var(--silk); white-space: nowrap; }   /* LEGIBILIDADE: 11 px sem condensar, minuscula, nunca cortado */
+  #cv .bx.tv .lr .hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #cv .bx.tv .knob.nk .k-val { min-width: 0; text-align: center; font: 500 9.5px/1 var(--mono); color: var(--silk2); }
   #cv .bx.tv .knob.nk.dirty .k-val { color: var(--silk); }
   .knob .kw { position: relative; display: block; flex: none; }
@@ -1194,7 +1246,7 @@
   .knob.drag .kb::before { background: radial-gradient(circle at 38% 30%, #fff, var(--sel) 35%, #8a4a14 92%); }
   #cv .bx.tv .k-tr { stroke: #00000028; stroke-width: 2.4; } #cv .bx.tv .k-ar { stroke: var(--silk); stroke-width: 2.4; } #cv .bx.tv .k-dot, #cv .bx.tv .k-df { display: none; }
   #cv .bx.tv .knob.alc .k-ar { stroke: var(--pc, var(--midi)); }
-  #cv .bx.tv .kj { left: calc(50% - 13px); top: auto; bottom: -28px; margin: 0; }   /* o CV do knob: jack no PE' do painel, embaixo dele (TV_FOOT) */
+  #cv .bx.tv .kj { left: calc(50% - 13px); top: auto; bottom: -38px; margin: 0; }   /* centro = 25 abaixo da fileira (tvJacks: fy) */   /* o CV do knob: jack no PE' do painel, embaixo dele (TV_FOOT) */
   #cv .bx.tv .kj::before { display: none; }
   /* FAMILIAS: o material conta quem fez a peca */
   #cv .bx.tv .skin { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 0; }
@@ -1232,8 +1284,8 @@
   #cv .bx.tv.offn .echo { display: none; }
   #cv .bx.tv.fam-gerador { --pl1: #d3efec; --pl2: #b6e0dc; --pl3: #94cbc6; --pl4: #77b2ac; }
   #cv .bx.tv .gmart { background: var(--t-martelo, none) 0 0 / 240px 240px; }
-  #cv .bx.tv.fam-gerador > .bh { padding-right: 78px; } #cv .bx.tv.fam-gerador > .bh .n { display: none; }   /* o VU nunca cobre palavra: o titulo para antes dele */
-  #cv .bx.tv .vu { position: absolute; right: 12px; top: 7px; width: 58px; height: 30px; border-radius: 4px; z-index: 3; overflow: hidden; pointer-events: none;
+  #cv .bx.tv.fam-gerador > .r1 { padding-right: 80px; }   /* o VU fica na LINHA 1, depois do fader: nunca cobre palavra */
+  #cv .bx.tv .vu { position: absolute; right: 12px; top: 4px; width: 58px; height: 30px; border-radius: 4px; z-index: 3; overflow: hidden; pointer-events: none;
     background: linear-gradient(#f7efd2, #e2d19e); box-shadow: inset 0 1px 3px #0008, 0 0 0 2px #151515, 0 1px 0 2px #ffffff30; }
   #cv .bx.tv .vu::before { content: ''; position: absolute; left: 7px; right: 7px; top: 7px; height: 40px; border-radius: 50% 50% 0 0; border-top: 1.5px solid #3a2a10; }
   #cv .bx.tv .vu i { position: absolute; left: 28px; bottom: -8px; width: 1.6px; height: 32px; background: #1a1a1a; transform-origin: 50% 100%; transform: rotate(-38deg); }
@@ -1242,9 +1294,114 @@
   #cv .bx.tv.fam-mascara { --pl1: #2a2730; --pl2: #211e26; --pl3: #19171d; --pl4: #121015; --silk: #f1e3f7; --silk2: #c9b6d4; --bez: #8a4fa6 #b07cc2 #d7b3e6 #b07cc2; }
   #cv .bx.tv .mchk { background: repeating-conic-gradient(#ffffff08 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
   #cv .bx.tv.fam-textura > .bh .nm, #cv .bx.tv.fam-mascara > .bh .nm { text-shadow: 0 1px 0 #000; }
-  #cv .bx.tv.fam-textura .cr .fader::before, #cv .bx.tv.fam-mascara .cr .fader::before { box-shadow: inset 0 2px 3px #000, 0 1px 0 #ffffff30; }
+  #cv .bx.tv.fam-textura .r1 .fader::before, #cv .bx.tv.fam-mascara .r1 .fader::before { box-shadow: inset 0 2px 3px #000, 0 1px 0 #ffffff30; }
   #cv .bx.tv.offn { opacity: 1; } #cv .bx.tv.offn > :not(.skin):not(.bh) { opacity: .75; }
-  #cv .bx.tv.fold .win, #cv .bx.tv.fold .cr, #cv .bx.tv.fold .at, #cv .bx.tv.fold .mk { display: none; }
+  #cv .bx.tv.fold .win, #cv .bx.tv.fold .r1, #cv .bx.tv.fold .otab, #cv .bx.tv.fold .at, #cv .bx.tv.fold .mk, #cv .bx.tv.fold > .port:not(.out):not(.in) { display: none; }
+
+
+  /* ETIQUETAS (rodada 3; rodada 4 = REALISTAS, "estao praticamente 2d"): todo texto do gabinete numa PLAQUETA de verdade — placa um
+     pouco acima do painel (chanfro claro em cima, escuro embaixo, sombra curta no painel) na cor clara dele (--lbl = --pl1), e a LETRA
+     GRAVADA (mais escura, com o brilho embaixo, como serigrafia funda). A textura nunca passa por tras de uma letra. */
+  #cv .bx.tv { --lbl: var(--pl1); --lbt: 0 1px 0 #ffffffb0; }
+  #cv .bx.tv.fam-textura, #cv .bx.tv.fam-mascara { --lbt: 0 -1px 0 #000c; }
+  #cv .bx.tv > .bh .nm, #cv .bx.tv .knob.nk .k-lb, #cv .bx.tv .knob.nk .k-val, #cv .bx.tv .lr .fader .f-lb, #cv .bx.tv .lr .hint, #cv .bx.tv .omap .hint,
+  #cv .bx.tv .nkw .chl, #cv .bx.tv .nkw .dn, .fil .fnm, #cv .bx.tv .port[data-l]::after {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--lbl), #fff 32%) 0, var(--lbl) 38%, color-mix(in srgb, var(--lbl), #000 9%) 100%);
+    border-radius: 3px; text-shadow: var(--lbt) !important;
+    box-shadow: inset 0 1px 0 #ffffffc0, inset 0 -1px 0 #00000030, 0 0 0 .6px #00000059, 0 1px 1.5px #0000008c, 0 2px 3px -1px #0000004d; }
+  #cv .bx.tv.fam-textura :is(.knob.nk .k-lb, .knob.nk .k-val, .port[data-l]::after, .lr .hint), #cv .bx.tv.fam-textura > .bh .nm,
+  #cv .bx.tv.fam-mascara :is(.knob.nk .k-lb, .knob.nk .k-val, .port[data-l]::after, .lr .hint), #cv .bx.tv.fam-mascara > .bh .nm, #cv .bx.tv.fam-textura > .fil .fnm, #cv .bx.tv.fam-mascara > .fil .fnm {
+    box-shadow: inset 0 1px 0 #ffffff2e, inset 0 -1px 0 #0000008c, 0 0 0 .6px #000, 0 1px 1.5px #000c; }
+  #cv .bx.tv > .bh .nm { border-radius: 4px; box-shadow: inset 0 1.5px 0 #ffffffd0, inset 0 -1.5px 0 #00000038, 0 0 0 .7px #00000066, 0 1.5px 2px #00000099, 0 3px 5px -2px #00000066; }
+  body.cel #cv .bx.tv :is(.knob.nk .k-lb, .knob.nk .k-val, .lr .fader .f-lb, .lr .hint, .omap .hint, .port[data-l]::after), body.cel #cv .bx.tv > .bh .nm, body.cel .fil .fnm {
+    background: var(--lbl); box-shadow: 0 0 0 1.5px var(--ink); text-shadow: none !important; }
+  /* o VALOR do knob (rodada 4: "sem porcentagem no knob"): so' girando, numa plaqueta solta embaixo dele (fora do layout) */
+  #cv .bx.tv .knob.nk { position: relative; }
+  #cv .bx.tv .knob.nk .k-val { display: none; position: absolute; left: 50%; top: 100%; margin-top: 3px; transform: translateX(-50%); z-index: 6; white-space: nowrap; }
+  #cv .bx.tv .knob.nk.drag .k-val { display: block; }
+  #cv .bx.tv > .bh .nm { padding: 3px 7px 2px; }
+  #cv .bx.tv .knob.nk .k-lb { padding: 2px 5px; } #cv .bx.tv .knob.nk .k-val { padding: 1px 4px; }
+  #cv .bx.tv .port[data-l]::after { padding: 2px 4px 1px; }
+  #cv .bx.tv .lr .fader .f-lb, #cv .bx.tv .lr .hint, #cv .bx.tv .omap .hint { padding: 2px 5px; } #cv .bx.tv .lr.one .hint { color: var(--silk); }
+  .fil .fnm { right: auto; padding: 3px 6px 2px; }
+  body.cel #cv .bx.tv { --lbl: #ffffff; } body.cel #cv .bx.tv.fam-textura, body.cel #cv .bx.tv.fam-mascara { --lbl: #1d1b22; }
+  /* MIXER arejado (rodada 3: "o mixer parece amontoado"): o jack DENTRO do gabinete, o nome da entrada numa etiqueta (vazia = "livre";
+     sem numero: pedido 2026-11-17), linhas lisas sem tracejado */
+  #cv .bx.tv.jk .lr, #cv .bx.tv.jk .lr.slot { padding-left: 56px; border-top: 1px solid #00000012; }
+  #cv .bx.tv.jk .lr .port, #cv .bx.tv.jk .lr.slot .port { left: 18px; }
+  #cv .bx.tv.jk .lr .port[data-l]::after { display: none; }
+  #cv .bx.tv.jk .lr .fader .f-lb { top: -2px; }
+  #cv .bx.tv.jk .lr.slot .hint { color: var(--silk2); font: 600 10px/1 var(--tvf); letter-spacing: .1em; text-transform: uppercase; }
+  #cv .bx.tv .lr.one { padding-left: 52px; } #cv .bx.tv .lr.one .port { left: 18px; }
+  /* MODULO FILHO (escolha/chave): gabinete da familia do pai (herda --pl*), nome em cima, controle, aba OUT escura a' direita */
+  #cv .bx.tv > .fil { position: absolute; z-index: 2; border-radius: 14px; cursor: default; user-select: none;
+    background: var(--t-grao, none), linear-gradient(175deg, var(--pl1) 0%, var(--pl2) 30%, var(--pl3) 70%, var(--pl4) 100%);
+    box-shadow: inset 0 2px 1px #ffffffa0, inset 0 -3px 2px #0000004d, 0 0 0 1px #3b3e41, 0 2px 0 #0009, 0 14px 20px -8px #000c; }
+  #cv .bx.tv > .fil.moving { box-shadow: 0 0 0 2px var(--sel), 0 18px 30px -8px #000e; }
+  #cv .bx.tv.fam-mascara > .fil { box-shadow: inset 0 0 0 3px #8e5fc8, 0 0 0 1px #3b3e41, 0 14px 20px -8px #000c; }
+  .fil .fnm { position: absolute; left: 12px; right: 12px; top: 11px; font: 700 14px/1 var(--tvf); letter-spacing: .1em; text-transform: uppercase; color: var(--silk); white-space: nowrap; pointer-events: none; }
+  .fil .ftab { position: absolute; right: 14px; width: 30px; height: 62px; border-radius: 9px; background: linear-gradient(#2a2e33, #16181b); box-shadow: inset 0 2px 4px #000c, 0 1px 0 #ffffff80; pointer-events: none; }
+  .fil .ftab::before { content: 'out'; position: absolute; left: 0; right: 0; top: 7px; text-align: center; font: 700 10px/1 var(--tvf); letter-spacing: .1em; text-transform: uppercase; color: #eef1f4; }
+  .fil .fjk { position: absolute; right: 16px; width: 26px; height: 26px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, #060708 0 22%, #262a2f 25% 30%, #f3f5f7 33%, #c3c8cd 45%, #8a9097 56%, #4a5056 64%, #0006 66%, transparent 72%); }
+  .fil .fled { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #3a1a12; box-shadow: inset 0 1px 1px #000; }
+  .fil .on .fled { background: radial-gradient(circle at 40% 35%, #fff2c8, #ffb43a 45%, #d06a00); box-shadow: 0 0 6px #ffb43a; }
+  .fil .fkey { position: absolute; left: 51px; height: 28px; box-sizing: border-box; border: 0; border-radius: 4px; padding: 0 9px; display: flex; align-items: center; gap: 7px; cursor: pointer;
+    font: 600 12px/1 var(--sans); color: #1d2023; white-space: nowrap; background: linear-gradient(#f4f5f6, #c4c8cc); box-shadow: 0 3px 0 #6c7177, 0 4px 5px #0008; transition: transform .06s, box-shadow .06s; }
+  .fil .fkey.on { transform: translateY(2px); box-shadow: 0 1px 0 #6c7177, 0 1px 2px #0008, inset 0 2px 3px #0003; background: linear-gradient(#d9dde0, #b3b8bd); }
+  .fil .fsel { position: absolute; left: 54px; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; --a: -120deg;
+    background: repeating-conic-gradient(#1a1b1d 0 6deg, #2e3033 6deg 9deg); box-shadow: 0 3px 4px #000b, 0 0 0 1px #000; }
+  .fil .fsel .rot { position: absolute; inset: 0; transform: rotate(var(--a)); transition: transform .12s; }
+  .fil .fsel .cap { position: absolute; inset: 17%; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #fafbfc, #c9ced3 45%, #8c9298 85%); box-shadow: 0 1px 2px #000a; }
+  .fil .fsel .ptr { position: absolute; left: 50%; top: 19%; width: 2.6px; height: 29%; margin-left: -1.3px; background: #1d1f22; border-radius: 2px; }
+  .fil .frl { position: absolute; left: 107px; height: 20px; padding: 0; border: 0; background: none; display: flex; align-items: center; gap: 7px; cursor: pointer;
+    font: 600 12px/1 var(--sans); color: var(--silk); white-space: nowrap; }
+  .fil .frl:hover span { text-decoration: underline; text-underline-offset: 3px; }
+  body.cel .fil { background: radial-gradient(150% 120% at 18% 0%, var(--pl1) 0 58%, var(--pl2) 58.3% 74%, var(--pl3) 74.3%) !important; box-shadow: 0 0 0 3px var(--ink), 8px 9px 0 1px #160f2e8c !important; }
+  body.cel .fil .ftab { background: #23262b; box-shadow: 0 0 0 2px var(--ink); }
+  body.cel .fil .fjk { background: radial-gradient(circle, var(--ink) 0 24%, #e8ebee 26% 54%, var(--ink) 56% 63%, transparent 65%); }
+  body.cel .fil .fkey { background: #eef0f2; box-shadow: 0 0 0 1.5px var(--ink), 0 3px 0 var(--ink); }
+  body.cel .fil .fkey.on { background: #c9ced3; box-shadow: 0 0 0 1.5px var(--ink), 0 1px 0 var(--ink); }
+  body.cel .fil .fsel { background: #2a2c30; box-shadow: 0 0 0 2px var(--ink); } body.cel .fil .fsel .cap { background: linear-gradient(160deg, #f4f6f8 0 55%, #c3c8cd 55%); box-shadow: 0 0 0 1.5px var(--ink); }
+  body.leve .fil { box-shadow: 0 0 0 1px #3b3e41 !important; }
+  /* o IN do filho (o 1o da corrente = a entrada A do pai; os outros = ponta da ligacao fixa) e as pontas da ligacao fixa */
+  .fil .fin { position: absolute; width: 26px; height: 26px; border-radius: 50%; z-index: 3; }
+  .fil .fjin, .fil .fjk { background: radial-gradient(circle, #060708 0 22%, #262a2f 25% 30%, #f3f5f7 33%, #c3c8cd 45%, #8a9097 56%, #4a5056 64%, #0006 66%, transparent 72%); }
+  .fil .fjk { pointer-events: auto !important; cursor: not-allowed; } .fil .fjin { cursor: not-allowed; } #cv .bx.tv > .port.in.lk { cursor: not-allowed; }
+  #cv .bx .fil .port.fin[data-l]::after { left: 50%; top: -17px; transform: translateX(-50%); }   /* rotulo EM CIMA: o cabo chega por baixo */
+  #cv-wires .lkb { stroke: #0009; stroke-width: 12; stroke-linejoin: round; stroke-linecap: square; filter: drop-shadow(0 2px 2px #0008); }
+  #cv-wires .lkc { stroke-width: 7; stroke-linejoin: round; stroke-linecap: square; }
+  #cv-wires .lkg { stroke: #0000008c; stroke-width: 1.4; stroke-dasharray: 5 4; }
+  #cv-wires .lkb.dim, #cv-wires .lkc.dim, #cv-wires .lkg.dim { opacity: .3; }
+  #cv-wires .pg.lock .lkt { stroke: #000a; stroke-width: 1; } #cv-wires .pg.lock .lkh { fill: #000b; }
+  body.cel #cv-wires .lkb { stroke: var(--ink); filter: none; } body.cel #cv-wires .pg.lock .lkt { stroke: var(--ink); stroke-width: 2.4; }
+  body.leve #cv-wires .lkb { filter: none; }
+  #cv-wires .w.lock { stroke-width: 7; }
+  #cv-wires .pg-k { fill: none; stroke: #e6e9ec; stroke-width: 2; } body.cel #cv-wires .pg-k { stroke: var(--ink); }
+  /* ZOOM DE LONGE (2026-11-17, rodada VCV): BLOCO = cada no' vira um bloco liso na cor da familia, com o NOME grande (do mesmo tamanho
+     na tela: calc com --cvzi = 1/zoom) e a tela parada (o ultimo quadro); PONTO = so' a cor (e o nome, se couber). Nenhuma peca, textura,
+     sombra nem texto pequeno: bem de longe TODOS os nos estao na vista e o desenho de cada um tem que ser leve. Cabos finos, sem plugue. */
+  #cv .bx { --blk: #7d8fa3; }
+  #cv .bx.fam-forma { --blk: #5f8f5a; } #cv .bx.fam-geometria { --blk: #4f6fa6; } #cv .bx.fam-cor { --blk: #c25b86; } #cv .bx.fam-luz { --blk: #c9a227; }
+  #cv .bx.fam-textura { --blk: #6b7078; } #cv .bx.fam-distorcao { --blk: #7a5fb0; } #cv .bx.fam-tempo { --blk: #3f8e96; } #cv .bx.fam-gerador { --blk: #2f8f74; }
+  #cv .bx.fam-mascara { --blk: #8e5fc8; } #cv .bx.fam-fonte, #cv .bx.fam-mistura, #cv .bx.fam-saida { --blk: #8a949e; } #cv .bx.ctln { --blk: var(--nc, #7d8fa3); }
+  #cv .bx > .blkn { display: none; }
+  #cv-in.zl-blk .bx > :not(.blkn):not(.win) { display: none !important; }
+  #cv-in.zl-blk .bx { background: var(--blk) !important; box-shadow: none !important; border: 0 !important; outline: 0; }
+  #cv-in.zl-blk .bx::after, #cv-in.zl-blk .bx::before { display: none !important; }
+  #cv-in.zl-blk .bx.sel, #cv-in.zl-blk .bx.msel { box-shadow: 0 0 0 calc(3px * var(--cvzi)) var(--sel) !important; }
+  #cv-in.zl-blk .bx.offn { filter: saturate(.25) brightness(.7); }
+  #cv-in.zl-blk .bx > .win { border: 0 !important; box-shadow: none !important; background: #0008 !important; }
+  #cv-in.zl-blk .bx > .win .crt::after { display: none; }
+  #cv-in.zl-ponto .bx > .win { display: none !important; }
+  #cv-in.zl-blk .bx > .blkn { display: flex; position: absolute; left: 4%; right: 4%; top: var(--blkt, 0); bottom: 0; align-items: center; justify-content: center; pointer-events: none;
+    font: 700 calc(14px * var(--cvzi))/1 var(--tvf, sans-serif); letter-spacing: .03em; text-transform: uppercase; color: #fff; white-space: nowrap; overflow: hidden; }
+  #cv-in.zl-ponto .bx > .blkn { top: 0; }
+  #cv-in.zl-blk .bx > .blkn b { font: inherit; white-space: nowrap; flex: none; }
+  #cv-in.zl-blk .bx > .blkn.hide { visibility: hidden; }   /* nunca cortado: nao cabe = some (a cor ainda diz a familia) */
+  #cv-in.zl-blk #cv-wires .w, #cv-in.zl-blk #cv-wires-top path { stroke-width: calc(2px * var(--cvzi)) !important; filter: none !important; }
+  #cv-in.zl-ponto #cv-wires .w { stroke-width: calc(1.2px * var(--cvzi)) !important; }
+  #cv-in.zl-blk #cv-wires .ws, #cv-in.zl-blk #cv-wires .pg { display: none; }
   /* FONTE, MISTURA e SAIDA: prata neutro (a mistura um pouco mais escura; a saida com o tally verde) */
   #cv .bx.tv.fam-mistura { --pl1: #b9bdc1; --pl2: #a2a7ac; --pl3: #8c9196; --pl4: #777c81; }
   #cv .bx.tv.fam-saida > .bh .led.on, #cv .bx.tv.fam-fonte > .bh .led.on { background: #3fd08f; box-shadow: 0 0 0 2px #00000040, 0 0 8px 2px #3fd08faa; }
@@ -1325,7 +1482,6 @@
   body.cel #cv .bx.tv .win { border-color: #6c7176 #9aa0a5 #e6e9eb #9aa0a5; box-shadow: 0 0 0 2.5px var(--ink), inset 0 0 0 2px var(--ink); }
   body.cel #cv .bx.tv.fam-mascara .win { border-color: #8a4fa6 #b07cc2 #d7b3e6 #b07cc2; }
   body.cel #cv .bx.tv .crt::after { box-shadow: inset 0 0 0 2px var(--ink); }
-  body.cel:not(.leve) #cv .bx.tv .crt .lv { filter: url(#toon); }
   body.cel #cv .bx.tv .led.pw { box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #c3c8cd, 0 0 0 6px var(--ink); }
   body.cel #cv .bx.tv .led.pw::before { inset: 0; background: radial-gradient(circle at 50% 50%, #ec3a24 0 62%, #b01e10 62.5%); }
   body.cel #cv .bx.tv .led.pw:not(.on)::before { background: radial-gradient(circle at 50% 50%, #5a2620 0 62%, #3a1612 62.5%); }
@@ -1335,8 +1491,8 @@
   body.cel .knob .kb::before { inset: 5px; background: radial-gradient(circle at 50% 60%, #5a6068 0 60%, #43484f 61%); box-shadow: 0 0 0 1.6px var(--ink); }
   body.cel .knob.modded .kb::before, body.cel .knob.alc .kb::before { background: var(--pc, var(--midi)); box-shadow: 0 0 0 1.6px var(--ink), 0 0 0 4px color-mix(in srgb, var(--pc, var(--midi)) 55%, transparent); }
   body.cel .knob .kb i::after { background: #fff; box-shadow: 0 0 0 1.1px var(--ink); }
-  body.cel #cv .bx.tv .cr .fader::before { background: var(--ink); box-shadow: none; }
-  body.cel #cv .bx.tv .cr .fader::after { background: linear-gradient(90deg, #eef0f2 0 55%, #b7bdc3 55%); box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 #0005; }
+  body.cel #cv .bx.tv .r1 .fader::before { background: var(--ink); box-shadow: none; }
+  body.cel #cv .bx.tv .r1 .fader::after { background: linear-gradient(90deg, #eef0f2 0 55%, #b7bdc3 55%); box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 #0005; }
   body.cel #cv .bx.tv .vu { box-shadow: 0 0 0 2.5px var(--ink); }
   body.cel #cv .bx.tv .rbl { box-shadow: 0 -2px 0 var(--ink); }
   body.cel #cv .bx.tv .halo { box-shadow: 0 0 0 10px #f2c94c88; }
@@ -1357,8 +1513,6 @@
 <body data-mode="show">
 <!-- ICONES: silhuetas em SVG (simbolos de fonte e emoji mudam de tamanho/desenho com o sistema) -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <!-- CEL: a imagem da tela em degraus de cor (so' a posterizacao: o contorno do mockup nao age numa imagem opaca) -->
-  <filter id="toon" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="discrete" tableValues="0 .22 .45 .7 .88 1"/><feFuncG type="discrete" tableValues="0 .22 .45 .7 .88 1"/><feFuncB type="discrete" tableValues="0 .22 .45 .7 .88 1"/></feComponentTransfer></filter>
   <symbol id="i-cor" viewBox="0 0 24 24"><path d="M12 3.5c3.6 4.2 6 7.3 6 10.2a6 6 0 0 1-12 0c0-2.9 2.4-6 6-10.2z"/></symbol>
   <symbol id="i-luz" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8"/></symbol>
   <symbol id="i-forma" viewBox="0 0 24 24"><path d="M6.5 18.5C3 15.5 3.5 8 8 5.5s10-1 11 4-1.5 9.5-6 10-4.5.7-6.5-1z"/></symbol>
@@ -1518,7 +1672,7 @@
   <section id="center">
     <div class="panel" id="cv-p">
       <div class="ph" id="cv-h"><span class="lbl">Canvas</span><span class="hint" id="cv-hint"></span><span class="grow"></span>
-        <span id="cv-zoom" title="tamanho das caixas no canvas (Ctrl + roda do mouse) · clique no número = 100%"><button class="ib" id="cvz-out">−</button><span class="hint num" id="cvz-n"></span><button class="ib" id="cvz-in">+</button></span>
+        <span id="cv-zoom" title="tamanho das caixas no canvas (Ctrl + roda do mouse) · clique no número = 100%"><button class="ib" id="cvz-out">−</button><span class="hint num" id="cvz-n"></span><button class="ib" id="cvz-in">+</button><button class="ib" id="cvz-fit" title="CABER TUDO (H): o patch inteiro na vista · de novo = volta pra onde estava">⤢</button></span>
         <button class="btn sm ed" id="tema-btn" title="VISUAL: foto-real ou cel shading, e o modo leve (máquina fraca: sem grão, decoração nem animação) — lembrado nesta tela">visual</button>
         <span id="cable-cfg" title="CABOS (como as configurações do VCV), lembrados por modo: tensão = quanto o cabo cai (reta ↔ funda) · opacidade"><button class="btn sm" id="cable-btn" title="CABOS: tensão e opacidade — preferência de vista, guardada por modo (fica escondida até precisar)">cabos</button><span id="cable-rs" hidden>
           <input type="range" id="cable-t" min="0" max="1" step="0.05" title="tensão: quanto o cabo cai (0 = reta, 1 = curva funda) · 2 cliques = padrão">
@@ -1526,7 +1680,7 @@
         <button class="btn sm ed" id="cn-btn" title="CENAS: a lista (trocar, criar, transição) — abre por cima do canvas; clicar fora fecha">cenas · <b id="cn-name"></b></button>
         <button class="btn sm ed" id="pv-btn" title="PROGRAMA (o que o público vê): janelinha ↔ escondido · na janelinha, “fundo” põe atrás do canvas"><svg class="ico sm"><use href="#i-tela"/></svg>programa</button>
         <button class="btn sm ed" id="add-mix" title="MISTURA nova: junta várias entradas (cada uma, uma camada) numa imagem; átomos nela agem na imagem já junta"><svg class="ico sm"><use href="#i-mistura"/></svg>mistura</button>
-        <button class="btn sm ed" id="tidy-btn" title="arrumar os nós da esquerda pra direita (coluna = quantos nós antes; saídas no fim)">arrumar</button>
+        <button class="btn sm ed" id="tidy-btn" title="arrumar: um SETOR por fonte (de cima pra baixo), a fonte no meio dele; o que mistura duas fontes fica entre os setores; as saídas na direita, no meio de onde vêm">arrumar</button>
         <button class="btn sm ed" id="undo-btn" title="desfazer a última mudança nesta cena (Ctrl+Z)"><svg class="ico sm"><use href="#i-desfazer"/></svg>desfazer</button></div>
       <div id="cvw"><div id="cv"><div id="cv-in"><svg id="cv-hits"></svg><svg id="cv-wires"></svg><svg id="cv-wires-top"></svg></div></div>
         <div id="pvw" hidden><div class="pvh" title="arraste pra mover · o canto de baixo muda o tamanho"><span class="lbl">Programa</span><span class="hint">no ar</span><span class="grow"></span>
@@ -1897,7 +2051,7 @@ function placeInsp(){
 }
 
 // TAMANHOS: largura das colunas (divisorias) e zoom do canvas, por modo (travado/montando), so' neste navegador
-const LAYOUT_LIM = { L: [200, 600], R: [260, 1200] }, CVZ_LIM = [0.4, 2], CENTER_MIN = 360;
+const LAYOUT_LIM = { L: [200, 600], R: [260, 1200] }, CVZ_LIM = [0.02, 2], CENTER_MIN = 360;   // zoom: 2% (piso de seguranca: cabe qualquer patch) a 200%
 const layoutOf = () => (LS.get('v5layout', {}) || {})[mode] || {};
 function setLayout(patch){
   const all = LS.get('v5layout', {}) || {}, l = Object.assign({}, all[mode], patch);
@@ -1905,13 +2059,27 @@ function setLayout(patch){
   all[mode] = l; LS.set('v5layout', all); applyLayout();
 }
 let cvzNow = 1;   // o zoom do canvas, lido UMA vez aqui (cvZoom): ler o estilo no meio do renderBoxes forcava estilo + layout dos nos
+// ZOOM SEMANTICO em NIVEIS (2026-11-17, rodada VCV): perto | normal | longe (sem texto pequeno) | BLOCO (cada no' = um bloco na cor da
+// familia, nome grande, a tela parada) | PONTO (so' a cor e o nome, se couber). Bem de longe todos os nos estao na vista: o desenho
+// de cada um fica leve (sem pecas) e nenhuma previa e' pedida.
+const zlOf = z => z >= 1.3 ? 'near' : z > 0.7 ? '' : z >= 0.28 ? 'far' : z >= 0.09 ? 'bloco' : 'ponto';
+const ZL_TXT = { near: ' · perto', far: ' · longe', bloco: ' · blocos', ponto: ' · pontos' };
+let zlNow = null;
+const zoomLabel = z => { $('#cvz-n').textContent = (z < 0.1 ? (z * 100).toFixed(1) : Math.round(z * 100)) + '%' + (ZL_TXT[zlOf(z)] || ''); };
+function zoomClasses(z){
+  const zl = zlOf(z), ci = $('#cv-in');
+  zoomLabel(z);
+  ci.style.setProperty('--cvzi', (1 / z).toFixed(4));   // = 1/zoom: o que precisa ter o MESMO tamanho na tela (cabo fino, nome do bloco)
+  if (zl === zlNow) return; zlNow = zl;
+  ci.classList.toggle('zl-far', zl === 'far' || zl === 'bloco' || zl === 'ponto'); ci.classList.toggle('zl-near', zl === 'near');
+  ci.classList.toggle('zl-blk', zl === 'bloco' || zl === 'ponto'); ci.classList.toggle('zl-ponto', zl === 'ponto');
+}
 function applyLayout(){
   const l = layoutOf(), st = document.body.style;
   for (const side of ['L', 'R']) l[side] ? st.setProperty('--col' + side, l[side] + 'px') : st.removeProperty('--col' + side);
   l.z ? st.setProperty('--cvz', l.z) : st.removeProperty('--cvz');
-  const z = cvzNow = parseFloat(getComputedStyle($('#cv-in')).zoom) || 1, zl = z <= 0.7 ? 'far' : z >= 1.3 ? 'near' : '';
-  $('#cvz-n').textContent = Math.round(z * 100) + '%' + (zl === 'far' ? ' · longe' : zl === 'near' ? ' · perto' : '');
-  $('#cv-in').classList.toggle('zl-far', zl === 'far'); $('#cv-in').classList.toggle('zl-near', zl === 'near');   // ZOOM SEMANTICO
+  const z = cvzNow = parseFloat(getComputedStyle($('#cv-in')).zoom) || 1;
+  zoomClasses(z);
 }
 $$('.split').forEach(sp => {
   const side = sp.dataset.side, other = side === 'L' ? '#right' : '#left';
@@ -1931,25 +2099,88 @@ $$('.split').forEach(sp => {
   };
   sp.ondblclick = () => setLayout({ [side]: null });
 });
-function setCvZoom(z, ev){   // ev (roda do mouse) = o ponto embaixo do cursor fica parado
-  const C = CV.getBoundingClientRect(), z0 = cvZoom(), ax = ev ? ev.clientX - C.left : C.width / 2, ay = ev ? ev.clientY - C.top : C.height / 2;
-  const px = (CV.scrollLeft + ax) / z0, py = (CV.scrollTop + ay) / z0;
-  setLayout({ z: z == null ? null : Math.round(Math.max(CVZ_LIM[0], Math.min(CVZ_LIM[1], z)) * 100) / 100 });
-  cvSig = ''; renderBoxes();
-  const z1 = cvZoom(); CV.scrollLeft = px * z1 - ax; CV.scrollTop = py * z1 - ay;
+// ZOOM: setCvZoom(z, ev) = na hora (o ponto embaixo do cursor fica parado); smooth = anda SUAVE ate' o alvo (roda, +/-, botoes, caber
+// tudo). DURANTE A ANIMACAO o zoom do CSS NAO muda (rodada 3, 2026-11-18: "esta travando pra dar zoom"; cada troca do zoom do CSS
+// refazia o layout do canvas inteiro, ~80 ms por quadro, e o resto do dash — envelopes, knobs vivos — parava junto): o #cv-in ganha
+// um transform (so' o compositor, ~0 ms) e o zoom DE VERDADE (layout, niveis, rolagem, fios) entra UMA vez, no fim.
+// Arrastando algo (no', fio, zona) o zoom anda do jeito antigo: o arrasto mede o layout a cada quadro.
+let zAnim = null, zFitPrev = null;
+const zClamp = z => Math.max(CVZ_LIM[0], Math.min(CVZ_LIM[1], z));
+const zDefault = () => isShow() ? 0.72 : 1;
+function zoomFrame(z, ax, ay, px, py){
+  cvzNow = z; document.body.style.setProperty('--cvz', z); zoomClasses(z); sizeCvi();
+  CV.scrollLeft = px * z - ax; CV.scrollTop = py * z - ay;
   if (drag){ placeZones(); if (drag.last) dragMove(drag.last); }   // ZOOM NO MEIO DO ARRASTO: as zonas sao medidas de novo
   if (boxDragMv) boxDragMv(); if (wireDragMv) wireDragMv();
-  drawBoxWires();
+  placeInsp(); paintMsel();
 }
-$('#cvz-in').onclick = () => setCvZoom(cvZoom() + 0.1);
-$('#cvz-out').onclick = () => setCvZoom(cvZoom() - 0.1);
-$('#cvz-n').onclick = () => setCvZoom(null);
+function zoomVis(){   // o mapa que a TELA mostra agora: tela = z * (p - P) + A (p = ponto do mundo; na vista, em px)
+  const a = zAnim; if (a && a.tf) return a.vis;
+  return { z: cvZoom(), P: [0, 0], A: [-CV.scrollLeft, -CV.scrollTop] };
+}
+const zDragging = () => !!(drag || boxDrag || wireDrag);
+function zTf(a, z){   // um quadro da animacao: so' o transform (a rolagem do fim ja' com a mesma trava do zoomFrame: o fim nao pula)
+  if (!a.tf){ a.tf = 1; a.b = { z: cvZoom(), sl: CV.scrollLeft, st: CV.scrollTop }; CVI.style.transformOrigin = '0 0'; CVI.style.willChange = 'transform'; }
+  const b = a.b, sx = Math.max(0, Math.min(cvWH[0] * z, a.px * z - a.ax)), sy = Math.max(0, Math.min(cvWH[1] * z, a.py * z - a.ay));
+  const A = [a.px * z - sx, a.py * z - sy], k = z / b.z;
+  a.vis = { z, P: [a.px, a.py], A };
+  CVI.style.transform = `translate(${((A[0] + b.sl) / b.z - k * a.px).toFixed(2)}px, ${((A[1] + b.st) / b.z - k * a.py).toFixed(2)}px) scale(${k.toFixed(5)})`;
+  zoomLabel(z);
+}
+function zTfOff(a){ if (!a || !a.tf) return; a.tf = 0; CVI.style.transform = ''; CVI.style.willChange = ''; }
+function setCvZoom(z, ev, smooth){
+  const C = CV.getBoundingClientRect(), V = zoomVis(), reset = z == null;
+  const ax = ev ? ev.clientX - C.left : C.width / 2, ay = ev ? ev.clientY - C.top : C.height / 2;
+  const px = V.P[0] + (ax - V.A[0]) / V.z, py = V.P[1] + (ay - V.A[1]) / V.z, zt = zClamp(reset ? zDefault() : z);
+  if (!smooth){ if (zAnim){ zTfOff(zAnim); if (zAnim.raf) cancelAnimationFrame(zAnim.raf); } zAnim = null;
+    setLayout({ z: reset ? null : Math.round(zt * 1000) / 1000 });
+    zoomFrame(cvZoom(), ax, ay, px, py); drawBoxWires(); fitBlkNames(); return; }
+  const p = zAnim;
+  zAnim = { z: V.z, zt, ax, ay, px, py, reset, to: ev && ev.to, raf: p ? p.raf : 0, tf: p ? p.tf : 0, b: p && p.b, vis: p && p.vis };
+  if (!zAnim.raf) zAnim.raf = requestAnimationFrame(zoomStep);
+}
+function zoomStep(){
+  const a = zAnim; if (!a) return; a.raf = 0;
+  const l0 = Math.log(a.z), lt = Math.log(a.zt), z = Math.abs(lt - l0) < 0.004 ? a.zt : Math.exp(l0 + (lt - l0) * 0.3);
+  if (a.to){ a.ax += (a.to[0] - a.ax) * 0.3; a.ay += (a.to[1] - a.ay) * 0.3; if (z === a.zt){ a.ax = a.to[0]; a.ay = a.to[1]; } }   // caber tudo: o centro do patch anda ate' o centro da vista
+  a.z = z;
+  if (z !== a.zt){
+    if (zDragging()){ zTfOff(a); zoomFrame(z, a.ax, a.ay, a.px, a.py); } else zTf(a, z);
+    a.raf = requestAnimationFrame(zoomStep); return; }
+  zAnim = null;   // FIM: o zoom de verdade (uma vez) e o transform sai no MESMO quadro (nada pisca)
+  setLayout({ z: a.reset ? null : Math.round(z * 1000) / 1000 }); zTfOff(a);
+  zoomFrame(cvZoom(), a.ax, a.ay, a.px, a.py); drawBoxWires(); fitBlkNames();
+}
+// CABER TUDO (H ou o botao ⤢): enquadra o patch inteiro; de novo = volta pro zoom e o lugar de antes
+function patchBox(){
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const el of [...Object.values(boxEls), ...Object.values(ctlEls), ...CVI.querySelectorAll('.bx > .fil')]){ if (!el.isConnected) continue;
+    const p = el.classList.contains('fil') ? el.parentElement : null, x = el.offsetLeft + (p ? p.offsetLeft : 0), y = el.offsetTop + (p ? p.offsetTop : 0);
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + el.offsetWidth); y1 = Math.max(y1, y + el.offsetHeight); }
+  return x0 < Infinity ? [x0, y0, x1 - x0, y1 - y0] : null;
+}
+function fitAll(){
+  const C = CV.getBoundingClientRect(), V = zoomVis(), mid = [C.width / 2, C.height / 2];
+  const scr = (x, y) => [V.z * (x - V.P[0]) + V.A[0], V.z * (y - V.P[1]) + V.A[1]];   // ponto do mundo -> onde ele esta' na vista AGORA
+  if (zFitPrev){ const p = zFitPrev, q = scr(p.cx, p.cy); zFitPrev = null; $('#cvz-fit').classList.remove('on');   // VOLTAR: o ponto que estava no meio da vista volta pro meio
+    setCvZoom(p.z, { clientX: C.left + q[0], clientY: C.top + q[1], to: mid }, true); return; }
+  const b = patchBox(); if (!b) return;
+  zFitPrev = { z: V.z, cx: V.P[0] + (mid[0] - V.A[0]) / V.z, cy: V.P[1] + (mid[1] - V.A[1]) / V.z }; $('#cvz-fit').classList.add('on');
+  const z = zClamp(Math.min(C.width / (b[2] + 80), C.height / (b[3] + 80)));
+  const q = scr(b[0] + b[2] / 2, b[1] + b[3] / 2);   // o centro do patch: de onde ele esta' na tela agora ate' o centro da vista
+  setCvZoom(z, { clientX: C.left + q[0], clientY: C.top + q[1], to: mid }, true);
+}
+const zForget = () => { zFitPrev = null; $('#cvz-fit').classList.remove('on'); };   // mexeu no zoom: o "voltar" do caber tudo esquece
+$('#cvz-in').onclick = () => { zForget(); setCvZoom((zAnim ? zAnim.zt : cvZoom()) * 1.25, null, true); };
+$('#cvz-out').onclick = () => { zForget(); setCvZoom((zAnim ? zAnim.zt : cvZoom()) / 1.25, null, true); };
+$('#cvz-n').onclick = () => { zForget(); setCvZoom(null, null, true); };
+$('#cvz-fit').onclick = () => fitAll();
 // NAVEGAR NO CANVAS: RODA = zoom no ponto do cursor (sem barras de rolagem); BOTAO DO MEIO (em qualquer lugar) = mover a vista;
 // ESQUERDO NO VAZIO (MONTAR) = retangulo de SELECAO (varios nos; Shift soma). Clique parado no vazio limpa a selecao.
 $('#cv').addEventListener('wheel', e => {
   e.preventDefault();
   const d = (e.deltaY || e.deltaX) * (e.deltaMode ? 33 : 1);
-  setCvZoom(cvZoom() * Math.exp(-Math.max(-120, Math.min(120, d)) * 0.0018), e);
+  zForget(); setCvZoom((zAnim ? zAnim.zt : cvZoom()) * Math.exp(-Math.max(-120, Math.min(120, d)) * 0.0018), e, true);
 }, { passive: false });
 $('#cv').addEventListener('pointerdown', e => {   // (CV/CVI/WIRES sao declarados mais abaixo: so' usados dentro do handler)
   const empty = e.target === CV || e.target === CVI || e.target === WIRES || e.target === HITS || e.target.id === 'cv-empty';
@@ -2099,7 +2330,8 @@ function pumpPreviews(){
     const p = PV[i];
     if (!p.canvas.isConnected){ PV.splice(i, 1); continue; }
     if (p.busy || t - p.last < 1000 / p.fps || !p.canvas.getClientRects().length || (p.when && !p.when())) continue;
-    if (p.inView){ C = C || CV.getBoundingClientRect(); const r = p.canvas.getBoundingClientRect(); if (r.right < C.left || r.left > C.right || r.bottom < C.top || r.top > C.bottom) continue; }
+    if (p.inView){ if (zlNow === 'bloco' || zlNow === 'ponto') continue;   // de longe: a tela do no' para no ultimo quadro (nada pedido)
+      C = C || CV.getBoundingClientRect(); const r = p.canvas.getBoundingClientRect(); if (r.right < C.left || r.left > C.right || r.bottom < C.top || r.top > C.bottom) continue; }
     pullPreview(p);
   }
 }
@@ -2624,7 +2856,7 @@ function syncCtls(ids){   // todo movimento tem o seu controlador; ids = true da
   return made;
 }
 function ctlSpot(o, ky){   // lugar LIVRE pro controlador novo (ky = [x, y] do jack do knob, ou so' y): mini TV = EMBAIXO; card antigo = a' ESQUERDA, na altura do knob
-  const R = [...lastOverlays.filter(x => x.xy).map(x => [x.xy[0], x.xy[1], boxW(chKey(x)), boxH(chKey(x))]),
+  const R = [...lastOverlays.filter(x => x.xy).map(rectOfNode),
     ...ctlStore().filter(c => c.xy).map(c => [c.xy[0], c.xy[1], CTL_W, CTL_H])];
   const free = (x, y) => x >= 0 && y >= 0 && !R.some(r => x < r[0] + r[2] + 16 && x + CTL_W + 16 > r[0] && y < r[1] + r[3] + 12 && y + CTL_H + 12 > r[1]);
   const maxY = Math.max(0, ...R.map(r => r[1] + r[3]));
@@ -3074,33 +3306,122 @@ function feeds(aKey, bKey){   // a caixa a alimenta b (direto ou por outras)?
   return false;
 }
 // CARD (2026-11-02): cabecalho 36 (+3 da linha da cat: no atomo), tira do mixer 40; espelho = um chip
-const BOX_W = 232, COL_W = 312, SNAP = 12, LAYER_H = 40, MIRROR_W = 104, HEAD_H = 36, LIVE_H = 58;   // LIVE_H = a imagem viva do no' de atomo
+const BOX_W = 232, COL_W = 324, SNAP = 12, LAYER_H = 40, MIRROR_W = 104, HEAD_H = 36, LIVE_H = 58;   // LIVE_H = a imagem viva do no' de atomo
 let cvSig = '', boxEls = {}, openAt = LS.get('v5openAt', ''), selWire = null, boxDrag = null, wireDrag = null, boxDragMv = null, wireDragMv = null;
 const CV = $('#cv'), CVI = $('#cv-in'), WIRES = $('#cv-wires'), WIRES_TOP = $('#cv-wires-top'), HITS = $('#cv-hits');   // HITS = o clique dos cabos, POR BAIXO dos nos (o desenho fica por cima)
 // MINI TV (2026-11-17): o no' de ATOMO. Largura fixa (mais de 3 knobs numa fileira = alarga); a tela segue a proporcao da imagem do
 // no' (o motor entrega cada no' no tamanho do PALCO, entao = a do palco; sem telas = a da janela de saida). Altura = a soma abaixo, e o
 // card recebe ela como height (o layout dos fios/arrumar e' o que se ve).
-const TV_W = 240, TV_HEAD = 40, TV_PADX = 14, TV_BEZ = 10, TV_KROW = 72, TV_FOOT = 32, TV_GAP = 6, TV_KW = 64;
+const TV_W = 252, TV_HEAD = 44, TV_PADX = 14, TV_KROW = 66, TV_FOOT = 50, TV_KW = 70;
+// DISTRIBUICAO C COMPACTA (2026-11-17, rodada VCV; design book "PRISMA — design book: distribuição e filhos", design/vcv-layout.html):
+// de cima pra baixo = LINHA 1 (liga + fader de opacidade, em cima da tela) | a TELA, com o TRILHO de jacks a' esquerda (in, b, másc;
+// rotulo embaixo de cada um) e a ABA escura da saida a' direita | o NOME logo abaixo da tela (numero a' direita) | os knobs (rotulos na
+// mesma altura, o CV embaixo de cada um). Nada encosta em nada; a altura do no' e' a do que ele tem. Fonte/mistura/saida: sem a linha 1.
+const TV_RL = 58, TV_RR = 54, TV_RAILX = 31, TV_RAILD = 48, TV_R1 = 38, TV_NAME = 24, TV_BZ = 7, TV_TABH = 72, TV_TABS = 58, TV_OUTX = 32;   // RAILX/OUTX = centro do jack a' 31/32 px da borda (rodada 4: 'jacks muito perto das bordas')
+function tvGeo(key){
+  const o = rowOf(key) || {}, s = stackOf(key)[0], kind = o.kind ? (o.kind === 'out' ? 'out' : 'mix') : s ? 'atom' : 'src';
+  const low = kind === 'atom' || kind === 'src';   // RODADA 4: atomo/fonte = tela na LARGURA TODA; os jacks descem pra linha dos knobs
+  const W = boxW(key), sx = 14, sw = W - sx - (low || kind === 'out' ? 14 : TV_RR + 2);
+  const sh = Math.round((sw - 2 * TV_BZ) / tvAR()) + 2 * TV_BZ, sy = kind === 'atom' ? TV_R1 : 14, ny = sy + sh + 5;
+  return { W, kind, low, sx, sy, sw, sh, ny, by: ny + TV_NAME + 6, tab: sy + 4 };
+}
+// OS JACKS DE IMAGEM (rodada 4, 2026-11-18: "o espaco vazio do lado esquerdo inferior: aumentar o preview e descer o in, mask e out pra
+// altura dos knobs"): coluna a' ESQUERDA dos knobs, de baixo pra cima a partir da linha dos jacks de CV (o ultimo = másc na linha dos CV,
+// o de cima = IN na altura do knob); OUT a' DIREITA, na altura do knob, no pe' da aba escura. Fonte: másc e OUT na ultima linha.
+function tvJacks(key, H){
+  const G = tvGeo(key), n = tvRailN(key);
+  if (G.kind === 'src'){ const y = H - 30; return { ys: [y], oy: y, tab: y + 24 - TV_TABS, tabH: TV_TABS }; }
+  const fy = H - TV_FOOT + 25, oy = fy - TV_RAILD;   // fy = o centro dos jacks de CV; oy = o centro do knob (= fy - 48: .kj bottom -38)
+  return { ys: Array.from({ length: n }, (_, i) => fy - (n - 1 - i) * TV_RAILD), oy, tab: oy + 24 - TV_TABH, tabH: TV_TABH };
+}
 const tvNode = key => atomNode(key) && !mirrorNode(key);
 const tvSrcNode = key => { const o = rowOf(key); return !!o && !o.kind && !isTapKey(key) && !atomNode(key) && !stackOf(key).length; };   // FONTE pura = mini TV prata
-const TV_SRC_CR = 34;   // a fonte: so' a linha da MASC (esquerda) e do OUT (direita)
 const tvAR = () => { const [w, hh] = cvDims(); return Math.max(0.5, Math.min(2.4, w / Math.max(1, hh))); };
 function tvKnobs(s){ const L = nodeKnobList(s), md = s.mod || {}; return L.knobs.filter(n => n !== 'opacity' || md.opacity); }   // opacidade = o FADER (com movimento, knob)
-const tvW = key => { const s = stackOf(key)[0], n = s ? tvKnobs(s).length : 0; return n > 3 ? 2 * TV_PADX + n * TV_KW : TV_W; };
-const tvWinH = key => Math.round((boxW(key) - 2 * TV_PADX - 2 * TV_BEZ) / tvAR()) + 2 * TV_BEZ;
+const tvW = key => { const s = stackOf(key)[0], n = s ? tvKnobs(s).length : 0; return Math.max(TV_W, TV_RL + TV_RR + n * TV_KW); };   // os knobs = entre a coluna dos jacks e a do OUT
 const tvHasB = s => !!(metaOf(s.file).ins.length || (s.ins || []).length);
-const tvCrH = s => tvHasB(s) ? 72 : 50;   // linha de conexoes: IN, (B), MASC empilhados na esquerda
 const tvAlH = s => { const b = (s.ins || [])[0]; return (b && b !== 'src') || (s.pub || []).length ? 26 : 12; };   // = a linha .al do atomRow (B, estrela); os selos de movimento sairam (a TAMPA acesa diz)
 const mkShown = key => stackOf(key + MK).some(s => !isTapKey((s.ins || [])[0] || ''));   // mascara SEM cabo (antiga): a etiqueta continua
-function tvH(key){ const o = rowOf(key), s = stackOf(key)[0]; if (o && o.fold) return TV_HEAD + 8;
-  if (!s) return TV_HEAD + tvWinH(key) + TV_GAP + TV_SRC_CR + (mkShown(key) ? 40 : 0) + 10;   // FONTE
-  const L = nodeKnobList(s), wide = L.wide.reduce((a, n) => a + wideH(s.file, n), 0), post = postOf(s).length ? 6 + STK_H * postOf(s).length : 0;
-  return TV_HEAD + tvWinH(key) + TV_GAP + tvCrH(s) + (mkShown(key) ? 40 : 0) + tvAlH(s) + post + wide + TV_KROW + TV_FOOT; }
+const tvRailN = key => { const s = stackOf(key)[0]; return s ? 2 + (tvHasB(s) ? 1 : 0) : 1; };   // jacks de IMAGEM no trilho (in, b, másc | fonte: másc)
+function tvH(key){ const o = rowOf(key), s = stackOf(key)[0]; if (o && o.fold) return TV_HEAD;
+  const G = tvGeo(key), rail = G.by + TV_FOOT + 10 + (tvRailN(key) - 1) * TV_RAILD;   // a coluna dos jacks (de baixo pra cima, rotulo EM CIMA de cada um) cabe embaixo do nome
+  if (!s) return G.by + (mkShown(key) ? 40 : 0) + 62;   // FONTE: o nome, e embaixo a linha másc ... OUT
+  const L = nodeKnobList(s), post = postOf(s).length ? 6 + STK_H * postOf(s).length : 0, k = L.wide.length;   // escolha/chave = FILHO (fora do card)
+  return Math.max(G.by + (mkShown(key) ? 40 : 0) + tvAlH(s) + post + TV_KROW + TV_FOOT, rail); }
+// MODULOS FILHO (2026-11-17, rodada VCV; decidido): toda ESCOLHA (// opcoes:) e toda CHAVE sem movimento sai do card e vira um modulo
+// separado, A' ESQUERDA do pai, com controles "analogicos" (2 opcoes = duas TECLAS; 3+ = SELETOR com a lista acesa; chave = uma TECLA).
+// O FILHO e' a ENTRADA e o PAI a SAIDA: um cabo PRESO (nao se mexe) sai da aba OUT do filho e entra no JACK DA OPCAO do pai, no trilho,
+// na linha dos CVs (a alteracao vem ANTES do que a tela do pai mostra). O motor NAO muda: o valor continua no fx do atomo (floor(u_fx_X*K)
+// | step(.5,u_fx_X)), com o MESMO id de controle (o MIDI aprendido segue). O filho e' so' desenho: o lugar dele = s.filhos[knob] =
+// [dx, dy] RELATIVO ao pai (o elemento mora DENTRO do no' pai: arrastar o pai, a selecao ou o "sem limite" levam ele junto; arrastar
+// o filho muda so' o dx/dy). Sem lugar guardado = nasce a' esquerda, com o OUT na altura do jack da opcao.
+const FIL_GAP = 40, FIL_FONT = '600 12px system-ui, sans-serif';
+const txtW = (() => { const c = document.createElement('canvas').getContext('2d'), m = new Map();
+  return (t, f = FIL_FONT) => { const k = f + '|' + t; if (!m.has(k)){ c.font = f; m.set(k, Math.ceil(c.measureText(t).width)); } return m.get(k); }; })();
+function filSpec(file, n){   // o desenho do filho: controle, opcoes, largura (o nome mais longo nunca e' cortado), altura e onde fica o OUT
+  const sw = isSwitch(file, n), opts = sw ? [knobLabel(n)] : (metaOf(file).escolha || {})[n] || ['?'], N = opts.length;
+  const ctl = sw ? 'tecla' : N > 2 ? 'seletor' : 'teclas', tw = Math.max(...opts.map(t => txtW(t))), nw = txtW(knobLabel(n).toUpperCase(), '700 14px system-ui, sans-serif') * 1.15 + 26;
+  if (ctl === 'seletor'){ const cy = 44 + (N - 1) * 11; return { ctl, opts, N, cy, w: Math.max(200, 178 + tw, nw), h: Math.max(42 + (N - 1) * 22 + 26, cy + 36) + 14, outY: Math.max(56, cy) }; }
+  return { ctl, opts, N, w: Math.max(182, 146 + tw, nw), h: 38 + N * 34 + 10 + (N < 2 ? 14 : 0), outY: Math.max(56, 38 + N * 17 - 3) };
+}
+function filKids(key){   // os filhos do no' de atomo: [{n, sp, off, i, head}] (i = 0 encosta no pai; head = o 1o da corrente, o IN de verdade)
+  if (!tvNode(key)) return []; const o = rowOf(key), s = stackOf(key)[0]; if (!o || o.fold || !s) return [];
+  const L = nodeKnobList(s), k = L.wide.length; if (!k) return [];
+  const ry = tvJacks(key, tvH(key)).ys[0], out = []; let x = 0;   // na altura do IN do pai
+  for (let i = 0; i < k; i++){ const n = L.wide[i], sp = filSpec(s.file, n); x -= sp.w + FIL_GAP;
+    const fo = (s.filhos || {})[n], off = Array.isArray(fo) && fo.length === 2 ? fo : [x, ry - sp.outY]; out.push({ n, sp, off, i, head: i === k - 1 }); }
+  return out;
+}
+function filEl(key, s, f){   // o MODULO FILHO (dentro do elemento do pai, em left/top relativos)
+  const { n, sp } = f, file = s.file, id = s.id || 0, cur = () => { const x = stackOf(key)[0]; return x && x.file === file ? x : null; };
+  const get = () => { const x = cur(); return x ? fxVal(key, x, n) : fxDefault(file, n); };
+  const set = v => { const x = cur(); if (!x) return; setFxVal(key, x, n, v); KNOB_BIND.touch(); KNOB_BIND.commit(); };
+  const N = sp.N, idx = v => Math.max(0, Math.min(N - 1, Math.floor(v * N))), pick = i => { set(sp.ctl === 'tecla' ? i : (i + 0.5) / N); w._show(get()); };
+  const el = h('div', { class: 'fil f-' + sp.ctl, 'data-n': n, 'data-i': String(f.i), style: `left:${f.off[0]}px;top:${f.off[1]}px;width:${sp.w}px;height:${sp.h}px`,
+    title: `${knobLabel(n)} de ${fxName(file)}: ` + (sp.ctl === 'tecla' ? 'liga/desliga' : 'escolha uma') + ' — a imagem entra no IN, passa pelo filho e segue pelo OUT até o nó (ligação fixa)' + (isShow() ? '' : ' · arraste pra mover (o nó leva junto)') });
+  const w = h('div', { class: 'fctl' }); w.dataset.bar = '1'; w.dataset.kn = n;
+  const btn = (t, i, y) => { const b = h('button', { class: 'fkey', style: `top:${y}px;width:${sp.w - 108}px`, title: t }, h('i', { class: 'fled' }), h('span', { text: t }));
+    b.onclick = e => { e.stopPropagation(); pick(sp.ctl === 'tecla' ? (get() >= 0.5 ? 0 : 1) : i); }; return b; };
+  if (sp.ctl === 'teclas' || sp.ctl === 'tecla'){   // TECLAS: uma afunda e acende (tecla unica = chave: afundada = ligada)
+    const ks = sp.opts.map((t, i) => btn(t, i, 38 + i * 34)); w.append(...ks);
+    w._show = v => { const i = sp.ctl === 'tecla' ? (v >= 0.5 ? 0 : -1) : idx(v); if (w._v === i) return; w._v = i; ks.forEach((k, j) => { k.classList.toggle('on', j === i); k.setAttribute('aria-pressed', j === i); }); };
+  } else {   // SELETOR com a LISTA ACESA: o knob aponta, o LED do nome acende; clique no knob avanca (Shift volta), clique no nome escolhe
+    const kn = h('button', { class: 'fsel', style: `top:${sp.cy - 21}px`, title: `${knobLabel(n)}: clique avança (Shift volta)` }, h('span', { class: 'rot' }, h('span', { class: 'cap' }), h('span', { class: 'ptr' })));
+    kn.onclick = e => { e.stopPropagation(); pick((idx(get()) + (e.shiftKey ? N - 1 : 1)) % N); };
+    const rows = sp.opts.map((t, i) => { const r = h('button', { class: 'frl', style: `top:${32 + i * 22}px`, title: t }, h('i', { class: 'fled' }), h('span', { text: t }));
+      r.onclick = e => { e.stopPropagation(); pick(i); }; return r; });
+    w.append(kn, ...rows);
+    w._show = v => { const i = idx(v); if (w._v === i) return; w._v = i; kn.style.setProperty('--a', (-120 + i * 240 / Math.max(1, N - 1)) + 'deg'); rows.forEach((r, j) => r.classList.toggle('on', j === i)); };
+  }
+  reg(`bar:${key}:${id}:${n}`, { kind: 'trig', fire: () => sp.ctl === 'tecla' ? pick(get() >= 0.5 ? 0 : 1) : pick((idx(get()) + 1) % N), get, label: `${fxName(file)} · ${knobLabel(n)}`, el: w });   // o MESMO id da escolha de antes
+  const lockNo = e => { e.stopPropagation(); e.preventDefault(); if (!isShow()) toast('ligação fixa: o filho faz parte do módulo (arraste pelo nome)'); };
+  const jin = f.head ? inPort(key, 'a', 0, 'in', 'IN = a entrada do módulo (a corrente passa por aqui até o pai)' + (isShow() ? '' : ' — puxe a ponta pra mover ou soltar no vazio'))
+    : h('span', { class: 'fjin', title: 'vem do filho anterior (ligação fixa)' });
+  jin.classList.add('fin'); jin.style.cssText += `;left:15px;top:${sp.outY - 13}px`; if (!f.head) jin.onpointerdown = lockNo;
+  const jout = h('span', { class: 'fjk', style: `top:${sp.outY - 13}px`, title: 'ligação fixa até o próximo (não se tira)' }); jout.onpointerdown = lockNo;
+  el.append(h('span', { class: 'fnm', text: knobLabel(n) }), h('span', { class: 'ftab', style: `top:${sp.outY - 38}px` }), jout, jin, w);
+  w._show(get());
+  el.onpointerdown = e => { e.stopPropagation(); if (e.button !== 0 || isShow() || e.target.closest('button')) return; filDragStart(e, key, n, el, f.off); };
+  el.onclick = e => { e.stopPropagation(); if (!e.target.closest('button')) setSel(key, 0, true); };
+  return el;
+}
+function filDragStart(e, key, n, el, off0){   // o FILHO arrasta livre (o lugar dele e' relativo ao pai)
+  const a0 = canvasPt(e); let moved = false, last = e, off = off0.slice();
+  const mv = ev => { last = ev; const a = canvasPt(ev); if (!moved && Math.hypot(a[0] - a0[0], a[1] - a0[1]) * cvZoom() < 4) return;
+    if (!moved){ moved = true; boxDrag = key; boxDragMv = () => mv(last); el.classList.add('moving'); document.body.classList.add('dragging'); }
+    off = [Math.round((off0[0] + a[0] - a0[0]) / SNAP) * SNAP, Math.round((off0[1] + a[1] - a0[1]) / SNAP) * SNAP];
+    el.style.left = off[0] + 'px'; el.style.top = off[1] + 'px'; wiresFollow(new Set([key])); };
+  const mvF = rafMove(mv);
+  const up = () => { mvF.flush(); if (!moved) return; boxDrag = null; boxDragMv = null; el.classList.remove('moving'); document.body.classList.remove('dragging'); swallowClick();
+    const s = stackOf(key)[0]; if (s){ s.filhos = Object.assign({}, s.filhos, { [n]: off }); sendBindings(true); }
+    cvSig = ''; renderBoxes(); };
+  follow(e, { move: mvF, up, cancel: up });
+}
 function boxH(key){ const o = rowOf(key); if (o && o.fold && !tvNode(key) && !tvSrcNode(key)) return HEAD_H + 2;
   if (tvNode(key) || tvSrcNode(key)) return tvH(key);
   if (o && o.kind){ const nr = o.kind === 'out' ? 1 : o.jacks || (o.layers || []).length;   // saida: 1 entrada; mixer: N jacks; mistura antiga: camadas + "+"
     const L = nr * (o.jacks ? MIX_ROW_H : LAYER_H) + (o.kind === 'out' || o.jacks || isShow() ? 0 : 30) + 31 * stackOf(key).length + (o.kind === 'out' ? 34 : 0) + (o.jacks ? MIX_FOOT : 0);   // MINI TV: tela + as entradas
-    return o.fold ? TV_HEAD + 8 : TV_HEAD + tvWinH(key) + TV_GAP + L + 10; }
+    return o.fold ? TV_HEAD : tvGeo(key).by + L + 10; }
   const st = stackOf(key), mk = stackOf(key + MK).length ? 34 : 0;
   if (mirrorNode(key)) return HEAD_H + 2;
   return HEAD_H + (atomNode(key) ? 3 + LIVE_H + nodeKnobH(st[0]) + (postOf(st[0]).length ? 6 + STK_H * postOf(st[0]).length : 0) : 31 * st.length) + mk + 2; }
@@ -3115,13 +3436,46 @@ function autoPlace(all){   // caixa sem lugar (cena da v4, caixa nova): coluna =
   const rows = rowsTopDown(), used = {};
   if (!all && rows.every(o => o.xy)) return false;   // todos com lugar: nada a medir (era boxH de todos a cada render)
   if (!all) for (const o of rows) if (o.xy){ const c = Math.max(0, Math.round((o.xy[0] - 72) / COL_W)); used[c] = Math.max(used[c] || 0, o.xy[1] + boxH(chKey(o)) + 28); }
+  if (all) return tidyPlace(rows);
   let moved = false;
+  const colX = [];   // ARRUMAR: a coluna c comeca depois da mais larga da anterior e dos FILHOS dela (que ficam a' esquerda do no')
+  if (all){ const cw = [], ce = []; for (const o of rows){ const c = depthOf(o); cw[c] = Math.max(cw[c] || 0, boxW(chKey(o))); ce[c] = Math.max(ce[c] || 0, filExt(o)); }
+    let x = 72; for (let c = 0; c < cw.length; c++){ x += ce[c] || 0; colX[c] = x; x += (cw[c] || TV_W) + COL_W - TV_W; } }
   for (const o of rows){
     if (o.xy && !all) continue;
     const c = depthOf(o), y = used[c] || 24;
-    o.xy = [72 + c * COL_W, y]; used[c] = y + boxH(chKey(o)) + 28; moved = true;   // 72: o fio chega pela esquerda do no'
+    o.xy = [colX[c] ?? 72 + c * COL_W + filExt(o), y]; used[c] = y + Math.max(boxH(chKey(o)), rectOfNode(o)[3]) + 28; moved = true;   // 72: o fio chega pela esquerda do no'
   }
   return moved;
+}
+// ARRUMAR POR SETOR (rodada 4, 2026-11-18: "orientar com o source na metade da sua combinacao: setor de cima = fonte 1, de baixo = fonte 2,
+// os que se cruzam entre os dois e a saida centralizada entre os setores, do lado direito"). RAIZ = no' sem entrada de imagem (fonte,
+// gerador); cada raiz = um SETOR (na ordem de cima pra baixo de agora). Cada no' vai pra faixa = a MEDIA dos setores das raizes de onde
+// ele vem (por qualquer entrada: A, B, mascara, camada): so' de uma = o setor dela; de duas = entre as duas. Coluna = depthOf (corrente);
+// saidas na ULTIMA coluna. Dentro da faixa cada coluna fica CENTRADA na altura da faixa (a fonte sozinha na coluna 0 = no meio do setor).
+function tidyPlace(rows){
+  const isOut = o => o.kind === 'out', aL = o => inputsOf(o).filter(w => (w.port === 'a' || w.port === 'L') && nodeKeyOfRef(w.ref) && rowOf(nodeKeyOfRef(w.ref)));
+  const roots = rows.filter(o => !isOut(o) && !aL(o).length).sort((a, b) => (a.xy ? a.xy[1] : 1e9) - (b.xy ? b.xy[1] : 1e9) || (a.xy ? a.xy[0] : 0) - (b.xy ? b.xy[0] : 0));
+  const idx = new Map(roots.map((o, i) => [chKey(o), i])), memo = new Map();
+  const anc = o => { const k = chKey(o); if (memo.has(k)) return memo.get(k); memo.set(k, new Set());   // (laco: para aqui)
+    const out = new Set(); if (idx.has(k)) out.add(k);
+    for (const w of inputsOf(o)){ const r = rowOf(nodeKeyOfRef(w.ref) || ''); if (r && r !== o) for (const a of anc(r)) out.add(a); }
+    memo.set(k, out); return out; };
+  const band = o => { const a = [...anc(o)].map(k => idx.get(k)); return a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length * 1000) / 1000 : roots.length; };
+  const lastCol = Math.max(0, ...rows.filter(o => !isOut(o)).map(o => depthOf(o))) + 1, col = o => isOut(o) ? lastCol : depthOf(o);
+  const cw = [], ce = [], colX = []; for (const o of rows){ const c = col(o); cw[c] = Math.max(cw[c] || 0, boxW(chKey(o))); ce[c] = Math.max(ce[c] || 0, filExt(o)); }
+  let x = 72; for (let c = 0; c < cw.length; c++){ x += ce[c] || 0; colX[c] = x; x += (cw[c] || TV_W) + COL_W - TV_W; }
+  const hOf = o => Math.max(boxH(chKey(o)), o.xy ? rectOfNode(o)[3] : 0), GAP = 28, BAND = 72;
+  const bands = new Map(); for (const o of rows){ const b = band(o); if (!bands.has(b)) bands.set(b, new Map()); const m = bands.get(b), c = col(o); if (!m.has(c)) m.set(c, []); m.get(c).push(o); }
+  let y = 24;
+  for (const b of [...bands.keys()].sort((p, q) => p - q)){
+    const cols = bands.get(b), H = new Map();
+    for (const [c, L] of cols){ L.sort((p, q) => (p.xy ? p.xy[1] : 0) - (q.xy ? q.xy[1] : 0)); H.set(c, L.reduce((t, o) => t + hOf(o), 0) + GAP * (L.length - 1)); }
+    const bh = Math.max(...H.values());
+    for (const [c, L] of cols){ let yy = y + (bh - H.get(c)) / 2; for (const o of L){ o.xy = snapXY([colX[c] ?? 72, yy]); yy += hOf(o) + GAP; } }
+    y += bh + BAND;
+  }
+  return true;
 }
 function tidy(){   // ARRUMAR: nos em colunas (autoPlace) e depois cada controlador de novo num lugar livre perto do no' que ele move
   autoPlace(true);
@@ -3130,7 +3484,13 @@ function tidy(){   // ARRUMAR: nos em colunas (autoPlace) e depois cada controla
   sendOverlays(true); if (cs.length) sendBindings(true); cvSig = ''; renderBoxes(); }
 // SEM SOBREPOR (2026-11-05): no' que nasce (no fio, do menu, receita dividida em corrente) EMPURRA quem ele cobre — pra direita quem
 // esta' a' direita dele (a corrente segue andando), pra baixo quem esta' a' esquerda; em cascata. Controladores contam como nos.
-const rectOfNode = o => o.file === 'ctl' && !o.kind && o.mod ? [o.xy[0], o.xy[1], CTL_W, CTL_H] : [o.xy[0], o.xy[1], boxW(chKey(o)), boxH(chKey(o))];
+function rectOfNode(o){   // a PEGADA do no' no canvas: ele + os filhos (a' esquerda)
+  if (o.file === 'ctl' && !o.kind && o.mod) return [o.xy[0], o.xy[1], CTL_W, CTL_H];
+  const k = chKey(o); let x0 = o.xy[0], y0 = o.xy[1], x1 = x0 + boxW(k), y1 = y0 + boxH(k);
+  for (const f of filKids(k)){ const fx = o.xy[0] + f.off[0], fy = o.xy[1] + f.off[1]; x0 = Math.min(x0, fx); y0 = Math.min(y0, fy); x1 = Math.max(x1, fx + f.sp.w); y1 = Math.max(y1, fy + f.sp.h); }
+  return [x0, y0, x1 - x0, y1 - y0];
+}
+const filExt = o => Math.max(0, ...filKids(chKey(o)).map(f => -f.off[0]));   // quanto os filhos passam a' esquerda do no'
 function declutter(fixed){
   const G = 24, all = () => [...lastOverlays.filter(o => o.xy), ...ctlStore().filter(c => c.xy)];
   const hit = (a, b) => a[0] < b[0] + b[2] + G && a[0] + a[2] + G > b[0] && a[1] < b[1] + b[3] + G && a[1] + a[3] + G > b[1];
@@ -3197,15 +3557,19 @@ function renderBoxes(){
   ctlStore().forEach((c, j) => { if (!c.xy) c.xy = [24, 24]; CVI.append(ctlEl(c, j)); W = Math.max(W, c.xy[0] + CTL_W + 80); H = Math.max(H, c.xy[1] + CTL_H + 80); });
   for (const [k, c] of LIVE_CV) if (!c.isConnected) LIVE_CV.delete(k);   // no' que sumiu: solta o canvas dele
   if (hoverKey && !boxEls[hoverKey]) hoverKey = '';   // o no' sob o mouse sumiu (cena nova): nada fica apagado por um hover velho
-  const zz = cvZoom();   // folga de uma tela inteira: da' pra arrastar a vista e deixar as caixas em qualquer canto
-  if (!cvView[0]) cvView = [CV.clientWidth, CV.clientHeight];   // tamanho da vista: do ResizeObserver (ler aqui forcava o layout)
-  CVI.style.width = (W + cvView[0] / zz) + 'px'; CVI.style.height = (H + cvView[1] / zz) + 'px';
+  cvWH = [W, H]; sizeCvi();
   if (!rows.some(o => !o.kind)) CVI.append(h('div', { id: 'cv-empty', text: isShow()
     ? 'Nada no canvas — vá em MONTAR e arraste uma FONTE da biblioteca pra cá.'
     : 'Arraste uma FONTE da biblioteca (câmera, vídeo, imagem) pra cá: vira um nó. Clique na bolinha da direita dele: o fio gruda no cursor — clique numa entrada (A, B, máscara, camada de uma mistura/saída) ou no vazio pro menu.' }));
   $('#cv-hint').textContent = '';   // tudo a vista sem texto: a dica fica no title do topo do canvas
   $('#cv-h').title = isShow() ? '' : 'bolinha: clique = o fio gruda (Esc cancela) · arrastar também · entrada ligada: puxe pra mover ou soltar no vazio · mouse num fio + Delete = tira só ele';
-  requestAnimationFrame(drawBoxWires);
+  requestAnimationFrame(() => { drawBoxWires(); fitBlkNames(); });
+}
+let cvWH = [0, 0];
+function sizeCvi(){   // o mundo = os nos + uma folga de uma tela inteira (da' pra arrastar a vista e deixar as caixas em qualquer canto)
+  const zz = cvZoom();
+  if (!cvView[0]) cvView = [CV.clientWidth, CV.clientHeight];   // tamanho da vista: do ResizeObserver (ler aqui forcava o layout)
+  CVI.style.width = (cvWH[0] + cvView[0] / zz) + 'px'; CVI.style.height = (cvWH[1] + cvView[1] / zz) + 'px';
 }
 function srcThumb(key, info){   // miniatura ao vivo da FONTE no cabecalho do no'
   const th = h('div', { class: 'th' }, icon(info.icon, 'sm')), cv = h('canvas'); th.append(cv); addPreview(cv, '/frame?which=fx&src=' + encodeURIComponent(key), 4); return th; }
@@ -3225,6 +3589,10 @@ function nodeLate(o){   // LED de LACO: alguma entrada le um no' que (direto ou 
 const nodeTitle = key => { const o = rowOf(key); if (!o) return '?'; if (o.kind) return mixName(o);
   const an = atomNode(key) && stackOf(key)[0]; return an ? fxName(an.file) + ' · ' + boxNo(key) : srcInfo(key).name; };
 const mixName = o => o.nome || (o.kind === 'out' ? 'saída ' + (o.n || 1) : (o.jacks ? 'mixer ' : 'mistura ') + (o.n || ''));
+// O QUE O CANVAS ESCREVE (rodada 3, 2026-11-18: "nomes como mixer 16 nao precisa"): sem o numero do no' (ele continua no canto, nos avisos e
+// no MIDI); a saida fica com o numero (= a tela do palco dela)
+const mixShow = o => o.nome || (o.kind === 'out' ? 'saída ' + (o.n || 1) : o.jacks ? 'mixer' : 'mistura');
+const visName = key => { const o = rowOf(key); if (!o) return '?'; if (o.kind) return mixShow(o); const an = atomNode(key) && stackOf(key)[0]; return an ? fxName(an.file) : srcInfo(key).name; };
 const mirrorNode = key => atomNode(key) && !!stackOf(key)[0].espelho;
 function origOf(s){ const t = s && s.espelho && findModule(s.espelho); return t || null; }   // {key, j, s} do ORIGINAL de um espelho
 const origColor = s => { const t = origOf(s); return t ? nodeColor((rowOf(t.key) || {}).id || t.key) : 'var(--tx3)'; };
@@ -3243,6 +3611,15 @@ function nameEl(key, an, nm, info){
   const el = h('span', { class: 'nm', text: nm });
   return el;   // so' o nome: clicar no titulo ESCOLHE o no' (antes abria a lista de troca = "qualquer toque abre coisas"); trocar = ↻
 }
+const FAM_BLK = { forma: '#5f8f5a', geometria: '#4f6fa6', cor: '#c25b86', luz: '#c9a227', textura: '#6b7078', distorcao: '#7a5fb0', tempo: '#3f8e96', gerador: '#2f8f74', mascara: '#8e5fc8', mistura: '#7d8fa3' };   // = o --blk de cada familia
+const blkName = (t, top) => h('span', { class: 'blkn', style: `--blkt:${top}px` }, h('b', { text: t }));   // o NOME do no' no zoom de longe (bloco/ponto)
+function fitBlkNames(){   // bloco/ponto: o nome ENCOLHE ate' caber (14 -> 8 px na tela); nem assim = some (nunca cortado). So' no fim de um zoom
+  if (!CVI.classList.contains('zl-blk')) return;
+  const L = [...CVI.querySelectorAll('.bx > .blkn')]; L.forEach(n => { n.classList.remove('hide'); n.style.fontSize = ''; });
+  const m = L.map(n => [n.firstChild.offsetWidth, n.clientWidth, n.clientHeight * cvZoom()]);   // UMA leitura (14 px de base; a largura NATURAL do texto)
+  L.forEach((n, i) => { const [sw, cw, ch] = m[i], px = Math.min(14, Math.floor(14 * cw / Math.max(1, sw)), Math.floor(ch * 0.9));
+    if (px < 8) n.classList.add('hide'); else if (px < 14) n.style.fontSize = `calc(${px}px * var(--cvzi))`; });
+}
 function tvSkin(c, el){   // o MATERIAL da familia (decisoes do mockup: PRISMA = a 1a "marca"; o gabinete conta quem fez a peca)
   const D = { cor: ['rbl'], luz: ['brass'], forma: ['dbl2', 'dbl2 in', 'topo'], geometria: ['tri', 'ruler2'], distorcao: ['sine2'], textura: ['rel', 'rplate'],
     gerador: ['gmart'], mascara: ['mchk'] }[c] || [];
@@ -3255,8 +3632,8 @@ function tvFamTag(tv, ts, c, nm, info){   // a etiqueta da familia so' quando ca
   const t = ts ? info.kind || 'fonte' : CAT_NAME[c] || 'outros';
   return tv && c !== 'gerador' && String(nm).length + t.length <= 12 ? h('span', { class: 'fam', text: t }) : null;
 }
-function tvConn(key, s){   // a linha de conexoes da mini TV: o FADER de opacidade (o mesmo id do knob de antes: o MIDI aprendido segue)
-  const cur = () => { const x = stackOf(key)[0]; return x && x.file === s.file ? x : null; }, cr = h('div', { class: 'cr', style: `height:${tvCrH(s)}px` });
+function tvConn(key, s, led){   // LINHA 1 da mini TV: o LIGA e o FADER de opacidade, em cima da tela (o mesmo id do knob de antes: o MIDI aprendido segue)
+  const cur = () => { const x = stackOf(key)[0]; return x && x.file === s.file ? x : null; }, cr = h('div', { class: 'r1' }, led);
   if ((s.mod || {}).opacity) return cr;   // com movimento a opacidade vira knob (alcance) na fileira de baixo
   const f = fader({ id: `bar:${key}:${s.id || 0}:opacity`, label: 'opacidade', mlabel: `${fxName(s.file)} · opacidade`, dflt: 1, io: KNOB_BIND,
     title: 'opacidade — arraste ↔ (Shift = fino) · roda · duplo-clique = 100%', get: () => (cur() || {}).opacity ?? 1, set: v => { const x = cur(); if (x) x.opacity = Math.round(v * 1000) / 1000; } });
@@ -3268,7 +3645,8 @@ function boxEl(o, live, mirrored){
   const an = atomNode(key) && stackOf(key)[0], mir = an && an.espelho, el = h('div', { class: 'bx' + (selB ? ' sel' : '') + (on ? ' live' : '') + (o.fold ? ' fold' : '') + (mir ? ' mirror' : ''),
     'data-key': key, style: `left:${o.xy[0]}px;top:${o.xy[1]}px` + (an && !mir ? `;--cc:${catColor(catOf(an.file))}` : '') });
   const ts = !an && tvSrcNode(key), tv = (an && !mir) || ts, c0 = an ? catOf(an.file) : ts ? 'fonte' : '';   // MINI TV: gabinete = a familia; FONTE = prata
-  if (tv){ el.classList.add('tv', 'fam-' + (c0 || 'outros')); Object.assign(el.style, { width: tvW(key) + 'px', height: tvH(key) + 'px' }); el.style.setProperty('--ar', tvAR().toFixed(4)); }
+  const G = tv ? tvGeo(key) : null;
+  if (tv){ el.classList.add('tv', 'fam-' + (c0 || 'outros')); Object.assign(el.style, { width: tvW(key) + 'px', height: tvH(key) + 'px', paddingTop: o.fold ? '' : G.by + 'px' }); el.style.setProperty('--ar', tvAR().toFixed(4)); }
   const nm = an ? fxName(an.file) : info.name;   // NÓ = ÁTOMO: o nome do no' e' o do atomo
   // NO' DE ATOMO: a bolinha E' o liga/desliga (verde = ligado, apagada = desligado: a imagem passa direto); fonte: no ar ou nao
   const led = an && !mir ? h('i', { class: 'led pw' + (an.off ? '' : ' on'), title: (an.off ? 'DESLIGADO: a imagem passa direto — clique liga' : 'ligado — clique desliga (a imagem passa direto)')
@@ -3277,7 +3655,7 @@ function boxEl(o, live, mirrored){
   const hd = h('div', { class: 'bh' + (an ? ' atom' : ''), title: `nó ${boxNo(key)} · ${nm}` + (an ? ` (${info.name})` : '') + (mir ? ' — ESPELHO: knobs e movimentos do original (clique leva até ele)' : '') + (isShow() ? '' : ' — arraste pra mover · 2 cliques = painel · Shift+2 cliques dobra') });
   if (mir){   // ESPELHO: um chip — LED, o icone + a marca de cor do original, o numero; o nome so' no title
     hd.append(led, h('span', { class: 'mchip', style: `--mc:${origColor(an)}` }, icon(atomIcon(an.file), 'sm')), h('span', { class: 'grow' }), h('span', { class: 'n', text: String(boxNo(key)) }));
-  } else hd.append(...[led, an ? h('span', { class: 'ai' }, icon(atomIcon(an.file))) : ts ? h('span', { class: 'ai' }, icon(info.icon)) : srcThumb(key, info), nameEl(key, an, nm, info),
+  } else hd.append(...[tv && an ? null : led, an ? h('span', { class: 'ai' }, icon(atomIcon(an.file))) : ts ? h('span', { class: 'ai' }, icon(info.icon)) : srcThumb(key, info), nameEl(key, an, nm, info),
     tvFamTag(tv, ts, c0, nm, info),
     an && metaOf(an.file).estado ? h('i', { class: 'led on lst', title: 'tem ESTADO (// estado:): lembra os quadros anteriores' }) : null,
     nodeLate(o) ? h('i', { class: 'led lp', title: 'LAÇO: uma entrada deste nó lê o quadro anterior (fio tracejado)' }) : null,
@@ -3290,28 +3668,32 @@ function boxEl(o, live, mirrored){
   if (an && an.off) el.classList.add('offn');
   hd.onclick = e => { e.stopPropagation(); if (mir){ const t = origOf(an); if (t){ setSel(t.key, t.j); return; } } setSel(key, an ? 0 : -1, true); };
   hd.ondblclick = e => { e.stopPropagation(); if (isShow() || !e.shiftKey) return; const x = rowOf(key); if (!x) return; if (x.fold) delete x.fold; else x.fold = 1; sendOverlays(true); cvSig = ''; renderBoxes(); };
-  if (!isShow()) hd.onpointerdown = e => boxDragStart(e, key, el);
   reg('sel:' + key, { kind: 'trig', fire: () => setSel(key, -1), label: 'escolher · nó ' + boxNo(key), el: hd });
   if (tv) el.prepend(tvSkin(c0, el));
-  el.append(hd, outPort(key));
+  if (tv && !o.fold) Object.assign(hd.style, { top: G.ny + 'px', left: G.sx + 'px', width: (G.W - G.sx - 12) + 'px' });   // o NOME logo abaixo da tela
+  const J = tv ? tvJacks(key, o.fold ? TV_HEAD : tvH(key)) : null;
+  if (tv) el.append(h('span', { class: 'otab', style: `left:${G.W - TV_OUTX - 15}px;top:${J.tab}px;height:${J.tabH}px` }));   // a ABA escura da saida (na altura do knob)
+  el.append(hd, outPort(key), blkName(nm, tv ? G.sy + G.sh : 0));
+  if (!isShow()) el.onpointerdown = e => nodeGrab(e, key, el);   // ARRASTAR POR QUALQUER PARTE (rodada 4), a tela inclusive
   if (tv){   // a TELA da mini TV: a imagem viva dentro do vidro, na proporcao --ar
     const lv = liveCv(key, 'o que este nó produz, ao vivo');
-    el.append(h('div', { class: 'win' }, h('div', { class: 'crt' }, lv)));
+    el.append(h('div', { class: 'win', style: `left:${G.sx}px;top:${G.sy}px;width:${G.sw}px` }, h('div', { class: 'crt' }, lv)));
   }
   // LINHA DE CONEXOES (mini TV): IN, (B), MASC empilhados na borda esquerda, OUT na direita e o fader de opacidade no meio
-  const crY = tv ? TV_HEAD + tvWinH(key) + TV_GAP : 0, hasB = an && !mir && tvHasB(an), at = (p, y) => { if (tv) p.style.top = (crY + y - 13) + 'px'; return p; };
-  if (tv) el.querySelector(':scope > .port.out').style.top = (crY + (ts ? TV_SRC_CR : tvCrH(an)) / 2 - 13) + 'px';
-  if (info.tap) el.append(at(inPort(key, 'a', 0, tv ? 'in' : 'A', 'A = a corrente: ' + info.name + (isShow() ? '' : ' — puxe pra mover a ponta ou soltar no vazio (fica sem entrada)')), 13));
+  // TRILHO (mini TV): as entradas de IMAGEM empilhadas a' esquerda da tela (in, b, másc), rotulo embaixo; OUT no pe' da aba escura
+  const hasB = an && !mir && tvHasB(an), at = (p, i) => { if (tv){ p.style.left = (TV_RAILX - 13) + 'px'; p.style.top = (J.ys[Math.min(i, J.ys.length - 1)] - 13) + 'px'; } return p; };
+  if (tv) Object.assign(el.querySelector(':scope > .port.out').style, { left: (G.W - TV_OUTX - 13) + 'px', right: 'auto', top: (J.oy - 13) + 'px' });
+  if (info.tap) el.append(at(inPort(key, 'a', 0, tv ? 'in' : 'A', 'A = a corrente: ' + info.name + (isShow() ? '' : ' — puxe pra mover a ponta ou soltar no vazio (fica sem entrada)')), 0));
   if (hasB){
     const b = (an.ins || [])[0];
-    el.append(Object.assign(at(inPort(key, 'b', 0, b === 'fb' ? 'B ↺' : 'B', 'B = ' + (metaOf(an.file).bnome || 'a entrada B do átomo') + (b ? ': ' + insName(b) : ' (sem fio: a fonte crua)')), 36), tv ? {} : { style: 'top:41px' }));
+    el.append(Object.assign(at(inPort(key, 'b', 0, b === 'fb' ? 'B ↺' : 'B', 'B = ' + (metaOf(an.file).bnome || 'a entrada B do átomo') + (b ? ': ' + insName(b) : ' (sem fio: a fonte crua)')), 1), tv ? {} : { style: 'top:41px' }));
   }
   if (!mir){
     const mt = stackOf(key + MK);
     const pm = inPort(key, 'm', 0, 'másc', 'MÁSCARA: um fio aqui = o resultado só aparece onde aquela imagem é clara (Luma)');
-    if (tv) at(pm, ts ? TV_SRC_CR / 2 : hasB ? 59 : 37); else pm.style.cssText = 'top:auto;bottom:4px';   // card antigo: no canto de baixo (o nome aparece no hover)
+    if (tv) at(pm, ts ? 0 : hasB ? 2 : 1); else pm.style.cssText = 'top:auto;bottom:4px';   // card antigo: no canto de baixo (o nome aparece no hover)
     el.append(pm);
-    if (tv) el.append(ts ? h('div', { class: 'cr', style: `height:${TV_SRC_CR}px` }) : tvConn(key, an));
+    if (tv && !ts) el.append(tvConn(key, an, led));
     if (!tv) stackOf(key).forEach((s, j) => el.append(atomRow(key, j, s)));
     if (mt.length && (!tv || mkShown(key))){   // mini TV: mascara ligada por CABO nao precisa estar escrita (o cabo diz)
       const m = matteOf(key) || {};
@@ -3330,8 +3712,12 @@ function boxEl(o, live, mirrored){
       el.append(strip);
     }
     if (tv) stackOf(key).forEach((s, j) => el.append(atomRow(key, j, s)));   // mini TV: os knobs por ULTIMO (rente ao pe', o CV sai por baixo)
+    const kids = tv && an && !o.fold ? filKids(key) : [];
+    for (const f of kids) el.append(filEl(key, an, f));   // FILHOS a' esquerda: a corrente entra no IN do 1o e chega no IN do pai pela ligacao fixa
+    const pin = kids.length && el.querySelector(':scope > .port.in');
+    if (pin){ pin.classList.add('lk'); pin.title = 'IN: vem do filho (ligação fixa) — a entrada do módulo é o IN do filho'; pin.onpointerdown = e => { e.stopPropagation(); e.preventDefault(); if (!isShow()) toast('ligação fixa: a entrada deste módulo é o IN do filho'); }; }
   }
-  el.onclick = e => { if (e.target === el || (tv && e.target.closest('.skin, .cr') && !e.target.closest('.fader'))) setSel(key, -1, true); };
+  el.onclick = e => { if (e.target === el || (tv && e.target.closest('.skin, .r1, .otab, .win') && !e.target.closest('.fader, .led'))) setSel(key, -1, true); };
   el.onpointerenter = () => hoverNode(key); el.onpointerleave = () => hoverNode('');
   boxEls[key] = el;
   return el;
@@ -3341,7 +3727,8 @@ function mixEl(o, live){   // STAGING / SAIDA: entradas numeradas (camadas; em c
   const el = h('div', { class: 'bx mix' + (isOut ? ' outn' : '') + (selB ? ' sel' : '') + (on ? ' live' : '') + (o.fold ? ' fold' : ''), 'data-key': key,
     style: `left:${o.xy[0]}px;top:${o.xy[1]}px` });
   // MINI TV (2026-11-17): mistura e saida = gabinete PRATA (a saida com o tally verde); a miniatura do cabecalho virou a TELA
-  el.classList.add('tv', isOut ? 'fam-saida' : 'fam-mistura'); Object.assign(el.style, { width: TV_W + 'px', height: boxH(key) + 'px' }); el.style.setProperty('--ar', tvAR().toFixed(4));
+  const G = tvGeo(key);
+  el.classList.add('tv', isOut ? 'fam-saida' : 'fam-mistura'); Object.assign(el.style, { width: TV_W + 'px', height: boxH(key) + 'px', paddingTop: o.fold ? '' : G.by + 'px' }); el.style.setProperty('--ar', tvAR().toFixed(4));
   el.append(h('span', { class: 'skin' }, h('span', { class: 'dots' })));
   const cv = liveCv(key, isOut ? 'esta saída sozinha, ao vivo' : 'a mistura, ao vivo'), th = null;
 
@@ -3349,22 +3736,25 @@ function mixEl(o, live){   // STAGING / SAIDA: entradas numeradas (camadas; em c
   const hd = h('div', { class: 'bh', title: (isOut ? 'SAÍDA: uma imagem final, num lugar do palco (Saída → Saídas no palco)' : 'MISTURA: junta as entradas (cada uma = uma camada) e os átomos daqui agem na imagem junta · "no palco" (inspetor) = vira saída')
       + (isShow() ? '' : ' — arraste pra mover · 2 cliques = painel · Shift+2 cliques dobra') },
     h('i', { class: 'led' + (on ? ' on' : ''), title: on ? 'no ar' : 'fora do ar' }), h('span', { class: 'ai' }, icon(isOut ? 'tela' : 'mistura', 'sm')),
-    h('span', { class: 'nm', text: mixName(o) }), nodeLate(o) ? h('i', { class: 'led lp', title: 'LAÇO: uma entrada lê o quadro anterior' }) : null, th, h('span', { class: 'n', text: no }));
+    h('span', { class: 'nm', text: mixShow(o) }), nodeLate(o) ? h('i', { class: 'led lp', title: 'LAÇO: uma entrada lê o quadro anterior' }) : null, th, h('span', { class: 'n', text: no }));
   hd.onclick = e => { e.stopPropagation(); setSel(key, -1, true); };
   hd.ondblclick = e => { e.stopPropagation(); if (isShow() || !e.shiftKey) return; const x = rowOf(key); if (!x) return; if (x.fold) delete x.fold; else x.fold = 1; sendOverlays(true); cvSig = ''; renderBoxes(); };
-  if (!isShow()) hd.onpointerdown = e => boxDragStart(e, key, el);
   reg('sel:' + key, { kind: 'trig', fire: () => setSel(key, -1), label: 'escolher · ' + mixName(o), el: hd });
-  el.append(hd, h('div', { class: 'win' }, h('div', { class: 'crt' }, cv)));
+  if (!o.fold) Object.assign(hd.style, { top: G.ny + 'px', left: G.sx + 'px', width: (G.W - G.sx - 12) + 'px' });
+  if (!isOut) el.append(h('span', { class: 'otab', style: `left:${G.W - TV_OUTX - 15}px;top:${G.tab}px;height:${TV_TABH}px` }));
+  el.append(hd, h('div', { class: 'win', style: `left:${G.sx}px;top:${G.sy}px;width:${G.sw}px` }, h('div', { class: 'crt' }, cv)), blkName(mixShow(o), G.sy + G.sh));
+  if (!isShow()) el.onpointerdown = e => nodeGrab(e, key, el);   // ARRASTAR POR QUALQUER PARTE
   if (o.jacks) el.classList.add('jk');
-  if (!isOut) el.append(Object.assign(outPort(key), { style: o.jacks ? `top:${boxH(key) - 33}px` : `top:${TV_HEAD + tvWinH(key) / 2 - 13}px` }));   // MIXER: OUT no canto de BAIXO a' direita; mistura antiga: na altura da tela
+  if (!isOut) el.append(Object.assign(outPort(key), { style: `left:${G.W - TV_OUTX - 13}px;right:auto;top:${G.tab + TV_TABH - 24 - 13}px` }));   // OUT no pe' da aba escura (C compacta: como no atomo)
   const lays = o.layers || [];
   if (isOut){   // SAIDA = UMA entrada (juntar imagens = um MIXER antes dela)
     const src = lays[0] && nodeKeyOfRef(lays[0].from);
     el.append(h('div', { class: 'lr one', 'data-i': '0' }, inPort(key, 'L', 0, '', src ? 'entrada: ' + nodeTitle(src) + ' — puxe a ponta pra outra saída ou solte no vazio pra tirar' : 'a entrada desta saída: solte um fio aqui'),
-      h('span', { class: 'hint', text: src ? shortTitle(src) : 'solte um fio aqui' })));
+      h('span', { class: 'hint', text: src ? visName(src) : 'solte um fio aqui' })));
   } else if (o.jacks){   // MIXER de N jacks: um por linha, jack de cima = na frente (o lugar do cabo e' o jack, sem alca de ordem)
     for (let s = 0; s < o.jacks; s++){ const i = lays.findIndex(x => x.slot === s);
-      el.append(i >= 0 ? layerRow(o, lays[i], i, s) : h('div', { class: 'lr slot', 'data-i': String(900 + s) }, inPort(key, 'L', 900 + s, String(s + 1), `entrada ${s + 1}${s ? '' : ' (a da frente)'}: solte um fio aqui`))); }
+      el.append(i >= 0 ? layerRow(o, lays[i], i, s) : h('div', { class: 'lr slot', 'data-i': String(900 + s) }, inPort(key, 'L', 900 + s, String(s + 1), `entrada ${s + 1}${s ? '' : ' (a da frente)'}: solte um fio aqui`),
+        h('span', { class: 'hint', text: 'livre' }))); }   // (sem numero: pedido 2026-11-17, 'mixer sem numeracao nos jacks')
   } else {   // mistura antiga (sem jacks fixos): as camadas + "+ entrada"
     lays.map((L, i) => [L, i]).reverse().forEach(([L, i]) => el.append(layerRow(o, L, i)));
     if (!isShow()) el.append(h('div', { class: 'lr slot', 'data-i': String(lays.length) }, inPort(key, 'L', lays.length, '+', 'mais uma entrada: solte um fio aqui (vira a camada da frente)'),
@@ -3377,15 +3767,20 @@ function mixEl(o, live){   // STAGING / SAIDA: entradas numeradas (camadas; em c
     el.append(h('div', { class: 'omap' }, icon('palco', 'sm'), h('span', { class: 'hint', text: where }), h('span', { class: 'grow' }),
       h('button', { class: 'btn sm', title: 'onde esta saída fica no palco (Saída → Saídas no palco)', onclick: e => { e.stopPropagation(); setSel(key, -1, true); openDrawer('eq', 'telas'); setStgView('fontes'); } }, 'mapear')));
   }
-  el.onclick = e => { if (e.target === el) setSel(key, -1, true); };
+  el.onclick = e => { if (e.target === el || e.target.closest('.skin, .otab, .win, .lr, .omap') && !e.target.closest('.fader, button, .port')) setSel(key, -1, true); };
   el.onpointerenter = () => hoverNode(key); el.onpointerleave = () => hoverNode('');
   boxEls[key] = el;
   return el;
 }
+// PEGAR O MODULO POR QUALQUER PARTE (rodada 4, 2026-11-18: "quero pegar em qualquer parte dele pra arrastar, no preview inclusive"): so'
+// os CONTROLES (knob, fader, botao, jack, liga, teclas do filho...) fazem a coisa deles; o resto — gabinete, tela, nome, etiquetas — arrasta.
+// Clique parado continua escolhendo (o arrasto so' comeca depois de 4 px).
+const NODRAG = '.knob, .fader, button, select, input, .port, .kj, .led, .sw, .chseg, .fil, .rng, .mc, .grip, .ib, a';
+function nodeGrab(e, key, el){ if (e.button !== 0 || isShow() || (e.target.closest && e.target.closest(NODRAG))) return; boxDragStart(e, key, el); }
 function layerRow(o, L, i, slot){   // uma ENTRADA do mixer = uma camada: bolinha numerada na borda + opacidade + modo + liga/desliga
   const key = chKey(o), src = nodeKeyOfRef(L.from), cur = () => ((rowOf(key) || {}).layers || [])[i];
   const id = o.id === 'o1' && src ? 'row:' + src : `lay:${key}:${L.from}`;   // saida 1: o id do fader da SAIDA de antes (o MIDI aprendido continua)
-  const fd = fader({ id, label: src ? shortTitle(src) : '?', mlabel: `${mixName(o)} · ${src ? nodeTitle(src) : '?'}`, dflt: 1, io: IO_OVL,
+  const fd = fader({ id, label: src ? visName(src) : '?', mlabel: `${mixName(o)} · ${src ? nodeTitle(src) : '?'}`, dflt: 1, io: IO_OVL,
     get: () => (cur() || {}).opacity ?? 1, set: v => { const x = cur(); if (x) x.opacity = Math.round(v * 1000) / 1000; },
     title: 'quanto desta entrada entra — arraste ↔ · duplo-clique = 100%' });
   fd.dataset.lay = '1';
@@ -3451,7 +3846,7 @@ function ctlEl(c, j){   // CONTROLADOR no canvas: nome + o que ele segue + o sin
   const rows = h('div', { class: 'crg' }, rg.slice(0, 2).map(u => ctlRange(u)),
     uses.length > Math.min(2, rg.length) ? h('span', { class: 'hint', text: `+ ${uses.length - Math.min(2, rg.length)} ligação(ões) — no painel` }) : null,
     uses.length ? null : h('span', { class: 'hint', text: 'sem cabo: puxe o jack de cima até um knob' }));
-  el.append(hd, port, h('div', { class: 'cb' }, h('span', { class: 't', text: modShort(m) }), h('div', { class: 'scope', 'data-mvs': c.id }, sc)), rows);
+  el.append(hd, port, h('div', { class: 'cb' }, h('span', { class: 't', text: modShort(m) }), h('div', { class: 'scope', 'data-mvs': c.id }, sc)), rows, blkName(ctlName(m), 0));
   el.onclick = e => { e.stopPropagation(); setSel(CTL_KEY, j, true); };
   ctlEls[c.id] = el;
   return el;
@@ -3469,19 +3864,20 @@ function ctlDragStart(e, id, el){   // mover o controlador (o mesmo gesto do box
   if (e.button !== 0) return;
   const c0 = ctlStore().find(x => x.id === id); if (!c0) return;
   const a0 = canvasPt(e), grab = [a0[0] - c0.xy[0], a0[1] - c0.xy[1]];
-  let moved = false, c = c0, last = e, grp = null;
+  let moved = false, c = c0, last = e, grp = null, keys = null;
   const cx0 = c0.xy.slice();
   const mv = ev => { last = ev;
     const a = canvasPt(ev); if (!moved && Math.hypot(a[0] - a0[0], a[1] - a0[1]) * cvZoom() < 4) return;
-    if (!moved){ c = ctlStore().find(x => x.id === id); if (!c) return; grp = groupOf('ctl:' + id); moved = true; boxDrag = 'ctl'; boxDragMv = () => mv(last); el.classList.add('moving'); document.body.classList.add('dragging'); }
+    if (!moved){ c = ctlStore().find(x => x.id === id); if (!c) return; grp = groupOf('ctl:' + id); keys = dragKeys('ctl:' + id, grp); moved = true; boxDrag = 'ctl'; boxDragMv = () => mv(last); el.classList.add('moving'); document.body.classList.add('dragging'); }
     c.xy = [Math.max(0, Math.round((a[0] - grab[0]) / SNAP) * SNAP), Math.max(0, Math.round((a[1] - grab[1]) / SNAP) * SNAP)];
     el.style.left = c.xy[0] + 'px'; el.style.top = c.xy[1] + 'px'; bindTouched = now();
     if (grp){ grpMove(grp, c.xy[0] - cx0[0], c.xy[1] - cx0[1]); mediaTouched = now(); }
-    drawBoxWires(); edgeTrack(ev, () => mv(last), true); edge.onShift = (dx, dy) => { if (grp) grp.forEach(m => { m.xy0 = [m.xy0[0] + dx, m.xy0[1] + dy]; }); }; };
+    wiresFollow(keys); placeInsp(); edgeTrack(ev, () => mv(last), true); edge.onShift = (dx, dy) => { if (grp) grp.forEach(m => { m.xy0 = [m.xy0[0] + dx, m.xy0[1] + dy]; }); }; };
+  const mvF = rafMove(mv);
   cvGrew = false;
-  const up = () => { if (!moved) return; boxDrag = null; boxDragMv = null; el.classList.remove('moving'); document.body.classList.remove('dragging');
+  const up = () => { mvF.flush(); if (!moved) return; boxDrag = null; boxDragMv = null; el.classList.remove('moving'); document.body.classList.remove('dragging');
     swallowClick(); sendBindings(true); if (cvGrew || (grp && grp.some(m => !m.ctl))) sendOverlays(true); cvGrew = false; cvSig = ''; renderBoxes(); };
-  follow(e, { move: mv, up, cancel: up });
+  follow(e, { move: mvF, up, cancel: up });
 }
 function cvTarget(ev){   // o KNOB embaixo do ponteiro: {el, key, j, n} — knob do no', barra de caixa antiga, celula dos Controles ou o atomo (= o principal)
   const t = document.elementFromPoint(ev.clientX, ev.clientY); if (!t) return null;
@@ -3528,7 +3924,8 @@ function cvEnd(u){   // onde o cabo de controle CHEGA: na borda esquerda do no',
   if (!isMk(u.key)){
     const at = bx.querySelector(`.at[data-k="${CSS.escape(u.key)}"][data-j="${u.j}"]`), kn = at && at.querySelector(`[data-kn="${CSS.escape(u.n)}"]`), r = (kn || at || {}).getBoundingClientRect && (kn || at).getBoundingClientRect();
     const kj = bx.classList.contains('tv') && at && at.querySelector(`.nkr[data-kr="${CSS.escape(u.n)}"] .kj`);
-    if (kj){ const q = kj.getBoundingClientRect(); return [(q.left + q.width / 2 - R.left) / z, (q.top + q.height / 2 - R.top) / z, 'down']; }   // MINI TV: o CV entra por BAIXO, no jack do knob
+    if (kj){ const q = kj.getBoundingClientRect(); if (!q.width) return [(B.left + B.width / 2 - R.left) / z, (B.bottom - R.top) / z, 'down'];   // BLOCO: o pe' do bloco
+      return [(q.left + q.width / 2 - R.left) / z, (q.top + q.height / 2 - R.top) / z, 'down']; }   // MINI TV: o CV entra por BAIXO, no jack do knob
     if (r && r.height) y = (r.top + r.height / 2 - R.top) / z;
   } else y = (B.bottom - R.top) / z - 12;
   return [x, y];
@@ -3604,7 +4001,7 @@ function nodeKnobs(key, j, s){   // NO' = ATOMO: todos os knobs dele REDONDOS no
   };
   const kn = tv ? tvKnobs(s) : L.knobs;   // mini TV: uma FILEIRA rente ao pe' (a opacidade sem movimento e' o fader da linha de conexoes)
   return h('div', { class: tv ? 'nks row' : 'nks vert' }, tv ? h('div', { class: 'nkg2', style: `--kn:${Math.max(1, kn.length)}` }, kn.map(one)) : kn.map(one),
-    L.wide.length ? h('div', { class: 'nkw' }, L.wide.map(n => { const c = barCtl(key, j, s, n, true);
+    L.wide.length && !tv ? h('div', { class: 'nkw' }, L.wide.map(n => { const c = barCtl(key, j, s, n, true);
       return c.classList.contains('chseg') ? c : h('div', { class: 'al' }, h('span', { class: 'dn', text: knobLabel(n) }), c); })) : null);
 }
 function jackMenu(x, y, key, j, n){   // clique na BOLINHA do knob: ali mesmo, os movimentos que cabem nele (= presetBox/modEditor do inspetor)
@@ -3788,7 +4185,9 @@ function syncBoxes(){   // valores sem refazer (outra aba, MIDI, cena nova com a
 // de onde o fio sai. Os fios passam POR BAIXO dos nos (no VCV e' por cima: aqui o knob nunca fica coberto) e as bolinhas ficam na
 // BORDA, entao a curva sai pra fora do proprio no'. Girando um knob os fios somem; passar o mouse num no' acende os dele.
 // TENSAO (quanto o cabo cai: 0 = reta) e OPACIDADE = globais, lembradas por modo (como o zoom) ----------
-const portXY = (el, side) => { const r = el.getBoundingClientRect(), R = CVI.getBoundingClientRect(), z = cvZoom();   // jack VISTO DE CIMA: o cabo pluga no CENTRO
+const portXY = (el, side) => { let r = el.getBoundingClientRect(); const R = CVI.getBoundingClientRect(), z = cvZoom();   // jack VISTO DE CIMA: o cabo pluga no CENTRO
+  if (!r.width){ const b = el.closest('.bx'); if (b){ const B = b.getBoundingClientRect();   // BLOCO (zoom de longe): o jack sumiu -> a borda do bloco
+    return [((side === 'out' ? B.right : B.left) - R.left) / z, (B.top + B.height / 2 - R.top) / z]; } }
   return [(r.left + r.width / 2 - R.left) / z, (r.top + r.height / 2 - R.top) / z]; };
 const cvZoom = () => cvzNow;   // = applyLayout (todo zoom passa por setLayout/setMode)
 const CABLE_DFLT = { t: 0.45, o: 0.85 };
@@ -3816,7 +4215,7 @@ function outPortEl(ref){   // a bolinha de SAIDA de onde sai '@<id>'
   return atomNode(t.key) ? boxEls[t.key].querySelector(':scope > .port.out') : CVI.querySelector(`.at[data-k="${CSS.escape(t.key)}"][data-j="${t.j}"] .port.aout`);
 }
 function inPortEl(key, w){ const el = boxEls[key]; if (!el) return null;
-  return w.port === 'a' ? el.querySelector(':scope > .port.in') : w.port === 'b' ? el.querySelector(':scope > .port.pbx') : w.port === 'm' ? el.querySelector(':scope > .port.pm')
+  return w.port === 'a' ? el.querySelector(':scope > .fil > .port.in') || el.querySelector(':scope > .port.in') : w.port === 'b' ? el.querySelector(':scope > .port.pbx') : w.port === 'm' ? el.querySelector(':scope > .port.pm')
     : el.querySelector(`.lr[data-i="${w.i}"] .port.lin`); }
 function wireOwnerId(ref){ const id = refId(ref), r = rowById(id); if (r) return r.id; const t = findModule(id); return t ? ((rowOf(t.key) || {}).id || t.key) : id; }
 function feeds(aKey, bKey){   // a alimenta b (b le a, direto ou por outros, por qualquer entrada)?
@@ -3828,7 +4227,7 @@ function feeds(aKey, bKey){   // a alimenta b (b le a, direto ou por outros, por
 let hoverKey = '', hoverWire = null;
 // HOVER num no' (2026-11-17, "suave"): troca so' as classes dos cabos que JA existem (os outros esmaecem com transicao), sem refazer
 function hoverNode(k){ if (cable || boxDrag || drag) return; if (k === hoverKey) return; hoverKey = k;
-  if (hoverWire) return drawBoxWires();
+  if (hoverWire) hoverWireSet(null);   // entrou num no' = saiu do cabo (o "saiu" do cabo some quando ele e' refeito): limpa NO LUGAR, sem refazer
   for (const p of WIRES.querySelectorAll('[data-k]')){ const lit = !!k && (p.dataset.k === k || p.dataset.s === k);
     if (p.classList.contains('w')) p.classList.toggle('hl', lit); p.classList.toggle('dim', !!k && !lit); } }
 const wireSig = w => JSON.stringify([w.t, w.key, w.j ?? null, w.i ?? null, w.n ?? null, w.mid ?? null]);
@@ -3844,15 +4243,16 @@ function drawBoxWires(){
   if (!WIRES.isConnected) return;
   const W = CVI.scrollWidth, H = CVI.scrollHeight, cfg = cableCfg();
   WIRES.setAttribute('width', W); WIRES.setAttribute('height', H); WIRES.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  WIRES.innerHTML = ''; WIRES.style.setProperty('--wo', cfg.o);
+  WIRES.innerHTML = ''; WIRES.style.setProperty('--wo', cfg.o); WLIVE = []; wnCache = null;
   const WT = WIRES_TOP; WT.innerHTML = ''; WT.setAttribute('width', W); WT.setAttribute('height', H); WT.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const onTop = p => WT.append(p.cloneNode());   // o ESCOLHIDO tambem por cima dos nos
+  const onTop = p => { const q = p.cloneNode(); WT.append(q); return q; };   // o ESCOLHIDO tambem por cima dos nos
   if (cable && cable.tmp) WIRES.append(cable.tmp);   // o fio sendo arrastado sobrevive a um redesenho (antes sumia ao passar por outro fio)
   $$('.port.con', CVI).forEach(p => { p.classList.remove('con', 'hl'); p.style.removeProperty('--pc'); });
   HITS.innerHTML = ''; HITS.setAttribute('width', W); HITS.setAttribute('height', H); HITS.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const path = (d, cls, col) => { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('class', cls); if (col) p.style.stroke = col; (cls === 'hit' ? HITS : WIRES).append(p); return p; };
   const plugs = [];   // PLUGUE do cabo (VCV): por cima de tudo, desenhado depois dos cabos
-  const plug = (x, y, col, sig, st, k, sk) => plugs.push([x, y, col, sig, st, k, sk]);
+  const plug = (x, y, col, sig, st, k, sk, ent, i) => plugs.push([x, y, col, sig, st, k, sk, ent, i]);
+  const live = (keys, geo, ...paths) => { const e = { keys, geo, paths: paths.filter(Boolean), plugs: [] }; WLIVE.push(e); return e; };
   let selXY = null;
   const deco = !tema.leve;   // modo leve: o cabo e' UM traco
   for (const o of rowsVisible()){
@@ -3860,20 +4260,21 @@ function drawBoxWires(){
     for (const w of inputsOf(o)){
       const from = outPortEl(w.ref), to = inPortEl(key, w); if (!from || !to) continue;
       const sk = nodeKeyOfRef(w.ref), wid = { t: w.port, key, j: w.j, i: w.i }, col = cableColor(w.ref + '>' + wireSig(wid));   // cor ALEATORIA por cabo (estavel)
-      const [x0, y0] = portXY(from, 'out'), [x1, y1] = portXY(to, 'in'), d = curve(x0, y0, x1, y1);
+      const geo = () => { const [x0, y0] = portXY(from, 'out'), [x1, y1] = portXY(to, 'in'); return { d: curve(x0, y0, x1, y1), a: [x0, y0], b: [x1, y1] }; };
+      const G0 = geo(), [x0, y0] = G0.a, [x1, y1] = G0.b, d = G0.d;
       const late = sk && (sk === key || feeds(key, sk)), isSel = selWire && wireSig(selWire) === wireSig(wid);
       const lit = (hoverKey && (hoverKey === key || hoverKey === sk)) || (hoverWire && wireSig(hoverWire) === wireSig(wid));
       const off = w.port === 'L' && o.layers[w.i] && o.layers[w.i].off, st = (late ? ' late' : '') + (off ? ' off' : '') + (lit ? '' : (hoverKey || hoverWire) ? ' dim' : '');
       const ws = deco && !late ? path(d, 'ws' + st, dkC(col)) : null;   // VCV: sombra embaixo (CSS ::) + o CONTORNO escuro da cor do cabo; cel = tinta
       const vp = path(d, 'w' + (late ? ' late' : '') + (off ? ' off' : '') + (isSel ? ' sel' : '') + (lit ? ' hl' : (hoverKey || hoverWire) ? ' dim' : ''), col);
       const wh = null;
-      vp._w = { key, port: w.port, idx: w.port === 'L' ? w.i : (w.j || 0), ref: w.ref }; vp.setAttribute('data-sig', wireSig(wid)); if (isSel) onTop(vp);   // soltar um atomo AQUI = no' no meio do fio
+      vp._w = { key, port: w.port, idx: w.port === 'L' ? w.i : (w.j || 0), ref: w.ref }; vp.setAttribute('data-sig', wireSig(wid)); const top = isSel ? onTop(vp) : null;   // soltar um atomo AQUI = no' no meio do fio
       for (const p of [ws, wh]) if (p) p.setAttribute('data-sig', wireSig(wid));
       for (const p of [vp, ws]) if (p){ p.dataset.k = key; p.dataset.s = sk || ''; }   // as 2 pontas: o hover de um no' acende/apaga NO LUGAR
       for (const p of [from, to]){ p.classList.add('con'); p.style.setProperty('--pc', col); if (lit || isSel) p.classList.add('hl'); }
-      plug(x0, y0, col, wireSig(wid), st, key, sk || ''); plug(x1, y1, col, wireSig(wid), st, key, sk || '');
-      if (!isShow()){
-        const hit = path(d, 'hit');
+      const hit = !isShow() ? path(d, 'hit') : null, ent = live([key, sk || ''], geo, ws, vp, top, hit);
+      plug(x0, y0, col, wireSig(wid), st, key, sk || '', ent, 0); plug(x1, y1, col, wireSig(wid), st, key, sk || '', ent, 1);
+      if (hit){
         hit.onclick = e => { e.stopPropagation(); if (document.activeElement) document.activeElement.blur(); selWire = isSel ? null : wid; cvSig = ''; renderBoxes(); };
         hit.onpointerenter = () => hoverWireSet(wid); hit.onpointerleave = () => hoverWireSet(null);
         const tt = document.createElementNS(NS, 'title'); tt.textContent = `${sk ? nodeTitle(sk) : '?'} → ${nodeTitle(key)} · ${({ a: 'A', b: 'B', m: 'máscara', L: 'entrada ' + ((w.i || 0) + 1) })[w.port]}`
@@ -3884,19 +4285,21 @@ function drawBoxWires(){
   }
   for (const c of ctlStore()){   // CABOS DE CONTROLE: do losango do controlador ate' a altura do knob na borda do no' (fino, tracejado)
     const el = ctlEls[c.id], from = el && el.querySelector('.port.cout'); if (!from) continue;
-    const [x0, y0] = coutXY(from), d0 = coutDir(from), uses = mvUses(c.id);
+    const d0 = coutDir(from), uses = mvUses(c.id);
     if (uses.length) from.classList.add('con');
     for (const u of uses){
       const end = cvEnd(u); if (!end) continue;
       const wid = { t: 'cv', key: u.key, j: u.j ?? null, n: u.n, mid: c.id }, isSel = selWire && wireSig(selWire) === wireSig(wid), col = cableColor(wireSig(wid));
-      const lit = hoverKey === mkBase(u.key) || (hoverWire && wireSig(hoverWire) === wireSig(wid)), d = cableD(x0, y0, d0, end[0], end[1], end[2] === 'down' ? [0, 1] : [-1, 0]);
+      const geo = () => { const [x0, y0] = coutXY(from), e1 = cvEnd(u) || end; return { d: cableD(x0, y0, d0, e1[0], e1[1], e1[2] === 'down' ? [0, 1] : [-1, 0]), a: [x0, y0], b: [e1[0], e1[1]] }; };
+      const G0 = geo(), [x0, y0] = G0.a, d = G0.d;
+      const lit = hoverKey === mkBase(u.key) || (hoverWire && wireSig(hoverWire) === wireSig(wid));
       const st = lit ? '' : (hoverKey || hoverWire) ? ' dim' : '', ws = deco ? path(d, 'ws' + st, dkC(col)) : null;
-      const cp = path(d, 'w cv' + (isSel ? ' sel' : '') + (lit ? ' hl' : (hoverKey || hoverWire) ? ' dim' : ''), col); cp.setAttribute('data-sig', wireSig(wid)); if (isSel) onTop(cp);
+      const cp = path(d, 'w cv' + (isSel ? ' sel' : '') + (lit ? ' hl' : (hoverKey || hoverWire) ? ' dim' : ''), col); cp.setAttribute('data-sig', wireSig(wid)); const top = isSel ? onTop(cp) : null;
       if (ws) ws.setAttribute('data-sig', wireSig(wid));
       for (const p of [cp, ws]) if (p){ p.dataset.k = mkBase(u.key); p.dataset.s = ''; }
-      plug(x0, y0, col, wireSig(wid), st, mkBase(u.key), ''); plug(end[0], end[1], col, wireSig(wid), st, mkBase(u.key), '');
-      if (!isShow() && !u.row && !isMk(u.key)){
-        const hit = path(d, 'hit');
+      const hit = !isShow() && !u.row && !isMk(u.key) ? path(d, 'hit') : null, ent = live(['ctl:' + c.id, mkBase(u.key)], geo, ws, cp, top, hit);
+      plug(x0, y0, col, wireSig(wid), st, mkBase(u.key), '', ent, 0); plug(end[0], end[1], col, wireSig(wid), st, mkBase(u.key), '', ent, 1);
+      if (hit){
         hit.onclick = e => { e.stopPropagation(); if (document.activeElement) document.activeElement.blur(); selWire = isSel ? null : wid; cvSig = ''; renderBoxes(); };
         hit.onpointerenter = () => hoverWireSet(wid); hit.onpointerleave = () => hoverWireSet(null);
         const tt = document.createElementNS(NS, 'title'); tt.textContent = `controlador “${ctlName(c.mod.sinal)}” → ${knobLabel(u.n)} de ${fxName(u.s.file)} — clique escolhe (Delete tira)`; hit.append(tt);
@@ -3904,13 +4307,45 @@ function drawBoxWires(){
       if (isSel) selXY = [end[0] + 10, end[1], wid];
     }
   }
-  for (const [x, y, col, sig, st, k, sk] of plugs){   // o PLUGUE (VCV): corpo na cor do cabo, aro escuro, o furo e um brilho
-    const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'pg' + st); g.setAttribute('data-sig', sig); g.dataset.k = k; g.dataset.s = sk; g.setAttribute('transform', `translate(${x} ${y})`);
-    g.innerHTML = `<circle r="9.5" class="pg-r" style="fill:${dkC(col)}"/><circle r="7" class="pg-b" style="fill:${col}"/><circle r="3.4" class="pg-h"/><circle cx="-2.6" cy="-3" r="1.8" class="pg-l"/>`;
+  // LIGACAO FIXA filho -> filho -> pai (rodada 3, 2026-11-18: "o design do cabo deve ser diferente para nao dar para remover"): nao e'
+  // cabo — e' uma TRILHA rigida (reta, cotovelo em angulo reto, sem cair), na cor da familia, com um sulco no meio e TERMINAIS
+  // quadrados no lugar dos plugues. Nao tem area de clique; as pontas engolem o clique (nada arrasta nem se solta).
+  const lockLinks = [];
+  if (!CVI.classList.contains('zl-blk')) for (const bx of CVI.querySelectorAll('.bx.tv')){ const fs = [...bx.querySelectorAll(':scope > .fil')]; if (!fs.length) continue;
+    const k = bx.dataset.key, byI = fs.sort((a, b) => +a.dataset.i - +b.dataset.i), pin = bx.querySelector(':scope > .port.in');
+    byI.forEach((f, i) => { const to = i ? byI[i - 1].querySelector('.fin') : pin, from = f.querySelector('.fjk'); if (to && from) lockLinks.push([k, from, to]); }); }
+  for (const [k, from, to] of lockLinks){
+    const col = FAM_BLK[catOf((stackOf(k)[0] || {}).file)] || '#7d8fa3', st = hoverKey && hoverKey !== k ? ' dim' : '';
+    const geo = () => { const [x0, y0] = portXY(from, 'out'), [x1, y1] = portXY(to, 'in'), mx = Math.round((x0 + x1) / 2);
+      return { d: Math.abs(y1 - y0) < 1 ? `M${x0} ${y0}H${x1}` : `M${x0} ${y0}H${mx}V${y1}H${x1}`, a: [x0, y0], b: [x1, y1] }; };
+    const G0 = geo(), base = path(G0.d, 'lkb' + st), body = path(G0.d, 'lkc' + st, col), groove = path(G0.d, 'lkg' + st);
+    for (const q of [base, body, groove]){ q.dataset.k = k; q.dataset.s = ''; }
+    const ent = live([k], geo, base, body, groove);
+    plug(G0.a[0], G0.a[1], col, 'lock:' + k, st + ' lock', k, '', ent, 0); plug(G0.b[0], G0.b[1], col, 'lock:' + k, st + ' lock', k, '', ent, 1);
+  }
+  for (const [x, y, col, sig, st, k, sk, ent, i] of plugs){   // o PLUGUE (VCV): corpo na cor do cabo, aro escuro, o furo e um brilho; PRESO = anel de trava
+    const g = document.createElementNS(NS, 'g'); if (ent) ent.plugs[i] = g; g.setAttribute('class', 'pg' + st); g.setAttribute('data-sig', sig); g.dataset.k = k; g.dataset.s = sk; g.setAttribute('transform', `translate(${x} ${y})`);
+    g.innerHTML = / lock/.test(st) ? `<rect x="-10" y="-10" width="20" height="20" rx="3.5" class="lkt" style="fill:${dkC(col)}"/><rect x="-6.5" y="-6.5" width="13" height="13" rx="2" style="fill:${col}"/><rect x="-2.5" y="-2.5" width="5" height="5" rx="1" class="lkh"/>`
+      : `<circle r="9.5" class="pg-r" style="fill:${dkC(col)}"/><circle r="7" class="pg-b" style="fill:${col}"/><circle r="3.4" class="pg-h"/><circle cx="-2.6" cy="-3" r="1.8" class="pg-l"/>`;
     WIRES.append(g); }
   $$('.wx', CVI).forEach(x => x.remove());
   // (sem o x no cabo, 2026-11-17: tirar = cabo escolhido + Delete, ou puxar a ponta pro vazio)
 }
+// ARRASTANDO (rodada 3, 2026-11-18: "arrastar os modulos esta muito ruim"): cada passo refazia TODOS os fios (~12 ms) e procurava um
+// fio perto ponto a ponto (~16 ms). Agora o drawBoxWires guarda cada cabo (WLIVE: as pontas, a geometria e os elementos) e o arrasto
+// so' refaz a curva dos cabos que tocam quem anda; o redesenho inteiro fica pro soltar.
+var WLIVE = [], wnCache = null;
+function wiresFollow(keys){
+  for (const e of WLIVE){ if (!e.keys.some(k => keys.has(k))) continue;
+    const g = e.geo(); for (const p of e.paths) p.setAttribute('d', g.d);
+    if (e.plugs[0]) e.plugs[0].setAttribute('transform', `translate(${g.a[0]} ${g.a[1]})`);
+    if (e.plugs[1]) e.plugs[1].setAttribute('transform', `translate(${g.b[0]} ${g.b[1]})`); }   // (o wnCache fica: os fios de quem anda nao entram nele)
+}
+function dragKeys(key, grp){ const k = new Set([key]); if (grp) for (const m of grp) k.add(m.ctl ? 'ctl:' + m.obj.id : chKey(m.obj)); return k; }
+// UM passo por quadro: o mouse manda mais eventos que a tela desenha
+function rafMove(fn){ let rq = 0, last = null;
+  const f = ev => { last = ev; if (!rq) rq = requestAnimationFrame(() => { rq = 0; fn(last); }); };
+  f.flush = () => { if (rq){ cancelAnimationFrame(rq); rq = 0; fn(last); } }; return f; }
 function cutMask(key, j){ selWire = null; removeMask(key + MK, j); cvSig = ''; renderBoxes(); toast(`nó ${boxNo(key)}: máscara tirada`); }
 function wireX(x, y, fn){   // fio escolhido: um x perto da entrada tira a ligacao (ou Delete)
   const g = h('button', { class: 'wx', title: 'tirar este fio (Delete)', style: `left:${x}px;top:${y}px` }, icon('x', 'sm'));
@@ -4066,7 +4501,7 @@ function boxDragStart(e, key, el){
   let o = rowOf(key); if (!o) return;
   const cpt = ev => { const R = CVI.getBoundingClientRect(), z = cvZoom(); return [(ev.clientX - R.left) / z, (ev.clientY - R.top) / z]; };   // ponteiro no canvas
   const a0 = cpt(e), p0 = o.xy.slice(), grab = [a0[0] - p0[0], a0[1] - p0[1]];   // onde a caixa foi pega (sobrevive a rolar e a dar ZOOM no meio)
-  let moved = false, last = e, hotW = null, copied = false, grp = null;
+  let moved = false, last = e, hotW = null, copied = false, grp = null, hotP = null, keys = null;
   // ALT (ou Ctrl) + ARRASTAR = DUPLICA como no Figma: QUALQUER no' (fonte, atomo, mistura, saida) e, se ele faz parte de uma
   // selecao, a selecao inteira (controladores juntos). As copias nascem SEM FIOS e sao elas que andam; o original fica.
   const dup = e.altKey || e.ctrlKey;
@@ -4084,20 +4519,23 @@ function boxDragStart(e, key, el){
         key = made[0]; o = rowOf(key); el = boxEls[key]; copied = true; if (!o || !el) return;
       }
       grp = groupOf(key);   // no' selecionado junto com outros: o GRUPO anda junto
+      keys = dragKeys(key, grp);
       moved = true; boxDrag = key; boxDragMv = () => mv(last); el.classList.add('moving'); document.body.classList.add('dragging'); }
     o.xy = [Math.max(0, Math.round((a[0] - grab[0]) / SNAP) * SNAP), Math.max(0, Math.round((a[1] - grab[1]) / SNAP) * SNAP)];
     el.style.left = o.xy[0] + 'px'; el.style.top = o.xy[1] + 'px';
     if (grp) grpMove(grp, o.xy[0] - p0[0], o.xy[1] - p0[1]);
     CVI.style.width = Math.max(parseFloat(CVI.style.width) || 0, o.xy[0] + BOX_W + 80) + 'px';   // da' pra levar alem da borda
     CVI.style.height = Math.max(parseFloat(CVI.style.height) || 0, o.xy[1] + boxH(key) + 80) + 'px';
-    drawBoxWires();
+    wiresFollow(keys); placeInsp();
     // EM CIMA DE UM FIO (so' no' de atomo): o fio acende; soltar = o no' entra no meio dele
     hotW = !grp && atomNode(key) ? wireNear(a, key) : null;
-    if (hotW){ const hp = [...WIRES.querySelectorAll('path.w')].find(p => p._w && p._w.key === hotW.key && p._w.port === hotW.port && p._w.idx === hotW.idx); if (hp) hp.classList.add('hl', 'drop'); }
+    const hp = hotW ? hotW.path : null;
+    if (hp !== hotP){ if (hotP) hotP.classList.remove('hl', 'drop'); hotP = hp; if (hp) hp.classList.add('hl', 'drop'); }
     el.classList.toggle('onwire', !!hotW);
     edgeTrack(ev, () => mv(last), true); edge.onShift = (dx, dy) => { if (grp) grp.forEach(m => { m.xy0 = [m.xy0[0] + dx, m.xy0[1] + dy]; }); }; };
+  const mvF = rafMove(mv);
   cvGrew = false;
-  const up = () => {
+  const up = () => { mvF.flush();
     if (!moved) return; boxDrag = null; boxDragMv = null; el.classList.remove('moving', 'onwire'); document.body.classList.remove('dragging');
     swallowClick();
     const plugged = hotW && nodeOnWire(o, hotW);
@@ -4105,7 +4543,7 @@ function boxDragStart(e, key, el){
     cvGrew = false; sendOverlays(true); cvSig = ''; renderBoxes();
     if (plugged) toast(`${fxName(stackOf(chKey(o))[0].file)} no meio do fio${copied ? ' (cópia)' : ''}`);
     else if (copied) toast(`cópia${msel.size > 1 ? ` (${msel.size})` : ''} — sem fios${atomNode(chKey(o)) ? ' (solte num fio pra ligar)' : ''}`); };
-  follow(e, { move: mv, up, cancel: () => { hotW = null; up(); } });
+  follow(e, { move: mvF, up, cancel: () => { mvF.flush(); hotW = null; up(); } });
 }
 function dupNode(k){   // COPIA SEM FIOS de um no' (ou 'ctl:<id>'): mesmo lugar, mesmos knobs/movimentos, ids novos; devolve a chave nova
   if (k.startsWith('ctl:')){
@@ -4206,7 +4644,7 @@ function cableTarget(ev){   // o que esta' embaixo do ponteiro: {kind: port|box|
     if (bo && bo.kind !== 'out') return { kind: 'src', el: bx, ref: '@' + ensureRowId(bo) };   // o corpo do no' = a saida dele
     return { kind: bx ? 'none' : 'empty' };
   }
-  const p = t && t.closest('.port.in, .port.pbx, .port.pm, .port.lin');
+  const p = t && t.closest('.port.in:not(.lk), .port.pbx, .port.pm, .port.lin');
   if (p && bx) return { kind: 'port', el: p, key: bx.dataset.key, port: p.dataset.p, idx: +p.dataset.i || 0 };
   if (bx){ const o = rowOf(bx.dataset.key); if (!o || nodeKeyOfRef(cable.ref) === bx.dataset.key) return { kind: 'none' };   // corpo do proprio no': nada
     if (o.kind === 'out') return { kind: 'port', el: bx, key: bx.dataset.key, port: 'L', idx: 0 };   // saida: a entrada dela (troca)
@@ -4467,12 +4905,15 @@ function nodeOnWire(o, z){   // NO' JA' EXISTENTE solto num fio: sai de onde est
   return true;
 }
 // fio de imagem mais perto do ponto p (coordenadas do canvas), que NAO toca no no' `key` (nem entra nem sai dele): {..._w, path}
-function wireNear(p, key, R = 22){
-  const o = rowOf(key), mine = new Set([key, ...(o && o.id ? ['@' + o.id] : []), ...stackOf(key).map(s => '@' + s.id)]);
+function wireNear(p, key, R = 22){   // os fios sao amostrados UMA vez (wnCache; zera quando algum fio muda): antes era a cada passo do arrasto
+  const o = rowOf(key), mine = new Set([key, ...(o && o.id ? ['@' + o.id] : []), ...stackOf(key).map(s => '@' + s.id)]), sig = [...mine].join('|');
+  if (!wnCache || wnCache.sig !== sig){ wnCache = { sig, L: [] };
+    for (const path of WIRES.querySelectorAll('path.w')){ const w = path._w; if (!w || mine.has(w.key) || mine.has(w.ref)) continue;
+      const L = path.getTotalLength(); if (L < 30) continue; const pts = [];
+      for (let s = 0; s <= L; s += 10){ const q = path.getPointAtLength(s); pts.push(q.x, q.y); }
+      wnCache.L.push({ w, path, pts }); } }
   let best = null, bd = R;
-  for (const path of WIRES.querySelectorAll('path.w')){ const w = path._w; if (!w || mine.has(w.key) || mine.has(w.ref)) continue;
-    const L = path.getTotalLength(); if (L < 30) continue;
-    for (let s = 0; s <= L; s += 10){ const q = path.getPointAtLength(s), dd = Math.hypot(q.x - p[0], q.y - p[1]); if (dd < bd){ bd = dd; best = { ...w, path }; } } }
+  for (const { w, path, pts } of wnCache.L) for (let i = 0; i < pts.length; i += 2){ const dd = Math.hypot(pts[i] - p[0], pts[i + 1] - p[1]); if (dd < bd){ bd = dd; best = { ...w, path }; } }
   return best;
 }
 function freshCopy(items){   // COPIA SOLTA (Alt+arrastar): id novo, mesmos knobs/movimentos — sem entrada B nem "em cima" de ninguem
@@ -7602,7 +8043,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); const k = e.key.toLowerCase(); if (k === 'v') clipPaste(); else clipTake(k === 'x'); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === '.' && !e.repeat){ e.preventDefault(); blackout(); return; }
-  if (e.key === '+' || e.key === '=' || e.key === '-'){ e.preventDefault(); setCvZoom(cvZoom() * (e.key === '-' ? 1 / 1.15 : 1.15)); return; }   // ZOOM (tambem arrastando)
+  if (e.key === '+' || e.key === '=' || e.key === '-'){ e.preventDefault(); zForget(); setCvZoom((zAnim ? zAnim.zt : cvZoom()) * (e.key === '-' ? 1 / 1.25 : 1.25), null, true); return; }   // ZOOM (tambem arrastando)
   if (e.repeat) return;
   if (e.key === ' '){ e.preventDefault(); cueGo(); return; }
   if (e.key === 'Enter'){ e.preventDefault();   // MONTAR: ENTER = a lista de modulos (como o VCV), onde o mouse esta' (digitar ja' procura); TOCAR: liga/desliga
@@ -7624,13 +8065,14 @@ document.addEventListener('keydown', e => {
   if (e.key.length !== 1) return;
   const k = e.key.toLowerCase(); if (!/[a-z]/.test(k)) return;
   const sc = lastScenes.find(x => x.key === k);
-  if (sc){ e.preventDefault(); goScene(sc.name); }
+  if (sc){ e.preventDefault(); goScene(sc.name); return; }
+  if (k === 'h' && !e.repeat){ e.preventDefault(); fitAll(); }   // CABER TUDO (a tecla de cena, se houver uma no H, vem antes)
 });
 function renderKeys(){
   const fam = MIX_FAMILIES[mixKeys.family];
   const rows = [[fam, 'escolhe o nó N (segurar = liga/desliga nas SAÍDAS)'], ['← →', 'átomo anterior / próximo na caixa'], ['↑ ↓', 'caixa da frente / de trás'],
     ['Enter', 'MONTAR: a lista de módulos onde está o mouse (digite pra procurar) · TOCAR: liga/desliga a selecionada'], ['Espaço', 'GO (a próxima cena vai pro ar)'], ['Delete', 'tira o átomo/nó/fio escolhido (em MONTAR)'], ['clique na bolinha', 'o fio gruda no cursor: clique numa entrada liga, no vazio abre o menu (Esc cancela)'], ['Ctrl+arrastar', 'CÓPIA SOLTA do nó (sem fios; solte num fio pra ligar no meio) — Alt também, se o sistema deixar'], ['Ctrl+Shift+arrastar', 'ESPELHO do átomo onde soltar'], ['mouse num fio + Delete', 'tira só aquela ligação'],
-    ['.', 'BLACKOUT'], ['+ / −', 'zoom do canvas (longe = estrutura, perto = movimentos) · funciona arrastando'], ['Shift', 'com grade: liga/desliga NA HORA'], ['Ctrl+Z', 'desfazer'], ['Ctrl+X / C / V', 'recortar / copiar / colar o átomo (cola depois do escolhido)'], ['Shift+arrastar', 'arrasta uma CÓPIA do átomo/máscara'], ['a–z', 'tecla da cena'], ['F1 / F2', 'TOCAR / MONTAR'], ['Esc', 'fecha a gaveta · sai do MIDI learn'], ['Esc 3×', 'fecha o prisma']];
+    ['.', 'BLACKOUT'], ['+ / −', 'zoom do canvas (longe = estrutura, perto = movimentos) · funciona arrastando'], ['H', 'CABER TUDO: o patch inteiro na vista · de novo = volta'], ['Shift', 'com grade: liga/desliga NA HORA'], ['Ctrl+Z', 'desfazer'], ['Ctrl+X / C / V', 'recortar / copiar / colar o átomo (cola depois do escolhido)'], ['Shift+arrastar', 'arrasta uma CÓPIA do átomo/máscara'], ['a–z', 'tecla da cena'], ['F1 / F2', 'TOCAR / MONTAR'], ['Esc', 'fecha a gaveta · sai do MIDI learn'], ['Esc 3×', 'fecha o prisma']];
   const kh = $('#keyhelp'); kh.innerHTML = '';
   for (const [k, t] of rows) kh.append(h('div', {}, h('b', { text: k }), t));
   const box = $('#keys-cfg'); box.innerHTML = '';

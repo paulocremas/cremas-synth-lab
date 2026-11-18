@@ -119,13 +119,22 @@ Cada ferramenta isolada, depois comparar, só então compor.
   um controlador por movimento e NUNCA apaga. Trocar o átomo (`swapAtom`) desfaz as ligações, os controladores ficam soltos.
 - **dash5** (`/v5`, o que o app abre; decisões no topo do `dash5.html`): TOCAR | MONTAR (`mode` 'show'|'montar', `setMode`).
   Nó = MINI TV (`.bx.tv`, mockup `design/mini-tv.html`): gabinete = família (`fam-<cat>`, `tvSkin`), tela `.win>.crt>canvas.lv` na proporção
-  do PALCO (`tvAR`), IN/B/MÁSC à esquerda, OUT à direita, fader de opacidade (`tvConn`), knobs no pé (`nodeKnobs` 'row', `.kb` girado por
-  `--ka`) com o CV `.kj` saindo por BAIXO; altura = `tvH` (= `boxH`, vai como height). Fonte/mistura/saída = prata; controlador = osciloscópio
+  do PALCO (`tvAR`). Distribuição (`tvGeo`/`tvJacks`, rodada 4): linha 1 = liga + fader de opacidade EM CIMA da tela (`.r1`, `tvConn`); TELA na
+  largura toda; nome (`.bh`) logo abaixo; IN/B/MÁSC numa coluna à esquerda dos knobs (IN na altura do knob, o de baixo na dos CVs), OUT à
+  direita na altura do knob (aba `.otab`); jacks a 31 px das bordas; knob sem porcentagem (só girando); knobs (`nodeKnobs` 'row') com o CV `.kj` embaixo; altura = `tvH` (= `boxH`, vai como height). ESCOLHA/CHAVE = MÓDULO FILHO
+  (`filKids`/`filEl`: teclas | seletor com lista | tecla) DENTRO do elemento do pai, à esquerda, lugar relativo em `s.filhos[knob] = [dx, dy]`
+  (servidor normaliza; o native ignora). O filho está NA CORRENTE: o IN do 1º filho É a entrada A do pai (`inPortEl`); filho → pai = LIGAÇÃO FIXA
+  (trilha rígida `.lkc`, terminais quadrados, sem clique; o IN do pai fica `.lk`). Motor igual: o fx do átomo, mesmo id de controle.
+  `rectOfNode` = pegada com os filhos (declutter, arrumar, `ctlSpot`). Zoom 2–200% (`CVZ_LIM`) suave: a animação só mexe no `transform` do `#cv-in` (`zTf`/`zoomVis`; trocar o zoom do CSS refaz o layout todo,
+  ~80 ms) e o zoom de verdade (`zoomFrame`) entra uma vez no fim; níveis `zlOf`
+  (perto | normal | longe | `zl-blk` bloco na cor `--blk` | `zl-ponto`); de longe sem prévia; H / ⤢ = caber tudo (`fitAll`, de novo volta). Fonte/mistura/saída = prata; controlador = osciloscópio
   (`SCOPE`) + faixa de/até (`ctlRange`), nasce EMBAIXO (`ctlSpot`), jack no meio do topo. Jack VISTO DE CIMA; cabo como o VCV (`cableD`,
   plugue `.pg`) POR CIMA dos nós, clique no `#cv-hits` por baixo; clique na saída PEGA o cabo, Shift = novo. Cor do cabo = aleatória por cabo (`cableColor`). MIXER = `kind: 'mix'` com `jacks` (2/4/8),
   camada no jack (`slot`; jack de cima = frente); SAÍDA = UMA entrada (saída antiga com várias vira mixer: `outOneInput`). Enter (MONTAR) = a lista de
-  módulos onde está o mouse. Próximo passo: `PROMPT_VCV_LAYOUT.md` (distribuição estilo VCV + módulos "filho"). Prévia: `liveCv` (o mesmo
+  módulos onde está o mouse. Prévia: `liveCv` (o mesmo
   canvas entre renders, só as visíveis); prévia do nó SAÍDA = ela sozinha (native `mix_node`).
+  Texto no gabinete = sempre numa PLAQUETA em relevo com letra gravada (`--lbl`/`--lbt`); módulo arrasta por QUALQUER parte
+  (`nodeGrab`, exceto `NODRAG`); ARRUMAR = setor por fonte (`tidyPlace`: fonte no meio do setor, o que cruza entre, saída à direita); nome no canvas sem o número do nó (`mixShow`/`visName`).
   Tema (botão "visual"): `body.cel` | foto + `body.leve`, em `localStorage v5tema`; texturas = PNG uma vez (`texturas()` → `--t-*`).
   Rolar a vista NÃO refaz fios. Pictograma `i-at-<Nome>` (`atomIcon`; átomo novo = desenhar o símbolo, o teste `cards` acusa);
   `normalizeNodes`/`graphFix` mantêm 1 átomo por nó; `topoOrder`.
@@ -135,7 +144,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
   — os dois fecham com clique fora. Biblioteca = RODA (2 cliques no vazio: `openWheel` → `floatList`; `looseNode`/`insertOnWire`).
   Clicar no nome só ESCOLHE (`nameEl`); trocar = ↻ (aparece no mouse). Ctrl+arrastar = `dupNode` sem fios (nó ou seleção; Alt também, mas no
   Linux o Cinnamon pega o Alt). Fio escolhido (`selWire`) solta com qualquer clique fora dele. Navegar: roda = zoom, meio/direito = vista, esquerdo no vazio = seleção (`msel`); à esquerda/em
-  cima sem limite (`cvShift`, também no `edgeTrack(…, grow)`). Arrasto = `follow()`/`swallowClick()` (o click sintético logo
+  cima sem limite (`cvShift`, também no `edgeTrack(…, grow)`). Arrasto = `follow()` + `rafMove` (um passo por quadro) + `wiresFollow` (só os cabos de quem anda, de `WLIVE`; nada de `drawBoxWires`
+  nem `body.x *` no CSS — restyle da página toda) /`swallowClick()` (o click sintético logo
   após um arrasto é engolido — em teste, chamar o handler). Knob = `dragCtl` relativo + arrasto infinito (`POST /warp` →
   `plat.warp_pointer`); segurando knob, `renderCtl`/`renderBoxes` esperam. `plug`/`unplug` = fios (`connect()` é o SSE!).
 - v3/v4 (`dash3.html`, `dash4.html`): legado; decisões no topo de cada arquivo. Prévias: `/frame?which=out|cv|sel|comp|src|fx|
@@ -162,7 +172,7 @@ Cada ferramenta isolada, depois comparar, só então compor.
 `src/dash_data.py`, `src/telao_sim.py --selfcheck`, `packaging/updater.py`, `packaging/check_imports.py` — o CI roda
 todos; `src/matriz.py [pasta]` sozinho = a matriz + PNG por átomo). GESTOS do dash5: `tests/dash_gestos.py [palavra]` (dash real
 em Chromium/Brave headless via CDP, mouse de verdade, tuning temporário na porta 8799, cena fixa própria) — todo bug de
-usabilidade vira um teste aqui; rodar antes de entregar mudança no dash5. Build local fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning.py`
+usabilidade vira um teste aqui; rodar antes de entregar mudança no dash5. O teste mata o GRUPO do navegador ao sair e recusa rodar se a porta 9333 já tem um (órfão de rodada velha = falhas aleatórias). Build local fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning.py`
 temporário (`tuning_path`). Rodar o native do repo migra/auto-salva o `src/tuning.py` do repo; porta 8765 pode
 estar com o prisma aberto; simulador aberto = telão virtual anunciado (teste que lê saídas isola o
 `VIRTUAL_OUTPUTS`). Arrastar/clicar no dash do app aberto GRAVA no `tuning.py` vivo — backup antes.

@@ -65,7 +65,7 @@ PRISMA é a 1ª "marca" de módulos. A ideia é a de fabricantes num jogo de saq
 - Gabinete com terminador curvo: luz de cima-esquerda e 3 tons.
 - Luz de recorte fria na borda direita e risco de brilho no topo.
 - Retícula de pontos na sombra e sombra chapada roxo-escura deslocada.
-- Tela com brilho em faixa, imagem posterizada com o filtro `#toon` só na imagem.
+- Tela com brilho em faixa. A IMAGEM da tela nunca muda com o tema (decidido em 2026-11-17: o `#toon` saiu).
 - Fundo azul-noite com retícula nas bordas.
 - Texto dos gabinetes escuros em claro.
 

@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRISMA — design book: distribuição e filhos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* RODADA 2: so' a C (compacta), sem alavanca, sem parafuso, liga ao lado do fader, nome embaixo da tela, legibilidade 1o */
+  --bg: #0b0c0e; --card: #121418; --line: #22262c; --tx: #e6e9ed; --tx2: #9aa3ad; --tx3: #6b7480; --sel: #ff9d52; --ok: #3fd08f; --ink: #141416;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif; --body: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--tx); font: 14px/1.5 var(--body); }
+main { max-width: 1900px; margin: 0 auto; padding: 24px 20px 80px; display: grid; gap: 26px; }
+h1 { font: 700 34px/1.1 var(--display); letter-spacing: .02em; margin: 0; text-wrap: balance; }
+h2 { font: 700 24px/1.2 var(--display); letter-spacing: .03em; margin: 0; text-wrap: balance; }
+h3 { font: 700 17px/1.2 var(--display); letter-spacing: .06em; text-transform: uppercase; margin: 0; }
+p, li { color: var(--tx2); max-width: 82ch; }
+p { margin: 0; }
+a { color: #8fc1ff; }
+b.k { color: var(--tx); font-weight: 600; }
+.top { position: sticky; top: 0; z-index: 100; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 10px 20px; background: #0b0c0eee; border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.top .grow { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button, .opt, .btn { font: 600 13px var(--body); color: var(--tx2); background: #181b20; border: 0; padding: 7px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: #2a2f37; color: var(--tx); }
+.save { font: 600 12px var(--mono); color: var(--tx3); } .save.ok { color: var(--ok); } .save.err { color: #ff8a8a; }
+.btn { border: 1px solid var(--line); border-radius: 7px; }
+.btn:hover, .opt:hover { color: var(--tx); background: #20242b; }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+section { display: grid; gap: 14px; }
+.lead { display: grid; gap: 10px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; }
+.card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.tag { font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--tx3); }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; }
+.q .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.opt { border: 1px solid var(--line); border-radius: 999px; padding: 6px 13px; }
+.opt.on { background: #3a2410; border-color: var(--sel); color: #ffd9b8; }
+.opt.on::before { content: '✓ '; }
+textarea.nota { width: 100%; min-height: 44px; resize: vertical; background: #0d0f12; color: var(--tx); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: 13px var(--body); }
+.wrap { overflow-x: auto; border-radius: 12px; border: 1px solid #1c2025; }
+.patch { position: relative; background: radial-gradient(ellipse 60% 55% at 42% 30%, #262a30, transparent 70%), #101215; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12.5px; color: var(--tx2); }
+.legend i { display: inline-block; width: 26px; height: 5px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+.vgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.vbox { position: relative; height: 300px; border-radius: 10px; background: radial-gradient(ellipse at 50% 30%, #1b1e23, #0e1013); border: 1px solid #1c2025; overflow: hidden; }
+.vcap { display: grid; gap: 4px; }
+.vcap b { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--tx); }
+.vcap span { font-size: 12.5px; color: var(--tx3); }
+.sc { position: absolute; transform-origin: 0 0; }
+.chg { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(200px, 1.3fr); gap: 4px 18px; margin: 0; }
+.chg dt { color: #ffd9b8; font-size: 13px; } .chg dd { margin: 0; color: var(--tx2); font-size: 13px; }
+.chg dt::before { content: '“'; } .chg dt::after { content: '”'; }
+
+/* ================= PECAS (foto-real por padrao; body.cel = desenho chapado) ================= */
+/* LEGIBILIDADE: texto do painel em Plex (sem condensar) >= 11 px; escuro no claro, claro no escuro; nunca cortado */
+.mod { position: absolute; border-radius: 18px; --p1: #cfd2d4; --p2: #b5b9bc; --p3: #9a9ea2; --fc: #7d8fa3; --silk: #1b1e21;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' seed='9'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .14 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    linear-gradient(175deg, var(--p1) 0%, var(--p2) 38%, var(--p3) 100%);
+  box-shadow: inset 0 2px 1px #ffffffa0, inset 0 -3px 2px #0000004d, inset 3px 0 3px #ffffff30, 0 0 0 1px #3b3e41, 0 3px 3px #000a, 0 18px 28px -8px #000e; }
+.mod .deco { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; }
+.f-forma { --p1: #d5e3d2; --p2: #b9cdb6; --p3: #9bb198; --fc: #5f8f5a; }
+.f-forma .deco { background: repeating-radial-gradient(circle at 85% 95%, transparent 0 11px, #2f4a2f1a 11px 12.5px), repeating-radial-gradient(circle at 10% 30%, transparent 0 15px, #2f4a2f10 15px 16px); }
+.f-geometria { --p1: #dfe6f0; --p2: #c3cfde; --p3: #a5b3c6; --fc: #4f6fa6; }
+.f-geometria .deco { background: repeating-linear-gradient(60deg, transparent 0 22px, #3340601c 22px 23px), repeating-linear-gradient(-60deg, transparent 0 22px, #3340601c 22px 23px); }
+.f-mistura, .f-prata { --p1: #cfd2d4; --p2: #b5b9bc; --p3: #9a9ea2; --fc: #7d8fa3; }
+.f-mistura .deco, .f-prata .deco { background: repeating-linear-gradient(90deg, #ffffff12 0 1px, transparent 1px 3px); }
+.f-cor { --p1: #f1e4e8; --p2: #e0ccd3; --p3: #c9b0b9; --fc: #c25b86; }
+.f-cor .deco { background: linear-gradient(90deg, #e9524a, #f39c35, #f2d33c, #5cc46a, #3f9be6, #9a5fd6) 0 100% / 100% 7px no-repeat; }
+.f-luz { --p1: #f6eed4; --p2: #eadcb2; --p3: #d6c38e; --fc: #c9a227; }
+.f-luz .deco { background: repeating-linear-gradient(100deg, #ffffff1c 0 2px, transparent 2px 5px); }
+.f-textura { --p1: #4a4d52; --p2: #3a3d42; --p3: #2c2f33; --fc: #8a8f96; --silk: #eef1f4; }
+.f-textura .deco { background: repeating-linear-gradient(45deg, transparent 0 8px, #ffffff0c 8px 9px), repeating-linear-gradient(-45deg, transparent 0 8px, #ffffff0c 8px 9px); }
+.f-distorcao { --p1: #e4dcef; --p2: #cdc0e0; --p3: #b0a1c8; --fc: #7a5fb0; }
+.f-distorcao .deco { background: radial-gradient(ellipse 60% 14px at 50% 100%, #7a5fb030, transparent); }
+.f-tempo { --p1: #dfe9ea; --p2: #c4d6d8; --p3: #a6bfc2; --fc: #3f8e96; }
+.f-gerador { --p1: #b9d9cf; --p2: #9cc5b8; --p3: #7fae9f; --fc: #2f8f74; }
+.f-mascara { --p1: #3a3340; --p2: #2a2530; --p3: #1c1920; --fc: #8e5fc8; --silk: #eee9f6; }
+.f-mascara .deco { background: repeating-conic-gradient(#ffffff06 0 25%, transparent 0 50%) 0 0 / 14px 14px; box-shadow: inset 0 0 0 3px #8e5fc8; }
+.mod.child { border-radius: 14px; }
+
+.sk { position: absolute; transform: translate(-50%, -50%); font: 600 11px/1 var(--body); color: var(--silk); white-space: nowrap; pointer-events: none; }
+.sk.inv { color: #eef1f4; }
+.nmr { position: absolute; height: 22px; display: flex; align-items: center; gap: 8px; color: var(--silk); }
+.nmr b { font: 700 16px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.nmr i { margin-left: auto; font: 600 11px var(--mono); font-style: normal; opacity: .75; }
+.cnm { position: absolute; left: 12px; right: 12px; top: 11px; font: 700 14px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--silk); white-space: nowrap; }
+.vfd { font: 600 11px/1 var(--mono); color: #9dffc0; background: #0a110c; border-radius: 4px; padding: 4px 6px; box-shadow: inset 0 1px 3px #000, 0 1px 0 #ffffff70; text-shadow: 0 0 5px #3f9a; white-space: nowrap; }
+.nmr .vfd { cursor: pointer; }
+.liga { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffd9d2 0 8%, #ff4a3a 32%, #a3100a 76%, #4a0503); box-shadow: 0 0 0 2px #2a2c2e, 0 0 0 3.5px #9aa0a5, 0 0 10px #ff3a2a77; }
+.liga.sm { width: 14px; height: 14px; margin: -7px 0 0 -7px; }
+.liga.off { background: radial-gradient(circle at 35% 30%, #9a8a88 0 8%, #5a1e18 32%, #2a0a07 76%, #140302); box-shadow: 0 0 0 2px #2a2c2e, 0 0 0 3.5px #9aa0a5; }
+.scr { position: absolute; border-radius: 11px; padding: 7px; background: linear-gradient(180deg, #5d6165, #a9adb1 60%, #d3d6d8); box-shadow: inset 0 2px 3px #000a, 0 1px 0 #ffffffa0, 0 0 0 1px #5d6165; }
+.scr canvas { display: block; width: 100%; height: 100%; border-radius: 7px; background: #000; }
+.scr::after { content: ''; position: absolute; inset: 7px; border-radius: 7px; pointer-events: none; box-shadow: inset 0 0 18px 4px #000c; }
+.fd { position: absolute; height: 18px; }
+.fd::before { content: ''; position: absolute; left: 0; right: 0; top: 6px; height: 6px; border-radius: 3px; background: #141516; box-shadow: inset 0 2px 2px #000, 0 1px 0 #ffffff80; }
+.fd .fl { position: absolute; left: 0; top: 7px; height: 4px; border-radius: 2px; background: var(--fc); opacity: .85; }
+.fd .cap { position: absolute; top: 0; width: 12px; height: 18px; margin-left: -6px; border-radius: 3px; background: linear-gradient(90deg, #4f565e, #f2f4f6 40%, #b5bdc5 62%, #5a6169); box-shadow: 0 2px 3px #000c; }
+.jk { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%;
+  background: conic-gradient(#f3f5f7, #9aa0a6 16%, #eef1f3 33%, #8b9197 50%, #f3f5f7 66%, #9aa0a6 83%, #f3f5f7); box-shadow: 0 0 0 1px #3a3d40, 0 2px 2px #0008; }
+.jk::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 50% 60%, #000 0 55%, #2a2c2e); box-shadow: inset 0 2px 3px #000, 0 0 0 1.5px #5a5e62; }
+.jk.cv { width: 20px; height: 20px; margin: -10px 0 0 -10px; } .jk.cv::after { inset: 5px; }
+.pl { position: absolute; border-radius: 9px; background: linear-gradient(#2a2e33, #16181b); box-shadow: inset 0 2px 4px #000c, 0 1px 0 #ffffff80; }
+.kn { position: absolute; width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2); border-radius: 50%;
+  background: repeating-conic-gradient(#1a1b1d 0 6deg, #2e3033 6deg 9deg); box-shadow: 0 3px 4px #000b, 0 0 0 1px #000; }
+.kn .rot { position: absolute; inset: 0; transform: rotate(var(--a)); }
+.kn .cap { position: absolute; inset: 17%; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #fafbfc, #c9ced3 45%, #8c9298 85%); box-shadow: 0 1px 2px #000a, inset 0 -1px 1px #0005; }
+.kn .ptr { position: absolute; left: 50%; top: 19%; width: 2.6px; height: 29%; margin-left: -1.3px; background: #1d1f22; border-radius: 2px; }
+.kn.lit .cap { box-shadow: 0 0 0 2px var(--pc), 0 0 12px var(--pc); }
+.led { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #3a1a12; box-shadow: inset 0 1px 1px #000; }
+.led.on { background: radial-gradient(circle at 40% 35%, #fff2c8, #ffb43a 45%, #d06a00); box-shadow: 0 0 6px #ffb43a; }
+/* controles dos filhos: TECLA (afunda), BOTAO ILUMINADO (o nome aceso), SELETOR com lista acesa */
+.key { position: absolute; height: 28px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 7px; padding: 0 9px;
+  font: 600 12px var(--body); color: #1d2023; white-space: nowrap;
+  background: linear-gradient(#f4f5f6, #c4c8cc); box-shadow: 0 3px 0 #6c7177, 0 4px 5px #0008; transition: transform .06s, box-shadow .06s; }
+.key .led { width: 6px; height: 6px; }
+.key.on { transform: translateY(2px); box-shadow: 0 1px 0 #6c7177, 0 1px 2px #0008, inset 0 2px 3px #0003; background: linear-gradient(#d9dde0, #b3b8bd); }
+.key.on .led { background: radial-gradient(circle at 40% 35%, #fff2c8, #ffb43a 45%, #d06a00); box-shadow: 0 0 6px #ffb43a; }
+.ilb { position: absolute; height: 46px; border-radius: 6px; cursor: pointer; display: grid; place-items: center; align-content: center; gap: 5px;
+  font: 600 12.5px/1 var(--body); color: #8a9097; background: linear-gradient(#2c3034, #1b1d20); box-shadow: inset 0 1px 0 #ffffff22, 0 0 0 1px #0009, 0 3px 0 #0007; }
+.ilb.on { color: #2a1600; background: radial-gradient(ellipse at 50% 40%, #fff3d2, #ffc666 60%, #e3901f); box-shadow: 0 0 14px #ffb43a99, inset 0 1px 0 #fff8, 0 0 0 1px #0009, 0 3px 0 #6b3d05; }
+.ilb .dots { display: flex; gap: 4px; } .ilb .dots i { width: 5px; height: 5px; border-radius: 50%; background: #0000002e; } .ilb .dots i.on { background: #2a1600; }
+.rl { position: absolute; display: flex; align-items: center; gap: 7px; height: 20px; font: 600 12px var(--body); color: var(--silk); cursor: pointer; white-space: nowrap; }
+.rsel { cursor: pointer; }
+/* cabos */
+svg.cab { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 30; }
+.cab .outl { fill: none; stroke-linecap: round; opacity: .9; }
+.cab .core { fill: none; stroke-linecap: round; }
+.cab .hi { fill: none; stroke: #ffffff; stroke-opacity: .28; stroke-linecap: round; }
+.cab .bar { filter: drop-shadow(0 3px 3px #000a); }
+.note { position: absolute; z-index: 40; font: 600 12px var(--body); color: #ffd9b8; background: #2a1a0cdd; border: 1px solid #ff9d5277; border-radius: 6px; padding: 3px 8px; white-space: nowrap; pointer-events: none; }
+.note::before { content: ''; position: absolute; width: 1px; background: #ff9d52aa; left: var(--lx, 50%); top: 100%; height: var(--lh, 22px); }
+
+/* ---------- CEL: cada peca com desenho chapado proprio ---------- */
+body.cel .mod { background: linear-gradient(180deg, var(--p1) 0 20%, var(--p2) 20% 80%, var(--p3) 80%); box-shadow: 0 0 0 2.5px var(--ink), 7px 8px 0 #2b1f4a; }
+body.cel .mod .deco { opacity: .6; }
+body.cel .liga { background: radial-gradient(circle at 34% 30%, #fff 0 14%, #ff4a3a 15%); box-shadow: 0 0 0 2px var(--ink); }
+body.cel .liga.off { background: radial-gradient(circle at 34% 30%, #c9b5b2 0 14%, #6a2018 15%); }
+body.cel .scr { background: #2b2f33; box-shadow: 0 0 0 2.5px var(--ink); }
+body.cel .scr::after { box-shadow: none; }
+body.cel .fd::before { background: #111; box-shadow: 0 0 0 1.5px var(--ink); }
+body.cel .fd .cap { background: linear-gradient(90deg, #eef0f2 0 55%, #b7bdc3 55%); box-shadow: 0 0 0 1.5px var(--ink); }
+body.cel .jk { background: #dfe3e7; box-shadow: 0 0 0 2px var(--ink); }
+body.cel .jk::after { background: #111; box-shadow: none; }
+body.cel .pl { background: #23262b; box-shadow: 0 0 0 2px var(--ink); }
+body.cel .kn { background: #2a2c30; box-shadow: 0 0 0 2px var(--ink), 2px 3px 0 #2b1f4a; }
+body.cel .kn .cap { background: linear-gradient(160deg, #f4f6f8 0 55%, #c3c8cd 55%); box-shadow: 0 0 0 1.5px var(--ink); }
+body.cel .key { background: #eef0f2; box-shadow: 0 0 0 1.5px var(--ink), 0 3px 0 var(--ink); }
+body.cel .key.on { background: #c9ced3; box-shadow: 0 0 0 1.5px var(--ink), 0 1px 0 var(--ink); }
+body.cel .ilb { background: #26292d; box-shadow: 0 0 0 1.5px var(--ink), 0 3px 0 var(--ink); }
+body.cel .ilb.on { background: linear-gradient(160deg, #ffe4a6 0 50%, #ffbe55 50%); box-shadow: 0 0 0 1.5px var(--ink), 0 3px 0 var(--ink); }
+body.cel .vfd { box-shadow: 0 0 0 1.5px var(--ink); text-shadow: none; }
+
+/* ---------- PULSA (envelope): so' a faixa escolhida acende ---------- */
+.env { position: absolute; width: 330px; border-radius: 16px; padding: 42px 18px 18px; display: grid; gap: 12px; }
+.scope { position: relative; height: 72px; border-radius: 5px; background: radial-gradient(ellipse at 50% 50%, #102018, #030605); box-shadow: inset 0 3px 5px #000, 0 1px 0 #ffffff90; overflow: hidden; }
+.scope::before { content: ''; position: absolute; inset: 0; background: linear-gradient(#ffffff09 1px, transparent 1px) 0 0 / 100% 25%, linear-gradient(90deg, #ffffff09 1px, transparent 1px) 0 0 / 20% 100%; }
+.scope canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+body.cel .scope { box-shadow: 0 0 0 2px var(--ink); }
+.envn { font: 700 16px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--silk); margin-top: -4px; }
+.rg { display: grid; gap: 4px; }
+.rg .lb { display: flex; justify-content: space-between; align-items: center; min-height: 22px; font: 600 12px var(--body); color: var(--silk); }
+.rg .rd { opacity: 0; transition: opacity .12s; }
+.rg:hover .rd, .rg.drag .rd { opacity: 1; }
+.rt { position: relative; height: 48px; touch-action: none; cursor: ew-resize; }
+.rt .slot { position: absolute; left: 2px; right: 2px; top: 10px; height: 12px; border-radius: 6px; background: #0d0e0f; box-shadow: inset 0 2px 3px #000, 0 1px 0 #ffffff80; }
+.rt .win { position: absolute; top: 12px; height: 8px; border-radius: 4px; left: calc(8px + (100% - 16px) * var(--a)); width: calc((100% - 16px) * (var(--b) - var(--a)));
+  background: linear-gradient(#ffffff70, transparent 70%), var(--nc); box-shadow: 0 0 10px var(--nc), 0 0 2px var(--nc); cursor: grab; }
+.rt .now { position: absolute; top: 10px; height: 12px; width: 3px; margin-left: -1.5px; left: calc(8px + (100% - 16px) * var(--p)); background: #fff; box-shadow: 0 0 6px #fff; border-radius: 2px; pointer-events: none; z-index: 1; }
+.rt .now.out { display: none; }
+.rt .cap { position: absolute; top: 2px; width: 14px; height: 28px; margin-left: -7px; left: calc(8px + (100% - 16px) * var(--p)); border-radius: 3px; z-index: 2;
+  background: linear-gradient(90deg, #3f454b, #d8dde2 30%, #f4f6f8 50%, #c5cbd1 70%, #4a5057); box-shadow: 0 3px 4px #000b; }
+.rt .cap::after { content: ''; position: absolute; left: 2px; right: 2px; top: 50%; height: 2px; margin-top: -1px; background: #1d2023; }
+.rt .cl { position: absolute; top: 37px; transform: translateX(-50%); left: calc(8px + (100% - 16px) * var(--p)); font: 600 11px/1 var(--body); color: var(--silk); pointer-events: none; white-space: nowrap; }
+.rt.leds .slot, .rt.leds .win, .rt.leds .now { display: none; }
+.rt .lad { display: none; }
+.rt.leds .lad { position: absolute; left: 5px; right: 5px; top: 6px; height: 20px; padding: 3px; border-radius: 4px; background: #0a0b0c; box-shadow: inset 0 2px 3px #000, 0 1px 0 #ffffff80; display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+.rt.leds .lad i { border-radius: 1.5px; background: #262a2e; }
+.rt.leds .lad i.in { background: var(--nc); box-shadow: 0 0 6px var(--nc); }
+.rt.leds .lad i.now { background: #fff; box-shadow: 0 0 8px #fff, 0 0 3px var(--nc); }
+.rt.leds .cap { top: 27px; width: 0; height: 0; margin-left: -7px; border: 7px solid transparent; border-top: 0; border-bottom: 9px solid #e8ecef; background: none; box-shadow: none; filter: drop-shadow(0 1px 1px #000a); }
+.rt.leds .cap::after { display: none; }
+.rt.leds .cl { top: 40px; }
+.rt .bind { position: absolute; top: -12px; transform: translateX(-50%); left: calc(8px + (100% - 16px) * var(--p)); font: 700 10px var(--mono); color: #0b0c0e; background: #5eb0ff; border-radius: 3px; padding: 0 4px; white-space: nowrap; z-index: 4; }
+.rt.learn .cap, .rt.learn .win, .rt.learn .lad { outline: 2px dashed #5eb0ff; outline-offset: 2px; cursor: pointer; }
+body.cel .rt .slot, body.cel .rt.leds .lad { box-shadow: 0 0 0 1.5px var(--ink); }
+body.cel .rt .win { background: var(--nc); box-shadow: 0 0 0 1.5px var(--ink); }
+body.cel .rt .cap { background: linear-gradient(90deg, #eef0f2 0 55%, #b7bdc3 55%); box-shadow: 0 0 0 1.5px var(--ink); }
+body.cel .rt.leds .cap { background: none; box-shadow: none; }
+.pop { position: absolute; z-index: 60; background: #161a20; border: 1px solid #2c333c; border-radius: 10px; padding: 10px; display: grid; gap: 6px; width: 250px; box-shadow: 0 12px 30px #000c; }
+.pop .t { font: 600 12px var(--body); color: var(--tx); }
+.pop button { text-align: left; font: 600 12.5px var(--body); color: var(--tx2); background: #1e232a; border: 1px solid #2c333c; border-radius: 7px; padding: 7px 10px; cursor: pointer; display: grid; }
+.pop button small { font-weight: 400; color: var(--tx3); }
+.pop button:hover { color: var(--tx); border-color: #5eb0ff; }
+.midi { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.midi input[type=range] { width: 200px; accent-color: #5eb0ff; }
+
+/* ---------- RODA ---------- */
+.whl { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.whc { position: absolute; width: 76px; height: 76px; margin: -38px; border-radius: 50%; display: grid; place-items: center; text-align: center; }
+.whc.dark { background: #1a1d22; border: 1px solid #2c323a; color: #c9d0d8; font: 500 11.5px var(--body); box-shadow: 0 4px 10px #0008; }
+.whc > span:not(.deco) { position: relative; z-index: 2; }
+.whc.mod > span:not(.deco) { background: #ffffffe0; color: #1b1e21; border-radius: 4px; padding: 2px 6px; font: 600 11.5px var(--body); }
+.whc.f-textura > span:not(.deco), .whc.f-mascara > span:not(.deco) { background: #0b0c0ee0; color: #eef1f4; }
+.whm { position: absolute; width: 104px; height: 104px; margin: -52px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--sel); background: #111; font: 700 14px var(--body); }
+
+/* ---------- ZOOM (demo) ---------- */
+.zv { position: relative; height: 600px; overflow: hidden; border-radius: 12px; border: 1px solid #1c2025; background: radial-gradient(ellipse 60% 55% at 42% 30%, #262a30, transparent 70%), #101215; cursor: grab; touch-action: none; }
+.zv:active { cursor: grabbing; }
+.zl { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.zhud { position: absolute; left: 12px; top: 12px; z-index: 50; display: flex; gap: 8px; align-items: center; background: #0b0c0ecc; border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; }
+.zhud b { font: 600 12px var(--mono); color: var(--tx); min-width: 48px; }
+.zhud span { font: 600 12px var(--body); color: var(--sel); }
+.blk { display: none; position: absolute; inset: 0; border-radius: inherit; background: var(--fc); }
+.blk .nm { position: absolute; left: 7%; right: 7%; top: calc(8px / var(--z)); font: 700 calc(13px / var(--z))/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: #fff; white-space: nowrap; overflow: hidden; }
+.blk .nm.hide { visibility: hidden; }
+.zv.zl-medio .note { display: none; }
+.zv.zl-bloco .mod > :not(.blk):not(.scr), .zv.zl-ponto .mod > :not(.blk) { display: none !important; }
+.zv.zl-bloco .mod, .zv.zl-ponto .mod { background: var(--fc) !important; box-shadow: none !important; }
+.zv.zl-bloco .blk, .zv.zl-ponto .blk { display: block; }
+.zv.zl-bloco .scr { z-index: 2; background: #0008; box-shadow: none; padding: 0; } .zv.zl-bloco .scr::after { display: none; }
+.zv.zl-bloco .cab .outl, .zv.zl-bloco .cab .hi, .zv.zl-bloco .cab .plug, .zv.zl-ponto .cab .outl, .zv.zl-ponto .cab .hi, .zv.zl-ponto .cab .plug, .zv.zl-ponto .cab .bar { display: none; }
+.zv.zl-bloco .cab .core { stroke-width: calc(2px / var(--z)) !important; }
+.zv.zl-ponto .cab .core { stroke-width: calc(1px / var(--z)) !important; opacity: .8; }
+
+/* ---------- KIT (pecas do programa todo) ---------- */
+.kit { position: relative; height: 470px; }
+.kit .mod { position: absolute; }
+.kc { position: absolute; transform: translateX(-50%); font: 600 11px var(--body); color: var(--silk); white-space: nowrap; }
+.key.guard { background: linear-gradient(#ff9184, #c93a2e); color: #fff; box-shadow: 0 3px 0 #6e1810, 0 4px 5px #0008; }
+body.cel .key.guard { background: #e2483a; box-shadow: 0 0 0 1.5px var(--ink), 0 3px 0 var(--ink); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="top">
+  <b style="font: 700 18px var(--display); letter-spacing: .1em">PRISMA · DESIGN BOOK · RODADA 2</b>
+  <span class="tag">tema</span>
+  <div class="seg" id="theme"><button data-t="foto" aria-pressed="true">foto-real</button><button data-t="cel" aria-pressed="false">cel</button></div>
+  <span class="grow"></span>
+  <span id="count" class="save"></span>
+  <span id="save" class="save">conectando…</span>
+</div>
+<main>
+<section class="lead">
+  <h1>Rodada 2: a C compacta, sem alavanca, sem parafuso</h1>
+  <p>Refiz a partir das suas notas. A pesquisa do VCV continua valendo: saída na placa escura, CV colado no knob, sinal da esquerda para a direita. Tudo aqui é pensado também para o <b class="k">resto do programa</b> (barra, inspetor, cenas, som), que vai ser refeito com estas mesmas peças: a seção 7 mostra isso.</p>
+  <div class="card"><span class="tag">o que você disse → o que mudou</span>
+    <dl class="chg">
+      <dt>C está melhor, mas não está realista nos espaços e sobreposições, e tem muito espaço vazio</dt><dd>Só a C. Uma grade fixa: um trilho de jacks à esquerda, uma aba de saída à direita e a zona de knobs alinhada com a tela. Nada encosta em nada, e a altura do módulo é a do que ele tem.</dd>
+      <dt>Coloque o botão de desligar na mesma linha do fader de opacidade</dt><dd>A primeira linha de todo módulo é o liga seguido do fader, em cima da tela.</dd>
+      <dt>O nome pode ficar logo abaixo da tela</dt><dd>O nome fica embaixo da tela, em 16 px. O número do nó fica à direita dele.</dd>
+      <dt>Não coloque parafusos nos módulos</dt><dd>Tirei os do filho, os da trava do cabo e os da barra.</dd>
+      <dt>Não gostei da alavanca</dt><dd>Saiu. No lugar dela entram a tecla que afunda e o botão iluminado, com o nome da opção aceso na própria tecla.</dd>
+      <dt>A barra da Pulsa: conceitos do mundo real, só o meio brilha</dt><dd>A faixa acesa é a única coisa que brilha. Há dois desenhos de equipamento real na seção 4.</dd>
+      <dt>Roda: a cor está sobrepondo</dt><dd>As fatias ficaram mais afastadas e o nome ganhou uma chapa lisa por baixo.</dd>
+      <dt>Leitura clara é prioridade</dt><dd>Rótulos em fonte sem condensar, com pelo menos 11 px; texto escuro em gabinete claro e claro em gabinete escuro; nenhum nome cortado.</dd>
+    </dl></div>
+</section>
+
+<section id="props">
+  <h2>1 · O módulo (C compacta) no patch</h2>
+  <p>Fonte → Contornar (filho <b class="k">fundo</b>) → Polar (filho <b class="k">sentido</b>) → Misturar (filho <b class="k">modo</b>, B = Contornar) → Mixer. A grade de cada módulo, de cima para baixo:</p>
+  <ul>
+    <li><b class="k">Linha 1:</b> o liga e o fader de opacidade.</li>
+    <li><b class="k">A tela.</b> À esquerda dela fica o trilho de jacks (in, b, másc, opção); à direita, a aba escura da saída.</li>
+    <li><b class="k">O nome.</b></li>
+    <li><b class="k">Os knobs</b>, todos com o nome na mesma altura. O principal é maior, e o CV de cada um fica logo embaixo dele.</li>
+  </ul>
+  <p>Clique nas teclas dos filhos: a tela do pai muda.</p>
+  <div class="legend"><span><i style="background:#b9c0c8"></i>cabo de imagem: entra no pai pelo IN (ou B)</span><span><i style="background:#5f8f5a;outline:2px solid #0008"></i>cabo preso do filho: entra no jack da opção e não se mexe</span><span><i style="background:#2a2e33;outline:1px solid #555"></i>aba escura = saída</span></div>
+  <div class="wrap"><div class="patch" id="patch" style="width:2140px;height:600px"></div></div>
+  <div class="q"><h3>O módulo</h3><div class="opts"><button class="opt" data-id="layout2" data-v="ok">assim está bom</button><button class="opt" data-id="layout2" data-v="ajustar">ajustar (nota)</button></div>
+    <textarea class="nota" data-id="layout2" placeholder="o que ainda está apertado, sobrando, difícil de ler…"></textarea></div>
+</section>
+
+<section>
+  <h2>2 · O filho</h2>
+  <p>Toda escolha e toda chave vira filho. Ele nasce à esquerda do pai, e o cabo preso sai da aba escura dele e entra no jack da opção, no trilho do pai. Arrastar o filho move só ele; arrastar o pai leva os dois. Sem alavanca: há <b class="k">teclas</b> (uma afunda e acende), o <b class="k">botão iluminado</b> (a opção de agora escrita acesa na tecla; clique avança) e, para 3 ou mais opções, um <b class="k">seletor com a lista acesa</b>. Os nomes nunca são cortados: o filho tem a largura do nome mais longo.</p>
+  <div class="vgrid" id="fvars"></div>
+  <div class="cols">
+    <div class="q"><h3>Escolha de 2 (fundo, sentido)</h3><div class="opts"><button class="opt" data-id="f2b" data-v="teclas">duas teclas</button><button class="opt" data-id="f2b" data-v="luz">botão iluminado</button></div><textarea class="nota" data-id="f2b" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Escolha de 3 ou mais (modo, paleta)</h3><div class="opts"><button class="opt" data-id="fn" data-v="rotativo">seletor com lista acesa</button><button class="opt" data-id="fn" data-v="radio">teclas de rádio</button></div><textarea class="nota" data-id="fn" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Chave liga/desliga (inverter)</h3><div class="opts"><button class="opt" data-id="fsw2" data-v="tecla">uma tecla</button><button class="opt" data-id="fsw2" data-v="luz">botão iluminado</button></div><textarea class="nota" data-id="fsw2" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>O cabo preso</h3><div class="opts"><button class="opt" data-id="preso" data-v="trava">cabo curto com trava</button><button class="opt" data-id="preso" data-v="barra">barra de metal</button></div><textarea class="nota" data-id="preso" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Recolher o filho</h3><div class="opts"><button class="opt" data-id="recolher" data-v="solto">sempre solto</button><button class="opt" data-id="recolher" data-v="visor">vira um visor no pai</button><button class="opt" data-id="recolher" data-v="encaixe">encaixa colado</button></div><textarea class="nota" data-id="recolher" placeholder="comentário"></textarea></div>
+  </div>
+</section>
+
+<section>
+  <h2>3 · A roda com as mesmas famílias dos gabinetes</h2>
+  <p>Cada fatia veste o material da família, a máscara volta e as misturas viram uma fatia só. As fatias ficaram mais afastadas e o nome ganhou uma chapa lisa por baixo, porque a textura da família não pode passar por cima da letra.</p>
+  <div class="cols"><div class="vcap"><div class="vbox" id="wh0" style="height:470px"></div><b>Hoje</b><span>Treze fatias escuras, sem máscara, com mistura duas vezes.</span></div>
+    <div class="vcap"><div class="vbox" id="wh1" style="height:470px"></div><b>Proposta</b><span>A fatia é um pedaço do gabinete; o nome fica numa chapa lisa.</span></div></div>
+  <div class="cols">
+    <div class="q"><h3>A roda</h3><div class="opts"><button class="opt" data-id="roda" data-v="familias">fatias com o material da família</button><button class="opt" data-id="roda" data-v="consertar">como hoje, só consertar máscara e mistura</button></div><textarea class="nota" data-id="roda" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Mistura</h3><div class="opts"><button class="opt" data-id="rmist" data-v="junta">uma fatia: Misturar + mixers</button><button class="opt" data-id="rmist" data-v="separa">separadas, com nomes diferentes</button></div><textarea class="nota" data-id="rmist" placeholder="comentário"></textarea></div>
+  </div>
+</section>
+
+<section>
+  <h2>4 · Pulsa: só a faixa escolhida acende</h2>
+  <p>Dois desenhos de equipamento real para a mesma faixa. Nos dois, a faixa entre o <b class="k">de</b> e o <b class="k">até</b> é a única parte acesa, e é ela que você agarra para mover as duas pontas juntas. As pontas são peças físicas, sem luz.</p>
+  <ul>
+    <li><b class="k">Janela de luz:</b> um trilho de fader de mesa com duas tampas. Entre elas, um acrílico aceso na cor do cabo; o traço branco é o sinal agora.</li>
+    <li><b class="k">Segmentos de LED:</b> uma escada de LEDs, como num medidor de nível. Os segmentos da faixa ficam acesos, o do sinal agora fica branco e as pontas são duas setas embaixo.</li>
+  </ul>
+  <p>Os dois módulos mexem na mesma faixa: arraste num e veja o outro. O número aparece quando o mouse está em cima.</p>
+  <div class="vbox" id="envbox" style="height: 360px"></div>
+  <div class="cols">
+    <div class="card"><span class="tag">simulação de MIDI</span>
+      <div class="midi"><button class="btn" id="learn">aprender MIDI</button><span class="save" id="lrn">—</span></div>
+      <div class="midi"><span class="tag">seu controle MIDI (CC 21)</span><input type="range" id="cc" min="0" max="127" value="64" aria-label="controle MIDI simulado"></div>
+      <p style="font-size: 12.5px">Na <b class="k">posição</b>, o CC leva a faixa inteira de ponta a ponta sem mudar a largura.</p>
+    </div>
+    <div class="q"><h3>Qual desenho</h3><div class="opts"><button class="opt" data-id="pulsa" data-v="janela">janela de luz</button><button class="opt" data-id="pulsa" data-v="segmentos">segmentos de LED</button></div><textarea class="nota" data-id="pulsa" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Como escolher onde o MIDI liga</h3><div class="opts"><button class="opt" data-id="emidi" data-v="menu">menu depois de mexer no MIDI</button><button class="opt" data-id="emidi" data-v="clique">clicar na parte, depois mexer</button><button class="opt" data-id="emidi" data-v="os-dois">os dois</button></div><textarea class="nota" data-id="emidi" placeholder="comentário"></textarea></div>
+  </div>
+</section>
+
+<section>
+  <h2>5 · Zoom de longe e "caber tudo"</h2>
+  <p>A demo agora usa o módulo novo. A roda do mouse dá zoom centrado no cursor e arrastar move a vista. <b class="k">H</b> (ou o botão) enquadra o patch inteiro; de novo, volta para onde estava. Os quatro níveis:</p>
+  <ul>
+    <li><b class="k">Perto:</b> tudo.</li>
+    <li><b class="k">Médio:</b> sem as notas.</li>
+    <li><b class="k">Bloco:</b> a cor da família com o nome grande e a tela.</li>
+    <li><b class="k">Ponto:</b> só a cor.</li>
+  </ul>
+  <div class="zv" id="zv" tabindex="0" aria-label="demo de zoom: roda = zoom, arrastar = mover, H = caber tudo">
+    <div class="zhud"><button class="btn" id="zfit">caber tudo (H)</button><b id="zpct">100%</b><span id="zlvl">perto</span></div>
+    <div class="zl" id="zl"></div>
+  </div>
+  <div class="cols">
+    <div class="q"><h3>Piso do zoom</h3><div class="opts"><button class="opt" data-id="zpiso" data-v="2">2%</button><button class="opt" data-id="zpiso" data-v="5">5%</button><button class="opt" data-id="zpiso" data-v="auto">o que caber o patch, menos um pouco</button></div><textarea class="nota" data-id="zpiso" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Atalho do "caber tudo"</h3><div class="opts"><button class="opt" data-id="ztecla" data-v="H">H (home, como o TouchDesigner)</button><button class="opt" data-id="ztecla" data-v="F">F (frame, como Nuke e Blender)</button><button class="opt" data-id="ztecla" data-v="botao">só o botão</button></div><textarea class="nota" data-id="ztecla" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Prévia viva de longe</h3><div class="opts"><button class="opt" data-id="zprev" data-v="bloco-parada">no bloco a tela para (o último quadro)</button><button class="opt" data-id="zprev" data-v="bloco-viva">no bloco ainda viva, devagar</button><button class="opt" data-id="zprev" data-v="sem">sem tela desde o bloco</button></div><textarea class="nota" data-id="zprev" placeholder="comentário"></textarea></div>
+    <div class="q"><h3>Os 4 níveis</h3><div class="opts"><button class="opt" data-id="zniveis" data-v="ok">assim está bom</button><button class="opt" data-id="zniveis" data-v="ajustar">ajustar (nota)</button></div><textarea class="nota" data-id="zniveis" placeholder="ex.: o bloco deveria aparecer antes, o nome maior…"></textarea></div>
+  </div>
+</section>
+
+<section>
+  <h2>6 · As peças, que vão para o programa todo</h2>
+  <p>A estética do PRISMA inteiro vai ser refeita a partir do canvas, então as peças decididas aqui viram o vocabulário de tudo. Embaixo, um exemplo: a barra de cima montada só com elas. É só para conferir a linguagem; a barra em si é uma rodada própria.</p>
+  <div class="cols">
+    <div class="card"><span class="tag">regras de leitura (valem para tudo)</span>
+      <ul>
+        <li>Rótulos em fonte sem condensar, com pelo menos <b class="k">11 px</b> no zoom 100%. O nome do módulo tem 16 px.</li>
+        <li>Texto <b class="k">escuro em gabinete claro e claro em gabinete escuro</b>. Nunca texto em cima de textura ou animação sem uma chapa lisa por baixo.</li>
+        <li><b class="k">Nenhum nome cortado</b> com "…": a peça tem a largura do nome mais longo.</li>
+        <li>Uma palavra por rótulo, em minúscula. Maiúscula só no nome do módulo e nas teclas da barra.</li>
+        <li>Sem parafuso, sem enfeite que pareça controle: tudo que parece um botão é um botão.</li>
+        <li>O que brilha é <b class="k">estado</b> (ligado, escolhido, sinal agora), nunca decoração.</li>
+      </ul></div>
+  </div>
+  <div class="wrap"><div class="patch kit" id="kit" style="width:1160px"></div></div>
+  <div class="q"><h3>As peças e as regras</h3><div class="opts"><button class="opt" data-id="kit" data-v="ok">é essa a linguagem</button><button class="opt" data-id="kit" data-v="ajustar">ajustar (nota)</button></div>
+    <textarea class="nota" data-id="kit" placeholder="peça que falta, regra que muda…"></textarea></div>
+</section>
+
+<section>
+  <h2>7 · Comentário geral</h2>
+  <div class="q"><textarea class="nota" data-id="geral2" style="min-height: 110px" placeholder="o que faltou, ordem das etapas, qualquer coisa"></textarea></div>
+</section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const mk = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
+const CAB = ['#8e5fc8', '#f2c94c', '#e9763a', '#4f9fe6', '#7cc142', '#e2507a', '#35b9a8'];
+const FAMC = { forma: '#5f8f5a', geometria: '#4f6fa6', mistura: '#7d8fa3', prata: '#7d8fa3', cor: '#c25b86', luz: '#c9a227', textura: '#8a8f96', distorcao: '#7a5fb0', tempo: '#3f8e96', gerador: '#2f8f74', mascara: '#8e5fc8' };
+const ST = {}; let PRESO = 'trava';
+
+// ---------------------------------------------------------------- telas (imagem de mentira, por modulo)
+function person(c, w, h, col){ c.fillStyle = col || '#a3958a'; c.beginPath(); c.ellipse(w * .52, h * .40, w * .11, h * .22, 0, 0, 7); c.fill();
+  c.fillStyle = '#3a4656'; c.beginPath(); c.ellipse(w * .5, h * 1.02, w * .26, h * .42, 0, 0, 7); c.fill(); }
+function edges(c, w, h, glow){ c.strokeStyle = '#eef3ff'; c.lineWidth = 1.6; c.shadowColor = glow || '#cfe0ff'; c.shadowBlur = 6;
+  c.beginPath(); c.ellipse(w * .52, h * .40, w * .11, h * .22, 0, 0, 7); c.stroke(); c.beginPath(); c.ellipse(w * .5, h * 1.02, w * .26, h * .42, 0, 0, 7); c.stroke();
+  for (let i = 0; i < 6; i++){ c.beginPath(); c.moveTo(w * (.1 + i * .02), h * (.2 + i * .1)); c.lineTo(w * (.22 + i * .03), h * (.16 + i * .1)); c.stroke(); } c.shadowBlur = 0; }
+function bgcam(c, w, h){ const g = c.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#3a414b'); g.addColorStop(1, '#171b20'); c.fillStyle = g; c.fillRect(0, 0, w, h); }
+function spiral(c, w, h, dir, col){ c.strokeStyle = col || '#8fd0ff'; c.lineWidth = 1.4; c.beginPath();
+  for (let t = 0; t < 40; t += .05){ const r = t * Math.min(w, h) / 70, a = dir * t; const x = w / 2 + Math.cos(a) * r * 1.5, y = h / 2 + Math.sin(a) * r; t ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); }
+const PIC = {
+  cam: (c, w, h) => { bgcam(c, w, h); person(c, w, h); },
+  contornar: (c, w, h, o) => { if (o === 1){ c.fillStyle = '#000'; c.fillRect(0, 0, w, h); } else { bgcam(c, w, h); person(c, w, h); } edges(c, w, h); },
+  polar: (c, w, h, o) => { c.fillStyle = '#05070a'; c.fillRect(0, 0, w, h); spiral(c, w, h, o === 1 ? -1 : 1, '#e7f0ff'); c.globalAlpha = .5; spiral(c, w, h, o === 1 ? -1.07 : 1.07, '#7fb0ff'); c.globalAlpha = 1; },
+  misturar: (c, w, h, o) => { bgcam(c, w, h); person(c, w, h); c.globalCompositeOperation = ['source-over', 'lighter', 'screen', 'multiply', 'difference'][o || 0];
+    c.globalAlpha = .8; spiral(c, w, h, 1, '#ffd36b'); edges(c, w, h, '#ffe1a0'); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; },
+  luma: (c, w, h, o) => { const g = c.createLinearGradient(0, 0, w, 0); g.addColorStop(0, o ? '#fff' : '#000'); g.addColorStop(1, o ? '#000' : '#fff'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.globalCompositeOperation = 'difference'; person(c, w, h, '#fff'); c.globalCompositeOperation = 'source-over'; },
+  mixer: (c, w, h) => { bgcam(c, w, h); person(c, w, h, '#b9a090'); c.globalCompositeOperation = 'screen'; spiral(c, w, h, 1, '#ffd36b'); spiral(c, w, h, -1, '#7fb0ff'); c.globalCompositeOperation = 'source-over'; },
+  gen: (c, w, h, o, fam) => { c.fillStyle = '#05070a'; c.fillRect(0, 0, w, h); const col = FAMC[fam] || '#888'; for (let i = 0; i < 9; i++){ c.fillStyle = col; c.globalAlpha = .15 + i * .07;
+    c.beginPath(); c.arc(w * (.15 + (i * 37 % 70) / 100), h * (.2 + (i * 53 % 60) / 100), 6 + i * 2, 0, 7); c.fill(); } c.globalAlpha = 1; },
+};
+function screen(m, x, y, w, kind, opt, fam){ const hh = Math.round((w - 14) * 9 / 16) + 14;
+  const s = mk(`<div class="scr" style="left:${x}px;top:${y}px;width:${w}px;height:${hh}px"><canvas width="${(w - 14) * 2}" height="${(hh - 14) * 2}"></canvas></div>`);
+  m.el.append(s); const cv = s.firstChild; m.draw = o => { const c = cv.getContext('2d'); c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, w, hh); (PIC[kind] || PIC.gen)(c, w - 14, hh - 14, o, fam); };
+  m.draw(opt); return y + hh; }
+
+// ---------------------------------------------------------------- pecas
+// GRADE do modulo (C compacta): trilho de jacks (RL) | tela | aba da saida (RR). Tudo em px do modulo, sem sobreposicao.
+const W = 252, RL = 46, RR = 42, RAILX = 23, RAIL0 = 58, RAILD = 42, FW = 152;
+function Mod(x, y, w, h, fam, cls = ''){ const el = mk(`<div class="mod f-${fam} ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"><span class="deco"></span></div>`);
+  return { el, x, y, w, h, fam, J: {} }; }
+const sk = (m, t, x, y, c = '') => m.el.append(mk(`<span class="sk ${c}" style="left:${x}px;top:${y}px">${t}</span>`));
+function liga(m, x, y, on = true, sm){ const l = mk(`<span class="liga${on ? '' : ' off'}${sm ? ' sm' : ''}" style="left:${x}px;top:${y}px" title="${on ? 'ligado — clique desliga' : 'desligado — clique liga'}"></span>`);
+  l.onclick = e => { e.stopPropagation(); l.classList.toggle('off'); }; m.el.append(l); }
+function jack(m, key, x, y, label, cv){ m.el.append(mk(`<span class="jk${cv ? ' cv' : ''}" style="left:${x}px;top:${y}px"></span>`)); m.J[key] = [x, y];
+  if (label) sk(m, label, x, y + 21); }
+function plate(m, x, y, w, h){ m.el.append(mk(`<span class="pl" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></span>`)); }
+function outTab(m, w, yTop, h = 72){ plate(m, w - 36, yTop, 30, h); sk(m, 'out', w - 21, yTop + 14, 'inv'); jack(m, 'out', w - 21, yTop + h - 24); }
+function knob(m, x, y, s, a, lit){ const k = mk(`<span class="kn${lit ? ' lit' : ''}" style="--s:${s}px;--a:${a}deg;left:${x}px;top:${y}px;--pc:${lit || ''}"><span class="rot"><span class="cap"></span><span class="ptr"></span></span></span>`);
+  m.el.append(k); return k; }
+function fader(m, x0, x1, y, v){ m.el.append(mk(`<span class="fd" style="left:${x0}px;top:${y - 9}px;width:${x1 - x0}px"><span class="fl" style="width:${v * 100}%"></span><span class="cap" style="left:${v * 100}%"></span></span>`)); }
+function nameRow(m, x, y, w, name, n, chip){ const r = mk(`<div class="nmr" style="left:${x}px;top:${y}px;width:${w}px"><b>${name}</b>${n ? `<i>${n}</i>` : ''}</div>`);
+  if (chip) r.append(chip); m.el.append(r); }
+
+// ---------------------------------------------------------------- os ATOMOS (dados reais do repo)
+const ATOMS = {
+  Contornar: { fam: 'forma', pic: 'contornar', knobs: [['limiar', -40], ['espessura', 20], ['borda', -10]], ins: ['in', 'másc'], op: { nm: 'fundo', opts: ['imagem', 'preto'] } },
+  Polar: { fam: 'geometria', pic: 'polar', knobs: [['força', 50], ['giro', 0]], ins: ['in', 'másc'], op: { nm: 'sentido', opts: ['enrolar', 'desenrolar'] } },
+  Misturar: { fam: 'mistura', pic: 'misturar', knobs: [['quanto', 0]], ins: ['in', 'b', 'másc'], op: { nm: 'modo', opts: ['normal', 'soma', 'tela', 'multiplicar', 'diferença'] } },
+  Matiz: { fam: 'cor', knobs: [['giro', 30], ['quanto', -20]], ins: ['in', 'másc'] },
+  Brilhar: { fam: 'luz', knobs: [['quanto', 60], ['raio', -30]], ins: ['in', 'másc'] },
+  Grao: { fam: 'textura', knobs: [['quanto', 10], ['tamanho', -50]], ins: ['in', 'másc'] },
+  Onda: { fam: 'distorcao', knobs: [['força', 40], ['freq', -20], ['vel', 70]], ins: ['in', 'másc'] },
+  Feedback: { fam: 'tempo', knobs: [['quanto', 80], ['zoom', 0]], ins: ['in', 'másc'] },
+  Ruido: { fam: 'gerador', knobs: [['escala', -60], ['vel', 30], ['detalhe', 0]], ins: ['in', 'másc'] },
+  Luma: { fam: 'mascara', pic: 'luma', knobs: [['limiar', -30], ['macio', 20]], ins: ['in', 'másc'], op: { nm: 'inverter', opts: ['não', 'sim'], sw: 1 } },
+};
+
+// PAI: liga + fader | trilho, tela, aba | nome | knobs (rotulo na mesma altura, CV embaixo de cada um)
+function atomMod(name, x, y, o = {}){
+  const A = ATOMS[name], op = A.op || null, lit = o.lit || {}, ins = A.ins.slice(); let opv = o.opv || 0;
+  if (op && !o.visor) ins.push(op.nm);
+  const m = Mod(x, y, W, 10, A.fam); m.name = name;
+  liga(m, 20, 20); fader(m, 42, W - 16, 20, 1);
+  const sw = W - RL - RR - 4, yEnd = screen(m, RL + 2, 38, sw, A.pic || 'gen', opv, A.fam);
+  outTab(m, W, 42);
+  let chip = null;
+  if (o.visor && op){   // RECOLHIDO: a opcao num visor ao lado do nome (clique troca; 2 cliques soltaria o filho)
+    chip = mk(`<span class="vfd" title="${op.nm}: clique troca">${op.opts[opv]}</span>`);
+    chip.onclick = () => { opv = (opv + 1) % op.opts.length; chip.textContent = op.opts[opv]; m.draw(opv); }; }
+  nameRow(m, RL + 2, yEnd + 5, W - RL - 16, name, chip ? '' : o.n, chip);
+  // trilho: as entradas de IMAGEM em cima, ao lado da tela; a OPCAO (o filho) no pe', na linha dos CVs: escolha e' controle
+  const img = ins.filter(n => !op || n !== op.nm);
+  img.forEach((n, i) => jack(m, n, RAILX, RAIL0 + i * RAILD, n));
+  const railEnd = RAIL0 + (img.length - 1) * RAILD + 28;
+  const y0 = yEnd + 36, zx0 = RL + 2, zw = W - 8 - zx0, ks = A.knobs, cy = y0 + 36; let kEnd, cvY;
+  if (ks.length === 1){ const [nm, a] = ks[0], cx = zx0 + zw * .36;
+    sk(m, nm, cx, y0); knob(m, cx, cy, 50, a, lit[nm]); jack(m, 'cv:' + nm, cx + 66, cy, '', 1); kEnd = cy + 25; cvY = cy + 16; }
+  else { const cw = zw / ks.length; ks.forEach(([nm, a], i) => { const cx = zx0 + cw * (i + .5);
+    sk(m, nm, cx, y0); knob(m, cx, cy, i ? 36 : 48, a, lit[nm]); jack(m, 'cv:' + nm, cx, cy + 42, '', 1); }); kEnd = cy + 52; cvY = cy + 42; }
+  let H = Math.max(kEnd + 14, railEnd + 10);
+  if (op && ins.includes(op.nm)){ const yy = Math.max(cvY, railEnd + 22);
+    if (o.dock) m.J.op = [0, yy]; else jack(m, 'op', RAILX, yy, op.nm);
+    H = Math.max(H, yy + 32); }
+  m.h = H; m.el.style.height = H + 'px'; m.op = op;
+  m.el.append(mk(`<span class="blk"><span class="nm">${name}</span></span>`));
+  return m;
+}
+function mixerMod(x, y, n = 4){   // MIXER: tela, nome; uma linha por entrada = jack | liga | fader (sem numeracao)
+  const m = Mod(x, y, W, 10, 'prata'); m.name = 'Mixer';
+  const yEnd = screen(m, 14, 14, W - 14 - RR - 4, 'mixer'); outTab(m, W, 18);
+  nameRow(m, 14, yEnd + 5, W - 30, 'Mixer');
+  const y0 = yEnd + 46;
+  for (let i = 0; i < n; i++){ const yy = y0 + i * 40; jack(m, 'in' + i, RAILX, yy); liga(m, 58, yy, i !== 3, 1); fader(m, 76, W - 16, yy, [1, .8, .55, .3][i]); }
+  const H = y0 + (n - 1) * 40 + 26;
+  m.h = H; m.el.style.height = H + 'px'; m.el.append(mk('<span class="blk"><span class="nm">Mixer</span></span>')); return m;
+}
+function srcMod(x, y){
+  const m = Mod(x, y, W, 10, 'prata'); m.name = 'Câmera';
+  const yEnd = screen(m, RL + 2, 14, W - RL - RR - 4, 'cam'); outTab(m, W, 18); jack(m, 'másc', RAILX, 40, 'másc');
+  nameRow(m, RL + 2, yEnd + 5, W - RL - 16, 'Câmera');
+  const H = yEnd + 38; m.h = H; m.el.style.height = H + 'px'; m.el.append(mk('<span class="blk"><span class="nm">Câmera</span></span>')); return m;
+}
+
+// ---------------------------------------------------------------- o FILHO (sem alavanca, sem parafuso)
+function childMod(op, v, ctl, x, y, fam, onPick){
+  const CW = ctl === 'rotativo' ? 196 : FW; x -= CW - FW;   // o seletor precisa de lugar pra lista inteira (cresce pra esquerda)
+  const m = Mod(x, y, CW, 10, fam, 'child'); m.el.append(mk(`<div class="cnm">${op.nm}</div>`));
+  const N = op.opts.length; let H, outY, paint = () => {};
+  const set = i => { v = i; paint(); onPick && onPick(i); };
+  if (ctl === 'teclas' || ctl === 'radio' || ctl === 'tecla'){   // TECLAS: uma afunda e acende; tecla unica = liga/desliga
+    const keys = ctl === 'tecla' ? [op.nm] : op.opts;
+    const ks = keys.map((t, i) => { const k = mk(`<span class="key" style="left:10px;top:${38 + i * 34}px;width:${CW - 58}px"><span class="led"></span>${t}</span>`); m.el.append(k);
+      k.onclick = () => set(ctl === 'tecla' ? (v ? 0 : 1) : i); return k; });
+    paint = () => ks.forEach((k, i) => k.classList.toggle('on', ctl === 'tecla' ? !!v : i === v));
+    H = 38 + keys.length * 34 + 10; outY = Math.max(52, 38 + keys.length * 17 - 3);
+  } else if (ctl === 'luz'){   // BOTAO ILUMINADO: a opcao de agora escrita acesa; clique avanca. Chave: acende = ligada
+    const b = mk(`<span class="ilb" style="left:10px;top:38px;width:${CW - 58}px"><span class="t"></span>${op.sw ? '' : `<span class="dots">${'<i></i>'.repeat(N)}</span>`}</span>`); m.el.append(b);
+    b.onclick = e => set(op.sw ? (v ? 0 : 1) : (v + (e.shiftKey ? N - 1 : 1)) % N);
+    paint = () => { b.querySelector('.t').textContent = op.sw ? op.nm : op.opts[v]; b.classList.toggle('on', op.sw ? !!v : true);
+      b.querySelectorAll('.dots i').forEach((d, i) => d.classList.toggle('on', i === v)); };
+    H = 96; outY = 61;
+  } else {   // SELETOR com a LISTA ACESA: o knob aponta, o LED da opcao acende; clique no knob avanca, clique no nome escolhe
+    const cy = 42 + (N - 1) * 11;
+    const k = knob(m, 34, cy, 42, 0); k.classList.add('rsel'); k.onclick = e => set((v + (e.shiftKey ? N - 1 : 1)) % N);
+    const rows = op.opts.map((t, i) => { const r = mk(`<span class="rl" style="left:66px;top:${32 + i * 22}px"><span class="led"></span>${t}</span>`); m.el.append(r); r.onclick = () => set(i); return r; });
+    paint = () => { k.style.setProperty('--a', (-120 + v * 240 / Math.max(1, N - 1)) + 'deg'); rows.forEach((r, i) => r.firstChild.classList.toggle('on', i === v)); };
+    H = Math.max(42 + (N - 1) * 22 + 24, cy + 36); outY = Math.max(52, cy);
+  }
+  outTab(m, CW, outY - 38, 62);
+  m.h = H; m.el.style.height = H + 'px'; m.el.append(mk(`<span class="blk"><span class="nm">${op.nm}</span></span>`)); paint(); return m;
+}
+const ctlFor = op => op.sw ? (ST.fsw2?.sel === 'luz' ? 'luz' : 'tecla') : op.opts.length > 2 ? (ST.fn?.sel === 'radio' ? 'radio' : 'rotativo') : ST.f2b?.sel === 'luz' ? 'luz' : 'teclas';
+
+// ---------------------------------------------------------------- cabos (VCV: centro a centro, cai com o peso; plugue redondo na cor)
+const NS = 'http://www.w3.org/2000/svg';
+const absJ = (m, k) => [m.x + m.J[k][0], m.y + m.J[k][1]];
+const cel = () => document.body.classList.contains('cel');
+function cablePath(a, b, sagK = 1){ const d = Math.hypot(b[0] - a[0], b[1] - a[1]), sag = Math.min(60, 10 + d * .1) * sagK;
+  const cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2 + sag; return `M${a[0]},${a[1]} Q${cx},${cy + sag * .5} ${b[0]},${b[1]}`; }
+function plug(g, p, col, locked){ const s = cel();   // PRESO: um anel de trava em volta do miolo (sem parafuso)
+  g.insertAdjacentHTML('beforeend', `<g class="plug"><circle cx="${p[0]}" cy="${p[1]}" r="${locked ? 11 : 10}" fill="${s ? '#141416' : '#18191b'}"/><circle cx="${p[0]}" cy="${p[1]}" r="${locked ? 8.5 : 7.5}" fill="${col}"/>`
+    + (locked ? `<circle cx="${p[0]}" cy="${p[1]}" r="4.6" fill="none" stroke="${s ? '#141416' : '#e6e9ec'}" stroke-width="2"/><circle cx="${p[0]}" cy="${p[1]}" r="2.4" fill="#0a0a0a"/>`
+      : `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#0a0a0a"/>`) + (s ? '' : `<circle cx="${p[0] - 2.5}" cy="${p[1] - 3}" r="2" fill="#fff" opacity=".35"/>`) + '</g>'); }
+function cable(svg, a, b, col, o = {}){
+  if (o.locked && PRESO === 'barra' && !o.anyway){   // BARRA de metal rigida (sem parafusos: as pontas sao plugues)
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI, d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    svg.insertAdjacentHTML('beforeend', `<g class="bar" transform="translate(${a[0]},${a[1]}) rotate(${ang})"><rect x="-12" y="-8" width="${d + 24}" height="16" rx="8" fill="${cel() ? '#d9dde1' : 'url(#barg)'}" stroke="${cel() ? '#141416' : '#3a3d40'}" stroke-width="${cel() ? 2 : 1}"/>`
+      + `<rect x="10" y="-3" width="${Math.max(0, d - 20)}" height="6" rx="3" fill="${col}"/></g>`);
+    plug(svg, a, col, 1); plug(svg, b, col, 1); return; }
+  const p = cablePath(a, b, o.locked ? .35 : 1), s = cel(), wv = o.locked ? 7 : 5;
+  svg.insertAdjacentHTML('beforeend', `<path class="outl" d="${p}" stroke="${s ? '#141416' : `color-mix(in srgb, ${col} 45%, #000)`}" stroke-width="${wv + 3.5}"/><path class="core" d="${p}" stroke="${col}" stroke-width="${wv}"/>`
+    + (s ? '' : `<path class="hi" d="${p}" stroke-width="1.4" transform="translate(-.8,-1.2)"/>`));
+  plug(svg, a, col, o.locked); plug(svg, b, col, o.locked);
+}
+function svgLayer(host, w, h){ const s = document.createElementNS(NS, 'svg'); s.setAttribute('class', 'cab'); s.setAttribute('width', w); s.setAttribute('height', h);
+  s.innerHTML = '<defs><linearGradient id="barg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset=".5" stop-color="#aab0b6"/><stop offset="1" stop-color="#6d737a"/></linearGradient></defs>'; host.append(s); return s; }
+function note(host, t, x, y, lh = 22, lx){ host.append(mk(`<span class="note" style="left:${x}px;top:${y}px;--lh:${lh}px${lx != null ? `;--lx:${lx}px` : ''}">${t}</span>`)); }
+
+// pai + filho: o OUT do filho na altura do jack da opcao do pai
+function group(host, name, x, y, o = {}){
+  const A = ATOMS[name]; let v = o.v || 0;
+  const p = atomMod(name, x + FW + 40, y, { ...o, opv: v }); host.append(p.el);
+  let c = null;
+  if (A.op && !o.visor){ const ctl = o.ctl || ctlFor(A.op);
+    c = childMod(A.op, v, ctl, o.dock ? x + 40 : x, 0, A.fam, i => { v = i; p.draw(i); host._redraw && host._redraw(); });
+    c.y = p.y + p.J.op[1] - c.J.out[1]; c.el.style.top = c.y + 'px'; host.append(c.el);
+    if (o.dock){ c.el.style.borderRadius = '14px 0 0 14px'; c.el.style.boxShadow = 'inset -2px 0 0 #0004, 0 18px 28px -8px #000e'; } }
+  return { p, c };
+}
+
+// ---------------------------------------------------------------- 1 · o patch
+function buildPatch(){
+  const host = $('#patch'); host.innerHTML = '';
+  const src = srcMod(24, 90); host.append(src.el);
+  const g1 = group(host, 'Contornar', 320, 70, { n: 3 });
+  const g2 = group(host, 'Polar', 840, 70, { n: 4, lit: { 'força': CAB[1] } });
+  const g3 = group(host, 'Misturar', 1360, 70, { n: 5 });
+  const mx = mixerMod(1860, 70); host.append(mx.el);
+  const maxH = Math.max(...[src, g1.p, g2.p, g3.p, mx, g1.c, g2.c, g3.c].filter(Boolean).map(m => m.y + m.h)) + 40;
+  host.style.height = maxH + 'px';
+  const svg = svgLayer(host, 2140, maxH);
+  host._redraw = () => { [...svg.querySelectorAll(':scope > :not(defs)')].forEach(e => e.remove());
+    cable(svg, absJ(src, 'out'), absJ(g1.p, 'in'), CAB[3]);
+    cable(svg, absJ(g1.p, 'out'), absJ(g2.p, 'in'), CAB[0]);
+    cable(svg, absJ(g2.p, 'out'), absJ(g3.p, 'in'), CAB[1]);
+    cable(svg, absJ(g1.p, 'out'), absJ(g3.p, 'b'), CAB[4]);
+    cable(svg, absJ(g3.p, 'out'), absJ(mx, 'in0'), CAB[2]);
+    for (const g of [g1, g2, g3]) if (g.c) cable(svg, absJ(g.c, 'out'), absJ(g.p, 'op'), FAMC[g.p.fam], { locked: 1 }); };
+  host._redraw();
+  note(host, 'liga e opacidade na mesma linha', g2.p.x + 8, g2.p.y - 40, 30, 12);
+  note(host, 'imagem entra em cima', g2.p.x - 150, g2.p.y + 20, 0);
+  note(host, 'a escolha entra embaixo, com os CVs', g2.c.x - 30, g2.c.y + g2.c.h + 14, 0);
+}
+
+// ---------------------------------------------------------------- 2 · variantes do filho
+function vcard(title, desc, build, h = 260){ const c = mk(`<div class="vcap"><div class="vbox" style="height:${h}px"></div><b>${title}</b><span>${desc}</span></div>`);
+  $('#fvars').append(c); build(c.firstChild); }
+function scaled(box, s, x, y){ const sc = mk(`<div class="sc" style="transform:scale(${s});left:${x}px;top:${y}px;width:1000px;height:800px"></div>`); box.append(sc); return sc; }
+function miniGroup(box, name, ctl, s, x, y, o = {}){
+  const host = scaled(box, s, x, y), g = group(host, name, 50, 10, { ...o, ctl });
+  if (!g.c || o.dock) return;
+  const svg = svgLayer(host, 1000, 800), sv = PRESO; PRESO = o.preso || PRESO;
+  cable(svg, absJ(g.c, 'out'), absJ(g.p, 'op'), FAMC[g.p.fam], { locked: 1 }); PRESO = sv;
+}
+function buildVars(){
+  $('#fvars').innerHTML = '';
+  vcard('Escolha de 2 · duas teclas', 'Sentido do Polar. Uma tecla afunda e o LED dela acende.', b => miniGroup(b, 'Polar', 'teclas', .62, 4, 8));
+  vcard('Escolha de 2 · botão iluminado', 'Fundo do Contornar. A opção de agora está escrita acesa na tecla; clique avança. Os pontinhos dizem quantas opções há.', b => miniGroup(b, 'Contornar', 'luz', .62, 4, 8));
+  vcard('3 ou mais · seletor com lista acesa', 'Modo do Misturar. O knob aponta e o LED do nome acende. Clique no knob avança; clique no nome escolhe direto.', b => miniGroup(b, 'Misturar', 'rotativo', .62, 4, 8), 260);
+  vcard('3 ou mais · teclas de rádio', 'Modo do Misturar. Uma tecla por opção, só uma afundada.', b => miniGroup(b, 'Misturar', 'radio', .62, 4, 8), 260);
+  vcard('Chave · uma tecla', 'O "inverter" da Luma (máscara). Afundada = invertido.', b => miniGroup(b, 'Luma', 'tecla', .62, 4, 8));
+  vcard('Chave · botão iluminado', 'O "inverter" acende quando está ligado.', b => miniGroup(b, 'Luma', 'luz', .62, 4, 8));
+  vcard('Cabo preso · curto com trava', 'Um cabo mais grosso e curto; o plugue tem um anel de trava, sem parafuso.', b => miniGroup(b, 'Polar', 'teclas', .62, 4, 8, { preso: 'trava' }));
+  vcard('Cabo preso · barra de metal', 'Uma barra rígida na cor da família, com um plugue em cada ponta.', b => miniGroup(b, 'Polar', 'teclas', .62, 4, 8, { preso: 'barra' }));
+  vcard('Recolher · sempre solto', 'O filho é sempre um módulo à vista.', b => miniGroup(b, 'Misturar', 'rotativo', .62, 4, 8));
+  vcard('Recolher · vira um visor no pai', 'Recolhido, a opção aparece num visor ao lado do nome (clique troca). Dois cliques no visor soltam o filho de novo.', b => miniGroup(b, 'Misturar', 'rotativo', .74, 4 - (FW + 90) * .74, 8, { visor: 1, v: 2 }));
+  vcard('Recolher · encaixa colado', 'O filho gruda na lateral do pai, sem cabo, e os dois andam como uma peça só.', b => miniGroup(b, 'Polar', 'teclas', .62, -20, 8, { dock: 1 }));
+}
+
+// ---------------------------------------------------------------- 3 · a roda
+function buildWheels(){
+  const hoje = ['Fontes', 'cor', 'luz', 'forma', 'geometria', 'distorção', 'textura', 'tempo', 'mistura', 'gerador', 'Movimentos', 'Receitas', 'Misturas'];
+  const prop = [['Fontes', 'prata'], ['cor', 'cor'], ['luz', 'luz'], ['forma', 'forma'], ['geometria', 'geometria'], ['distorção', 'distorcao'], ['textura', 'textura'], ['tempo', 'tempo'],
+    ['gerador', 'gerador'], ['máscara', 'mascara'], ['mistura', 'mistura'], ['Movimentos', ''], ['Receitas', '']];
+  const draw = (id, items, fam) => { const b = $(id); b.innerHTML = ''; const w = mk('<div class="whl"></div>'); b.append(w); w.append(mk('<span class="whm">novo</span>'));
+    const R = 184; items.forEach((it, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / items.length, [t, f] = fam ? it : [it, ''];
+      w.append(mk(`<span class="whc ${f ? 'mod f-' + f : 'dark'}" style="left:${Math.cos(a) * R}px;top:${Math.sin(a) * R}px">${f ? '<span class="deco"></span>' : ''}<span>${t}</span></span>`)); }); };
+  draw('#wh0', hoje, 0); draw('#wh1', prop, 1);
+}
+
+// ---------------------------------------------------------------- 4 · Pulsa: a faixa (so' ela acende) + MIDI
+const R = [{ n: 'limiar · Contornar', lo: .2, hi: .55, c: CAB[1] }, { n: 'força · Polar', lo: .5, hi: .9, c: CAB[3] }];
+let LEARN = 0, BIND = null, rts = [];
+function pulsaMod(box, kind, x, y){
+  const el = mk(`<div class="mod f-gerador env" style="left:${x}px;top:${y}px"><span class="deco"></span></div>`); box.append(el);
+  const m = { el, J: {} };
+  liga(m, 28, 22);
+  plate(m, 254, 8, 64, 28); sk(m, 'out', 274, 22, 'inv'); jack(m, 'out', 302, 22);
+  const sc = mk('<div class="scope"><canvas width="588" height="144"></canvas></div>'); el.append(sc);
+  el.append(mk(`<div class="envn">Pulsa <span style="font: 600 11px var(--body); letter-spacing: 0; text-transform: none; opacity: .7">· ${kind === 'leds' ? 'segmentos de LED' : 'janela de luz'}</span></div>`));
+  R.forEach((r, i) => {
+    const g = mk(`<div class="rg" style="--nc:${r.c}"><div class="lb"><span>${r.n}</span><span class="rd vfd"></span></div>
+      <div class="rt ${kind}"><span class="slot"></span><span class="win"></span><div class="lad">${'<i></i>'.repeat(24)}</div><span class="now"></span>
+      <span class="cap"></span><span class="cap"></span><span class="cl">de</span><span class="cl">até</span></div></div>`);
+    el.append(g); const t = g.querySelector('.rt'), win = t.querySelector('.win'), now = t.querySelector('.now'), [c0, c1] = t.querySelectorAll('.cap'),
+      [l0, l1] = t.querySelectorAll('.cl'), leds = [...t.querySelectorAll('.lad i')], rd = g.querySelector('.rd');
+    const q = { i, t, g, r, kind, now, leds, cur: 0 };
+    q.show = () => { const a = Math.min(r.lo, r.hi), b = Math.max(r.lo, r.hi);
+      win.style.setProperty('--a', a); win.style.setProperty('--b', b);
+      c0.style.setProperty('--p', r.lo); c1.style.setProperty('--p', r.hi); l0.style.setProperty('--p', r.lo); l1.style.setProperty('--p', r.hi);
+      const near = Math.abs(r.hi - r.lo) < .14; l0.style.transform = near ? 'translateX(-100%)' : ''; l1.style.transform = near ? 'translateX(0)' : '';   // perto: os rotulos abrem pros lados
+      rd.textContent = Math.round(r.lo * 100) + ' → ' + Math.round(r.hi * 100);
+      t.querySelectorAll('.bind').forEach(e => e.remove());
+      if (BIND && BIND.i === i){ const p = BIND.part === 'hi' ? r.hi : BIND.part === 'lo' ? r.lo : (r.lo + r.hi) / 2; const bd = mk('<span class="bind">CC 21</span>'); bd.style.setProperty('--p', p); t.append(bd); }
+      q.frame(); };
+    q.frame = () => { const a = Math.min(r.lo, r.hi), b = Math.max(r.lo, r.hi), v = r.lo + (r.hi - r.lo) * q.cur;
+      now.style.setProperty('--p', v);
+      if (kind === 'leds'){ const k = Math.min(23, Math.floor(v * 24)); leds.forEach((d, j) => { const c = (j + .5) / 24, inn = c >= a && c <= b; d.classList.toggle('in', inn && j !== k); d.classList.toggle('now', j === k); }); } };
+    const at = e => { const bb = t.getBoundingClientRect(); return Math.min(1, Math.max(0, (e.clientX - bb.left - 8) / (bb.width - 16))); };
+    const partAt = e => { const bb = t.getBoundingClientRect(), x = at(e), px = bb.width - 16, dl = Math.abs(x - r.lo) * px, dh = Math.abs(x - r.hi) * px, a = Math.min(r.lo, r.hi), b = Math.max(r.lo, r.hi);
+      return Math.min(dl, dh) <= 9 ? (dl <= dh ? 'lo' : 'hi') : x > a && x < b ? 'mid' : dl <= dh ? 'lo' : 'hi'; };
+    let drag = null;
+    t.onpointerdown = e => { e.preventDefault(); const part = partAt(e);
+      if (LEARN){ if (ST.emidi?.sel !== 'menu'){ BIND = { i, part: part === 'mid' ? 'pos' : part }; LEARN = 0; learnUI(); showAll(i); } return; }
+      drag = { part, x0: at(e), lo: r.lo, hi: r.hi }; t.setPointerCapture(e.pointerId); g.classList.add('drag'); if (part !== 'mid') move(e); };
+    const move = e => { if (!drag){ const p = partAt(e); t.style.cursor = p === 'mid' ? 'grab' : 'ew-resize'; return; } const x = at(e);
+      if (drag.part === 'mid'){ let d = x - drag.x0; const a = Math.min(drag.lo, drag.hi), b = Math.max(drag.lo, drag.hi); d = Math.max(-a, Math.min(1 - b, d)); r.lo = drag.lo + d; r.hi = drag.hi + d; t.style.cursor = 'grabbing'; }
+      else r[drag.part] = x; showAll(i); };
+    t.onpointermove = move; t.onpointerup = t.onpointercancel = () => { drag = null; g.classList.remove('drag'); };
+    rts.push(q);
+  });
+  return sc.firstChild;
+}
+const showAll = i => rts.forEach(q => (i == null || q.i === i) && q.show());
+function buildEnv(){
+  const box = $('#envbox'); box.innerHTML = ''; rts = [];
+  const scopes = [pulsaMod(box, 'jan', 24, 18), pulsaMod(box, 'leds', 390, 18)];
+  showAll(); learnUI();
+  const t0 = performance.now(); cancelAnimationFrame(buildEnv.raf);
+  const tick = now => { const t = (now - t0) / 1000, s = Math.pow(1 - (t * .8) % 1, 2.4);
+    for (const cv of scopes){ const c = cv.getContext('2d'); c.clearRect(0, 0, 588, 144); c.strokeStyle = '#7dffb0'; c.lineWidth = 2.5; c.shadowColor = '#3f9'; c.shadowBlur = 8; c.beginPath();
+      for (let x = 0; x <= 588; x += 4){ const ph = (x / 588 * 2 + t * .8) % 1, y = 124 - Math.pow(1 - ph, 2.4) * 100; x ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); }
+    rts.forEach(q => { q.cur = s; q.frame(); });
+    buildEnv.raf = requestAnimationFrame(tick); };
+  buildEnv.raf = requestAnimationFrame(tick);
+}
+function learnUI(){ $('#learn').textContent = LEARN ? 'cancelar' : 'aprender MIDI';
+  $('#lrn').textContent = LEARN ? (ST.emidi?.sel === 'menu' ? 'mexa no controle MIDI…' : ST.emidi?.sel === 'clique' ? 'clique na parte da faixa (ponta ou o aceso), depois mexa no MIDI' : 'clique na parte (ou só mexa no MIDI e escolha no menu)')
+    : BIND ? `CC 21 → ${R[BIND.i].n}: ${{ hi: 'até (maior)', lo: 'de (menor)', pos: 'posição (a faixa inteira)' }[BIND.part]}` : '—';
+  rts.forEach(q => q.t.classList.toggle('learn', !!LEARN && ST.emidi?.sel !== 'menu')); }
+function midiMenu(){
+  document.querySelectorAll('.pop').forEach(p => p.remove());
+  const box = $('#envbox'), t = rts[0].t, b = t.getBoundingClientRect(), bb = box.getBoundingClientRect();
+  const p = mk(`<div class="pop" style="left:${b.left - bb.left + 40}px;top:${b.top - bb.top - 10}px"><span class="t">CC 21 chegou. Ligar em ${R[0].n}:</span>
+    <button data-p="hi">▲ até<small>a ponta maior; o "de" fica parado</small></button><button data-p="lo">▼ de<small>a ponta menor; o "até" fica parado</small></button>
+    <button data-p="pos">⇔ posição<small>a faixa inteira anda, a largura fica</small></button></div>`);
+  box.append(p); p.onclick = e => { const q = e.target.closest('button'); if (!q) return; BIND = { i: 0, part: q.dataset.p }; LEARN = 0; p.remove(); learnUI(); showAll(); };
+}
+$('#learn').onclick = () => { LEARN = LEARN ? 0 : 1; if (!LEARN) document.querySelectorAll('.pop').forEach(p => p.remove()); learnUI(); };
+$('#cc').oninput = e => { const v = e.target.value / 127;
+  if (LEARN && ST.emidi?.sel !== 'clique'){ if (!document.querySelector('.pop')) midiMenu(); return; }
+  if (!BIND) return; const r = R[BIND.i];
+  if (BIND.part === 'hi') r.hi = v; else if (BIND.part === 'lo') r.lo = v;
+  else { const w = r.hi - r.lo, a = Math.abs(w) / 2, c = a + v * (1 - 2 * a); r.lo = c - w / 2; r.hi = c + w / 2; }
+  showAll(BIND.i); };
+
+// ---------------------------------------------------------------- 5 · zoom: um patch grande, niveis semanticos, caber tudo
+const ZV = $('#zv'), ZL = $('#zl'); let Z = { z: .5, tx: 20, ty: 20 }, ZT = null, ZPREV = null, ZB = [0, 0, 1, 1];
+const LVL = z => z >= .55 ? 'perto' : z >= .28 ? 'medio' : z >= .09 ? 'bloco' : 'ponto';
+function buildZoom(){
+  ZL.innerHTML = '';
+  const rows = [['Contornar', 'Polar', 'Misturar'], ['Matiz', 'Onda', 'Brilhar'], ['Grao', 'Feedback', 'Ruido'], ['Luma', 'Polar', 'Onda']];
+  const all = [], links = [], RH = 420;
+  rows.forEach((r, ri) => { const y = ri * RH + 30;
+    const s = srcMod(20, y + 20); ZL.append(s.el); all.push(s); let prev = s;
+    r.forEach((n, i) => { const g = group(ZL, n, 300 + i * 520, y); all.push(g.p); if (g.c){ all.push(g.c); links.push([g.c, 'out', g.p, 'op', FAMC[g.p.fam], 1]); }
+      links.push([prev, 'out', g.p, 'in', CAB[(ri + i) % CAB.length]]); prev = g.p; });
+    const mx = mixerMod(1860, y); ZL.append(mx.el); all.push(mx); links.push([prev, 'out', mx, 'in0', CAB[(ri + 4) % CAB.length]]);
+    if (ri) links.push([all.find(m => m.name === 'Mixer' && m !== mx) || s, 'out', mx, 'in1', CAB[(ri + 5) % CAB.length]]); });
+  const W2 = 2140, H2 = rows.length * RH + 40; ZL.style.width = W2 + 'px'; ZL.style.height = H2 + 'px'; ZB = [0, 0, W2, H2];
+  const svg = svgLayer(ZL, W2, H2); links.forEach(([a, ka, b, kb, col, lk]) => cable(svg, absJ(a, ka), absJ(b, kb), col, { locked: lk, anyway: 1 }));
+  applyZ(true);
+}
+let zlast = '';
+function applyZ(force){ ZL.style.transform = `translate(${Z.tx}px,${Z.ty}px) scale(${Z.z})`; ZL.style.setProperty('--z', Z.z);
+  const l = LVL(Z.z); $('#zpct').textContent = (Z.z * 100).toFixed(Z.z < .1 ? 1 : 0) + '%'; $('#zlvl').textContent = l;
+  if (l !== zlast || force){ zlast = l; ['perto', 'medio', 'bloco', 'ponto'].forEach(k => ZV.classList.toggle('zl-' + k, k === l));
+    if (l === 'ponto' || l === 'bloco') requestAnimationFrame(() => ZL.querySelectorAll('.blk .nm').forEach(n => { n.classList.remove('hide'); if (n.scrollWidth > n.clientWidth + 1) n.classList.add('hide'); })); } }
+const ZMIN = .02, ZMAX = 2;
+function zoomTo(nz, mx, my){ const wx = (mx - Z.tx) / Z.z, wy = (my - Z.ty) / Z.z; ZT = { z: Math.max(ZMIN, Math.min(ZMAX, nz)), wx, wy, mx, my }; if (!zoomTo.r) zoomTo.r = requestAnimationFrame(zstep); }
+function zstep(){ zoomTo.r = 0; if (!ZT) return; const d = ZT.z - Z.z; Z.z = Math.abs(d) < ZT.z * .004 ? ZT.z : Z.z + d * .28;
+  if (ZT.tx != null){ Z.tx += (ZT.tx - Z.tx) * .28; Z.ty += (ZT.ty - Z.ty) * .28; } else { Z.tx = ZT.mx - ZT.wx * Z.z; Z.ty = ZT.my - ZT.wy * Z.z; }
+  applyZ(); if (Z.z !== ZT.z || (ZT.tx != null && Math.abs(ZT.tx - Z.tx) > .5)) zoomTo.r = requestAnimationFrame(zstep); else { if (ZT.tx != null){ Z.tx = ZT.tx; Z.ty = ZT.ty; applyZ(); } ZT = null; } }
+ZV.addEventListener('wheel', e => { e.preventDefault(); const b = ZV.getBoundingClientRect(); const base = ZT ? ZT.z : Z.z; zoomTo(base * Math.exp(-e.deltaY * .0016), e.clientX - b.left, e.clientY - b.top); }, { passive: false });
+let pan = null;
+ZV.addEventListener('pointerdown', e => { if (e.target.closest('.zhud, .key, .ilb, .rsel, .rl, .liga, .vfd')) return; pan = { x: e.clientX, y: e.clientY, tx: Z.tx, ty: Z.ty }; ZV.setPointerCapture(e.pointerId); });
+ZV.addEventListener('pointermove', e => { if (!pan) return; ZT = null; Z.tx = pan.tx + e.clientX - pan.x; Z.ty = pan.ty + e.clientY - pan.y; applyZ(); });
+ZV.addEventListener('pointerup', () => pan = null);
+function fitAll(){ const b = ZV.getBoundingClientRect();
+  if (ZPREV){ const p = ZPREV; ZPREV = null; ZT = { z: p.z, tx: p.tx, ty: p.ty }; zstep(); $('#zfit').textContent = 'caber tudo (H)'; return; }
+  ZPREV = { ...Z }; const z = Math.min(b.width / ZB[2], b.height / ZB[3]) * .92;
+  ZT = { z, tx: (b.width - ZB[2] * z) / 2, ty: (b.height - ZB[3] * z) / 2 }; zstep(); $('#zfit').textContent = 'voltar (H)'; }
+$('#zfit').onclick = fitAll;
+ZV.addEventListener('keydown', e => { if (e.key === 'h' || e.key === 'H' || e.key === 'f' || e.key === 'F'){ e.preventDefault(); fitAll(); } });
+ZV.addEventListener('pointerenter', () => ZV.focus({ preventScroll: true }));
+
+// ---------------------------------------------------------------- 6 · as pecas + a barra de cima feita com elas
+function buildKit(){
+  const host = $('#kit'); host.innerHTML = '';
+  const P = Mod(20, 20, 1120, 250, 'prata'); host.append(P.el);
+  const cap = (t, x, y) => P.el.append(mk(`<span class="kc" style="left:${x}px;top:${y}px">${t}</span>`));
+  P.el.append(mk('<div class="cnm" style="top:14px">peças</div>'));
+  // fileira 1
+  liga(P, 60, 80); liga(P, 110, 80, false); cap('liga · aceso / apagado', 85, 112);
+  fader(P, 170, 330, 80, .7); cap('fader', 250, 112);
+  knob(P, 400, 80, 48, -30); knob(P, 470, 80, 36, 40); knob(P, 530, 80, 36, 10, CAB[1]); cap('knob · principal, ajuste, com movimento', 465, 118);
+  jack(P, 'a', 610, 80); jack(P, 'b', 650, 80, '', 1); cap('jack · imagem / CV', 630, 112);
+  outTab(P, 750, 46); cap('saída', 729, 130);
+  P.el.append(mk('<span class="key" style="left:790px;top:66px;width:84px"><span class="led"></span>tecla</span>'), mk('<span class="key on" style="left:884px;top:66px;width:96px"><span class="led"></span>afundada</span>'));
+  cap('tecla · solta / afundada', 885, 112);
+  P.el.append(mk('<span class="ilb on" style="left:1000px;top:58px;width:100px"><span>tela</span><span class="dots"><i></i><i></i><i class="on"></i><i></i></span></span>')); cap('botão iluminado', 1050, 118);
+  // fileira 2
+  P.el.append(mk('<span class="vfd" style="position:absolute;left:40px;top:168px">128 bpm</span>'), mk('<span class="vfd" style="position:absolute;left:120px;top:168px">cena · abertura</span>')); cap('visor', 140, 202);
+  nameRow(P, 300, 166, 220, 'Contornar', '3'); cap('nome do módulo (16 px)', 410, 202);
+  sk(P, 'rótulo de knob, 11 px', 640, 178); cap('rótulo', 640, 202);
+  P.el.append(mk('<span class="key guard" style="left:760px;top:164px;width:112px"><span class="led"></span>BLACKOUT</span>')); cap('tecla de segurança', 816, 206);
+  // a BARRA de cima, so' com as pecas
+  const B = Mod(20, 300, 1120, 70, 'prata'); host.append(B.el);
+  liga(B, 30, 35);
+  B.el.append(mk('<span class="key on" style="left:56px;top:21px;width:84px"><span class="led"></span>TOCAR</span>'), mk('<span class="key" style="left:148px;top:21px;width:92px"><span class="led"></span>MONTAR</span>'));
+  B.el.append(mk('<span class="vfd" style="position:absolute;left:262px;top:25px;font-size:12px">cena · abertura</span>'), mk('<span class="vfd" style="position:absolute;left:400px;top:25px;font-size:12px">128 bpm · 3.2</span>'));
+  B.el.append(mk('<span class="key" style="left:530px;top:21px;width:70px">TAP</span>'), mk('<span class="key" style="left:608px;top:21px;width:70px">GO</span>'));
+  sk(B, 'master', 724, 35); fader(B, 756, 940, 35, .85);
+  B.el.append(mk('<span class="key guard" style="left:966px;top:21px;width:126px"><span class="led"></span>BLACKOUT</span>'));
+  host.append(mk('<span class="kc" style="left:580px;top:384px;color:var(--tx2)">exemplo: a barra de cima montada só com as peças (não é a proposta da barra, é o teste da linguagem)</span>'));
+}
+
+// ---------------------------------------------------------------- tema + escolhas (db 'escolhas')
+function buildAll(){ PRESO = ST.preso?.sel === 'barra' ? 'barra' : 'trava'; buildPatch(); buildVars(); buildWheels(); buildEnv(); buildKit(); const keep = { ...Z }; buildZoom(); Z = keep; applyZ(true); paint(); }
+$('#theme').onclick = e => { const b = e.target.closest('button'); if (!b) return; document.body.classList.toggle('cel', b.dataset.t === 'cel');
+  document.querySelectorAll('#theme button').forEach(x => x.setAttribute('aria-pressed', x === b)); buildAll(); };
+const st = id => ST[id] || (ST[id] = { sel: '', nota: '' });
+let db = null; const timers = {}, saveEl = $('#save');
+const flag = (t, c) => { saveEl.textContent = t; saveEl.className = 'save ' + (c || ''); };
+const QS = ['layout2', 'f2b', 'fn', 'fsw2', 'preso', 'recolher', 'roda', 'rmist', 'pulsa', 'emidi', 'zpiso', 'ztecla', 'zprev', 'zniveis', 'kit'];
+function paint(){
+  document.querySelectorAll('.opt[data-id]').forEach(o => { const on = st(o.dataset.id).sel === o.dataset.v; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+  document.querySelectorAll('textarea.nota').forEach(t => { if (document.activeElement !== t) t.value = st(t.dataset.id).nota || ''; });
+  $('#count').textContent = `${QS.filter(q => st(q).sel).length}/${QS.length} escolhidas`;
+}
+function persist(id){ clearTimeout(timers[id]); flag('salvando…');
+  timers[id] = setTimeout(async () => { const d = { id, sel: st(id).sel, nota: st(id).nota, quando: new Date().toISOString() };
+    try { if (db) await db.collection('escolhas').doc(id).set(d); else localStorage.setItem('prisma-vcv', JSON.stringify(ST));
+      flag(db ? 'salvo ✓' : 'salvo só neste navegador', db ? 'ok' : 'err'); } catch (e) { flag('não salvou: ' + (e.message || e), 'err'); } }, 400); }
+document.addEventListener('click', e => { const o = e.target.closest('.opt[data-id]'); if (!o) return;
+  const x = st(o.dataset.id); x.sel = x.sel === o.dataset.v ? '' : o.dataset.v; persist(o.dataset.id);
+  if (['f2b', 'fn', 'fsw2', 'preso'].includes(o.dataset.id)) buildAll(); else { paint(); if (o.dataset.id === 'emidi') learnUI(); } });
+document.addEventListener('input', e => { const t = e.target; if (t.classList.contains('nota')){ st(t.dataset.id).nota = t.value; persist(t.dataset.id); } });
+try { Object.assign(ST, JSON.parse(localStorage.getItem('prisma-vcv') || '{}')); } catch (e) {}
+buildAll();
+Z = { z: .42, tx: 20, ty: 50 }; applyZ(true);
+(async () => {
+  const to = setTimeout(() => { if (!db) flag('sem conexão: salva só neste navegador', 'err'); }, 10000);
+  try { db = await window.claude?.use?.('db'); } catch (e) { db = null; }
+  clearTimeout(to);
+  if (!db){ flag('sem conexão: salva só neste navegador', 'err'); return; }
+  let first = true;
+  db.collection('escolhas').onSnapshot(snap => {
+    (snap.docs || snap).forEach(d => { const v = typeof d.data === 'function' ? d.data() : d.data; if (v && v.id) ST[v.id] = { sel: v.sel || '', nota: v.nota || '' }; });
+    if (first){ first = false; buildAll(); } else paint(); flag('salvo ✓', 'ok'); }, err => flag('erro ao ler: ' + (err.message || err), 'err'));
+})();
+</script>
+</body>
+</html>

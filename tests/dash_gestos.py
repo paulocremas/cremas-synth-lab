@@ -137,12 +137,17 @@ def boot():
     sys.modules['tuning'] = tun
     import dash_server
     dash_server.start({}, tun, tpath, lambda: True, port=PORT, open_browser=False)
+    try:
+        urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json/version', timeout=0.5)
+        sys.exit(f'a porta {CDP_PORT} ja tem um navegador (de uma rodada velha?): feche ele antes (pkill -f prisma-gestos-)')
+    except OSError:
+        pass
     exe = next((shutil.which(b) for b in BROWSERS if shutil.which(b)), None)
     if not exe:
         sys.exit('sem Chromium/Brave/Chrome no PATH')
     br = subprocess.Popen([exe, '--headless=new', f'--remote-debugging-port={CDP_PORT}', f'--user-data-dir={tmp}/perfil',
                            '--window-size=1366,768', '--no-first-run', '--no-default-browser-check', '--disable-gpu', 'about:blank'],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)   # grupo proprio: sair mata TODOS os processos dele
     for _ in range(100):
         try:
             pages = json.load(urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json/list', timeout=1))
@@ -157,6 +162,17 @@ def boot():
     c.send('Runtime.enable')
     c.send('Page.enable')
     return c, br, tmp, tpath
+
+
+def kill_browser(br):
+    """mata o navegador E os filhos dele (o Brave/Chrome do sistema e' um script que deixa o processo real orfao: ele ficava
+    segurando a porta do CDP e a rodada seguinte conversava com o navegador VELHO -> falhas aleatorias)"""
+    import signal
+    try:
+        os.killpg(br.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, AttributeError, OSError):
+        br.kill()
+    br.wait()
 
 
 def load(c, sel=None):
@@ -185,11 +201,12 @@ def fixture(c):
       const src = lastOverlays.find(o => !isTapKey(o.file)); if (!src) return 'sem fonte';
       const A = 'presets/atomos/Contornar.frag', B = 'presets/atomos/Matiz.frag';
       if (!lastShaderList.includes(A) || !lastShaderList.includes(B)) return 'sem atomos';
-      const a = newNode('@' + ensureRowId(src), [360, 160], newModule(A));
-      const b = newNode('@' + a.id, [660, 160], newModule(B));
-      newMix('out', '@' + b.id, [960, 160]);
-      const m = newMix('out', '@' + ensureRowId(src), [960, 460]);
-      inspClosed = selSig(); cvSig = ''; renderBoxes(); placeInsp(); return 'ok'""")
+      const a = newNode('@' + ensureRowId(src), [560, 160], newModule(A));   // (o filho do Contornar fica a' esquerda dele)
+      const b = newNode('@' + a.id, [960, 160], newModule(B));
+      newMix('out', '@' + b.id, [1340, 160]);
+      const m = newMix('out', '@' + ensureRowId(src), [1340, 560]);
+      inspClosed = selSig(); cvSig = ''; renderBoxes(); placeInsp();
+      zAnim = null; zForget(); setCvZoom(1); CV.scrollLeft = 0; CV.scrollTop = 0; return 'ok'""")   # a vista volta pro comeco (zoom/rolagem de um teste nao vaza pro outro)
     assert ok == 'ok', f'fixture: {ok}'
     time.sleep(0.5)
 
@@ -357,11 +374,14 @@ def graph(c):
         (B(k).shaders || []).map(x => [x.file, (x.ins || []).join(), x.off ? 1 : 0]), ((B(k).matte || {}).items || []).map(x => [x.file, (x.ins || []).join()])]; }).sort())""")
 
 
-def wire_mid(c, port='a'):
-    """meio de um fio de imagem (o 1o da lista) em coordenadas de tela + a assinatura dele"""
-    return c.js("""for (const p of document.querySelectorAll('#cv-wires path.w:not(.cv)')){ if (!p._w) continue;
-        const L = p.getTotalLength(), m = p.getScreenCTM();
+def wire_mid(c, port='a', margin=20):
+    """meio de um fio de imagem (o 1o da lista) em coordenadas de tela + a assinatura dele (margin = longe das bordas da janela)"""
+    return c.js("""const M = """ + str(margin) + """;for (const p of document.querySelectorAll('#cv-wires path.w:not(.cv)')){ if (!p._w) continue;
+        const L = p.getTotalLength(), q0 = p.getPointAtLength(L / 2), z = cvZoom();   // leva a vista ate' o meio do fio
+        CV.scrollLeft = q0.x * z - CV.clientWidth / 2; CV.scrollTop = q0.y * z - CV.clientHeight / 2; await new Promise(r => setTimeout(r, 60));
+        const m = p.getScreenCTM();
         for (const f of [0.5, 0.4, 0.6, 0.3, 0.7]){ const q = p.getPointAtLength(L * f), x = q.x * m.a + m.e, y = q.y * m.d + m.f, t = document.elementFromPoint(x, y);
+          if (x < M || y < M + 110 || x > innerWidth - M || y > innerHeight - M) continue;   // longe da borda (a roda abre centrada no ponto)
           if (t && t.classList && t.classList.contains('hit')) return [x, y, p._w.key, p._w.port]; } }
       return null""")
 
@@ -519,7 +539,7 @@ def t_direito_arrasta_vista(c):
 @gesto
 def t_cabo_dois_cliques_roda(c):
     """2 cliques no CABO abrem a roda de atomos, no fio"""
-    w = wire_mid(c)
+    w = wire_mid(c, margin=170)
     assert w, 'sem fio exposto'
     c.click(w[0], w[1])
     c.click(w[0], w[1], clicks=2)
@@ -537,7 +557,7 @@ def t_shift_clique_soma(c):
     assert len(ks) == 2, 'precisa de 2 nos de atomo'
     c.click(*center(c, f'.bx[data-key="{ks[0]}"] > .bh .nm'))
     time.sleep(0.6)
-    x, y = c.js(f"const r = boxEls[{json.dumps(ks[1])}].querySelector('.nks').getBoundingClientRect(); return [r.right - 4, r.top + 4]")
+    x, y = center(c, f'.bx[data-key="{ks[1]}"] .win')
     c.mods = 8
     c.click(x, y)
     c.mods = 0
@@ -589,8 +609,10 @@ def t_retangulo_um(c):
     c.click(*empty_pt(c))
     k = c.js(f"return {ATOM}")
     r = c.js(f"const b = boxEls[{json.dumps(k)}]; b.scrollIntoView({{block: 'center'}}); const r = b.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]")
-    a = (r[0] - 10, r[1] - 10)
-    assert c.js(f"const t = document.elementFromPoint({a[0]}, {a[1]}); return t === CV || t === CVI || t === WIRES"), 'canto nao vazio'
+    vazio = lambda p: c.js(f"const t = document.elementFromPoint({p[0]}, {p[1]}); return t === CV || t === CVI || t === WIRES")
+    cand = [(r[0] - 10, r[1] - 10), (r[0] - 6, r[1] - 22), (r[0] + 20, r[1] - 12), (r[0] + 60, r[1] - 14), (r[0] - 14, r[1] + 4)]   # um canto VAZIO (cabo de outro no' pode passar)
+    a = next((p for p in cand if vazio(p)), None)
+    assert a, 'canto nao vazio: ' + str(c.js(f"const t = document.elementFromPoint({cand[0][0]}, {cand[0][1]}); return t && (t.outerHTML || '').slice(0, 160)"))
     c.drag([a, (r[0] + 30, r[1] + 20)])
     time.sleep(0.3)
     assert c.js("return [...msel]") == [k], f'retangulo pegou {c.js("return [...msel]")}'
@@ -710,13 +732,17 @@ def t_hover_suave(c):
     """mouse num no': os cabos dos outros esmaecem SUAVE — os mesmos elementos (com transicao), nao um redesenho; mexendo em knob ficam fracos, nao somem"""
     k = c.js(f"return {ATOM}")
     x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
-    c.js("window._w0 = [...document.querySelectorAll('#cv-wires path.w')]; return 1")
+    for _ in range(6):   # espera os cabos pararem (um redesenho do SSE no meio nao e' o hover)
+        c.js("window._w0 = [...document.querySelectorAll('#cv-wires path.w')]; return 1")
+        time.sleep(0.35)
+        if c.js("const ps = [...document.querySelectorAll('#cv-wires path.w')]; return ps.length === _w0.length && ps.every((p, i) => p === _w0[i])"):
+            break
     c.mouse('mouseMoved', x, y)
     time.sleep(0.2)
     r = c.js(f"""const ps = [...document.querySelectorAll('#cv-wires path.w')];
       return [ps.length === _w0.length && ps.every((p, i) => p === _w0[i]), ps.some(p => p.classList.contains('dim')) || ps.every(p => p.dataset.k === {json.dumps(k)} || p.dataset.s === {json.dumps(k)}),
               parseFloat(getComputedStyle(ps[0]).transitionDuration) > 0]""")
-    assert r[0], 'o hover refez os cabos (sem transicao: apaga seco)'
+    assert r[0], 'o hover refez os cabos (sem transicao: apaga seco) ' + str(c.js("return [_w0.length, document.querySelectorAll('#cv-wires path.w').length, cvZoom(), !!zAnim]"))
     assert r[1] and r[2], f'hover sem esmaecer suave: {r}'
     c.js("document.body.classList.add('kturn'); return 1")
     op = c.js("return +getComputedStyle(document.getElementById('cv-wires')).opacity")   # (a transicao anda: le o alvo pela regra)
@@ -773,20 +799,27 @@ def t_clique_pega_cabo(c):
 
 @gesto
 def t_mini_tv(c):
-    """mini TV: tela na proporcao do palco, jacks vistos de cima (IN/MASC junto da borda esquerda, OUT da direita, CV no pe'), fader de opacidade"""
+    """mini TV (rodada 4): liga + fader EM CIMA da tela; a TELA na largura toda; nome embaixo dela; IN/MASC a' ESQUERDA dos knobs (IN na
+    altura do knob, MASC na dos CVs), OUT a' DIREITA na altura do knob (aba escura); jacks LONGE das bordas; knob SEM porcentagem"""
     k = c.js(f"return {ATOM}")
-    r = c.js(f"""const b = boxEls[{json.dumps(k)}], B = b.getBoundingClientRect(), R = q => {{ const e = b.querySelector(q); return e && e.getBoundingClientRect(); }};
-      const crt = R('.crt'), i = R(':scope > .port.in'), m = R(':scope > .port.pm'), o = R(':scope > .port.out'), kj = R('.kj'), f = R('.cr .fader');
+    r = c.js(f"""const b = boxEls[{json.dumps(k)}], B = b.getBoundingClientRect(), z = cvZoom(), R = q => {{ const e = b.querySelector(q); return e && e.getBoundingClientRect(); }};
+      const crt = R('.crt'), win = R(':scope > .win'), i = R(':scope > .port.in'), m = R(':scope > .port.pm'), o = R(':scope > .port.out'), kj = R('.kj'), kw = R('.nkr .kw'), f = R('.r1 .fader'), pw = R('.r1 .led.pw'),
+        nm = R(':scope > .bh .nm'), tab = R(':scope > .otab'), lb = [...b.querySelectorAll('.k-lb')], kv = b.querySelector('.k-val'), cy = r => (r.top + r.bottom) / 2;
+      const borda = Math.min(...[i, m, o, kj].map(r => Math.min(r.left - B.left, B.right - r.right, B.bottom - r.bottom))) / z;
       return {{ tv: b.classList.contains('tv'), fam: [...b.classList].some(c => c.startsWith('fam-')), ar: crt && crt.width / crt.height, palco: tvAR(),
-        in_esq: i && i.left >= B.left - 1 && i.left < B.left + 12, masc_esq: m && m.left >= B.left - 1 && m.left < B.left + 12 && m.top > i.top,
-        out_dir: o && o.right <= B.right + 1 && o.right > B.right - 12, kj_pe: kj && kj.bottom <= B.bottom + 1 && kj.bottom > B.bottom - 12,
-        tela_em_cima: crt && i && crt.bottom < i.top, fader: !!f, sem_knob_opac: !b.querySelector('.nkr[data-kr="opacity"]') }}""")
+        tela_larga: (win.left - B.left) / z < 18 && (B.right - win.right) / z < 18,
+        in_esq: i && i.right <= kw.left && Math.abs(cy(i) - cy(kw)) < 4, masc_esq: m && m.right <= kw.left && Math.abs(cy(m) - cy(kj)) < 4,
+        out_dir: o && o.left >= kw.right && Math.abs(cy(o) - cy(kw)) < 4, out_na_aba: o && tab && o.top >= tab.top && o.bottom <= tab.bottom + 1,
+        longe_da_borda: borda >= 12, borda, sem_pct: !kv || getComputedStyle(kv).display === 'none',
+        fader_em_cima: !!f && f.bottom <= crt.top, liga_na_linha: !!pw && Math.abs((pw.top + pw.bottom) / 2 - (f.top + f.bottom) / 2) < 6,
+        nome_embaixo: !!nm && nm.top >= crt.bottom && nm.top < crt.bottom + 30, sem_knob_opac: !b.querySelector('.nkr[data-kr="opacity"]'),
+        rotulo_inteiro: lb.every(e => e.scrollWidth <= e.clientWidth + 1 && !/…/.test(e.textContent)) }}""")
     assert r['tv'] and r['fam'], f'nao e mini TV: {r}'
     assert abs(r['ar'] - r['palco']) < 0.05, f'tela fora da proporcao do palco: {r}'
-    for chave in ('in_esq', 'masc_esq', 'out_dir', 'kj_pe', 'tela_em_cima', 'fader', 'sem_knob_opac'):
+    for chave in ('tela_larga', 'in_esq', 'masc_esq', 'out_dir', 'out_na_aba', 'longe_da_borda', 'sem_pct', 'fader_em_cima', 'liga_na_linha', 'nome_embaixo', 'sem_knob_opac', 'rotulo_inteiro'):
         assert r[chave], f'{chave}: {r}'
     o0 = c.js(f"return stackOf({json.dumps(k)})[0].opacity ?? 1")
-    x, y = center(c, f'.bx[data-key="{k}"] .cr .fader')
+    x, y = center(c, f'.bx[data-key="{k}"] .r1 .fader')
     c.js("warpOK = false; return 1")   # sem /warp no teste: o cursor nao volta pro lugar
     c.drag([(x, y), (x - 60, y)])
     time.sleep(0.3)
@@ -804,6 +837,8 @@ def t_tema(c):
     time.sleep(0.3)
     assert c.js("return document.body.classList.contains('cel') && JSON.parse(localStorage.getItem('v5tema')).t === 'cel'"), 'cel nao ligou/gravou'
     assert c.js("return document.querySelectorAll('#cv-wires path.ws').length") > 0, 'cabo sem contorno no cel'
+    assert c.js("return [...document.querySelectorAll('#cv .lv, #pvw canvas, #pvw img')].every(e => getComputedStyle(e).filter === 'none')"), \
+        'o tema cel mexeu na IMAGEM da previa (o tema muda so as pecas, nunca o que a tela mostra)'
     c.click(*center(c, '#tema-leve'))
     time.sleep(0.3)
     assert c.js("return document.body.classList.contains('leve') && !document.querySelector('#cv-wires path.ws, #cv-wires path.wh')"), 'leve deixou decoracao no cabo'
@@ -834,6 +869,238 @@ def t_sem_maozinha(c):
     assert all(x in ('default', 'auto') for x in cur), f'cursores: {cur}'
 
 
+@gesto
+def t_zoom_longe(c):
+    """zoom out ate' o PISO (2%): niveis bloco/ponto (no' = bloco na cor da familia, sem pecas), cabos ainda nas bordas; roda = SUAVE e centrada no cursor"""
+    k = c.js(f"return {ATOM}")
+    c.js("setCvZoom(0.001); return 1")
+    z = c.js("return cvZoom()")
+    assert abs(z - 0.02) < 1e-6, f'o piso do zoom nao e 2%: {z}'
+    r = c.js(f"""const b = boxEls[{json.dumps(k)}], n = b.querySelector('.blkn');
+      return {{ cls: [...CVI.classList], knobs: !!b.querySelector('.nkr') && b.querySelector('.nkr').getClientRects().length, blk: getComputedStyle(b).backgroundColor,
+        nome: n && getComputedStyle(n).display, wires: [...document.querySelectorAll('#cv-wires path.w')].map(p => p.getAttribute('d')).filter(d => /^M0 0|NaN/.test(d)).length }}""")
+    assert 'zl-blk' in r['cls'] and 'zl-ponto' in r['cls'], f'nivel de longe: {r}'
+    assert not r['knobs'], f'de longe o no ainda desenha knobs: {r}'
+    assert r['nome'] == 'flex', f'o bloco nao mostra o nome: {r}'
+    assert r['wires'] == 0, f'cabo sem ponta (jack escondido): {r}'
+    c.js("setCvZoom(0.15); return 1")
+    assert 'zl-blk' in c.js("return [...CVI.classList]") and 'zl-ponto' not in c.js("return [...CVI.classList]"), 'nivel bloco'
+    assert c.js(f"return boxEls[{json.dumps(k)}].querySelector('.win').getClientRects().length") > 0, 'no bloco a tela (parada) deveria aparecer'
+    c.js("setCvZoom(1); return 1")
+    # RODA: suave (anda em varios quadros) e o ponto embaixo do cursor fica parado
+    C = center(c, f'.bx[data-key="{k}"] .win')   # em cima de um no' (dentro do mundo: a rolagem nao bate no limite)
+    w0 = c.js(f"const C = CV.getBoundingClientRect(), z = cvZoom(); return [(CV.scrollLeft + {C[0]} - C.left) / z, (CV.scrollTop + {C[1]} - C.top) / z]")
+    c.send('Input.dispatchMouseEvent', type='mouseWheel', x=C[0], y=C[1], deltaX=0, deltaY=-120)
+    z1 = c.js("return cvZoom()")
+    time.sleep(0.6)
+    z2 = c.js("return cvZoom()")
+    assert z2 > 1.15 and z1 < z2, f'a roda nao foi suave ({z1} -> {z2})'
+    w1 = c.js(f"const C = CV.getBoundingClientRect(), z = cvZoom(); return [(CV.scrollLeft + {C[0]} - C.left) / z, (CV.scrollTop + {C[1]} - C.top) / z]")
+    assert abs(w1[0] - w0[0]) < 3 and abs(w1[1] - w0[1]) < 3, f'o zoom nao ficou centrado no cursor: {w0} -> {w1}'
+    c.js("setCvZoom(1); return 1")
+
+
+@gesto
+def t_caber_tudo(c):
+    """H = CABER TUDO: todos os nos dentro da vista; H de novo = volta pro zoom e o lugar de antes"""
+    c.js("const o = lastOverlays.find(x => x.xy && !x.kind); o.xy = [4200, 2600]; cvSig = ''; renderBoxes(); setCvZoom(1.2); CV.scrollLeft = 0; CV.scrollTop = 0; return 1")
+    time.sleep(0.3)
+    z0, s0 = c.js("return [cvZoom(), [CV.scrollLeft, CV.scrollTop]]")
+    c.js("document.activeElement && document.activeElement.blur(); return 1")
+    c.key('h')
+    time.sleep(1.2)
+    r = c.js("""const C = CV.getBoundingClientRect(); return Object.values(boxEls).filter(e => e.isConnected).map(e => { const b = e.getBoundingClientRect();
+      return b.left >= C.left - 1 && b.right <= C.right + 1 && b.top >= C.top - 1 && b.bottom <= C.bottom + 1; })""")
+    assert r and all(r), f'caber tudo deixou no fora da vista: {r}'
+    assert c.js("return document.getElementById('cvz-fit').classList.contains('on')"), 'o botao caber tudo nao acendeu'
+    c.key('h')
+    time.sleep(1.2)
+    z1, s1 = c.js("return [cvZoom(), [CV.scrollLeft, CV.scrollTop]]")
+    assert abs(z1 - z0) < 0.01, f'H de novo nao voltou o zoom: {z0} -> {z1}'
+    assert abs(s1[0] - s0[0]) < 30 and abs(s1[1] - s0[1]) < 30, f'H de novo nao voltou o lugar: {s0} -> {s1}'
+    c.js("setCvZoom(1); return 1")
+
+
+FILHO = "Object.keys(lastBindings).find(k => tvNode(k) && boxEls[k] && boxEls[k].querySelector(':scope > .fil'))"
+
+
+@gesto
+def t_filho(c):
+    """MODULO FILHO: a escolha do atomo (fundo do Contornar) sai do card e vira modulo A' ESQUERDA, NA CORRENTE: o fio de antes chega
+    no IN do filho e o OUT do filho chega no IN do pai por uma LIGACAO FIXA (trilha, sem plugue redondo); teclas mudam o valor"""
+    k = c.js(f"return {FILHO}")
+    assert k, 'nenhum no com filho (o Contornar tem a escolha "fundo")'
+    r = c.js(f"""const b = boxEls[{json.dumps(k)}], f = b.querySelector(':scope > .fil'), B = b.getBoundingClientRect(), F = f.getBoundingClientRect();
+      const fin = f.querySelector('.port.in'), pin = b.querySelector(':scope > .port.in');
+      return {{ esq: F.right <= B.left, n: f.dataset.n, dentro: !!b.querySelector('.nkw, .chseg'), opj: !!b.querySelector('.port.opj'), fin: !!fin, lk: pin && pin.classList.contains('lk'),
+        trilha: document.querySelectorAll('#cv-wires path.lkc').length, teclas: f.querySelectorAll('.fkey').length,
+        chega: inPortEl({json.dumps(k)}, {{ port: 'a' }}) === fin }}""")
+    assert r['esq'], f'o filho nao nasceu a esquerda do pai: {r}'
+    assert not r['dentro'] and not r['opj'], f'a escolha ainda esta dentro do card / jack da opcao velho: {r}'
+    assert r['fin'] and r['lk'] and r['chega'], f'o filho nao esta na corrente (IN do filho = entrada do pai; IN do pai = ligacao fixa): {r}'
+    assert r['trilha'] >= 1, f'sem a ligacao fixa: {r}'
+    assert r['teclas'] == 2, f'escolha de 2 = duas teclas: {r}'
+    v0 = c.js(f"const s = stackOf({json.dumps(k)})[0]; return fxVal({json.dumps(k)}, s, {json.dumps(r['n'])})")
+    c.click(*center(c, f'.bx[data-key="{k}"] > .fil .fkey', 1))
+    time.sleep(0.3)
+    v1 = c.js(f"const s = stackOf({json.dumps(k)})[0]; return fxVal({json.dumps(k)}, s, {json.dumps(r['n'])})")
+    assert abs(v1 - 0.75) < 0.01 and abs(v0 - 0.75) > 0.1, f'a tecla "preto" nao escolheu (valor da opcao 2 de 2 = 0.75): {v0} -> {v1}'
+    assert c.js(f"return boxEls[{json.dumps(k)}].querySelectorAll(':scope > .fil .fkey')[1].classList.contains('on')"), 'a tecla escolhida nao afundou/acendeu'
+    # a LIGACAO FIXA nao se pega e as pontas dela NAO arrastam nada (antes: pegar a ponta arrastava o pai ou o filho)
+    g0 = graph(c)
+    P = lambda: c.js(f"const b = boxEls[{json.dumps(k)}], f = b.querySelector(':scope > .fil'); return [b.offsetLeft, b.offsetTop, f.offsetLeft, f.offsetTop]")
+    for css in (f'.bx[data-key="{k}"] > .port.in', f'.bx[data-key="{k}"] > .fil .fjk'):
+        a = P()
+        x, y = center(c, css)
+        c.drag([(x, y), (x - 70, y + 60)])
+        time.sleep(0.3)
+        assert P() == a, f'puxar a ponta da ligacao fixa ({css}) arrastou um modulo: {a} -> {P()}'
+        assert graph(c) == g0 and not c.js("return !!document.querySelector('.nmenu, .flist, .wheel')"), f'a ligacao fixa se mexeu ({css})'
+    # o IN do filho e' a entrada de verdade: puxar a ponta dali pega o fio que chega no pai
+    x, y = center(c, f'.bx[data-key="{k}"] > .fil .port.in')
+    mid = c.drag([(x, y), (x - 80, y + 90)], check=lambda i: c.js("return wireDrag"), cancel=True)
+    assert mid == ['cable'], f'o IN do filho nao pegou o fio da corrente: {mid}'
+    time.sleep(0.3)
+    assert graph(c) == g0, 'Esc no meio nao devolveu o fio'
+
+
+@gesto
+def t_filho_arrasta(c):
+    """arrastar o FILHO move so' ele (o lugar fica guardado, relativo ao pai); arrastar o PAI leva o filho junto"""
+    k = c.js(f"return {FILHO}")
+    P = lambda: c.js(f"const b = boxEls[{json.dumps(k)}], f = b.querySelector(':scope > .fil'), B = b.getBoundingClientRect(), F = f.getBoundingClientRect(); return [B.left, B.top, F.left, F.top]")
+    a = P()
+    x, y = center(c, f'.bx[data-key="{k}"] > .fil .fnm')
+    a = P()
+    c.drag([(x, y), (x - 60, y + 48)])
+    time.sleep(0.4)
+    b = P()
+    assert abs(b[0] - a[0]) < 2 and abs(b[1] - a[1]) < 2, f'arrastar o filho moveu o pai: {a} -> {b}'
+    assert b[2] < a[2] - 30 and b[3] > a[3] + 30, f'o filho nao andou: {a} -> {b}'
+    off = c.js(f"return (stackOf({json.dumps(k)})[0].filhos || {{}})")
+    assert off and list(off.values())[0][1] > 0 or off, f'o lugar do filho nao foi guardado: {off}'
+    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
+    a = P()
+    c.drag([(x, y), (x + 96, y + 60)])
+    time.sleep(0.4)
+    b = P()
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    assert dx > 40 and dy > 30, f'o pai nao andou: {a} -> {b}'
+    assert abs((b[2] - a[2]) - dx) < 2 and abs((b[3] - a[3]) - dy) < 2, f'o filho nao foi junto com o pai: {a} -> {b}'
+
+
+@gesto
+def t_zoom_liso(c):
+    """ZOOM LISO (rodada 3: "travando pra dar zoom" e os envelopes paravam): no meio da animacao o zoom do CSS NAO muda (so' o transform,
+    sem refazer o layout) e o ponto do cursor fica parado; no fim o zoom de verdade entra uma vez e o transform sai sem pulo"""
+    k = c.js(f"return {ATOM}")
+    C = center(c, f'.bx[data-key="{k}"] .win')
+    r = c.js(f"""const el = boxEls[{json.dumps(k)}], raf = () => new Promise(r => requestAnimationFrame(r)), R = () => el.getBoundingClientRect();
+      const z0 = cvZoom(), a = R(), px = {C[0]}, py = {C[1]}, fx = (px - a.left) / a.width, fy = (py - a.top) / a.height;
+      setCvZoom(1.5, {{ clientX: px, clientY: py }}, true); await raf(); await raf(); await raf();   // (aproximando: afastando no canto a rolagem bate no 0)
+      const m = R(), meio = {{ css: cvZoom(), tf: CVI.style.transform, dx: m.left + fx * m.width - px, dy: m.top + fy * m.height - py }};
+      let ult = null; while (zAnim){{ await raf(); if (zAnim) ult = R(); }}
+      await raf(); const f = R();
+      return {{ z0, meio, fim: {{ css: cvZoom(), tf: CVI.style.transform, pulo: ult ? Math.hypot(f.left - ult.left, f.top - ult.top) : 0, dx: f.left + fx * f.width - px, dy: f.top + fy * f.height - py }} }}""")
+    assert r['meio']['css'] == r['z0'] and 'scale' in r['meio']['tf'], f'no meio da animacao o zoom do CSS mudou (refaz o layout a cada quadro): {r}'
+    assert abs(r['meio']['dx']) < 2 and abs(r['meio']['dy']) < 2, f'no meio o ponto do cursor andou: {r}'
+    c.js("setCvZoom(1); return 1")
+    assert abs(r['fim']['css'] - 1.5) < 1e-3 and not r['fim']['tf'], f'o fim nao aplicou o zoom / ficou transform: {r}'
+    assert r['fim']['pulo'] < 3 and abs(r['fim']['dx']) < 2 and abs(r['fim']['dy']) < 2, f'o fim pulou: {r}'
+    c.js("setCvZoom(1); return 1")
+
+
+@gesto
+def t_arrasto_leve(c):
+    """ARRASTO LEVE (rodada 3: "arrastar os modulos esta muito ruim"): andando, NADA de redesenhar todos os fios — so' os do no' que anda
+    seguem (a ponta do cabo continua no jack a cada passo); soltar = um redesenho"""
+    k = c.js(f"return {ATOM}")
+    c.js("window.__dbw = 0; const o = drawBoxWires; window.drawBoxWires = function(){ __dbw++; return o.apply(this, arguments); }; return 1")
+    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
+    def chk(i):
+        return c.js(f"""const b = boxEls[{json.dumps(k)}], p = b.querySelector(':scope > .port.out').getBoundingClientRect(), cx = p.left + p.width / 2, cy = p.top + p.height / 2;
+          const g = [...document.querySelectorAll('#cv-wires g.pg')].map(g => g.getBoundingClientRect()).map(r => Math.hypot(r.left + r.width / 2 - cx, r.top + r.height / 2 - cy));
+          return [__dbw, Math.min(...g)]""")
+    mid = c.drag([(x, y), (x + 80, y + 40), (x + 160, y - 20)], check=chk)
+    time.sleep(0.4)
+    n = c.js("const n = __dbw; return n")
+    assert all(m[0] == 0 for m in mid), f'andando, os fios todos foram redesenhados: {mid}'
+    assert all(m[1] < 3 for m in mid), f'o plugue nao acompanhou o jack do no que anda: {mid}'
+    assert n >= 1, 'soltar nao redesenhou'
+
+
+@gesto
+def t_nomes_e_etiquetas(c):
+    """LEITURA (rodada 3): nome do mixer sem numero ("MIXER", nao "mixer 16"); entrada vazia = "livre" (sem numero, pedido); todo texto do
+    gabinete numa placa lisa (a textura nunca atras da letra); o valor do knob inteiro, fora do jack de CV"""
+    r = c.js("""const m = newMix('mix', null, [1300, 160]); if (m) m.jacks = 4; cvSig = ''; renderBoxes();
+      const b = Object.values(boxEls).find(e => e.classList.contains('jk')), nm = b && b.querySelector('.bh .nm').textContent;
+      const k = [...document.querySelectorAll('#cv .bx.tv .nkr')][0], lb = k.querySelector('.k-lb'), v = k.querySelector('.k-val'), j = k.querySelector('.kj');
+      const bg = e => getComputedStyle(e).backgroundImage;
+      return { nm, livre: b && [...b.querySelectorAll('.lr.slot .hint')].map(x => x.textContent), lb: bg(lb), val: bg(v), pct: getComputedStyle(v).display }""")
+    assert r['nm'] and not any(ch.isdigit() for ch in r['nm']), f'o nome do mixer ainda tem numero: {r}'
+    assert r['livre'] and r['livre'][0] == 'livre', f'entrada vazia sem etiqueta "livre" (sem numero: pedido): {r}'
+    assert 'gradient' in r['lb'] and 'gradient' in r['val'], f'o texto do knob nao tem plaqueta (com relevo): {r}'
+    assert r['pct'] == 'none', f'o knob parado mostra a porcentagem (rodada 4: so girando): {r}'
+
+
+@gesto
+def t_arrumar_setores(c):
+    """ARRUMAR por SETOR: fonte 1 em cima com a corrente dela, fonte 2 embaixo; quem mistura as duas fica ENTRE os setores; a fonte no
+    meio do setor dela; a saida na ultima coluna, centrada com o que ela mostra"""
+    r = c.js("""const S = lastOverlays.filter(o => !isTapKey(o.file) && !o.kind && !o.dup);
+      if (S.length < 2){ const f = lastMedia.map(m => m.file).find(f => !S.some(o => o.file === f)) || (lastMedia[0] || {}).file; if (!f) return 'sem 2 fontes'; newBox(f, [40, 900]); }
+      const [s1, s2] = lastOverlays.filter(o => !isTapKey(o.file) && !o.kind).slice(0, 2); s1.xy = [40, 100]; s2.xy = [40, 700];
+      const A = 'presets/atomos/Contornar.frag', B = 'presets/atomos/Matiz.frag';
+      const a1 = newNode('@' + ensureRowId(s1), [400, 900], newModule(A)), a2 = newNode('@' + ensureRowId(s2), [400, 50], newModule(B));
+      const m = newMix('mix', '@' + a1.id, [700, 700], 2); plug('@' + a2.id, { key: chKey(m), port: 'L', idx: 901 });
+      const o = newMix('out', '@' + m.id, [500, 1400]);
+      tidy();
+      const R = x => { const k = chKey(x); return [x.xy[0], x.xy[1] + boxH(k) / 2]; };
+      const mid = (f) => { const L = lastOverlays.filter(x => x.kind !== 'out' && x.xy && f(R(x)[1])); const t = Math.min(...L.map(x => x.xy[1])), b = Math.max(...L.map(x => x.xy[1] + boxH(chKey(x)))); return (t + b) / 2; };
+      return { s1: R(s1), s2: R(s2), a1: R(a1), a2: R(a2), m: R(m), o: R(o), meio1: mid(y => y < R(m)[1] - 60), meio2: mid(y => y > R(m)[1] + 60), maxX: Math.max(...lastOverlays.filter(x => x.kind !== 'out').map(x => x.xy[0])), mL: (m.layers || []).length }""")
+    assert isinstance(r, dict), r
+    assert r['mL'] == 2, f'o mixer de teste nao ficou com as 2 fontes: {r}'
+    assert r['s1'][1] < r['m'][1] < r['s2'][1], f'o que mistura as duas nao ficou ENTRE os setores: {r}'
+    assert r['a1'][1] < r['m'][1] < r['a2'][1], f'a corrente de cada fonte nao ficou no setor dela: {r}'
+    assert abs(r['s1'][1] - r['meio1']) < 30 and abs(r['s2'][1] - r['meio2']) < 30, f'a fonte nao ficou no meio do setor dela: {r}'
+    assert r['o'][0] > r['maxX'] and abs(r['o'][1] - r['m'][1]) < 30, f'a saida nao ficou na direita, centrada com o que mostra: {r}'
+
+
+@gesto
+def t_arrasta_por_qualquer_parte(c):
+    """rodada 4: o modulo arrasta por QUALQUER parte — a TELA (previa), o gabinete; clique parado na tela so' escolhe"""
+    k = c.js(f"return {ATOM}")
+    for css in ('.win', ':scope > .skin'):
+        xy0 = c.js(f"return rowOf({json.dumps(k)}).xy.slice()")
+        center(c, f'.bx[data-key="{k}"] .win')   # (leva a vista ate' o no')
+        x, y = c.js(f"""const b = boxEls[{json.dumps(k)}], e = {'b.querySelector(' + json.dumps(css) + ')' if css != ':scope > .skin' else 'b'}, r = e.getBoundingClientRect();
+          return {'[r.left + r.width / 2, r.top + r.height / 2]' if css == '.win' else '[r.left + r.width - 8, r.top + r.height * 0.55]'}""")
+        c.drag([(x, y), (x + 60, y + 36)])
+        time.sleep(0.4)
+        xy1 = c.js(f"return rowOf({json.dumps(k)}).xy")
+        assert xy1 != xy0 and xy1[0] > xy0[0], f'arrastar por {css} nao moveu o no: {xy0} -> {xy1}'
+    c.js("selectNone(); return 1")
+    time.sleep(0.2)
+    c.click(*center(c, f'.bx[data-key="{k}"] .win'))
+    time.sleep(0.3)
+    assert c.js(f"return mkBase(sel.key) === {json.dumps(k)}"), 'clique parado na tela nao escolheu o no'
+
+
+@gesto
+def t_pct_so_girando(c):
+    """rodada 4: o knob parado NAO mostra porcentagem; girando, o valor aparece (plaqueta solta) e some ao soltar"""
+    k = c.js(f"return {ATOM}")
+    x, y = center(c, f'.bx[data-key="{k}"] .nkr .kw')
+    c.js("warpOK = false; return 1")
+    vis = lambda: c.js(f"return getComputedStyle(boxEls[{json.dumps(k)}].querySelector('.nkr .k-val')).display")
+    assert vis() == 'none', 'parado mostra a porcentagem'
+    mid = c.drag([(x, y), (x, y - 40)], check=lambda i: c.js(f"const v = document.querySelector('.knob.nk.drag .k-val'); return v ? getComputedStyle(v).display : 'sem drag'"))
+    time.sleep(0.3)
+    assert mid and mid[0] == 'block', f'girando o valor nao apareceu: {mid}'
+    assert vis() == 'none', 'soltou e a porcentagem ficou'
+
+
 PERF = {}
 
 
@@ -859,10 +1126,22 @@ def t_desempenho(c):
     m1 = met()
     r['quadro_ms'] = round((m1['TaskDuration'] - m0['TaskDuration']) * 1000 / 90, 2)
     r['pintura_ms'] = round(((m1.get('LayoutDuration', 0) - m0.get('LayoutDuration', 0)) + (m1.get('RecalcStyleDuration', 0) - m0.get('RecalcStyleDuration', 0))) * 1000 / 90, 2)
+    c.js("setCvZoom(0.02); return 1")   # ZOOM MINIMO: todos os nos na vista, de bloco
+    time.sleep(0.3)
+    r2 = c.js("""const T = []; for (let i = 0; i < 6; i++){ const t0 = performance.now(); cvSig = ''; renderBoxes(); document.body.offsetHeight; drawBoxWires(); document.body.offsetHeight; T.push(performance.now() - t0); }
+      T.shift(); T.sort((a, b) => a - b); return +T[Math.floor(T.length / 2)].toFixed(1)""")
+    m0 = met()
+    c.js("""await new Promise(res => { let n = 0; const step = () => { zoomFrame(0.02 + (n % 2) * 0.002, 300, 200, 4000, 3000); CV.scrollLeft += 2; if (++n < 60) requestAnimationFrame(step); else res(); };
+      requestAnimationFrame(step); }); return 1""")   # = um quadro do zoom suave (zoomFrame) + rolar, de longe
+    m1 = met()
+    r['longe_render_ms'] = r2
+    r['longe_quadro_ms'] = round((m1['TaskDuration'] - m0['TaskDuration']) * 1000 / 60, 2)
+    c.js("setCvZoom(1); return 1")
     PERF.update(r)
     print('      desempenho:', json.dumps(r))
     assert r['nos'] >= 40, f'cena pequena: {r}'
     assert r['render_ms'] < 600, f'redesenho lento: {r}'
+    assert r['longe_quadro_ms'] < 40, f'zoom de longe pesado: {r}'
     assert r['quadro_ms'] < 40, f'arrastar a vista ficou pesado (base antes da mini TV: ~23 ms headless sem GPU): {r}'
 
 
@@ -887,8 +1166,7 @@ def main(filt):
                 fails += 1
                 print(f'FALHA {t.__name__[2:]:24} {t.__doc__.strip().splitlines()[0]}\n      -> {e}')
     finally:
-        br.kill()
-        br.wait()
+        kill_browser(br)
         shutil.rmtree(tmp, ignore_errors=True)
     print(f'{len([t for t in T if not filt or any(w in t.__name__ for w in filt)]) - fails} ok, {fails} falha(s)')
     return 1 if fails else 0
