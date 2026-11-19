@@ -383,11 +383,13 @@ se uma faixa ficar em silêncio por muito tempo, ela não se "amplifica" até ac
   <li>Um relógio interno (como um metrônomo que se corrige sozinho) segue a música e diz a <b>fase</b>: em que ponto da
       batida, do compasso e da frase estamos.</li>
 </ol>
-<p>Daí saem os eventos: <b>batida</b>, <b>compasso</b>, <b>frase</b>, <b>bumbo</b>, <b>golpe</b> (qualquer ataque
-forte). Se o detector errar, você corrige no painel: TAP (bater o tempo), dobrar/dividir o BPM, marcar o "1".</p>
+<p>Daí saem os eventos: <b>batida</b>, <b>compasso</b>, <b>frase</b> (do relógio) e, do som, <b>bumbo</b> (grave),
+<b>caixa</b> (médios), <b>chimbal</b> (agudo) e <b>golpe</b> (qualquer ataque forte) — cada um olhando só a sua faixa de
+frequências, e só quando há som de verdade (o chiado de fundo não conta). Se o detector errar, você corrige no painel: TAP (bater o tempo), dobrar/dividir o BPM, marcar o "1".</p>
 <div class="pq">O movimento usa a <b>fase</b> do relógio, não os picos crus. Por isso um "respira a cada 4 batidas"
 continua no tempo mesmo num trecho sem bumbo — o relógio segue andando como um baterista que não para quando a banda
-dá uma pausa. Se não houver som por 2 compassos, os eventos de bumbo passam a cair na batida do relógio.</div>
+dá uma pausa. Já os eventos do som <b>param</b> no silêncio; se você quiser que um alterador continue, ligue nele
+"sem som: ⏱ relógio" — depois de 2 compassos sem som, cada batida do relógio conta como um bumbo (ou caixa, chimbal…).</div>
 
 <h3>Seções da música</h3>
 <p>Comparando a energia dos últimos segundos com a do último minuto, o PRISMA classifica o momento: <b>intro</b>,

@@ -162,6 +162,42 @@ def clock(bpos, p0=0.0, bars=8, beats_per_bar=4):
     return {'batida': math.floor(bpos), 'compasso': math.floor(bpos / beats_per_bar), 'frase': math.floor(f)}, f % 1.0
 
 
+class Ataque:
+    """ATAQUE numa faixa de Hz (onset por faixa, 2026-11-19: caixa, chimbal, golpe): o fluxo espectral (o quanto o espectro
+    SOBE de um chunk pro outro) so' dos bins de lo..hi Hz -> evento (n sobe). Mesmo criterio do golpe do Tempo (fluxo >
+    k x a media movel, refratario) + PISO, como o do kick: so' com som (ok) e fluxo >= piso x o pico de LONGO prazo do
+    fluxo da faixa (~5 min de memoria) — a musica parou = o chiado fica muito abaixo do ataque que ela tinha. Fluxo LINEAR:
+    o chiado fica em ~0.2% do pico, um chimbal mais baixo que a caixa (que tambem soa no agudo) em ~15% -> piso 0.05."""
+
+    def __init__(self, lo, hi, refr=0.08, k=1.6, piso=0.05, long_decay=0.99995):
+        self.lo, self.hi, self.refr, self.k, self.piso, self.long_decay = lo, hi, refr, k, piso, long_decay
+        self.prev, self.thr, self.long, self.n, self._t = None, 0.0, 1e-6, 0, -1e9
+        self._mask = None
+
+    def faixa(self, lo, hi):
+        """muda os Hz (o dash mexeu nos cortes das faixas); o resto continua."""
+        if (lo, hi) != (self.lo, self.hi):
+            self.lo, self.hi, self._mask, self.prev = lo, hi, None, None
+
+    def update(self, t, spectrum, freqs, ok=True):
+        """um chunk: True se houve ataque agora (e n sobe)."""
+        if self._mask is None or len(self._mask) != len(freqs):
+            self._mask = (freqs >= self.lo) & (freqs < self.hi)
+            if not self._mask.any():
+                self._mask = np.abs(freqs - (self.lo + min(self.hi, freqs[-1])) / 2) == np.abs(freqs - (self.lo + min(self.hi, freqs[-1])) / 2).min()
+        s = np.asarray(spectrum, np.float64)[self._mask]   # LINEAR (nao log como o Tempo): o log fazia o resto de energia de
+        # um ataque de OUTRA faixa contar (chimbal virava caixa); linear = quem manda na faixa e' quem e' forte nela
+        flux = float(np.maximum(0.0, s - self.prev).sum()) if self.prev is not None and len(self.prev) == len(s) else 0.0
+        self.prev = s
+        self.long = max(flux, self.long * self.long_decay, 1e-6)
+        hit = (ok and flux > self.thr * self.k and flux > 1e-3 and flux >= self.piso * self.long and t - self._t > self.refr)
+        self.thr = self.thr * 0.97 + flux * 0.03
+        if hit:
+            self.n += 1
+            self._t = t
+        return hit
+
+
 SECOES = ('intro', 'sobe', 'drop', 'pausa')
 
 
@@ -322,6 +358,36 @@ if __name__ == '__main__':   # self-check: python src/ritmo.py
     tt.tap(60.0)                                               # pausa > 2 s: sequencia nova
     assert tt.taps == [60.0]
     assert tp.golpes >= 20, ('golpes do metronomo', tp.golpes)
+    # ATAQUE por faixa: a musica (kick + chimbal) passa primeiro (o pico LONGO de cada faixa = o ataque de verdade); depois so'
+    # o chimbal: conta no agudo e NAO no grave; depois so' o chiado: nao conta; sem som (ok=False) nao conta.
+    # (limite: uma faixa que so' ouviu chiado desde o comeco nao tem pico de verdade -> o chiado dela pode contar)
+    fq = np.fft.rfftfreq(hop, 1 / rate)
+    ag, gr, cx = Ataque(7000, 20000, refr=0.05), Ataque(20, 300), Ataque(321, 4815)
+    hp = np.diff(np.r_[0.0, rng.normal(0, 1, hop * 2)])        # ruido "branco puxado pro agudo" (chimbal)
+    tt_ = np.arange(hop) / rate
+    def toca(t0, secs, kick, hat, cai=False):
+        for i in range(int(fps * secs)):
+            x = rng.normal(0, 0.0005, hop)
+            if i % int(fps / 2) == 0:
+                if hat:
+                    x += hp[:hop] * 0.3 * np.exp(-np.arange(hop) / 120)
+                if kick:
+                    x += 0.8 * np.sin(2 * np.pi * 60 * tt_) * np.exp(-tt_ / 0.05)
+            if cai and i % int(fps / 2) == int(fps / 4):          # caixa no contratempo: ruido largo
+                x += rng.normal(0, 0.2, hop) * np.exp(-tt_ / 0.03)
+            sp = np.abs(np.fft.rfft(x * win))
+            for a in (ag, gr, cx):
+                a.update(t0 + i / fps, sp, fq)
+    toca(0.0, 4, True, True, True)
+    assert ag.n >= 6 and gr.n >= 6 and cx.n >= 6, ('kick, caixa e chimbal: os tres contam', ag.n, gr.n, cx.n)
+    a0, g0, c0 = ag.n, gr.n, cx.n
+    toca(10.0, 6, False, True)
+    assert ag.n - a0 >= 10 and gr.n - g0 <= 1 and cx.n - c0 <= 1, ('so\' chimbal: no agudo, nao no grave nem na caixa', ag.n - a0, gr.n - g0, cx.n - c0)
+    a0, g0 = ag.n, gr.n
+    toca(100.0, 4, False, False)                               # chiado sozinho (a musica parou)
+    assert ag.n == a0 and gr.n == g0, ('chiado nao e\' ataque', ag.n - a0, gr.n - g0)
+    ag.update(200.0, np.abs(np.fft.rfft(hp[:hop] * win)), fq, ok=False)
+    assert ag.n == a0, 'sem som (ok=False) nao conta'
     t2 = Tempo(fps); [t2.tap(10.0 + i * 0.5) for i in range(4)]   # 120 BPM
     t2.scale(0.5); assert abs(t2.bpm - 60) < 1e-6 and t2.manual, 'x2 / /2'
     t2.one(20.0); assert abs(t2.phase(20.0)[1]) < 1e-9, "'1' = comeco do compasso"

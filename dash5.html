@@ -2899,7 +2899,8 @@ function ctlSpot(o, ky){   // lugar LIVRE pro controlador novo (ky = [x, y] do j
 function specRecipe(spec){   // algo da biblioteca (preset / LFO / som / macro) -> receita de movimento, sem faixa
   if (spec.kind === 'preset'){ const P = (VOCAB.presets || {})[spec.name]; return P ? Object.assign(JSON.parse(JSON.stringify(P.mod)), { nome: spec.name }) : null; }
   if (spec.kind === 'lfo') return { b: ['lfo'], modo: 'loop', lfo: { f: spec.f || 'sin', r: spec.r || 4, ph: 0 } };
-  if (spec.kind === 'som') return { b: spec.b || ['subbass'] };
+  if (spec.kind === 'som') return spec.seg ? { b: spec.b, modo: 'segue', seg: { a: 10, r: 200 } } : { b: spec.b || ['subbass'] };
+  if (spec.kind === 'ev') return { b: [], modo: 'disparo', ev: { src: spec.src }, env: { a: 0, d: spec.d || 0.5 } };   // ENVELOPE num evento
   return null;
 }
 function newCtl(spec, xy){   // controlador solto (sem cabo): o sinal fica pronto, liga puxando a saida dele ate' um knob
@@ -4949,7 +4950,7 @@ function wheelSectors(){
   const mk = atoms.filter(f => catOf(f) === 'mascara');
   if (mk.length) S.push({ id: 'cat:mascara', l: 'máscaras', ic: catIcon('mascara'), fam: 'mascara', items: () => mk.map(f => ({ t: fxName(f), d: 'nó de máscara: ligue a saída na “másc” de outro nó · ' + (metaOf(f).desc || ''),
     ic: atomIcon(f), go: xy => looseNode(xy, prepItems([{ file: f }])) })) });   // MASCARA = NO' (solto; no fio viraria imagem cinza)
-  S.push({ id: 'ctl', l: 'alteradores', ic: 'sin', fam: 'fonte', items: () => ctlItems().map(c => ({ t: c.name, d: c.desc, ic: c.icon, spec: { kind: 'ctl', spec: c.spec }, go: xy => newCtl(c.spec, xy) })) });
+  S.push({ id: 'ctl', l: 'alteradores', ic: 'sin', fam: 'fonte', items: () => ctlItems().map(c => ({ t: c.name, d: c.desc, ic: c.icon, g: (FAMS.find(f => f[0] === c.g) || [])[1], spec: { kind: 'ctl', spec: c.spec }, go: xy => newCtl(c.spec, xy) })) });
   const mx = atoms.filter(f => catOf(f) === 'mistura');
   S.push({ id: 'mix', l: 'mistura e saída', ic: 'mistura', fam: 'mistura', items: () => [...at(mx),
     ...MIXERS.map(n => ({ t: 'mixer ' + n, d: `${n} entradas de opacidade · jack de cima = na frente`, ic: 'mistura', go: xy => newMix('mix', null, xy, n) })),
@@ -4971,7 +4972,8 @@ function floatList(x, y, title, items, onPick){
     const s = n(q.value.trim()), rank = it => !s ? 0 : n(it.t).startsWith(s) ? 0 : n(it.t).includes(s) ? 1 : n(it.d).includes(s) ? 2 : 9;
     shown = items.map((it, i) => [rank(it), i, it]).filter(z => z[0] < 9).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(z => z[2]);
     pick = Math.min(pick, Math.max(0, shown.length - 1)); box.innerHTML = '';
-    shown.forEach((it, i) => { const r = h('button', { class: 'nm-it' + (i === pick ? ' pick' : '') + (it.cur ? ' cur' : ''), title: it.d }, h('span', { class: 'mchip sm' }, icon(it.ic, 'sm')),
+    shown.forEach((it, i) => { if (it.g && !s && it.g !== (shown[i - 1] || {}).g) box.append(h('div', { class: 'pgt', text: it.g }));   // FAMILIA (sem busca)
+      const r = h('button', { class: 'nm-it' + (i === pick ? ' pick' : '') + (it.cur ? ' cur' : ''), title: it.d }, h('span', { class: 'mchip sm' }, icon(it.ic, 'sm')),
       h('span', { class: 'nm-t', text: it.t }), h('span', { class: 'hint', text: it.d }));
       if (it.spec) r.onpointerdown = e => { if (e.button) return; e.stopPropagation(); onPick(it, e); };
       else r.onclick = e => { e.stopPropagation(); onPick(it, null); };
@@ -5191,6 +5193,9 @@ let ctlSig = '', devEls = {}, modLive = [], modOpen = '';
 const MOD_BANDS = [['subbass', 'sub'], ['lowmid', 'low-mid'], ['midrange', 'mid'], ['highmid', 'high-mid'], ['presence', 'presence'],
   ['treble_hi', 'treble'], ['brilho', 'brilliance'], ['air', 'air'], ['kick', 'kick']];
 const MACROS = [['m1', 'M1'], ['m2', 'M2'], ['m3', 'M3'], ['m4', 'M4']];
+const SOUND_GRP = [['grave', 'grave'], ['medio', 'médio'], ['agudo', 'agudo']];   // = dash_data.SOUND_GROUPS: a mais forte das finas de cada grupo
+const GRP_OF = { grave: ['subbass', 'lowmid'], medio: ['midrange', 'highmid', 'presence'], agudo: ['treble_hi', 'brilho', 'air'] };
+const FINE_BANDS = MOD_BANDS.filter(([b]) => b !== 'kick');
 const LFO_SHAPES = [['sin', 'seno'], ['tri', 'triângulo'], ['saw', 'serra'], ['sq', 'quadrada'], ['rnd', 'acaso'], ['sh', 'acaso segurado'], ['passos', 'passos']];
 const LFO_RATES = [[0.25, '¼ batida'], [0.5, '½ batida'], [1, '1 batida'], [2, '2 batidas'], [4, '1 compasso'], [8, '2 compassos'], [16, '4 compassos'], [32, '8 compassos']];
 // MOVIMENTO (Claude Doc "PRISMA — sync com a música"; dash_data.MOV_*): fonte -> modo (loop | disparo | segue) -> forma -> faixa.
@@ -5201,11 +5206,21 @@ const PRESET_TXT = { pulsa: ['pulsa', 'salta no kick e cai em ½ batida'], respi
   acaso: ['acaso', 'um valor novo a cada batida'], grave: ['segue o grave', 'acompanha o grave com ataque rápido e soltura de 200 ms'],
   drop: ['estoura no drop', 'abre tudo quando a seção vira DROP e fecha em 8 batidas'], abaixa: ['abaixa no kick', 'cai a cada kick e volta (o sidechain do produtor)'] };
 const presetIcon = p => ({ pulsa: 'pico', respira: 'sin', anda: 'saw', passos: 'passos', acaso: 'sh', grave: 'segue', drop: 'pico', abaixa: 'pico' })[p] || 'sin';
-const EV_TXT = { batida: 'batida', compasso: 'compasso (o “1”)', frase: 'frase', kick: 'kick', golpe: 'golpe (qualquer ataque)',
+const EV_TXT = { batida: 'batida', compasso: 'compasso (o “1”)', frase: 'frase', kick: 'kick', caixa: 'caixa', chimbal: 'chimbal', golpe: 'golpe (qualquer ataque)',
   'secao:intro': 'seção intro', 'secao:sobe': 'seção sobe', 'secao:drop': 'seção drop', 'secao:pausa': 'seção pausa',
   'rosto.on': 'rosto aparece', 'mao.on': 'mão aparece', 'corpo.on': 'corpo aparece', 'obj.on': 'objeto aparece',
   'pad:1': 'pad 1', 'pad:2': 'pad 2', 'pad:3': 'pad 3', 'pad:4': 'pad 4' };
 const evTxt = e => EV_TXT[e] || e;
+const SOUND_EV = ['kick', 'caixa', 'chimbal', 'golpe'];   // = dash_data.SOUND_EVENTS: sem som param (ou, com ev.rel, seguem o relogio: native kick~...)
+// FAMILIAS dos alteradores (2026-11-19, "como podemos reorganizar os alteradores"): de ONDE vem o sinal. RELOGIO nunca falha (sem som
+// continua); SOM = niveis dos grupos de faixas + ataques; IMAGEM E CORPO = a camera; MAO = macros e pads (a pessoa)
+const FAMS = [['relogio', 'Relógio'], ['som', 'Som'], ['corpo', 'Imagem e corpo'], ['mao', 'Mão']];
+const evFam = e => /^(batida|compasso|frase)$/.test(e) ? 'relogio' : /\.on$/.test(e) ? 'corpo' : /^pad:/.test(e) ? 'mao' : 'som';
+function selGroups(opts, fam, val, on, title){   // <select> com <optgroup> por FAMILIA (opts = [[v, t]], fam(v) = id da familia)
+  const e = h('select', { class: 'inp sm', title: title || '' });
+  for (const [f, l] of FAMS){ const os = opts.filter(([v]) => fam(v) === f); if (!os.length) continue;
+    const g = h('optgroup', { label: l }); for (const [v, t] of os) g.append(h('option', { value: String(v), text: t })); e.append(g); }
+  e.value = String(val); e.onchange = () => on(e.value); return e; }
 const COND_OPTS = [['', 'sempre'], ['n2', 'a cada 2'], ['n4', 'a cada 4'], ['a1b2', '1:2 (1ª de cada 2)'], ['a2b2', '2:2 (2ª de cada 2)'], ['a1b4', '1:4'], ['p50', '50%'], ['p25', '25%'], ['first', 'só a 1ª']];
 const condKey = c => !c ? '' : c.first ? 'first' : c.b ? `a${c.a || 1}b${c.b}` : c.n ? 'n' + c.n : c.p ? 'p' + Math.round(c.p * 100) : '';
 const condOf = k => { if (!k) return null; if (k === 'first') return { first: 1 }; let m = /^a(\d+)b(\d+)$/.exec(k); if (m) return { a: +m[1], b: +m[2] };
@@ -5231,11 +5246,11 @@ function nodeSrcs(key, j){   // ATOMO v2 §8: QUALQUER no' vira sinal (no:<id> =
 }
 function srcName(x){
   if (String(x).startsWith('no:')){ for (const o of rowsTopDown()){ const k = chKey(o), it = stackOf(k).find(q => q.id === x.slice(3)); if (it) return 'nó ' + boxNo(k) + ' · ' + fxName(it.file); } return 'nó sumido'; }
-  return (MACROS.find(q => q[0] === x) || MOD_BANDS.find(q => q[0] === x) || IMG_MODS.map(([k, t]) => [k, 'imagem: ' + t]).find(q => q[0] === x)
+  return (MACROS.find(q => q[0] === x) || SOUND_GRP.find(q => q[0] === x) || MOD_BANDS.find(q => q[0] === x) || IMG_MODS.map(([k, t]) => [k, 'imagem: ' + t]).find(q => q[0] === x)
     || TRACK_SRC.find(q => q[0] === x) || MUSIC_SRC.find(q => q[0] === x) || [x, x])[1];
 }
 function modShort(m){
-  if (m.modo === 'disparo' && m.ev) return 'envelope · ' + evTxt(m.ev.src) + condTxt(m.ev.cond);
+  if (m.modo === 'disparo' && m.ev) return 'envelope · ' + evTxt(m.ev.src) + condTxt(m.ev.cond) + (m.ev.rel ? ' · ⏱' : '');
   return (m.b || []).map(x => x === 'lfo' ? 'LFO ' + ((LFO_SHAPES.find(s => s[0] === (m.lfo || {}).f) || ['', 'seno'])[1]) + ' · ' + rateTxt((m.lfo || {}).r || 4) : srcName(x)).join(' + ')
     + (m.modo === 'segue' ? ' (segue)' : '') + (m.q ? ' × ' + srcName(m.q) : '');
 }
@@ -5254,7 +5269,7 @@ function modLevel(m, a){   // nivel 0..1 do sinal que move o knob AGORA: o do MO
   if (m.modo === 'disparo') return 0;
   const lv = {}; for (const r of (a || {}).bands || []) lv[r.name] = r.final || 0;
   return Math.min(1, Math.max(0, ...(m.b || []).map(b => b === 'lfo' ? lfoNow(m.lfo, beatPos()) : b === 'kick' ? ((a || {}).kick || {}).final || 0
-    : /^m\d$/.test(b) ? macroV[+b[1] - 1] || 0 : b in imgLv ? imgLv[b] : lv[MOD_NAME[b]] || 0)));
+    : /^m\d$/.test(b) ? macroV[+b[1] - 1] || 0 : b in imgLv ? imgLv[b] : GRP_OF[b] ? Math.max(...GRP_OF[b].map(x => lv[MOD_NAME[x]] || 0)) : lv[MOD_NAME[b]] || 0)));
 }
 function pubList(){   // knobs publicados da cena (atomos e mascaras), na ordem do canvas
   const out = [];
@@ -5690,14 +5705,19 @@ function modEditor(key, j, n, md, ctl){   // o MOVIMENTO do knob: presets + (abr
     }
   } else if (modo === 'disparo'){
     const e = md.ev || {}, en = md.env || {};
-    more.append(irow('quando', selEl((VOCAB.events || Object.keys(EV_TXT)).map(x => [x, evTxt(x)]), e.src || 'kick', v => set(m => { m.ev = Object.assign({}, m.ev, { src: v }); delete m.nome; }), 'o EVENTO que dispara'),
+    more.append(irow('quando', selGroups((VOCAB.events || Object.keys(EV_TXT)).map(x => [x, evTxt(x)]), evFam, e.src || 'kick', v => set(m => { m.ev = Object.assign({}, m.ev, { src: v }); delete m.nome; }), 'o EVENTO que dispara'),
       selEl(COND_OPTS, condKey(e.cond), v => set(m => { m.ev = Object.assign({}, m.ev); const c = condOf(v); if (c) m.ev.cond = c; else delete m.ev.cond; }), 'CONDIÇÃO (como o trig condition do Elektron)')));
+    if (SOUND_EV.includes(e.src || 'kick'))   // SEM SOM (2026-11-19: "o envelope de kick toca mesmo sem som"): o substituto do relogio virou opcao, padrao = para
+      more.append(irow('sem som', h('div', { class: 'seg' }, [[0, 'para', 'sem som o envelope fica parado'], [1, '⏱ relógio', 'sem som por 2 compassos, cada batida do relógio vira um ' + evTxt(e.src || 'kick')]].map(([v, t, tt]) =>
+        h('button', { class: !!e.rel === !!v ? 'on' : '', title: tt, onclick: () => set(m => { m.ev = Object.assign({}, m.ev); if (v) m.ev.rel = 1; else delete m.ev.rel; }) }, t)))));
     more.append(irow('envelope', h('span', { class: 'hint', text: 'ataque' }), selEl(BEAT_OPTS, en.a || 0, v => set(m => { m.env = Object.assign({ d: 0.5 }, m.env, { a: +v }); }), 'quanto demora pra subir (batidas)'),
       h('span', { class: 'hint', text: 'queda' }), selEl(BEAT_OPTS.slice(1), en.d || 0.5, v => set(m => { m.env = Object.assign({ a: 0 }, m.env, { d: +v }); }), 'quanto demora pra cair (batidas)')));
   } else {
     const flip = x => set(m => { const l = m.b || [], nb = l.includes(x) ? l.filter(y => y !== x) : l.concat([x]); m.b = nb.length ? nb : l; delete m.nome; });
     const chips = list => h('div', { class: 'chips' }, list.map(([x, t]) => h('button', { class: 'chip' + (b.includes(x) ? ' on' : ''), text: t, onclick: () => flip(x) })));
-    more.append(irow('som', chips(MOD_BANDS)), irow('música', chips(MUSIC_SRC)), irow('imagem', chips(IMG_MODS)), irow('rastreio', chips(TRACK_SRC)), irow('macro', chips(MACROS)));
+    more.append(h('div', { class: 'pgt', text: 'som' }), irow('faixas', chips([...SOUND_GRP, ['kick', 'kick']])), irow('música', chips(MUSIC_SRC)), irow('finas', chips(FINE_BANDS)),
+      h('div', { class: 'pgt', text: 'imagem e corpo' }), irow('imagem', chips(IMG_MODS)), irow('corpo', chips(TRACK_SRC)),
+      h('div', { class: 'pgt', text: 'mão' }), irow('macro', chips(MACROS)));
     const nodes = nodeSrcs(key, j);
     if (nodes.length) more.append(irow('nó', chips(nodes)));
     const sg = md.seg || {};
@@ -5752,7 +5772,7 @@ function applyModulator(key, j, n, spec){   // algo da biblioteca/painel solto n
   const v = knobV(key, s, n);
   modOpen = `${key}|${j}|${n}`;
   editMod(key, j, mm => { mm[n] = spec.kind === 'lfo' ? { b: ['lfo'], modo: 'loop', lo: r3(v - 0.35), hi: r3(v + 0.35), lfo: { f: spec.f || 'sin', r: spec.r || 4, ph: 0 }, id: 'v' + rid() }
-    : { b: spec.b || ['subbass'], lo: r3(v), hi: 1, id: 'v' + rid() }; });
+    : Object.assign(specRecipe(spec) || { b: ['subbass'] }, { lo: r3(v), hi: 1, id: 'v' + rid() }); });   // som / segue / envelope (kind 'ev')
   ensureId(s);
   toast(`${knobLabel(n)} de ${fxName(s.file)} ← ${modSrcText(s.mod[n])}`);
 }
@@ -5881,14 +5901,23 @@ function moveModules(fk, js, tk, at){
 // arrastam pro canvas. A busca procura em TODAS. Dentro de Atomos: grupos por tipo, "Onde" (mascaras) e "Outros" (cat: nova).
 const PAL_TABS = [['fonte', 'Fontes'], ['atomo', 'Átomos'], ['ctl', 'Movimentos'], ['receita', 'Receitas']];
 let palSig = '', palCat = PAL_TABS.some(([t]) => t === LS.get('v5palTab', '')) ? LS.get('v5palTab', '') : 'atomo';
-function ctlItems(){
-  return [...Object.keys(VOCAB.presets || {}).map(p => ({ name: (PRESET_TXT[p] || [p])[0], icon: presetIcon(p), spec: { kind: 'preset', name: p }, desc: (PRESET_TXT[p] || ['', ''])[1] })),
-    { name: 'Som: grave', icon: 'som', spec: { kind: 'som', b: ['subbass', 'lowmid'] }, desc: 'o grave da música mexe o knob' },
-    { name: 'Som: kick', icon: 'som', spec: { kind: 'som', b: ['kick'] }, desc: 'pula na batida e decai' },
-    { name: 'Som: agudo', icon: 'som', spec: { kind: 'som', b: ['treble_hi', 'brilho'] }, desc: 'o agudo mexe o knob' },
-    { name: 'Imagem: luz', icon: 'olho', spec: { kind: 'som', b: ['luz'] }, desc: 'o brilho da imagem de entrada mexe o knob' },
-    { name: 'Imagem: movimento', icon: 'olho', spec: { kind: 'som', b: ['mov'] }, desc: 'o que se mexe na frente da câmera mexe o knob' },
-    ...MACROS.map(([m, t]) => ({ name: 'Macro ' + t, icon: 'macro', spec: { kind: 'som', b: [m] }, desc: 'o fader ' + t + ' (direita, embaixo) mexe o knob' }))];
+function ctlItems(){   // a lista dos ALTERADORES (roda, paleta), por FAMILIA (g = FAMS): de onde vem o sinal
+  const pre = p => { const P = (VOCAB.presets || {})[p] || {}; return { name: (PRESET_TXT[p] || [p])[0], icon: presetIcon(p), spec: { kind: 'preset', name: p }, desc: (PRESET_TXT[p] || ['', ''])[1],
+    g: ((P.mod || {}).b || []).includes('lfo') ? 'relogio' : 'som' }; };
+  const env = (g, src, ic, desc) => ({ name: 'envelope: ' + evTxt(src), icon: ic, spec: { kind: 'ev', src }, desc, g });
+  const L = Object.keys(VOCAB.presets || {}).map(pre);
+  return [...L.filter(x => x.g === 'relogio'),
+    env('relogio', 'batida', 'pico', 'salta em toda batida e cai — nunca para, nem sem som'), env('relogio', 'compasso', 'pico', 'salta no “1” de cada compasso'),
+    ...L.filter(x => x.g === 'som'),
+    ...SOUND_GRP.map(([b, t]) => ({ name: 'segue o ' + t, icon: 'segue', spec: { kind: 'som', b: [b], seg: 1 }, desc: 'o ' + t + ' da música (a faixa mais forte do grupo) mexe o knob', g: 'som' })),
+    env('som', 'kick', 'pico', 'salta no bumbo (grave)'), env('som', 'caixa', 'pico', 'salta na caixa (médios)'), env('som', 'chimbal', 'pico', 'salta no chimbal (agudo)'),
+    env('som', 'golpe', 'pico', 'salta em qualquer ataque forte'),
+    { name: 'imagem: luz', icon: 'olho', spec: { kind: 'som', b: ['luz'] }, desc: 'o brilho da imagem de entrada mexe o knob', g: 'corpo' },
+    { name: 'imagem: movimento', icon: 'olho', spec: { kind: 'som', b: ['mov'] }, desc: 'o que se mexe na frente da câmera mexe o knob', g: 'corpo' },
+    { name: 'mão: altura', icon: 'olho', spec: { kind: 'som', b: ['mao.y'] }, desc: 'a mão sobe, o knob sobe (rastreio)', g: 'corpo' },
+    env('corpo', 'rosto.on', 'olho', 'salta quando um rosto aparece'),
+    ...MACROS.map(([m, t]) => ({ name: 'macro ' + t, icon: 'macro', spec: { kind: 'som', b: [m] }, desc: 'o fader ' + t + ' (direita, embaixo) mexe o knob', g: 'mao' })),
+    ...[1, 2, 3, 4].map(k => env('mao', 'pad:' + k, 'macro', 'salta quando você bate no pad ' + k))];
 }
 function renderPalette(){
   if (isShow()) return;
@@ -5916,7 +5945,7 @@ function renderPalette(){
   const masks = () => tab('atomo') && group('Onde (máscaras)', 'mascara', atoms.filter(f => isMaskFile(f) && hit(fxName(f), metaOf(f).desc)).map(f =>
     item('mascara', fxName(f), '', (metaOf(f).desc || '') + ' — solte num nó: vira um NÓ de máscara ligado na “másc” dele (o nó só age onde ela acha)', { kind: 'mask', file: f }, () => {
       const k = mkBase(sel.key); if (k && rowOf(k)) maskNode(k, f); else toast('escolha uma caixa (ou arraste até ela)', 'err'); })));
-  if (tab('ctl')) group('Movimentos', 'sin', ctlItems().filter(c => hit(c.name, c.desc)).map(c =>
+  if (tab('ctl')) for (const [fg, fl] of FAMS) group(fl, 'sin', ctlItems().filter(c => c.g === fg && hit(c.name, c.desc)).map(c =>
     item(c.icon, c.name, '', c.desc + ' — arraste até um knob (liga direto) ou pro vazio do canvas (controlador solto, ligue depois pelo losango)', { kind: 'ctl', spec: c.spec }, () => {
       const [mk, mj, mn] = modOpen.split('|'), s = selModule();
       if (s && knobsOf(s.file).length) applyModulator(sel.key, sel.j, mn && mk === sel.key && +mj === sel.j ? mn : mainKnob(s) === 'opacity' ? knobsOf(s.file)[0] : mainKnob(s), c.spec);
@@ -6400,7 +6429,7 @@ function renderTop(d){
   if (a.kick) TM.kick.tgt = clamp01(a.kick.final);
   for (const b of a.bands || []) if (TM.bands[b.name]) TM.bands[b.name].tgt = clamp01(b.final);
 }
-let tpCfg = { quant: '', beats: 0, colors: 'quintas', bars: 8 }, tpTouched = -1e9, lastBpm = 0, barPh = 0, barAt = 0, bars = 0;
+let tpCfg = { quant: '', beats: 0, colors: 'quintas', bars: 8 }, tpTouched = -1e9, lastBpm = 0, barPh = 0, barAt = 0, bars = 0, tpSub = 0;   // tpSub = sem som: kick~/golpe~ no relogio (SSE tempo.sub)
 function beatPos(){   // batidas continuas (estimadas aqui pelo compasso do stream) — so' pro marcador vivo dos LFOs
   const k = lastBpm ? (now() - barAt) / 1000 * lastBpm / 240 : 0;
   return (bars + barPh + k) * 4;
@@ -6421,7 +6450,7 @@ function syncTempoCfg(){
 function renderTempo(t){
   if (!t) return;
   if (t.cfg && now() - tpTouched > TOUCH_MS && JSON.stringify(t.cfg) !== JSON.stringify(tpCfg)){ tpCfg = Object.assign({}, t.cfg); syncTempoCfg(); }
-  lastBpm = t.bpm || 0;
+  lastBpm = t.bpm || 0; tpSub = t.sub ? 1 : 0;
   const nb = t.bar || 0; if (nb < barPh - 0.5) bars++; barPh = nb; barAt = now();
   $('#m-bpm').textContent = t.bpm ? String(Math.round(t.bpm)) : '—'; $('#tp-bpm2').textContent = t.bpm ? t.bpm.toFixed(1) : '—';
   $('#music').classList.toggle('manual', !!t.manual);
@@ -8854,6 +8883,11 @@ G6 = GAME ? (() => {
       const b = SCOPE[c.id]; if (b && b.length){ const tn = performance.now(), X = ti => sx0 + (1 - (tn - ti) / SCOPE_MS) * sw0, Y = v => sy0 + sh0 - 3 - v * (sh0 - 6);   // = o osciloscopio do dash5 (tempo)
         g.save(); g.beginPath(); g.rect(sx0, sy0, sw0, sh0); g.clip();
         g.strokeStyle = c.col; g.lineWidth = 1.5 / z; g.beginPath(); b.forEach(([ti, v], i) => i ? g.lineTo(X(ti), Y(v)) : g.moveTo(X(ti), Y(v))); g.lineTo(sx0 + sw0, Y(b[b.length - 1][1])); g.stroke(); g.restore(); }
+      const sm = (c.c.mod || {}).sinal || {};
+      if (tpSub && sm.modo === 'disparo' && SOUND_EV.includes((sm.ev || {}).src) && z > 0.3){   // SELO: sem som, este alterador PARA ou segue o RELOGIO
+        const rel = !!sm.ev.rel, t = rel ? '⏱ relógio' : 'sem som'; g.font = '700 10px system-ui'; const tw = g.measureText(t).width + 10;
+        g.fillStyle = rel ? '#e0a23acc' : '#16181bcc'; rr(g, sx0 + sw0 - tw - 3, sy0 + 3, tw, 15, 4); g.fill();
+        g.fillStyle = rel ? '#16181b' : '#c9ced3'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(t, sx0 + sw0 - tw + 2, sy0 + 10.5); g.textBaseline = 'alphabetic'; }
       c.rg.forEach((u, i) => { const md = useMd(u), R_ = c.L.rows[i]; if (!md || !R_) return;   // FAIXA de/ate (de cada ligacao, na cor do CABO dela) + as pontas + o valor vivo
         const [lo, hi] = rgLohi(u), y = c.y + R_.y, x0 = c.x + R_.x0, ww = R_.x1 - R_.x0, lv = modLevel(md, lastAudio), col = rgCol(c.id, u), X = v => x0 + ww * v;
         if (rgBip(u)){ g.fillStyle = '#00000088'; g.fillRect(X(0.5) - 0.75, y - 7, 1.5, 14); }   // bipolar: o ZERO no meio

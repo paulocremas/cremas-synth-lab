@@ -868,7 +868,9 @@ def _poly_tex(shapes):
 
 MV_OUT = {}   # id do movimento -> ultimo sinal 0..1 (dash: anel/forma ao vivo)
 _MV = {}   # estado dos MOVIMENTOS (disparo: ultimo evento visto + instante; segue: valor) por id (ou pela receita)
-SILENCE_AMP = 0.02   # abaixo disso a musica "parou": kick/golpe caem pra batida depois de 2 compassos
+SILENCE_AMP = 0.02   # abaixo disso a musica "parou": o kick nao detecta; kick~/golpe~ (substituto) caem pra batida depois de 2 compassos
+KICK_FLOOR = 0.15    # o grave cru precisa passar disso x o pico de LONGO prazo dele pra contar como kick (tuning.KICK_FLOOR muda)
+ATAQUE_FLOOR = 0.05  # caixa/chimbal/golpe (ritmo.Ataque): fluxo da faixa >= isso x o pico LONGO dele (tuning.ATAQUE_FLOOR muda)
 PHRASE_BARS = 8      # frase padrao (tuning.PHRASE_BARS muda)
 
 
@@ -906,7 +908,10 @@ def _mod_value(v, m, levels, trk=None):
             _MV.clear()
         st = _MV.setdefault(key, {})
         src = str(e.get('src') or '')
-        c = (trk(src, True) if trk else 0) if src.endswith('.on') else (levels.get('ev') or {}).get(src, 0)
+        evs = levels.get('ev') or {}
+        if e.get('rel') and src + '~' in evs:             # "sem som: segue o relogio" (opcao do alterador): o contador com substituto
+            src += '~'
+        c = (trk(src, True) if trk else 0) if src.endswith('.on') else evs.get(src, 0)
         bp = levels.get('bpos', 0.0)
         if 'c' not in st:                                 # 1a vez: nao dispara pelo que ja' passou
             st.update(c=c, k=0, t=-1e9)
@@ -951,20 +956,26 @@ def _mod_total(v, m, levels, trk=None):
 
 def _music_events(st, tp, mem, bars=PHRASE_BARS):
     """EVENTOS do quadro -> st['ev'] = contadores que sobem (o movimento dispara quando o seu muda): batida, compasso,
-    frase (do relogio), kick, golpe (do som), secao:<nome> (ritmo.Secao), pad:N e o que o dash disparou (ev_man).
-    Sem som (amp < SILENCE_AMP por 2 compassos) kick e golpe caem pra batida: todo evento do som tem um substituto
-    do relogio. Tambem poe st['phrase'] (fase 0..1 da frase -> u_phrase)."""
+    frase (do relogio), kick/caixa/chimbal/golpe (do som), secao:<nome> (ritmo.Secao), pad:N e o que o dash disparou (ev_man).
+    Os do SOM (dash_data.SOUND_EVENTS) = SO' do som (2026-11-19: "o envelope de kick toca mesmo sem som" — o substituto era
+    escondido). O SUBSTITUTO do relogio fica em 'kick~', 'caixa~'...: sem som (amp < SILENCE_AMP por 2 compassos) eles sobem a cada batida; o alterador
+    usa esse so' com ev.rel = 1 ("sem som: segue o relogio"). st['ev_sub'] = 1 enquanto o substituto esta' valendo (selo no
+    dash). Tambem poe st['phrase'] (fase 0..1 da frase -> u_phrase)."""
     c, ph = ritmo.clock(st.get('bpos', 0.0), getattr(tp, 'p0', 0.0) if tp else 0.0, bars)
     st['phrase'] = ph
     if st.get('amp', 0.0) >= SILENCE_AMP:
         mem['sil'] = None
     elif mem.get('sil') is None:
         mem['sil'] = st.get('bpos', 0.0)
-    if mem.get('sil') is not None and st.get('bpos', 0.0) - mem['sil'] >= 8 and c['batida'] != mem.get('b'):
+    sub = mem.get('sil') is not None and st.get('bpos', 0.0) - mem['sil'] >= 8
+    if sub and c['batida'] != mem.get('b'):
         mem['ks'] = mem.get('ks', 0) + 1
     mem['b'] = c['batida']
     ks = mem.get('ks', 0)
-    ev = dict(c, kick=int(st.get('beats', 0)) + ks, golpe=(getattr(tp, 'golpes', 0) if tp else 0) + ks)
+    st['ev_sub'] = int(sub)
+    at = st.get('ataques') or {}                          # ritmo.Ataque por faixa (audio_thread): caixa, chimbal, golpe
+    snd = {'kick': int(st.get('beats', 0)), **{k: int(at.get(k, 0)) for k in dash_data.SOUND_EVENTS if k != 'kick'}}
+    ev = dict(c, **snd, **{k + '~': n + ks for k, n in snd.items()})
     sc = st.get('secao_obj')
     if sc is not None:
         ev.update({'secao:' + k: n for k, n in sc.n.items()})
@@ -2513,6 +2524,7 @@ def audio_thread(device):
     band_peaks = {name: 1e-6 for name, _, _ in fine_bands}  # auto-gain: teto recente de cada banda
     band_long = {}   # pico de longo prazo (piso do teto: faixa vazia nao amplifica o proprio ruido)
     kick_baseline = 0.0
+    kick_long = 1e-6   # PICO de LONGO prazo do grave cru (o piso do kick: KICK_FLOOR x isso)
     kick_env = 0.0
     kick_decay_dynamic = tuning.KICK_DECAY  # ate a 1a batida ter intervalo medido, usa o fixo
     kick_chunk_count = 0
@@ -2527,6 +2539,14 @@ def audio_thread(device):
     state['tempo_obj'] = tempo              # o render le a fase daqui (tempo.phase) a cada frame
     secao = ritmo.Secao(rate / chunk_samples)   # SECAO da musica (intro/sobe/drop/pausa) por regra
     state['secao_obj'] = secao
+
+    def ataque_hz(nome):   # Hz do ATAQUE (dash_data.ATAQUE_FAIXAS): da 1a a' ultima faixa fina do grupo (segue os cortes do dash)
+        a, b = dash_data.ATAQUE_FAIXAS[nome]
+        hz = {n: (lo, hi) for n, lo, hi in fine_bands}
+        return hz[a][0], hz[b][1]
+    ataques = {n: ritmo.Ataque(*ataque_hz(n), refr={'chimbal': 0.05}.get(n, 0.08),
+                               piso=getattr(tuning, 'ATAQUE_FLOOR', ATAQUE_FLOOR)) for n in dash_data.ATAQUE_FAIXAS}
+    state['ataques'] = {n: 0 for n in ataques}
     try:
         while running:
             # hot-reload do tuning.py — mesmo esquema do image.frag, so que pro lado Python:
@@ -2537,6 +2557,9 @@ def audio_thread(device):
                     tuning_mtime = m
                     importlib.reload(tuning)
                     (bass_bins, mid_bins, treble_bins), fine_bands = recompute_bins()
+                    for n_, a_ in ataques.items():
+                        a_.faixa(*ataque_hz(n_))
+                        a_.piso = getattr(tuning, 'ATAQUE_FLOOR', ATAQUE_FLOOR)
                     band_release, band_attack, band_peakdecay = band_tweak_maps()
                     print('tuning.py recarregado')
                 m = os.path.getmtime(DASH_SERVER_PATH)
@@ -2574,7 +2597,9 @@ def audio_thread(device):
                 for k in band_peaks:  # auto-gain nao herda o teto da fonte anterior
                     band_peaks[k] = 1e-6
                 band_long.clear()
-                kick_baseline = 0.0
+                kick_baseline, kick_long = 0.0, 1e-6
+                for a_ in ataques.values():   # pico longo/limiar da fonte velha nao valem pra nova (o contador continua)
+                    a_.prev, a_.thr, a_.long = None, 0.0, 1e-6
                 if media:
                     if proc:
                         _kill(proc)
@@ -2743,10 +2768,16 @@ def audio_thread(device):
             # o grave ficar forte por uns segundos o kick_baseline sobe a ponto do limiar
             # (baseline*THRESHOLD) passar de 1.0, ficando matematicamente impossivel de bater
             kick_baseline = kick_baseline * 0.95 + bass_raw * 0.05
+            # PISO (2026-11-19): so' o "X vezes a media recente" nao basta — em silencio a media desce ate' o CHIADO e
+            # qualquer ruido passa de 2.1x. Agora o kick tambem precisa (a) ter som (amp >= SILENCE_AMP, o mesmo "a musica
+            # parou" dos eventos) e (b) o grave passar de KICK_FLOOR do pico de LONGO prazo dele (~5 min de memoria, como
+            # o BAND_FLOOR das faixas): a musica parou -> o chiado fica muito abaixo do kick que ela tinha.
+            kick_long = max(bass_raw, kick_long * BAND_LONG_DECAY, 1e-6)
+            kick_floor_ok = raw['amp'] >= SILENCE_AMP and bass_raw >= getattr(tuning, 'KICK_FLOOR', KICK_FLOOR) * kick_long
             # aquecimento: so nos primeiros KICK_WARMUP_CHUNKS o baseline ainda nao
             # representa o "chao" de verdade (comeca em 0.0) — sem isso, qualquer som logo
             # no inicio dispara falso positivo. So acontece uma vez, no começo do programa.
-            if kick_chunk_count > tuning.KICK_WARMUP_CHUNKS and bass_raw > kick_baseline * tuning.KICK_THRESHOLD:
+            if kick_chunk_count > tuning.KICK_WARMUP_CHUNKS and kick_floor_ok and bass_raw > kick_baseline * tuning.KICK_THRESHOLD:
                 # decay adaptativo: mede quantos chunks se passaram desde a ULTIMA batida e
                 # recalcula o decay pra o envelope cair ate KICK_FADE_FLOOR nesse intervalo
                 # (musica rapida decai rapido, lenta decai devagar) — so depois da 2a batida
@@ -2764,6 +2795,14 @@ def audio_thread(device):
             else:
                 kick_env *= kick_decay_dynamic
             state['kick'] = 0.0 if 'kick' in off else kick_env
+            # ATAQUES por faixa (ritmo.Ataque): caixa, chimbal, golpe — eventos dos alteradores; com som + ATAQUE_FLOOR
+            snd_ok = raw['amp'] >= SILENCE_AMP
+            for n_, a_ in ataques.items():
+                a_.update(now_m, spectrum, freqs, snd_ok)
+            state['ataques'] = {n_: a_.n for n_, a_ in ataques.items()}
+            # GRUPOS de faixas (dash_data.SOUND_GROUPS): grave/medio/agudo = a MAIS FORTE das finas de cada um (ja' com gate/off)
+            for g_, ks_ in dash_data.SOUND_GROUPS.items():
+                state[g_] = max(state.get(k_, 0.0) for k_ in ks_)
             # u_build (0..1) = CRESCENDO, a memoria que o shader nao tem: sobe devagar (~20 s ate 1)
             # enquanto o som segura perto da media dos ultimos ~10 s e cai rapido (~1.5 s) quando a
             # musica baixa (break/silencio). Efeito que "vai crescendo" le daqui.
@@ -5622,9 +5661,19 @@ def _selfcheck():
     for k in range(0, 12):
         st_['bpos'] = 8.0 + k
         e_ = _music_events(st_, None, mem, 8)
-    assert e_['kick'] == 3 + 4 and e_['golpe'] == 4, ('8 batidas de silencio, depois kick = batida', e_)
-    st_['amp'] = 0.5; st_['bpos'] = 21.0
-    assert _music_events(st_, None, mem, 8)['kick'] == 7, 'som voltou: para de substituir'
+    assert e_['kick'] == 3 and e_['golpe'] == 0, ('sem som o kick PARA (o substituto e\' opcao do alterador)', e_)
+    assert e_['kick~'] == 3 + 4 and e_['golpe~'] == 4 and st_['ev_sub'] == 1, ('8 batidas de silencio, depois kick~ = batida', e_)
+    assert e_['chimbal'] == 0 and e_['chimbal~'] == 4 and e_['caixa~'] == 4, e_
+    st_['amp'] = 0.5; st_['bpos'] = 21.0; st_['ataques'] = {'chimbal': 5, 'golpe': 2}
+    e_ = _music_events(st_, None, mem, 8)
+    assert e_['kick~'] == 7 and st_['ev_sub'] == 0, 'som voltou: para de substituir'
+    assert e_['chimbal'] == 5 and e_['chimbal~'] == 9 and e_['golpe'] == 2 and e_['caixa'] == 0, ('ataques por faixa', e_)
+    rl = {'b': [], 'modo': 'disparo', 'ev': {'src': 'kick', 'rel': 1}, 'env': {'a': 0, 'd': 1}, 'lo': 0.0, 'hi': 1.0, 'id': 'rl'}
+    para = dict(rl, ev={'src': 'kick'}, id='pa')
+    for m_ in (rl, para):
+        _mod_value(0, m_, {'bpos': 30.0, 'ev': {'kick': 3, 'kick~': 9}})
+    lv_ = {'bpos': 30.5, 'ev': {'kick': 3, 'kick~': 10}}
+    assert near(_mod_value(0, rl, lv_), 1.0) and _mod_value(0, para, lv_) == 0.0, 'rel: o relogio dispara; sem rel: parado'
     fq, bd, dc = np.array([100.0, 10000.0]), [('Air', 5000.0, 20000.0)], {'Air': 0.999}
     pk, lg = {'Air': 1e-6}, {}
     for _ in range(200):

@@ -922,7 +922,8 @@ def _norm_rect(r):
 
 
 # fontes de som de um knob com ♪ (= chaves do state no native: as 8 faixas + o kick), ordem do espectro
-MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
+MOD_SOURCES = ('grave', 'medio', 'agudo',   # GRUPOS (dash_data.SOUND_GROUPS): a mais forte das faixas finas de cada um
+               'subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
                'm1', 'm2', 'm3', 'm4',   # m1..m4 = MACROS (faders no Palco): a mesma faixa lo->hi, movida a mao/MIDI
                'luz', 'mov',              # IMAGEM de entrada: brilho e movimento (dash_data.img_mod_levels)
                'lfo',                     # OSCILADOR no tempo da musica (dash v4: modulador como peca); forma em 'lfo'
@@ -960,6 +961,8 @@ def _norm_mod1(v, extra=True):
     e = v.get('ev') if isinstance(v.get('ev'), dict) else None
     if d.get('modo') == 'disparo' and e and e.get('src') in dash_data.EVENTS:
         ev = {'src': e['src']}
+        if e.get('rel') and e['src'] in dash_data.SOUND_EVENTS:   # "sem som: segue o relogio" (native: contador kick~/golpe~)
+            ev['rel'] = 1
         c = e.get('cond') if isinstance(e.get('cond'), dict) else {}
         if c.get('first'):
             ev['cond'] = {'first': 1}
@@ -2440,7 +2443,7 @@ def _payload():
         'lights': {'cfg': getattr(_tuning, 'LIGHTS', None) or {'on': 0, 'fixtures': []},   # luzes.py (painel: depois)
                    'live': _state.get('lights_live', []),
                    'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
-        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3), phrase=round(_state.get('phrase', 0.0), 3)),
+        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), sub=int(_state.get('ev_sub') or 0), bar=round(_state.get('bar', 0.0), 3), phrase=round(_state.get('phrase', 0.0), 3)),   # sub = sem som: kick~/golpe~ no relogio
         'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)
         'mv': {k: round(v, 3) for k, v in list((_state.get('mv') or {}).items())},   # sinal VIVO de cada movimento (id)
         'mv_t': round(time.monotonic() * 1000, 1),   # QUANDO o sinal foi lido (ms): o osciloscopio do dash espaca pelo servidor, nao pela chegada (rajadas)
@@ -3354,6 +3357,10 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert _norm_mod1({'b': ['lfo'], 'lfo': {'f': 'passos', 'st': [1, 0, 2, 'x']}})['lfo']['st'] == [1.0, 0.0, 1.0]
     assert _norm_mod1({'b': ['mao.y', 'rosto.on'], 'q': 'energia'}) == {'b': ['mao.y', 'rosto.on'], 'q': 'energia'}
     assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'compasso', 'cond': {'a': 9, 'b': 4}}})['ev']['cond'] == {'a': 4, 'b': 4}
+    assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'kick', 'rel': True}})['ev'] == {'src': 'kick', 'rel': 1}, 'sem som: relogio'
+    assert 'rel' not in _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'batida', 'rel': 1}})['ev'], 'rel so' + "'" + ' nos eventos do som'
+    assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'chimbal', 'rel': 1}})['ev'] == {'src': 'chimbal', 'rel': 1}
+    assert _norm_mod1({'b': ['grave', 'agudo'], 'modo': 'segue'})['b'] == ['grave', 'agudo'], 'grupos de faixas = fontes'
     ac = _norm_overlays([{'file': 'x.mp4', 'acao': {'liga': 'secao:drop', 'desliga': 'mao.on', 'x': 'kick'}}])[0]
     assert ac['acao'] == {'liga': 'secao:drop'}, ac
     assert not ({'id', 'grp', 'pub', 'gname'} & set(v4[1])), 'id/grp invalidos e pub que nao e lista somem'

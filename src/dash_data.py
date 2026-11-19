@@ -446,7 +446,12 @@ MOV_MODES = ('loop', 'disparo', 'segue')
 TRACK_SIGNALS = ('rosto.x', 'rosto.y', 'rosto.tam', 'mao.x', 'mao.y', 'corpo.x', 'corpo.abre', 'obj.x', 'obj.y', 'obj.tam')
 TRACK_GATES = ('rosto.on', 'mao.on', 'corpo.on', 'obj.on')
 SECOES = ('intro', 'sobe', 'drop', 'pausa')
-EVENTS = ('batida', 'compasso', 'frase', 'kick', 'golpe') + tuple('secao:' + x for x in SECOES) + TRACK_GATES \
+# SOM em grupos de faixas (2026-11-19, "usar outras faixas de mixagem"): o NIVEL de cada grupo = a mais forte das faixas finas
+# dele (native: state[grupo]); os ATAQUES (eventos) = kick (detector do grave) + ritmo.Ataque nos Hz das faixas de ATAQUE_FAIXAS
+SOUND_GROUPS = {'grave': ('subbass', 'lowmid'), 'medio': ('midrange', 'highmid', 'presence'), 'agudo': ('treble_hi', 'brilho', 'air')}
+ATAQUE_FAIXAS = {'caixa': ('Midrange', 'Presence'), 'chimbal': ('Brilliance', 'Air'), 'golpe': ('Sub-bass', 'Air')}   # da 1a a' ultima
+SOUND_EVENTS = ('kick', 'caixa', 'chimbal', 'golpe')   # eventos do SOM: param sem som (ev.rel = 1: seguem o relogio, kick~...)
+EVENTS = ('batida', 'compasso', 'frase') + SOUND_EVENTS + tuple('secao:' + x for x in SECOES) + TRACK_GATES \
     + ('pad:1', 'pad:2', 'pad:3', 'pad:4')
 # presets de 1 gesto (dash: botao do knob). faixa = (de, ate') RELATIVA ao valor do knob (None = absoluta 0..1)
 MOV_PRESETS = {
@@ -455,7 +460,7 @@ MOV_PRESETS = {
     'anda':    {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'saw', 'r': 16, 'ph': 0}}, 'faixa': None},
     'passos':  {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'passos', 'r': 4, 'ph': 0, 'st': [1, 0, 0.5, 0, 0.75, 0, 0.25, 0]}}, 'faixa': (-0.3, 0.3)},
     'acaso':   {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'sh', 'r': 1, 'ph': 0}}, 'faixa': (-0.3, 0.3)},
-    'grave':   {'mod': {'b': ['subbass'], 'modo': 'segue', 'seg': {'a': 10, 'r': 200}}, 'faixa': (0.0, 1.0)},
+    'grave':   {'mod': {'b': ['grave'], 'modo': 'segue', 'seg': {'a': 10, 'r': 200}}, 'faixa': (0.0, 1.0)},
     'drop':    {'mod': {'b': [], 'modo': 'disparo', 'ev': {'src': 'secao:drop'}, 'env': {'a': 0, 'd': 8}}, 'faixa': (0.0, 1.0)},
     'abaixa':  {'mod': {'b': [], 'modo': 'disparo', 'ev': {'src': 'kick'}, 'env': {'a': 0, 'd': 0.5}}, 'faixa': (0.0, -0.5)},
 }

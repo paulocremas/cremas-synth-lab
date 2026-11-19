@@ -2101,6 +2101,30 @@ def t6_roda_categorias(c):
     assert not r['falta'] and not r['dup'], f'atomo fora da roda {r["falta"]} ou em 2 fatias {r["dup"]}'
 
 
+@v6
+def t6_alteradores_familias(c):
+    """/v6 (2026-11-19, "como podemos reorganizar os alteradores"): a lista dos ALTERADORES vem por FAMILIA (Relogio, Som, Imagem e
+    corpo, Mao) com cabecalho; o envelope num ATAQUE por faixa (chimbal) nasce controlador e PASSA pelo servidor; o "quando" do
+    editor agrupa os eventos (optgroup) e mostra "sem som" nos do som (caixa/chimbal inclusive)"""
+    r = c.js("""const S = wheelSectors().find(s => s.id === 'ctl'), it = S.items();
+      const fl = floatList(80, 80, 'teste', it, () => {}), hs = [...fl.el.querySelectorAll('.pgt')].map(x => x.textContent); fl.el.remove();
+      return { hs, semG: ctlItems().filter(x => !FAMS.some(f => f[0] === x.g)).map(x => x.name), nomes: it.map(x => x.t) }""")
+    assert r['hs'] == ['Relógio', 'Som', 'Imagem e corpo', 'Mão'], f'familias na lista: {r["hs"]}'
+    assert not r['semG'], f'alterador sem familia: {r["semG"]}'
+    assert 'envelope: chimbal' in r['nomes'] and 'envelope: caixa' in r['nomes'] and 'segue o grave' in r['nomes'], r['nomes']
+    c.js("newCtl({ kind: 'ev', src: 'chimbal' }, [40, 40]); return 1")
+    time.sleep(1.2)
+    m = c.js("const x = ctlStore()[ctlStore().length - 1]; return x && x.mod && x.mod.sinal")
+    assert m and m.get('modo') == 'disparo' and m['ev']['src'] == 'chimbal', f'envelope no chimbal nao voltou do servidor: {m}'
+    e = c.js("""const j = ctlStore().length - 1, md = ctlStore()[j].mod.sinal, box = modEditor(CTL_KEY, j, 'sinal', md, true);
+      const sel = box.querySelector('select optgroup') && box.querySelector('select optgroup').parentElement;
+      return { g: [...sel.querySelectorAll('optgroup')].map(o => o.label), v: sel.value,
+        semSom: [...box.querySelectorAll('.irow .t')].some(t => t.textContent === 'sem som') }""")
+    assert e['g'][:2] == ['Relógio', 'Som'] and e['v'] == 'chimbal', f'"quando" sem grupos: {e}'
+    assert e['semSom'], 'evento do som (chimbal) sem a linha "sem som"'
+    c.js("removeCtl(ctlStore().length - 1); return 1")
+
+
 
 def _fx(c, nk, n):
     return c.js(f"const nd = {nk}, s = stackOf(nd.key)[0]; return Math.floor(fxVal(nd.key, s, {json.dumps(n)}) * metaOf(s.file).escolha[{json.dumps(n)}].length)")
