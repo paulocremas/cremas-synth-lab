@@ -50,7 +50,7 @@ Cada ferramenta isolada, depois comparar, só então compor.
   (`_trk`). GRADE `/grid` → `grid_q` → `grid_apply` na fronteira. Vocabulário em `dash_data` (`MOV_PRESETS`, `EVENTS`, `/vocab`);
   `/mv-freeze` = SOCORRO. Camada com `acao: {liga, desliga}` = evento liga/desliga. Controlador = item de `~ctl` com `mod.sinal`
   (a receita); `syncCtls` nunca apaga; `swapAtom` desfaz as ligações; `forEachMod`/`dropMod` tratam knob, extra (`mais`) e camada
-  (`L.mod.opacity`) igual. No dash: famílias `FAMS` (relógio | som | imagem e corpo | mão).
+  (`L.mod.opacity`) igual. No dash: famílias `FAMS` (relógio | som | imagem e corpo | mão) = o anel de DENTRO da roda (`ring: 'in'`).
 - Show: macros `m1..m4`, `Limiter` (anti-estrobo + teto, `LIMITS`; agindo = `#lim-top` na barra — "a tela escurece" é ele), auto-nível (`_auto_levels` → `u_lv`), PRÓXIMA cena
   (`set_cue`/`take_cue`), MIDI `kind: 'rel'` = encoder.
 - **Webcam virtual** (`tuning.VCAM`, `/vcam`): `read_canvas` → `vcam_q` → `vcam_thread` → `plat.VCam` (v4l2loopback `card_label=PRISMA`,

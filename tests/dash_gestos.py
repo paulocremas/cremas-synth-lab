@@ -2085,18 +2085,23 @@ def t6_roda_categorias(c):
     Alteradores, mistura e saida; nenhuma duplicada, nenhuma vazia, todo atomo em UMA fatia"""
     c.js("const r = document.getElementById('gcv').getBoundingClientRect(); openWheel({ clientX: r.left + r.width * 0.4, clientY: r.top + r.height * 0.5 }); return 1")
     time.sleep(0.5)
-    r = c.js("""const S = wheelSectors(), B = [...document.querySelectorAll('.wheel .wh-s')];
+    r = c.js("""const S = wheelSectors(), B = [...document.querySelectorAll('.wheel .wh-s:not(.in)')], BI = [...document.querySelectorAll('.wheel .wh-s.in')];
       const all = lastShaderList.filter(f => isAtomFile(f) && metaOf(f).atom && f !== LUMA), seen = {};
       for (const s of S) for (const it of s.items()) if (it.spec && it.spec.kind === 'mod') seen[it.spec.file] = (seen[it.spec.file] || 0) + 1;
       for (const s of S) if (s.id === 'cat:mascara') for (const it of s.items()) seen[lastShaderList.find(f => fxName(f) === it.t && catOf(f) === 'mascara')] = 1;
+      const ctr = BI.map(b => { const r = b.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }), mid = document.querySelector('.wheel .wh-mid').getBoundingClientRect();
+      const dist = ([x, y]) => Math.hypot(x - mid.left - mid.width / 2, y - mid.top - mid.height / 2), dOut = B.map(b => { const r = b.getBoundingClientRect(); return dist([r.left + r.width / 2, r.top + r.height / 2]); });
       return { l: S.map(s => s.l), n: S.map(s => s.items().length), mat: B.map(b => b.classList.contains('mat')), bg: B.map(b => !!b.style.backgroundImage),
+        inn: BI.map(b => b.textContent), dIn: Math.max(...ctr.map(dist)), dOut: Math.min(...dOut),
         falta: all.filter(f => !seen[f]).map(fxName), dup: Object.entries(seen).filter(([f, n]) => n > 1).map(([f]) => f) }""")
     c.js("closeWheel(); return 1")
     L = r['l']
     assert len(L) == len(set(L)), f'fatia duplicada: {L}'
     assert all(n > 0 for n in r['n']), f'fatia vazia: {list(zip(L, r["n"]))}'
-    assert L[0] == 'Fontes' and 'alteradores' in L and 'mistura e saída' in L and 'máscaras' in L, f'fatias: {L}'
-    assert not ({'Movimentos', 'Misturas', 'mistura', 'outros'} & set(L)), f'categoria antiga na roda: {L}'
+    assert L[0] == 'Fontes' and 'mistura e saída' in L and 'máscaras' in L, f'fatias: {L}'
+    assert r['inn'] == ['Relógio', 'Som', 'Imagem e corpo', 'Mão'], f'anel de dentro (alteradores por familia): {r["inn"]}'
+    assert r['dIn'] + 70 <= r['dOut'], f'os aneis se encostam: dentro {r["dIn"]:.0f} px, fora {r["dOut"]:.0f} px'
+    assert not ({'Movimentos', 'Misturas', 'mistura', 'outros', 'alteradores'} & set(L)), f'categoria antiga na roda: {L}'
     assert all(r['mat']) and all(r['bg']), f'fatia sem o material da familia: {list(zip(L, r["mat"]))}'
     assert not r['falta'] and not r['dup'], f'atomo fora da roda {r["falta"]} ou em 2 fatias {r["dup"]}'
 
@@ -2138,10 +2143,9 @@ def t6_alteradores_familias(c):
     """/v6 (2026-11-19, "como podemos reorganizar os alteradores"): a lista dos ALTERADORES vem por FAMILIA (Relogio, Som, Imagem e
     corpo, Mao) com cabecalho; o envelope num ATAQUE por faixa (chimbal) nasce controlador e PASSA pelo servidor; o "quando" do
     editor agrupa os eventos (optgroup) e mostra "sem som" nos do som (caixa/chimbal inclusive)"""
-    r = c.js("""const S = wheelSectors().find(s => s.id === 'ctl'), it = S.items();
-      const fl = floatList(80, 80, 'teste', it, () => {}), hs = [...fl.el.querySelectorAll('.pgt')].map(x => x.textContent); fl.el.remove();
-      return { hs, semG: ctlItems().filter(x => !FAMS.some(f => f[0] === x.g)).map(x => x.name), nomes: it.map(x => x.t) }""")
-    assert r['hs'] == ['Relógio', 'Som', 'Imagem e corpo', 'Mão'], f'familias na lista: {r["hs"]}'
+    r = c.js("""const S = wheelSectors().filter(s => s.ring === 'in'), it = S.flatMap(s => s.items());
+      return { hs: S.map(s => s.l), n: S.map(s => s.items().length), semG: ctlItems().filter(x => !FAMS.some(f => f[0] === x.g)).map(x => x.name), nomes: it.map(x => x.t) }""")
+    assert r['hs'] == ['Relógio', 'Som', 'Imagem e corpo', 'Mão'] and all(r['n']), f'familias na roda: {r["hs"]} {r["n"]}'
     assert not r['semG'], f'alterador sem familia: {r["semG"]}'
     assert 'envelope: chimbal' in r['nomes'] and 'envelope: caixa' in r['nomes'] and 'segue o grave' in r['nomes'], r['nomes']
     c.js("newCtl({ kind: 'ev', src: 'chimbal' }, [40, 40]); return 1")

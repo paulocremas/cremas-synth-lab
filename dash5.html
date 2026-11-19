@@ -558,6 +558,12 @@
   .wheel .wh-s.mat > span { background: #ffffffa6; border: 1px solid #0003; border-radius: 3px; padding: 0 5px; font: 600 10px system-ui, sans-serif; line-height: 15px; color: #2f3235; max-width: 74px; text-align: center; }
   .wheel .wh-s.mat .ico { color: #2f3235; } .wheel .wh-s.mat.dk .ico { color: #d8d4de; }
   .wheel .wh-s.mat.dk > span { background: #ffffff1a; border-color: #000a; color: #d8d4de; }
+  .wheel .wh-in { position: absolute; left: calc(-1 * var(--ri)); top: calc(-1 * var(--ri)); width: calc(2 * var(--ri)); height: calc(2 * var(--ri)); border-radius: 50%;
+    background: radial-gradient(circle, #0c1512 0 62%, #12201b 100%); border: 1px solid #2c4a3f; box-shadow: inset 0 0 18px #000c; }   /* anel dos ALTERADORES */
+  .wheel .wh-s.in { width: 70px; height: 70px; margin: -35px 0 0 -35px; background: #0b1310; border: 2px solid #2f6b55; color: #7fe0b4;
+    box-shadow: inset 0 0 12px #3fd08f33, 0 6px 16px #000a; }   /* = a tela de osciloscopio do controlador */
+  .wheel .wh-s.in > span { font: 600 9.5px system-ui, sans-serif; text-align: center; max-width: 64px; line-height: 11px; }
+  .wheel .wh-s.in:hover, .wheel .wh-s.in.on { border-color: var(--sel); color: #c8ffe6; }
   .wheel .wh-s.mat:hover, .wheel .wh-s.mat.on { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel), 0 10px 26px #000c; }
   .wheel .wh-mid { background: radial-gradient(circle at 35% 30%, #4a4e53, #1c1e21 70%); border: 2px solid #0009; }
   @keyframes whin { from { opacity: 0; transform: scale(.6); } }
@@ -4974,7 +4980,9 @@ function wheelSectors(){
   const mk = atoms.filter(f => catOf(f) === 'mascara');
   if (mk.length) S.push({ id: 'cat:mascara', l: 'máscaras', ic: catIcon('mascara'), fam: 'mascara', items: () => mk.map(f => ({ t: fxName(f), d: 'nó de máscara: ligue a saída na “másc” de outro nó · ' + (metaOf(f).desc || ''),
     ic: atomIcon(f), go: xy => looseNode(xy, prepItems([{ file: f }])) })) });   // MASCARA = NO' (solto; no fio viraria imagem cinza)
-  S.push({ id: 'ctl', l: 'alteradores', ic: 'sin', fam: 'fonte', items: () => ctlItems().map(c => ({ t: c.name, d: c.desc, ic: c.icon, g: (FAMS.find(f => f[0] === c.g) || [])[1], spec: { kind: 'ctl', spec: c.spec }, go: xy => newCtl(c.spec, xy) })) });
+  for (const [fg, fl] of FAMS)   // ALTERADORES = o ANEL DE DENTRO (2026-11-19): uma fatia por FAMILIA (de onde vem o sinal); fora = o que a imagem atravessa
+    S.push({ id: 'ctl:' + fg, l: fl, ic: FAM_IC[fg], ring: 'in', items: () => ctlItems().filter(c => c.g === fg).map(c => ({ t: c.name, d: c.desc, ic: c.icon,
+      spec: { kind: 'ctl', spec: c.spec }, go: xy => newCtl(c.spec, xy) })) });
   const mx = atoms.filter(f => catOf(f) === 'mistura');
   S.push({ id: 'mix', l: 'mistura e saída', ic: 'mistura', fam: 'mistura', items: () => [...at(mx),
     ...MIXERS.map(n => ({ t: 'mixer ' + n, d: `${n} entradas de opacidade · jack de cima = na frente`, ic: 'mistura', go: xy => newMix('mix', null, xy, n) })),
@@ -5026,7 +5034,9 @@ function openWheel(ev){
   const arm = popup(() => [wh, list && list.el]);
   const p = canvasPt(ev), xy = [p[0] - BOX_W / 2, p[1] - 18];
   const w0 = wireNear(p, ''), wire = w0 ? Object.assign(w0, { ev: { clientX: ev.clientX, clientY: ev.clientY } }) : null;
-  const S = wheelSectors(), R = Math.max(118, Math.ceil(S.length * 86 / (2 * Math.PI))), cx = Math.max(R + 50, Math.min(innerWidth - R - 50, ev.clientX)), cy = Math.max(R + 50, Math.min(innerHeight - R - 50, ev.clientY));
+  // DOIS ANEIS: dentro = os alteradores (sinal: mexem nos knobs), fora = o que a imagem atravessa (fontes, familias, mistura e saida...)
+  const S = wheelSectors(), SO = S.filter(s => s.ring !== 'in'), SI = S.filter(s => s.ring === 'in'), RI = 96;
+  const R = Math.max(SI.length ? 196 : 118, Math.ceil(SO.length * 86 / (2 * Math.PI))), cx = Math.max(R + 50, Math.min(innerWidth - R - 50, ev.clientX)), cy = Math.max(R + 50, Math.min(innerHeight - R - 50, ev.clientY));
   wh = h('div', { class: 'wheel', style: `left:${cx}px;top:${cy}px;--wr:${R + 52}px` });
   const lbl = h('div', { class: 'wh-mid', text: wire ? 'no fio' : 'novo' }); wh.append(lbl);
   let cur = null;
@@ -5043,8 +5053,10 @@ function openWheel(ev){
     list = floatList(right ? cx + R + 60 : cx - R - 60 - 300, cy - 190, s ? s.l : 'tudo', s ? s.items() : S.flatMap(x => x.items()), pickIt);
     if (typed){ list.q.value = typed; list.q.oninput(); } list.q.focus();
   };
-  S.forEach((s, i) => {
-    const a = -Math.PI / 2 + i * 2 * Math.PI / S.length, b = h('button', { class: 'wh-s', style: `left:${Math.cos(a) * R}px;top:${Math.sin(a) * R}px` }, icon(s.ic), h('span', { text: s.l }));
+  if (SI.length) wh.prepend(h('div', { class: 'wh-in', style: `--ri:${RI + 42}px` }));   // o disco do anel de dentro (ATRAS do rotulo do meio)
+  S.forEach(s => {
+    const inn = s.ring === 'in', L = inn ? SI : SO, i = L.indexOf(s), r = inn ? RI : R;
+    const a = -Math.PI / 2 + (i + (inn ? 0.5 : 0)) * 2 * Math.PI / L.length, b = h('button', { class: 'wh-s' + (inn ? ' in' : ''), style: `left:${Math.cos(a) * r}px;top:${Math.sin(a) * r}px` }, icon(s.ic), h('span', { text: s.l }));
     const sw = s.fam && G6 && G6.swatch ? G6.swatch(s.fam) : null;   // o MATERIAL do gabinete da familia (o mesmo body() do jogo)
     if (sw){ b.classList.add('mat'); if (s.fam === 'textura' || s.fam === 'mascara') b.classList.add('dk'); b.style.backgroundImage = `url(${sw})`; }
     b.onpointerenter = () => { lbl.textContent = s.l; }; b.onpointerleave = () => { lbl.textContent = cur ? cur.l : wire ? 'no fio' : 'novo'; };
@@ -5239,6 +5251,7 @@ const SOUND_EV = ['kick', 'caixa', 'chimbal', 'golpe'];   // = dash_data.SOUND_E
 // FAMILIAS dos alteradores (2026-11-19, "como podemos reorganizar os alteradores"): de ONDE vem o sinal. RELOGIO nunca falha (sem som
 // continua); SOM = niveis dos grupos de faixas + ataques; IMAGEM E CORPO = a camera; MAO = macros e pads (a pessoa)
 const FAMS = [['relogio', 'Relógio'], ['som', 'Som'], ['corpo', 'Imagem e corpo'], ['mao', 'Mão']];
+const FAM_IC = { relogio: 'tempo', som: 'som', corpo: 'olho', mao: 'macro' };
 const evFam = e => /^(batida|compasso|frase)$/.test(e) ? 'relogio' : /\.on$/.test(e) ? 'corpo' : /^pad:/.test(e) ? 'mao' : 'som';
 function selGroups(opts, fam, val, on, title){   // <select> com <optgroup> por FAMILIA (opts = [[v, t]], fam(v) = id da familia)
   const e = h('select', { class: 'inp sm', title: title || '' });
