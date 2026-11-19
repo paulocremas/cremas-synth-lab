@@ -202,6 +202,28 @@ def set_band_gate(d, tuning_path=None):
                       'limiar por faixa (dash: coluna do mixer de audio) — ativa = gate, teto = limite', tuning_path)
 
 
+def save_silencio(res, tuning_path=None):
+    """CALIBRAR SILENCIO: grava o piso de ruido medido pelo native (audio_thread, dash_data.norm_silencio) em tuning.SILENCIO.
+    {} = limpar (volta aos pisos fixos). Chamado de uma thread do native no fim da medicao."""
+    return _write_var('SILENCIO', dash_data.norm_silencio(res),
+                      'piso de ruido (dash: calibrar silencio) — o chiado medido; o native ignora numa fonte de audio diferente', tuning_path)
+
+
+def calibrar_silencio(op, tuning_path=None):
+    """POST /silencio: 'medir' = o native ouve SIL_SEGUNDOS (state['cal_req'] -> audio_thread) | 'limpar' = sem calibracao."""
+    if op == 'medir':
+        if _state is not None:
+            _state['cal_req'] = 1
+            _state['cal'] = {'on': 1, 'left': dash_data.SIL_SEGUNDOS}
+        return {'on': 1}
+    if op == 'limpar':
+        save_silencio({}, tuning_path)
+        if _state is not None:
+            _state['cal'] = {'on': 0, 'ok': 1, 'msg': 'sem calibração (pisos fixos)'}
+        return {'on': 0}
+    raise ValueError('op: medir | limpar')
+
+
 TEMPO_QUANTS = ('', 'beat', 'bar', 'phrase')   # GRADE de toda acao discreta: na hora / batida / "1" do compasso / "1" da frase
 KEY_COLOR_MODES = ('quintas', 'scriabin')  # cor do tom: circulo das quintas / tabela do Scriabin (ritmo.key_rgb)
 
@@ -2451,6 +2473,8 @@ def _payload():
         'grid': [{k: g.get(k) for k in ('op', 'key', 'j', 'off', 'name', 'unit')} for g in list(_state.get('grid_q') or [])],
         'cue': _state.get('scene_cue') or '',                         # PROXIMA cena (preview/GO)
         'limit': dict(_state.get('limit') or {}, cfg=_limits_cfg()),
+        'silencio': {'cfg': {k: v for k, v in (getattr(_tuning, 'SILENCIO', None) or {}).items() if k in ('quando', 'amp', 'fonte')},
+                     'cal': _state.get('cal') or {}},   # CALIBRAR SILENCIO: quando/ruido + a medicao em andamento (left) ou o resultado (msg)
         'vcam': dict(_state.get('vcam') or {}, cfg=dash_data.vcam_cfg(getattr(_tuning, 'VCAM', None))),   # webcam virtual    # protecao: ganho agora + motivo   # ritmo.py: BPM, TAP, tom, compasso
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
@@ -2780,6 +2804,12 @@ class _Handler(BaseHTTPRequestHandler):
                 out = set_bands_off(json.loads(raw.decode())['off'])
                 self._send(200, 'application/json', json.dumps({'off': out}).encode())
             except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/silencio':   # {op: 'medir' | 'limpar'} — CALIBRAR SILENCIO
+            try:
+                self._send(200, 'application/json', json.dumps(calibrar_silencio(json.loads(raw.decode()).get('op'))).encode())
+            except (ValueError, AttributeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
         if path == '/band-gate':   # {gate: {'Sub-bass': {th: 0.3, m: 'ativa'|'teto'}, 'amp': ...}}
@@ -3490,6 +3520,8 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     except ValueError:
         pass
     assert set_bands_off(['Air', 'lixo', 'kick'], p) == ['kick', 'Air'], 'faixas desligadas: validas, ordem fixa'
+    assert save_silencio({'amp': 0.01, 'bass': 0.002, 'bands': {'Air': 0.001}, 'fonte': 'mic'}, p)['bands'] == {'Air': 0.001} \
+        and save_silencio({}, p) == {} and open(p, encoding='utf-8').read().count('SILENCIO = ') == 1, 'silencio: grava e limpa ({} e\' valido)'
     assert set_band_gate({'Air': {'th': 0.4, 'm': 'teto'}, 'amp': {'th': 0}}, p) == {'Air': {'th': 0.4, 'm': 'teto'}} \
         and open(p, encoding='utf-8').read().count('BAND_GATE = ') == 1, 'limiar por faixa: grava so\' o que nao e\' neutro'
     assert set_bands_off(['Sub-bass'], p) == ['Sub-bass'] and open(p, encoding='utf-8').read().count('BANDS_OFF = ') == 1, \

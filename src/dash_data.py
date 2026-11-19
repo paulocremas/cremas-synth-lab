@@ -396,6 +396,34 @@ def band_gate(v, g):
     return min(v, th) if g.get('m') == 'teto' else (v if v >= th else 0.0)
 
 
+BAND_NAMES = ('Sub-bass', 'Low-mid', 'Midrange', 'High-mid', 'Presence', 'Treble', 'Brilliance', 'Air')
+SIL_MARGEM = 1.5     # CALIBRAR SILENCIO: o limiar = o MAIOR valor do ruido medido x isso (o chiado nunca passa dele)
+SIL_SEGUNDOS = 3.0   # quanto tempo o native ouve o silencio
+SIL_MAX_AMP = 0.15   # medido acima disso nao e' silencio (tinha musica): recusa a calibracao
+
+
+def _f4(x):
+    return float(f'{max(0.0, float(x)):.4g}')
+
+
+def norm_silencio(d):
+    """PISO DE RUIDO medido pelo "calibrar silencio" (tuning.SILENCIO) -> {amp, bass, bands: {faixa: magnitude}, flux: {ataque:
+    fluxo}, quando} so' com o que e' conhecido (4 algarismos); vazio/lixo = {} (= sem calibracao, vale o SILENCE_AMP/pisos fixos)."""
+    if not isinstance(d, dict):
+        return {}
+    try:
+        out = {'amp': _f4(d.get('amp', 0)), 'bass': _f4(d.get('bass', 0)),
+               'bands': {n: _f4(v) for n, v in (d.get('bands') or {}).items() if n in BAND_NAMES},
+               'flux': {n: _f4(v) for n, v in (d.get('flux') or {}).items() if n in ATAQUE_FAIXAS}}
+    except (TypeError, ValueError, AttributeError):
+        return {}
+    if isinstance(d.get('quando'), str):
+        out['quando'] = d['quando'][:16]
+    if isinstance(d.get('fonte'), str) and d['fonte']:   # a calibracao so' vale NESSA fonte de audio (mic != monitor)
+        out['fonte'] = d['fonte'][:300]
+    return out if out['amp'] or out['bass'] or out['bands'] else {}
+
+
 def norm_band_gate(d, names):
     """{nome: {th, m}} do dash -> so' faixas conhecidas, th 0..1 (3 casas), m em GATE_MODES; neutro (ativa 0 / teto 1) sai."""
     out = {}
@@ -954,6 +982,10 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert pin_rect({'box': [0, 0, 1000, 800], 'onde': 'nw', 'tam': 0.3, 'aspect': 1.5})[:2] == (16, 16) and norm_pin({'box': [1, 2]}) is None
     assert band_gate(0.3, None) == 0.3 and band_gate(0.3, {'th': 0.4, 'm': 'ativa'}) == 0.0 and band_gate(0.5, {'th': 0.4}) == 0.5, 'limiar ativa = gate'
     assert band_gate(0.9, {'th': 0.6, 'm': 'teto'}) == 0.6 and band_gate(0.2, {'th': 0.6, 'm': 'teto'}) == 0.2, 'limiar teto = limite'
+    assert norm_silencio({'amp': 0.0123456, 'bass': 1e-5, 'bands': {'Air': 0.002, 'lixo': 9}, 'flux': {'chimbal': 0.5, 'x': 1},
+                          'quando': '2026-11-19 10:00'}) == {'amp': 0.01235, 'bass': 1e-5, 'bands': {'Air': 0.002}, 'flux': {'chimbal': 0.5},
+                                                              'quando': '2026-11-19 10:00'}, 'silencio normalizado'
+    assert norm_silencio(None) == {} and norm_silencio({'amp': 'x'}) == {} and norm_silencio({'amp': 0}) == {}, 'lixo/vazio = sem calibracao'
     assert norm_band_gate({'Air': {'th': 2, 'm': 'x'}, 'amp': {'th': 1, 'm': 'teto'}, 'lixo': {'th': .5}, 'kick': {'th': 0}}, ('Air', 'amp', 'kick')) \
         == {'Air': {'th': 1.0, 'm': 'ativa'}}, 'limiar: so\' faixa conhecida, neutro sai'
     # GRAFO: a cena antiga vira saida 1 com as caixas no ar, na mesma ordem; ja' migrada = a mesma lista

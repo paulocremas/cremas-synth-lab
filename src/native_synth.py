@@ -963,7 +963,7 @@ def _music_events(st, tp, mem, bars=PHRASE_BARS):
     dash). Tambem poe st['phrase'] (fase 0..1 da frase -> u_phrase)."""
     c, ph = ritmo.clock(st.get('bpos', 0.0), getattr(tp, 'p0', 0.0) if tp else 0.0, bars)
     st['phrase'] = ph
-    if st.get('amp', 0.0) >= SILENCE_AMP:
+    if st.get('amp', 0.0) >= st.get('sil_amp', SILENCE_AMP):   # sil_amp = o calibrado (audio_thread), nunca abaixo do fixo
         mem['sil'] = None
     elif mem.get('sil') is None:
         mem['sil'] = st.get('bpos', 0.0)
@@ -1986,14 +1986,46 @@ def band_tweak_maps():
 BAND_LONG_DECAY = 0.99995   # pico de LONGO prazo por faixa (~5 min de meia-vida a ~43 chunks/s)
 
 
-def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay, band_long=None):
+GRAVE_N = 4096      # ANALISE LONGA DO GRAVE (2026-11-19, "quase nao tem sub mas o espectrograma mostra"): FFT de 4096 amostras
+GRAVE_HZ = 350.0    # (~93 ms, fatias de 10,8 Hz) abaixo de GRAVE_HZ; a de 1024 (43 Hz: o Sub-bass inteiro cabia em ~1 fatia, com o
+                    # baixo de 86 Hz vazando nela) fica acima. So' pros NIVEIS (faixas, espectrograma, calibrar); kick/ataques/
+                    # tempo seguem na curta (precisam do instante, nao da nota).
+
+
+class GraveLongo:
+    """Espectro COMBINADO: as ultimas GRAVE_N amostras (anel) -> FFT longa abaixo de GRAVE_HZ + a curta acima. A longa e' escalada
+    pela soma das janelas: um seno no centro de uma fatia da' a mesma magnitude nas duas (as faixas/calibracao nao mudam de escala)."""
+
+    def __init__(self, freqs, window, rate, n=GRAVE_N, cut=GRAVE_HZ):
+        self.n, self.buf = n, np.zeros(n, np.float32)
+        self.win = np.hanning(n)
+        self.k = float(window.sum() / self.win.sum())
+        fl = np.fft.rfftfreq(n, 1 / rate)
+        self.lo, self.hi = fl < cut, freqs >= cut
+        self.freqs = np.concatenate([fl[self.lo], freqs[self.hi]])
+
+    def push(self, samples):
+        s = np.asarray(samples, np.float32)
+        self.buf = np.concatenate([self.buf[len(s):], s]) if len(s) < self.n else s[-self.n:].copy()
+
+    def reset(self):
+        self.buf[:] = 0.0
+
+    def mix(self, spectrum):
+        """espectro curto do chunk -> o combinado (nos self.freqs)."""
+        longo = np.abs(np.fft.rfft(self.buf * self.win)) * self.k
+        return np.concatenate([longo[self.lo], np.asarray(spectrum)[self.hi]])
+
+
+def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay, band_long=None, noise=None):
     """Pra cada (nome, lo, hi) em `bands` (de freq_bands()): magnitude bruta (fallback de bin
     mais proximo pra faixa mais estreita que a resolucao da FFT) e nivel relativo ao PICO
     RECENTE DA PROPRIA banda — nao ao pico entre as bandas. Isso importa porque uma banda
     estruturalmente mais forte (ex. Sub-bass) ficaria travada perto de 1.0 so por ser mais
     alta que as demais. `band_peaks` (dict {nome: pico}) e mantido pelo chamador entre
     chunks: sobe na hora com um pico novo, decai devagar por `peak_decay[nome]` (fator por
-    faixa, tuning.BAND_PEAK_DECAY) — auto-gain sem escala manual."""
+    faixa, tuning.BAND_PEAK_DECAY) — auto-gain sem escala manual. noise = {nome: magnitude} do CALIBRAR SILENCIO (tuning.SILENCIO
+    bands): o nivel sai da magnitude MENOS o ruido x SIL_MARGEM (faixa so' com chiado = 0); a magnitude devolvida e' a crua."""
     out = []
     for name, lo, hi in bands:
         mask = (freqs >= lo) & (freqs < hi)
@@ -2002,13 +2034,16 @@ def named_band_levels(spectrum, freqs, bands, band_peaks, peak_decay, band_long=
         else:
             mid = (lo + min(hi, freqs[-1])) / 2  # `hi` pode ser infinito (ultima banda)
             mag = spectrum[np.argmin(np.abs(freqs - mid))]
+        crua = mag
+        if noise and noise.get(name):
+            mag = max(0.0, mag - noise[name] * dash_data.SIL_MARGEM)
         band_peaks[name] = max(mag, band_peaks[name] * peak_decay[name], 1e-6)
         ceil = band_peaks[name]
         if band_long is not None:   # PISO: o teto nunca cai abaixo de BAND_FLOOR do pico de longo prazo — senao,
             # minutos sem agudo e o teto do Air desce ate o CHIADO dele, que passa a acender como se tocasse
             band_long[name] = max(mag, band_long.get(name, 1e-6) * BAND_LONG_DECAY, 1e-6)
             ceil = max(ceil, getattr(tuning, 'BAND_FLOOR', 0.25) * band_long[name])
-        out.append((name, mag, min(1.0, mag / ceil)))
+        out.append((name, crua, min(1.0, mag / ceil)))
     return out
 
 
@@ -2523,6 +2558,7 @@ def audio_thread(device):
     smoothing_used = dict(smooth)  # ultimo smoothing (attack ou release) aplicado em cada chave
     band_peaks = {name: 1e-6 for name, _, _ in fine_bands}  # auto-gain: teto recente de cada banda
     band_long = {}   # pico de longo prazo (piso do teto: faixa vazia nao amplifica o proprio ruido)
+    cal = None         # CALIBRAR SILENCIO em andamento (o maior de cada medida ate' t1)
     kick_baseline = 0.0
     kick_long = 1e-6   # PICO de LONGO prazo do grave cru (o piso do kick: KICK_FLOOR x isso)
     kick_env = 0.0
@@ -2534,7 +2570,8 @@ def audio_thread(device):
     # estado entre throttles pro image_dash_data (auto-gain de pico + deltas de movimento/cor)
     html_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
                 'prev_val': [None], 'prev_mean': [None]}
-    smooth_spectrum = np.zeros(len(freqs))  # espectrograma piscava: era FFT crua, sem suavizar
+    grave = GraveLongo(freqs, window, rate)   # ANALISE LONGA DO GRAVE: o espectro combinado (niveis, espectrograma, calibrar)
+    smooth_spectrum = np.zeros(len(grave.freqs))  # espectrograma piscava: era FFT crua, sem suavizar
     tempo, key = ritmo.Tempo(rate / chunk_samples), ritmo.Key(rate)   # BPM/fase e tom (ritmo.py)
     state['tempo_obj'] = tempo              # o render le a fase daqui (tempo.phase) a cada frame
     secao = ritmo.Secao(rate / chunk_samples)   # SECAO da musica (intro/sobe/drop/pausa) por regra
@@ -2598,6 +2635,7 @@ def audio_thread(device):
                     band_peaks[k] = 1e-6
                 band_long.clear()
                 kick_baseline, kick_long = 0.0, 1e-6
+                grave.reset()
                 for a_ in ataques.values():   # pico longo/limiar da fonte velha nao valem pra nova (o contador continua)
                     a_.prev, a_.thr, a_.long = None, 0.0, 1e-6
                 if media:
@@ -2718,15 +2756,18 @@ def audio_thread(device):
                 xs = np.frombuffer(ch, dtype=np.int16).astype(np.float32) / 32768.0
                 tempo.update(now_m - (len(extra) - j) * dt_c, np.abs(np.fft.rfft(xs * window)))
                 key.push(xs)
+                grave.push(xs)
             tempo.update(now_m, spectrum)
             key.push(samples)
+            grave.push(samples)
+            spec_mix = grave.mix(spectrum)   # grave em fatias de 10,8 Hz + o resto da curta (GRAVE_HZ)
             state['bpm'] = round(tempo.bpm, 2)
             km = str(getattr(tuning, 'KEY_COLORS', 'quintas') or 'quintas')
             if key.tonic >= 0:
                 state['key_hue'], state['key_minor'], state['key_conf'] = ritmo.key_hue(key.tonic, key.minor, km), float(key.minor), key.conf
             state['tempo'] = {'bpm': round(tempo.bpm, 1), 'conf': round(tempo.conf, 2), 'manual': int(tempo.manual),
                               'key': key.name(), 'key_conf': round(key.conf, 2), 'key_rgb': list(ritmo.key_rgb(key.tonic, key.minor, km))}
-            smooth_spectrum = smooth_spectrum * tuning.SMOOTHING + spectrum * (1 - tuning.SMOOTHING)
+            smooth_spectrum = smooth_spectrum * tuning.SMOOTHING + spec_mix * (1 - tuning.SMOOTHING)
             bass_raw = float(spectrum[bass_bins].mean())
             mid_raw = float(spectrum[mid_bins].mean())
             treble_raw = float(spectrum[treble_bins].mean())
@@ -2741,7 +2782,14 @@ def audio_thread(device):
             # porque agora controlam uniforms de verdade (u_subbass..u_air). "level" ja
             # vem 0..1 (relativo ao pico ENTRE as 8 bandas, auto-calibrado, sem escala
             # manual por banda) — so falta suavizar igual as outras.
-            named_levels = named_band_levels(spectrum, freqs, fine_bands, band_peaks, band_peakdecay, band_long)
+            # CALIBRAR SILENCIO (tuning.SILENCIO, dash_data.norm_silencio): o piso de ruido medido; sem ele valem os fixos
+            sil = getattr(tuning, 'SILENCIO', None) or {}
+            fonte_ = state.get('audio_media') or state.get('audio_source') or ''
+            if sil.get('fonte') and sil['fonte'] != fonte_:   # calibrado em OUTRA fonte de audio: o ruido dela nao vale aqui
+                sil = {}
+            sil_amp = max(SILENCE_AMP, float(sil.get('amp', 0.0)) * dash_data.SIL_MARGEM)
+            state['sil_amp'] = sil_amp
+            named_levels = named_band_levels(spec_mix, grave.freqs, fine_bands, band_peaks, band_peakdecay, band_long, sil.get('bands'))
             # faixas DESLIGADAS no dash (botao na coluna, tuning.BANDS_OFF: nomes + 'kick') = 0 pro shader/♪
             off = {FREQ_BAND_UNIFORM.get(n, n) for n in getattr(tuning, 'BANDS_OFF', None) or ()}
             # LIMIAR por faixa (coluna do mixer, tuning.BAND_GATE[nome] = {th, m}): ativa = gate, teto = limite (dash_data.band_gate)
@@ -2773,7 +2821,8 @@ def audio_thread(device):
             # parou" dos eventos) e (b) o grave passar de KICK_FLOOR do pico de LONGO prazo dele (~5 min de memoria, como
             # o BAND_FLOOR das faixas): a musica parou -> o chiado fica muito abaixo do kick que ela tinha.
             kick_long = max(bass_raw, kick_long * BAND_LONG_DECAY, 1e-6)
-            kick_floor_ok = raw['amp'] >= SILENCE_AMP and bass_raw >= getattr(tuning, 'KICK_FLOOR', KICK_FLOOR) * kick_long
+            kick_floor_ok = (raw['amp'] >= sil_amp and bass_raw >= getattr(tuning, 'KICK_FLOOR', KICK_FLOOR) * kick_long
+                             and bass_raw > float(sil.get('bass', 0.0)) * dash_data.SIL_MARGEM)
             # aquecimento: so nos primeiros KICK_WARMUP_CHUNKS o baseline ainda nao
             # representa o "chao" de verdade (comeca em 0.0) — sem isso, qualquer som logo
             # no inicio dispara falso positivo. So acontece uma vez, no começo do programa.
@@ -2796,10 +2845,32 @@ def audio_thread(device):
                 kick_env *= kick_decay_dynamic
             state['kick'] = 0.0 if 'kick' in off else kick_env
             # ATAQUES por faixa (ritmo.Ataque): caixa, chimbal, golpe — eventos dos alteradores; com som + ATAQUE_FLOOR
-            snd_ok = raw['amp'] >= SILENCE_AMP
+            snd_ok = raw['amp'] >= sil_amp
             for n_, a_ in ataques.items():
+                a_.ruido = float((sil.get('flux') or {}).get(n_, 0.0)) * dash_data.SIL_MARGEM
                 a_.update(now_m, spectrum, freqs, snd_ok)
             state['ataques'] = {n_: a_.n for n_, a_ in ataques.items()}
+            # MEDINDO o silencio (POST /silencio -> state['cal_req']): SIL_SEGUNDOS guardando o MAIOR valor de cada medida crua;
+            # no fim grava (dash_server.save_silencio, numa thread: disco fora do loop de audio). Musica tocando = recusa.
+            if state.pop('cal_req', None):
+                cal = {'t1': now_m + dash_data.SIL_SEGUNDOS, 'amp': 0.0, 'bass': 0.0, 'bands': {}, 'flux': {}}
+            if cal is not None:
+                cal['amp'] = max(cal['amp'], raw['amp'])
+                cal['bass'] = max(cal['bass'], bass_raw)
+                for nm_, mag_, _ in named_levels:
+                    cal['bands'][nm_] = max(cal['bands'].get(nm_, 0.0), float(mag_))
+                for n_, a_ in ataques.items():
+                    cal['flux'][n_] = max(cal['flux'].get(n_, 0.0), a_.flux)
+                state['cal'] = {'on': 1, 'left': round(max(0.0, cal['t1'] - now_m), 1)}
+                if now_m >= cal['t1']:
+                    res, cal = cal, None
+                    res.pop('t1')
+                    if res['amp'] > dash_data.SIL_MAX_AMP:
+                        state['cal'] = {'on': 0, 'ok': 0, 'msg': 'tinha som demais (volume %.2f) — pare a música e calibre de novo' % res['amp']}
+                    else:
+                        res['quando'], res['fonte'] = time.strftime('%Y-%m-%d %H:%M'), fonte_
+                        threading.Thread(target=dash_server.save_silencio, args=(res,), daemon=True).start()
+                        state['cal'] = {'on': 0, 'ok': 1, 'msg': 'calibrado: ruído %.3f' % res['amp']}
             # GRUPOS de faixas (dash_data.SOUND_GROUPS): grave/medio/agudo = a MAIS FORTE das finas de cada um (ja' com gate/off)
             for g_, ks_ in dash_data.SOUND_GROUPS.items():
                 state[g_] = max(state.get(k_, 0.0) for k_ in ks_)
@@ -2815,7 +2886,7 @@ def audio_thread(device):
             secao.update(state['amp'], kick_hit_now, state['build'], math.floor((p_ if p_ is not None else now_m * 2.0) / 4.0))
             state['energia'] = secao.energia
             state['tempo'] = dict(state.get('tempo') or {}, secao=secao.nome, energia=round(secao.energia, 2),
-                                  forced=int(bool(secao.forced)), sil=int(state['amp'] < SILENCE_AMP), p0=tempo.p0,
+                                  forced=int(bool(secao.forced)), sil=int(state['amp'] < sil_amp), p0=tempo.p0,
                                   bars=int(getattr(tuning, 'PHRASE_BARS', PHRASE_BARS) or PHRASE_BARS))
 
             # canal com "output" escolhido E "src" bound SUBSTITUI a variavel (kick = onset,
@@ -2838,7 +2909,7 @@ def audio_thread(device):
                              for name, mag, lvl in named_levels]  # grave->agudo (ordem freq_bands())
                 state['audio_dash'] = dash_data.audio_dash_data(
                     bands_raw, amp_raw, raw['amp'], state['amp'], smoothing_used['amp'],
-                    state['kick'], kick_decay_dynamic, smooth_spectrum, freqs,
+                    state['kick'], kick_decay_dynamic, smooth_spectrum, grave.freqs,
                     band_lohi=[(lo, hi) for _, lo, hi in fine_bands])  # tint + cinza nos buracos
 
                 arr_s = frame_downsample(state.get('frame_comp', state['frame']), WIDTH, HEIGHT) \
@@ -5685,6 +5756,26 @@ def _selfcheck():
     for _ in range(13000):
         lv_old = named_band_levels(np.array([0.0, 0.02]), fq, bd, pk2, dc)[0][2]
     assert lv_old > 0.9, 'sem piso (chamada antiga) = o comportamento de antes'
+    pk3 = {'Air': 1e-6}
+    named_band_levels(np.array([0.0, 1.0]), fq, bd, pk3, dc, {}, {'Air': 0.02})
+    r_ = named_band_levels(np.array([0.0, 0.025]), fq, bd, pk3, dc, {}, {'Air': 0.02})[0]
+    assert r_[2] == 0.0 and r_[1] == 0.025, ('calibrado: chiado ate 1.5x o ruido = 0; a magnitude crua continua', r_)
+    # ANALISE LONGA DO GRAVE: um baixo em 86 Hz (Low-mid) quase nao aparece no Sub-bass (21-79 Hz) — na curta vazava inteiro;
+    # e um seno no centro de uma fatia tem a MESMA magnitude na longa e na curta (escala igual)
+    rate_, win_ = 44100, np.hanning(1024)
+    fq_ = np.fft.rfftfreq(1024, 1 / rate_)
+    gl = GraveLongo(fq_, win_, rate_)
+    tt_ = np.arange(GRAVE_N) / rate_
+    x_ = np.sin(2 * np.pi * (rate_ / 1024 * 2) * tt_)              # 86,13 Hz: centro de fatia nas duas
+    for i in range(0, GRAVE_N, 1024):
+        gl.push(x_[i:i + 1024])
+    sc_ = np.abs(np.fft.rfft(x_[-1024:] * win_))
+    mx_ = gl.mix(sc_)
+    sub = lambda sp, f: sp[(f >= 21) & (f < 79)].mean()
+    pk_s, pk_l = sc_[2], mx_[np.argmin(np.abs(gl.freqs - rate_ / 1024 * 2))]
+    assert abs(pk_l / pk_s - 1) < 0.05, ('mesma escala', pk_s, pk_l)
+    assert sub(mx_, gl.freqs) < 0.25 * sub(sc_, fq_), ('o baixo de 86 Hz nao vaza no sub', sub(mx_, gl.freqs), sub(sc_, fq_))
+    assert (gl.freqs[1:] > gl.freqs[:-1]).all() and ((gl.freqs >= 21) & (gl.freqs < 79)).sum() >= 5, 'sub com >= 5 fatias'
     print('native_synth mod self-check ok')
     # --- dash v4: quem le quem (ramo, entrada B, feedback) ---
     bnd = {'cam': {'shaders': [{'file': 'a.frag', 'id': 'k1'}, {'file': 'b.frag', 'id': 'k2', 'ins': ['fb']}]},

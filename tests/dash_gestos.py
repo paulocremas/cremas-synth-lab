@@ -2102,6 +2102,38 @@ def t6_roda_categorias(c):
 
 
 @v6
+def t6_protecao_na_barra(c):
+    """"a tela escurece do nada" (2026-11-19) = a PROTECAO (anti-estrobo) baixando o master: agora acende na BARRA enquanto age e
+    voltando, some depois de LIM_HOLD; clique abre Equipamento > Saida"""
+    r = c.js("renderLimit({ g: 0.35, why: 'flash' }); const b = document.getElementById('lim-top'); return [b.hidden, b.textContent]")
+    assert not r[0] and 'PROTEÇÃO −65%' in r[1] and 'pisca' in r[1], f'protecao agindo nao apareceu: {r}'
+    r = c.js("renderLimit({ g: 0.6, why: '' }); return document.getElementById('lim-top').textContent")
+    assert 'voltando' in r, f'voltando (ainda escuro) sumiu: {r}'
+    time.sleep(1.8)
+    r = c.js("renderLimit({ g: 1, why: '' }); return document.getElementById('lim-top').hidden")
+    assert r, 'protecao parada e o aviso continua'
+    c.js("renderLimit({ g: 0.35, why: 'flash' }); document.getElementById('lim-top').click(); return 1")
+    time.sleep(0.4)
+    r = c.js("return [drawer, eqTab]")
+    assert r == ['eq', 'saida'], f'clique nao abriu Equipamento > Saida: {r}'
+    c.js("openDrawer(''); return 1")
+
+
+@v6
+def t6_calibrar_silencio(c):
+    """CALIBRAR SILENCIO (2026-11-19): o botao (Audio e popup do tempo) pede a medicao — vira "ouvindo… N s" e trava enquanto o
+    native ouve; "limpar" volta ao "sem calibracao". Aqui nao ha native: a medicao fica pendurada ate' o limpar"""
+    c.js("document.getElementById('sil-btn').click(); return 1")
+    time.sleep(1.2)
+    r = c.js("const b = document.getElementById('sil-btn'); return [b.disabled, b.textContent, document.getElementById('sil-st').textContent]")
+    assert r[0] and r[1].startswith('ouvindo') and r[2] == 'silêncio, por favor', f'medindo: {r}'
+    c.js("silCal('limpar'); return 1")
+    time.sleep(1.2)
+    r = c.js("const b = document.getElementById('sil-btn'); return [b.disabled, b.textContent, document.getElementById('sil-st').textContent]")
+    assert not r[0] and r[1] == 'calibrar silêncio' and r[2] == 'sem calibração', f'limpar: {r}'
+
+
+@v6
 def t6_alteradores_familias(c):
     """/v6 (2026-11-19, "como podemos reorganizar os alteradores"): a lista dos ALTERADORES vem por FAMILIA (Relogio, Som, Imagem e
     corpo, Mao) com cabecalho; o envelope num ATAQUE por faixa (chimbal) nasce controlador e PASSA pelo servidor; o "quando" do

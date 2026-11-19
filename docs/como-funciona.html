@@ -372,7 +372,9 @@ compõem, como um prisma separa a luz branca em cores (daí o nome). O resultado
 grave-médio, médio, médio-agudo, presença, agudo, brilho e ar. Cada uma vira um sinal de 0 a 1.</p>
 <div class="pq">Cada faixa é medida em relação ao <b>próprio máximo</b> recente, não ao volume geral. O grave é sempre
 muito mais forte que o agudo; sem isso, o grave estaria sempre no talo e o agudo nunca sairia do zero. Mas há um piso:
-se uma faixa ficar em silêncio por muito tempo, ela não se "amplifica" até acender com o próprio chiado.</div>
+se uma faixa ficar em silêncio por muito tempo, ela não se "amplifica" até acender com o próprio chiado. E o botão
+<b>calibrar silêncio</b> mede, com a música parada, o chiado daquela entrada: dali em diante ele é descontado de tudo.
+O grave (abaixo de 350 Hz) é medido numa janela 4× mais longa, para separar o sub do baixo.</div>
 
 <h3>Batida e andamento (BPM)</h3>
 <ol>
@@ -450,7 +452,8 @@ bem no meio da transição.</div>
 <ul>
   <li><b>Proteção contra flashes</b> — luz piscando forte mais de 3 vezes por segundo pode causar crises em pessoas com
       epilepsia fotossensível (regra internacional de acessibilidade WCAG 2.3.1). O PRISMA conta as viradas de claro
-      para escuro na saída; passou do limite, ele abaixa o brilho na hora e só devolve devagar, depois que parar.</li>
+      para escuro na saída; passou do limite, ele abaixa o brilho na hora e só devolve devagar, depois que parar
+      (um aviso âmbar na barra de cima mostra quando isso está acontecendo).</li>
   <li><b>Teto de brilho</b> — impede que a média da imagem passe de um limite (projetor estourado na cara do público).</li>
   <li><b>Blackout</b> e <b>master</b> — não são suavizados: obedecem na hora.</li>
   <li><b>Congelar movimento</b> — o botão de socorro: tudo para onde está.</li>

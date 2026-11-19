@@ -37,9 +37,13 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - Eventos do som (`dash_data.SOUND_EVENTS` kick/caixa/chimbal/golpe) = SÓ do som; o substituto do relógio (`kick~`…, 2 compassos sem
   som = batida) só com `ev.rel = 1` no alterador (selo pelo SSE `tempo.sub`). Kick: `amp ≥ SILENCE_AMP` e grave ≥ `KICK_FLOOR` × pico
   longo; caixa/chimbal/golpe = `ritmo.Ataque` (fluxo LINEAR — o log fazia chimbal virar caixa; `ATAQUE_FAIXAS`, `ATAQUE_FLOOR`).
-  Níveis `grave/medio/agudo` = a mais forte das finas (`SOUND_GROUPS`).
+  Níveis `grave/medio/agudo` = a mais forte das finas (`SOUND_GROUPS`). CALIBRAR SILÊNCIO (`POST /silencio`, `state['cal_req']` →
+  `audio_thread` mede `SIL_SEGUNDOS` → `dash_server.save_silencio` → `tuning.SILENCIO`, só vale na `fonte` medida): `sil_amp`, piso do
+  kick, `Ataque.ruido` e o ruído descontado das faixas (`named_band_levels(noise=)`), tudo × `SIL_MARGEM`.
 - Faixas: nível = magnitude / teto da PRÓPRIA faixa (`named_band_levels`), teto ≥ `BAND_FLOOR` × pico longo (`BAND_LONG_DECAY`) — sem
-  o piso, faixa vazia amplifica o próprio chiado. Limiar por faixa = `BAND_GATE` (`dash_data.band_gate`).
+  o piso, faixa vazia amplifica o próprio chiado. Limiar por faixa = `BAND_GATE` (`dash_data.band_gate`). Faixas/espectrograma/
+  calibrar leem o espectro COMBINADO (`GraveLongo`: FFT de `GRAVE_N` abaixo de `GRAVE_HZ`, a de 1024 acima — na curta o Sub-bass era
+  ~1 fatia com o baixo vazando); kick/ataques/tempo seguem na curta (precisam do instante).
 - **Movimento** (Claude Doc "PRISMA — sync com a música"; `shaders/ATOMO.md` §9): `mod[knob] = {b, lo, hi, modo: loop|disparo|segue,
   lfo, ev: {src, cond, rel}, env, seg, q, id, nome, mais}` → `_mod_value`/`_mod_total` (estado por id em `_MV`; MESMO id = o mesmo
   movimento; sinal em `MV_OUT` → SSE `mv` + `mv_t`). Eventos = CONTADORES (`_music_events` → `state['ev']`); rastreio vira fonte
@@ -47,7 +51,7 @@ Cada ferramenta isolada, depois comparar, só então compor.
   `/mv-freeze` = SOCORRO. Camada com `acao: {liga, desliga}` = evento liga/desliga. Controlador = item de `~ctl` com `mod.sinal`
   (a receita); `syncCtls` nunca apaga; `swapAtom` desfaz as ligações; `forEachMod`/`dropMod` tratam knob, extra (`mais`) e camada
   (`L.mod.opacity`) igual. No dash: famílias `FAMS` (relógio | som | imagem e corpo | mão).
-- Show: macros `m1..m4`, `Limiter` (anti-estrobo + teto, `LIMITS`), auto-nível (`_auto_levels` → `u_lv`), PRÓXIMA cena
+- Show: macros `m1..m4`, `Limiter` (anti-estrobo + teto, `LIMITS`; agindo = `#lim-top` na barra — "a tela escurece" é ele), auto-nível (`_auto_levels` → `u_lv`), PRÓXIMA cena
   (`set_cue`/`take_cue`), MIDI `kind: 'rel'` = encoder.
 - **Webcam virtual** (`tuning.VCAM`, `/vcam`): `read_canvas` → `vcam_q` → `vcam_thread` → `plat.VCam` (v4l2loopback `card_label=PRISMA`,
   fora do `list_cams`; Windows `pyvirtualcam`). Luzes: `src/luzes.py` (Art-Net, `LIGHTS`).

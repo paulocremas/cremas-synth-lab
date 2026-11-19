@@ -172,6 +172,8 @@ class Ataque:
     def __init__(self, lo, hi, refr=0.08, k=1.6, piso=0.05, long_decay=0.99995):
         self.lo, self.hi, self.refr, self.k, self.piso, self.long_decay = lo, hi, refr, k, piso, long_decay
         self.prev, self.thr, self.long, self.n, self._t = None, 0.0, 1e-6, 0, -1e9
+        self.flux = 0.0             # o fluxo do ultimo chunk (o CALIBRAR SILENCIO mede o do chiado)
+        self.ruido = 0.0            # piso ABSOLUTO do calibrar silencio (fluxo do chiado x margem): abaixo disso nunca e' ataque
         self._mask = None
 
     def faixa(self, lo, hi):
@@ -188,9 +190,9 @@ class Ataque:
         s = np.asarray(spectrum, np.float64)[self._mask]   # LINEAR (nao log como o Tempo): o log fazia o resto de energia de
         # um ataque de OUTRA faixa contar (chimbal virava caixa); linear = quem manda na faixa e' quem e' forte nela
         flux = float(np.maximum(0.0, s - self.prev).sum()) if self.prev is not None and len(self.prev) == len(s) else 0.0
-        self.prev = s
+        self.prev, self.flux = s, flux
         self.long = max(flux, self.long * self.long_decay, 1e-6)
-        hit = (ok and flux > self.thr * self.k and flux > 1e-3 and flux >= self.piso * self.long and t - self._t > self.refr)
+        hit = (ok and flux > self.thr * self.k and flux > max(1e-3, self.ruido) and flux >= self.piso * self.long and t - self._t > self.refr)
         self.thr = self.thr * 0.97 + flux * 0.03
         if hit:
             self.n += 1
@@ -388,6 +390,14 @@ if __name__ == '__main__':   # self-check: python src/ritmo.py
     assert ag.n == a0 and gr.n == g0, ('chiado nao e\' ataque', ag.n - a0, gr.n - g0)
     ag.update(200.0, np.abs(np.fft.rfft(hp[:hop] * win)), fq, ok=False)
     assert ag.n == a0, 'sem som (ok=False) nao conta'
+    so = Ataque(7000, 20000)                                   # CALIBRADO: chiado medido -> piso absoluto (vale desde o 1o chunk)
+    for i in range(int(fps * 3)):
+        so.update(300 + i / fps, np.abs(np.fft.rfft(rng.normal(0, 0.0005, hop) * win)), fq)
+    assert so.n > 0, 'sem calibrar, uma faixa que so ouviu chiado conta o chiado (o limite que o calibrar resolve)'
+    so.ruido, n1 = so.flux * 3.0, so.n
+    for i in range(int(fps * 3)):
+        so.update(400 + i / fps, np.abs(np.fft.rfft(rng.normal(0, 0.0005, hop) * win)), fq)
+    assert so.n == n1, 'calibrado: o chiado nao conta'
     t2 = Tempo(fps); [t2.tap(10.0 + i * 0.5) for i in range(4)]   # 120 BPM
     t2.scale(0.5); assert abs(t2.bpm - 60) < 1e-6 and t2.manual, 'x2 / /2'
     t2.one(20.0); assert abs(t2.phase(20.0)[1]) < 1e-9, "'1' = comeco do compasso"
