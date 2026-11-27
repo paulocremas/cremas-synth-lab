@@ -17,8 +17,8 @@ Cada ferramenta isolada, depois comparar, só então compor.
   não volta). Código novo no app já → copiar pra `dist/prisma/` **e** a pasta de dados. Import novo em `src/` → listar no `if False:`
   do `launcher.py` (`packaging/check_imports.py` acusa).
 - **Release**: tag `vX.Y.Z` → `.github/workflows/release.yml` (`.deb`, `.exe` `packaging/prisma.iss`, zip); tag com `-` = pré.
-  `packaging/updater.py` compara `VERSION` com a última Release. Publicado: `v0.1.0-beta.2` (master = branch `dashboard-channels-output`).
-- Dash = Chromium `--app` próprio (`_open_dash_window`; Edge no Windows; `PRISMA_NO_BROWSER=1` nos testes). 3× Esc → `POST /quit`.
+  `packaging/updater.py` compara `VERSION` com a última Release. Publicado: `v0.1.0-beta.16` (master = branch `dashboard-channels-output`).
+- Dash = Chromium `--app` próprio (`_open_dash_window`; Edge no Windows; `PRISMA_NO_BROWSER=1` nos testes). SEGURAR Esc 2 s → `POST /quit` (dash e janela de saída).
 - Hot-reload por mtime: `.frag`, `transitions/*.glsl`, `tuning.py`, `dash_server.py`, `dash_data.py`, `dash*.html`.
   **`native_synth.py`, `ritmo.py` e `telao_sim.py` só reabrindo** (dash novo + native velho não combinam).
 
@@ -49,9 +49,9 @@ Cada ferramenta isolada, depois comparar, só então compor.
   movimento; sinal em `MV_OUT` → SSE `mv` + `mv_t`). Eventos = CONTADORES (`_music_events` → `state['ev']`); rastreio vira fonte
   (`_trk`). GRADE `/grid` → `grid_q` → `grid_apply` na fronteira. Vocabulário em `dash_data` (`MOV_PRESETS`, `EVENTS`, `/vocab`);
   `/mv-freeze` = SOCORRO. Camada com `acao: {liga, desliga}` = evento liga/desliga. Controlador = item de `~ctl` com `mod.sinal`
-  (a receita); `syncCtls` nunca apaga; `swapAtom` desfaz as ligações; `forEachMod`/`dropMod` tratam knob, extra (`mais`) e camada
+  (a receita); `syncCtls` nunca apaga; `forEachMod`/`dropMod` tratam knob, extra (`mais`) e camada
   (`L.mod.opacity`) igual. No dash: famílias `FAMS` (relógio | som | imagem e corpo | mão) = o anel de DENTRO da roda (`ring: 'in'`).
-- Show: macros `m1..m4`, `Limiter` (anti-estrobo + teto, `LIMITS`; agindo = `#lim-top` na barra — "a tela escurece" é ele), auto-nível (`_auto_levels` → `u_lv`), PRÓXIMA cena
+- Show: macros `m1..m4` (= o módulo MÃO: `MAO_KEY` `~mao`, faders = controladores `MAO_IDS` sem desenho próprio, pads = `pad:N`), `Limiter` (anti-estrobo + teto, `LIMITS`; agindo = `#lim-top` na barra — "a tela escurece" é ele), auto-nível (`_auto_levels` → `u_lv`), PRÓXIMA cena
   (`set_cue`/`take_cue`), MIDI `kind: 'rel'` = encoder.
 - **Webcam virtual** (`tuning.VCAM`, `/vcam`): `read_canvas` → `vcam_q` → `vcam_thread` → `plat.VCam` (v4l2loopback `card_label=PRISMA`,
   fora do `list_cams`; Windows `pyvirtualcam`). Luzes: `src/luzes.py` (Art-Net, `LIGHTS`).
@@ -82,26 +82,42 @@ Cada ferramenta isolada, depois comparar, só então compor.
 - **ÁTOMO** (`shaders/ATOMO.md`, `shaders/presets/atomos/`): `dash_data.ATOM_PRELUDE`; cabeçalho → `parse_meta`/`atom_check` (até 3
   knobs, 6 com `montagem:`); filtro = TROCA, `gerador|forma` = POR CIMA (`atom_replaces`); `// estado:` → `run_state`. `src/matriz.py`
   = todo par. Som/cor/giro = RECEITAS (`shaders/receitas/*.json`). Átomo novo = desenhar o pictograma (`atomIcon`; teste `cards`).
-- **Dash** = `dash5.html`, decisões no TOPO do arquivo. O app abre `/v6` = o canvas como JOGO (`GAME`, bloco `G6` no fim): geometria
-  `hzLayout`, alvo `G6.pick`, o que mexe nos dados é o código do dash5 (`plug`/`unplug`/`cableEnd`/`linkMv`/`dupNode`). O HTML antigo
-  só em `?html` (reserva; apagar depois de um ensaio). Sem filhos no /v6 (escolha = teclas/seletores no card, `tvWide`/`selSty`).
+- **Dash** = `dash5.html` (único: `/`, `/v5`, `/v6`); as DECISÕES moram em `DECISOES.md` (o que vale hoje + histórico; decisão nova = lá). REPAGINADA 2026-11-27 (B "cantos"): barra de cima = show (cena ◀ ▾ ▶ · próx · GO; avisos
+  na BOIA); sem barra do canvas: a vista é a PÍLULA `#cv-nav` (⋯ = arrumar/cabos/programa); PROGRAMA = monitor do canto (aba NO AR).
+  PELES (2026-11-27): menu ⋯ › pele (`v6skin`), 10, todas escuras; uma pele = tokens `SKINS` (canvas: `skinBody`/plaqueta/knob/jack/cabo; HTML: `--k-*`,
+  `body.skinned`); 'atual' = os pintores de sempre. Contraste cobrado por `skinContrast` (t6_peles); fundo decorado só em camada CSS parada. UM MODO só (TOCAR saiu em 2026-11-26; `mode` = 'montar'
+  só como chave de preferência). Cor do cabo = `cableColor` pela identidade com o ID da fileira (`cableKey`) + `CABLE_PIN` (cabo religado mantém a cor). O canvas é um JOGO (bloco `G6` no fim): geometria
+  `hzLayout`, alvo `G6.pick`, o que mexe nos dados é o código do dash5 (`plug`/`unplug`/`cableEnd`/`linkMv`/`dupNode`). Canvas HTML de
+  reserva e v1–v4 APAGADOS (2026-11-26). Sem filhos (escolha = teclas/seletores no card, `tvWide`/`selSty`).
+  Plano 2026-11-26 (Claude Doc "PRISMA — plano geral: gestos, estética e fluidez", fases 0–4 FEITAS): cabo = CLIQUE PEGA, CLIQUE SOLTA
+  (`CLICK_PX`, `cvFinish`/`evFinish`, direito/Esc cancela); módulo SOLTO num fio entra (`dropOnWire` + `SLIDE`); SACUDIR tira da corrente
+  (`shakeTrack`); roda gira controle SÓ com Alt, touchpad rola, pinça = zoom (`wheelDev`); FONTE = LEITOR com bandeja (`o.tray`,
+  `srcGo`/`srcStep`, `/grid` `src_set|src_next` → `src_swap`; pool quente prioriza a bandeja); EVENTO VIRA CABO: módulo RELÓGIO E SOM
+  (`EV_KEY '~ev'`), o cabo mora no DESTINO (`acao`: `alterna` = LIGA, `opcao:<knob>` = seletor via `opt_next`, `proximo` = leitor,
+  camada `alterna`; alterador = `mod.sinal` disparo), COMPARADOR `cmp:<id>` (native `_music_events`, histerese 0,4/0,6); PELE: cor do
+  cabo POR TIPO (`CABLE_IMG`/`CABLE_CV`/`EVCOL`), um tema + leve automático, TAMPA (`data-guard`), visor (`#toast`), painel no material.
   Elemento: todo controle tem motivo; estrutural leva `.ed`. Arrasto: `follow()`+`rafMove`+`wiresFollow` (nunca `drawBoxWires` nem CSS
   `body.x *` = restyle); o stream trava no APERTO (`boxDrag`); click sintético pós-arrasto é engolido (`swallowClick` — em teste, chamar o
   handler). Rolar a vista NÃO refaz fios; escolher nó/fio não entra no `cvSig`; segurando knob, `renderCtl`/`renderBoxes` esperam.
   Knob = `dragCtl` + `/warp`. `plug`/`unplug` = fios (`connect()` é o SSE!). Osciloscópio usa a hora do SERVIDOR (`mv_t`).
-- v1–v4 (`dash*.html`): legado. Prévias: `/frame?which=out|cv|sel|comp|src|fx|mask|steps|try` (só enquanto pedidas).
+  ACABAMENTO (topo do dash5): uma luz (de cima), sombra em camadas DENTRO do sprite (`softShadow`, margem `SHADOW_PAD`), LED `led()`,
+  pontos da mesa = camada CSS `#gdots` que só desliza. Nada que encha a tela no `frame()` a cada quadro: custa rasterização FORA do JS
+  (`G6.stats.ms` não vê; a grade no canvas derrubou 60 → 44 fps) — medir o fps, não só o ms.
+- Prévias: `/frame?which=out|cv|sel|comp|src|fx|mask|steps|try` (só enquanto pedidas; `&w=` largura na tela, `&fmt=rgba`). SSE manda
+  overlays/bindings/pool/source_fit SÓ quando mudam (+1 s de refresco, `_SSE_DIFF`).
 
 ## Testes
+`tests/tudo.sh` = todos os self-checks num comando (`--lento` = + motor com GL e os gestos).
 `.venv/bin/python src/dash_server.py`, `src/native_synth.py --selfcheck`, `src/plat.py`, `src/dash_data.py`, `src/ritmo.py`,
 `src/telao_sim.py --selfcheck`, `packaging/updater.py`, `packaging/check_imports.py` (o CI roda); `src/matriz.py [pasta]` = matriz + PNG.
 GESTOS: `tests/dash_gestos.py [palavra]` (Chromium headless via CDP, porta 8799, cena própria) — todo bug de usabilidade vira teste;
 rodar antes de entregar mudança no dash5; recusa rodar se a 9333 tem navegador órfão; alguns falham às vezes só na suíte (rodar sozinho).
-Foto do canvas: `tests/v6_foto.py`. Build fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning_path`
+Fotos: `tests/estetica.py <pasta> [palavra]` = TODAS as superfícies (revisão de pele); tela inteira: `tests/tela_foto.py <png> [painel] [perto]`. Build fora do `dist/`: `DIST=<pasta> packaging/build.sh`. Testes que gravam usam `tuning_path`
 temporário. Rodar o native do repo migra o `src/tuning.py` do repo; porta 8765 pode ser o prisma aberto; arrastar no dash do app aberto
 GRAVA no `tuning.py` vivo — backup antes.
 
 ## Docs
-- Fluxo técnico: <https://paulocremas.github.io/cremas-synth-lab/> (`docs/index.html`); leiga: `docs/como-funciona.html` — respeitar
+- Leiga: <https://paulocremas.github.io/cremas-synth-lab/> (`docs/index.html`; `como-funciona.html` = redireciona); fluxo técnico: `docs/tecnico.html` — respeitar
   glossário `GLOSS` + `linkify`, cores por região + linhagem, `<details>` retraído, `.maybe` separado da cor.
 - [MAPA.md](MAPA.md) = índice dos currículos. [BACKLOG.md](BACKLOG.md) = combinado e ainda não feito.
 

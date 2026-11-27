@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRISMA — repaginada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: caderno de bancada — direto, de quem monta o equipamento e escolhe.
+   IDEA: a planta do rack: a tela do PRISMA desenhada como planta, com o que muda marcado em laranja (escolhido) e vermelho (sai).
+   PICTURE: a tela inteira de cada proposta, em escala, com os números das mudanças.
+   COLOUR/TYPE: a pele do PRISMA (metal escuro; imagem azul, sinal âmbar, evento verde, escolhido laranja, perigo vermelho); Barlow Condensed + Plex.
+   LAYOUT: pergunta das macros → inventário → propostas (tela + o que mora onde) → envelope → escolhas. */
+:root { color-scheme: dark;
+  --bg: #0b0c0e; --card: #121418; --line: #22262c; --tx: #e6e9ed; --tx2: #a3acb6; --tx3: #727b86;
+  --sel: #ff9d52; --ok: #3fd08f; --bad: #ff5b61; --img: #4f8fe8; --cv: #e8a33a; --ev: #4fd08a;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif; --body: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace; }
+:root[data-theme=light], :root[data-theme=dark] { color-scheme: dark; }
+* { box-sizing: border-box; min-width: 0; }
+html { scroll-padding-top: 72px; }
+body { margin: 0; background: var(--bg); color: var(--tx); font: 16px/1.55 var(--body); overflow-x: clip; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px max(2vw, 16px) 90px; display: grid; gap: 34px; }
+h1 { font: 700 44px/1.05 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 30px/1.1 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 700 20px/1.2 var(--display); margin: 0; }
+p, li { color: var(--tx2); max-width: 78ch; } p { margin: 0; }
+b.k { color: var(--tx); font-weight: 600; }
+.top { position: sticky; top: 0; z-index: 10; display: flex; gap: 6px 16px; align-items: center; flex-wrap: wrap; padding: 10px max(2vw, 16px); background: #0b0c0eee; border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.top a { color: var(--tx2); text-decoration: none; font: 600 14px var(--body); padding: 8px 4px; }
+.top a:hover { color: var(--tx); } .top .grow { flex: 1; }
+.save { font: 600 13px var(--mono); color: var(--tx3); } .save.ok { color: var(--ok); } .save.err { color: #ff8a8a; }
+section { display: grid; gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
+.card ul, .card ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.ans { border-color: #5a3a1c; background: linear-gradient(#1a140e, var(--card)); }
+.rec { font: 700 13px var(--body); color: #ffd9b8; background: #3a2410; border: 1px solid var(--sel); border-radius: 999px; padding: 2px 10px; justify-self: start; }
+.shot { border-radius: 12px; border: 1px solid #1c2025; overflow: hidden; background: #0e1013; }
+.shot svg { display: block; width: 100%; height: auto; }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px 22px; margin: 0; padding: 0; list-style: none; }
+.legend li { display: grid; grid-template-columns: 26px 1fr; gap: 8px; font-size: 15px; }
+.legend li i { font: 700 13px/24px var(--mono); font-style: normal; text-align: center; width: 24px; height: 24px; border-radius: 50%; background: var(--sel); color: #1a1006; }
+.legend li i.x { background: var(--bad); color: #fff; }
+.pros { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.pros div { font-size: 15px; color: var(--tx2); } .pros b { display: block; font: 700 15px var(--display); letter-spacing: .04em; color: var(--tx); text-transform: uppercase; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 700 14px var(--display); letter-spacing: .05em; color: var(--tx); text-transform: uppercase; background: var(--bg); }
+td:first-child { color: var(--tx); font-weight: 600; } td { color: var(--tx2); }
+td.gone { color: #ff9a9d; } td.mod { color: #ffd9b8; }
+.envs { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; }
+.env { display: grid; gap: 8px; align-content: start; }
+.env svg { width: 100%; height: auto; background: radial-gradient(ellipse at 50% 30%, #1b1e23, #0e1013); border-radius: 10px; border: 1px solid #1c2025; }
+.env b { font: 700 17px var(--display); letter-spacing: .05em; text-transform: uppercase; }
+.env span { font-size: 14px; color: var(--tx2); }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; }
+.q p { font-size: 15px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { font: 600 14px var(--body); color: var(--tx2); background: #181b20; border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; min-height: 44px; cursor: pointer; }
+.opt:hover { color: var(--tx); background: #20242b; }
+.opt.on { background: #3a2410; border-color: var(--sel); color: #ffd9b8; } .opt.on::before { content: '✓ '; }
+button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+textarea.nota { width: 100%; min-height: 48px; resize: vertical; background: #0d0f12; color: var(--tx); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 16px var(--body); }
+.scroll { overflow-x: auto; }
+@media (max-width: 600px) { h1 { font-size: 34px; } table { font-size: 13px; }
+  .stack thead { display: none; } .stack tr { display: grid; padding-block: 10px; border-bottom: 1px solid var(--line); }
+  .stack td { display: flow-root; border: 0; padding: 3px 0; padding-inline-start: 7em; }
+  .stack td::before { content: attr(data-l); float: inline-start; width: 6.5em; margin-inline-start: -7em; color: var(--tx3); font-weight: 400; }
+  .stack td:empty { display: none; } }
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<nav class="top" aria-label="seções">
+  <a href="#macros">Macros</a><a href="#inventario">Inventário</a><a href="#prop-a">A · barra única</a><a href="#prop-b">B · cantos</a><a href="#prop-c">C · tudo é módulo</a><a href="#envelope">Envelope</a><a href="#escolhas">Escolhas</a>
+  <span class="grow"></span><span class="save" id="save">conectando…</span><span class="save" id="count"></span>
+</nav>
+<main>
+<header class="card" style="background:none;border:0;padding:0;gap:12px">
+  <h1>Repaginada: a barra do canvas some, cada coisa vai pro seu lugar</h1>
+  <p>Três propostas de onde mora cada recurso, desenhadas na tela de 1366 × 768 do notebook. Em todas, a barra do canvas (zoom, cabos, cenas, programa, arrumar, desfazer) sai e o canvas ganha <b class="k">48 px de altura</b> (+7%). Elas diferem em PARA ONDE essas coisas vão. Laranja numerado = muda; vermelho = sai. As escolhas no fim ficam salvas e eu leio de lá.</p>
+</header>
+
+<section id="macros">
+  <h2>A pergunta aberta: as macros M1–M4</h2>
+  <div class="card ans">
+    <span class="rec">minha resposta: viram o módulo MÃO</span>
+    <p><b class="k">Hoje:</b> são 4 faders 0..1 (<code>state['m1'..'m4']</code>, gravados em <code>tuning.MACROS</code>) que o motor já lê como fonte de sinal de qualquer knob. Na roda, a família <b class="k">Mão</b> ainda oferece "macro M1…M4" com a dica "o fader (direita, embaixo) mexe o knob" — só que esse fader mora na coluna <code>#right</code>, que não aparece mais. Então hoje dá pra ligar uma macro e não dá pra mexer nela sem MIDI.</p>
+    <p><b class="k">Proposta:</b> um módulo <b class="k">MÃO</b> no canvas, tirado da roda (família Mão), com 4 faders M1–M4, cada um com o seu jack REDONDO âmbar (sinal 0..1, igual à saída de um alterador) e, embaixo, 4 PADS com jack QUADRADO verde (evento <code>pad:1..4</code>, que hoje só existe pelo MIDI e está no BACKLOG como "pad como jack"). Um módulo só por cena (como o RELÓGIO E SOM). MIDI learn continua igual: o fader físico mexe o fader da tela.</p>
+    <p><b class="k">Por que não tirar:</b> a macro é o único jeito de UMA mão mexer em VÁRIOS knobs ao mesmo tempo, ao vivo, com a faixa de/até de cada ligação — é o "gesto do VJ". O motor e o MIDI já fazem; falta só um lugar na tela. E o módulo segue a regra do topo: <i>sinal só entra pelo knob</i>, a fonte do sinal é um módulo com jack.</p>
+  </div>
+  <div class="shot" style="max-width:520px"><svg id="mao" viewBox="0 0 420 250" role="img" aria-label="Mockup do módulo MÃO: quatro faders com jacks âmbar e quatro pads com jacks verdes"></svg></div>
+</section>
+
+<section id="inventario">
+  <h2>Inventário: onde cada coisa mora hoje e em cada proposta</h2>
+  <p>Valem para as três: a coluna <code>#right</code> e a <code>#left</code> (legado invisível) saem do código; Espaço = GO, H = caber tudo, Ctrl+Z, + / − continuam. Não dá pra criar atalho de UMA letra: a–z são as teclas das cenas.</p>
+  <div class="scroll"><table class="stack" id="inv"></table></div>
+</section>
+
+<section id="prop-a">
+  <h2>A · Barra única: tudo sobe pra barra de cima</h2>
+  <p>A mudança mínima: a barra do canvas se funde com a de cima. Cena + PRÓXIMA + GO ficam juntos à esquerda (o que se toca ao vivo), a vista no meio, o sistema à direita.</p>
+  <div class="shot"><svg id="sA" viewBox="0 0 1366 768" role="img" aria-label="Mockup da proposta A"></svg></div>
+  <ol class="legend" id="lA"></ol>
+  <div class="pros"><div><b>Ganha</b>Tudo num lugar só, sempre visível, nada novo pra aprender. Canvas inteiro limpo.</div><div><b>Perde</b>A 1366 px a barra fica cheia: EQUIPAMENTO vira só o ícone e os grupos ficam colados. Zoom longe dos dedos (lá em cima).</div></div>
+</section>
+
+<section id="prop-b">
+  <h2>B · Cantos: barra = show, canvas = navegação</h2>
+  <span class="rec">recomendada</span>
+  <p>Separa por função. A barra de cima só tem o que se TOCA (música, cena/PRÓXIMA/GO, efeitos, master, socorro, blackout). A vista (zoom, caber, desfazer) vira uma pílula no canto de baixo do canvas, como num mapa. O PROGRAMA vira um monitor pequeno preso no canto de baixo, logo acima da pílula, sempre no ar.</p>
+  <div class="shot"><svg id="sB" viewBox="0 0 1366 768" role="img" aria-label="Mockup da proposta B"></svg></div>
+  <ol class="legend" id="lB"></ol>
+  <div class="pros"><div><b>Ganha</b>Barra de cima respira e fica legível de longe. O que se mexe com o mouse (vista) fica perto do patch. Programa sempre à vista sem cobrir módulo grande.</div><div><b>Perde</b>Duas coisas flutuam sobre o canvas (pílula e monitor); módulo debaixo delas precisa rolar a vista. Arrumar e cabos ficam a um clique a mais (no ⋯).</div></div>
+</section>
+
+<section id="prop-c">
+  <h2>C · Tudo é módulo: só o sistema fica fora do canvas</h2>
+  <p>O jeito VCV puro. CENAS vira um módulo no patch, com jack verde de GO (um evento — o ½ de um envelope, um pad — pode trocar de cena). O PROGRAMA sai: as SAÍDAS já mostram o que vai pro ar, e o "fundo" vira tecla. A vista é só tecla e gesto, e o HUD do canto mostra o zoom (clique = menu).</p>
+  <div class="shot"><svg id="sC" viewBox="0 0 1366 768" role="img" aria-label="Mockup da proposta C"></svg></div>
+  <ol class="legend" id="lC"></ol>
+  <div class="pros"><div><b>Ganha</b>A tela mais limpa possível; cena ligada por cabo abre um monte de jogo (frase → próxima cena). Uma linguagem só.</div><div><b>Perde</b>O módulo CENAS sai da vista quando você dá zoom num canto (H traz de volta). Trocar de cena no susto fica mais longe. Mexe no formato da cena (um módulo novo).</div></div>
+</section>
+
+<section id="envelope">
+  <h2>Os quadradinhos das laterais do envelope</h2>
+  <div class="card">
+    <p><b class="k">O que são.</b> Quadrado = EVENTO (um instante, cabo verde); redondo = SINAL (0..1 contínuo, cabo âmbar).</p>
+    <ul>
+      <li><b class="k">Quadrado da ESQUERDA = GATILHO</b> (entra evento): o que dispara o envelope — kick, caixa, batida… do RELÓGIO E SOM, ou o ½ de outro envelope.</li>
+      <li><b class="k">Quadrado da DIREITA com "≥½" = COMPARADOR</b> (sai evento): dispara toda vez que o sinal do envelope passa da metade (sobe de 0,6, rearma abaixo de 0,4). Liga no LIGA de um módulo, num seletor, no ▶▶ da fonte ou no gatilho de outro envelope.</li>
+      <li>Redondo em cima à direita = a SAÍDA do sinal; a tecla embaixo dele = INVERTER.</li>
+    </ul>
+    <p><b class="k">Por que confundem:</b> (1) entrada e saída têm a MESMA forma, só o lado diz a direção; (2) o da esquerda não tem nome e o "≥½" tem ~8 px; (3) parecem caixinhas de marcar, ainda mais com o RELÓGIO E SOM cheio de quadrados com LED; (4) as duas SAÍDAS do módulo estão em lugares diferentes (uma em cima, outra na lateral); (5) a plaqueta "seção · drop" flutua solta fora do módulo.</p>
+  </div>
+  <div class="envs" id="envs"></div>
+</section>
+
+<section id="escolhas">
+  <h2>Escolhas</h2>
+  <p>Um toque escolhe, outro desfaz. A nota é livre (ex.: "B, mas com o desfazer na barra"). Fica salvo; eu leio daqui antes de implementar.</p>
+  <div id="qs" style="display:grid;gap:12px"></div>
+</section>
+</main>
+
+<script>
+{
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const C = { img: '#4f8fe8', cv: '#e8a33a', ev: '#4fd08a', sel: '#ff9d52', bad: '#ff5b61', ok: '#3fd08f' };
+
+// ---------- peças em SVG ----------
+const T = (x, y, s, o = {}) => `<text x="${x}" y="${y}" font-family="${o.f || 'Barlow Condensed'}" font-weight="${o.w || 600}" font-size="${o.z || 12}" fill="${o.c || '#dfe3e8'}" text-anchor="${o.a || 'start'}" letter-spacing="${o.ls || '.04em'}">${esc(s)}</text>`;
+const R = (x, y, w, h, o = {}) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${o.r ?? 6}" fill="${o.f || '#22272f'}" stroke="${o.s || '#343b45'}" stroke-width="${o.sw || 1}" ${o.d ? `stroke-dasharray="${o.d}"` : ''} opacity="${o.o ?? 1}"/>`;
+const key = (x, y, w, l, o = {}) => R(x, y, w, 30, { f: o.on ? '#16352a' : o.guard ? '#4a1c20' : 'url(#gk)', s: o.on ? C.ok : o.sel ? C.sel : o.guard ? '#a33' : '#3a414c', r: 6 }) + T(x + w / 2, y + 20, l, { a: 'middle', z: 12.5, c: o.on ? '#9ff0c8' : o.guard ? '#ffb3b6' : '#e3e7ec', ls: '.08em' });
+const vfd = (x, y, w, s) => R(x, y, w, 30, { f: '#0b1310', s: '#1f3328', r: 5 }) + T(x + 10, y + 20, s, { f: 'IBM Plex Mono', z: 12, c: '#6fe3a6', w: 500, ls: '0' });
+const fader = (x, y, w, l, v, col) => R(x, y, w, 30, { f: col === 'fx' ? '#4a2e12' : '#2a2f37', s: '#3a414c' }) + `<rect x="${x + 1}" y="${y + 1}" width="${(w - 2) * v}" height="28" rx="5" fill="${col === 'fx' ? '#b8742c' : '#7d8794'}" opacity=".55"/>` + T(x + 8, y + 19, l, { z: 11.5, ls: '.08em' }) + T(x + w - 8, y + 19, Math.round(v * 100) + '%', { a: 'end', z: 11, f: 'IBM Plex Mono', w: 500, ls: 0 });
+const jack = (x, y, c, sq) => sq ? `<rect x="${x - 6}" y="${y - 6}" width="12" height="12" rx="2" fill="#141619" stroke="${c}" stroke-width="2.2"/>` : `<circle cx="${x}" cy="${y}" r="7.5" fill="#141619" stroke="${c}" stroke-width="2.6"/><circle cx="${x}" cy="${y}" r="2.6" fill="#0a0b0c"/>`;
+const cable = (x1, y1, x2, y2, c, sag = 60) => `<path d="M${x1} ${y1} C${x1 + (x2 - x1) * .25} ${Math.max(y1, y2) + sag} ${x2 - (x2 - x1) * .25} ${Math.max(y1, y2) + sag} ${x2} ${y2}" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="7" stroke-linecap="round"/><path d="M${x1} ${y1} C${x1 + (x2 - x1) * .25} ${Math.max(y1, y2) + sag} ${x2 - (x2 - x1) * .25} ${Math.max(y1, y2) + sag} ${x2} ${y2}" fill="none" stroke="${c}" stroke-width="4" stroke-linecap="round"/>`;
+const plate = (x, y, s, o = {}) => { const w = o.w || s.length * 6.6 + 14; return R(x, y, w, 18, { f: o.dark ? '#16191d' : '#e9ecef', s: o.dark ? '#2c3138' : '#c9ced4', r: 3 }) + T(x + w / 2, y + 13, s, { a: 'middle', z: 11.5, c: o.dark ? '#dfe3e8' : '#1c1f23', w: 700 }); };
+const badge = (x, y, n, bad) => `<circle cx="${x}" cy="${y}" r="13" fill="${bad ? C.bad : C.sel}" stroke="#0b0c0e" stroke-width="3"/>` + T(x, y + 4.5, n, { a: 'middle', z: 14, f: 'IBM Plex Mono', w: 700, c: bad ? '#fff' : '#1a1006', ls: 0 });
+const ring = (x, y, w, h, bad) => R(x - 4, y - 4, w + 8, h + 8, { f: 'none', s: bad ? C.bad : C.sel, sw: 2, d: '6 4', r: 9 });
+const mod = (x, y, w, h, name, skin, o = {}) => {
+  const f = { prata: '#b9bec5', verde: '#b7c7b3', rosa: '#d6bec7', esc: '#2a2e35' }[skin] || skin;
+  let s = R(x, y, w, h, { f, s: o.sel ? C.sel : '#0007', sw: o.sel ? 2.5 : 1, r: 9 });
+  if (o.scr !== false) s += R(x + (o.sx ?? 40), y + 28, o.sw ?? Math.min(130, w - 90), o.sh ?? h - 56, { f: '#08090a', s: '#000', r: 5 });
+  return s + plate(x + (o.px ?? (w - name.length * 6.6 - 14) / 2), y + 8, name);
+};
+const defs = `<defs><linearGradient id="gk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#343a43"/><stop offset="1" stop-color="#262b32"/></linearGradient>
+  <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="11" cy="11" r="1.1" fill="#3a4049"/></pattern>
+  <radialGradient id="mesa" cx=".5" cy=".4" r=".7"><stop offset="0" stop-color="#22262c"/><stop offset="1" stop-color="#121417"/></radialGradient></defs>`;
+
+// o mesmo patch das fotos (design/revisao/depois/01-tela.png), deslocado em y
+function patch(dy, o = {}) {
+  const Y = v => v + dy; let s = '';
+  s += mod(40, Y(272), 200, 152, 'YTDOWNCOM_YOUT…', 'prata', { sx: 40, sw: 120, sh: 84 }) + R(76, Y(392), 104, 24, { f: '#16191d', s: '#000' });
+  s += mod(293, Y(265), 372, 170, 'CONTORNAR', 'verde', { sx: 48, sw: 132, sh: 96, px: 180 });
+  s += mod(716, Y(290), 286, 120, 'MATIZ', 'rosa', { sx: 40, sw: 120, sh: 84, px: 170 });
+  s += mod(1049, Y(184), 275, 95, 'SAÍDA 2', 'prata', { sx: 158, sw: 108, sh: 74, px: 10 }) + mod(1049, Y(298), 275, 95, 'SAÍDA 1', 'prata', { sx: 158, sw: 108, sh: 74, px: 10 }) + mod(1049, Y(420), 275, 95, 'SAÍDA 3', 'prata', { sx: 158, sw: 108, sh: 74, px: 10, sel: 1 });
+  const env = (x, y, n, sub) => mod(x, Y(y), 140, 96, n, 'prata', { px: 8, sx: 8, sw: 124, sh: 34 }) + T(x + 10, Y(y) + 36, sub, { z: 10.5, c: '#222' });
+  s += env(350, 476, 'ESTOURA NO DROP', '') + env(732, 452, 'PULSA', '');
+  s += mod(538, Y(543), 98, 142, 'RELÓGIO E SOM', 'esc', { scr: false, px: 4 });
+  ['kick', 'caixa', 'chimbal', 'golpe', 'batida', 'compasso', 'frase'].forEach((e, i) => { s += R(545, Y(566 + i * 16), 46, 12, { f: '#dfe3e8', s: '#999', r: 2 }) + T(549, Y(576 + i * 16), e, { z: 9.5, c: '#222' }) + jack(624, Y(572 + i * 16), i ? '#666' : C.ev, 1); });
+  // knobs
+  [[497, 398], [545, 398], [594, 398]].forEach(([x, y]) => { s += `<circle cx="${x}" cy="${Y(y)}" r="16" fill="#222" stroke="#111"/>`; });
+  s += `<circle cx="908" cy="${Y(364)}" r="16" fill="#222" stroke="#111"/>`;
+  // cabos
+  s += cable(222, Y(350), 322, Y(334), C.img, 40) + cable(222, Y(350), 1063, Y(476), C.img, 120) + cable(636, Y(352), 735, Y(337), C.img, 30);
+  s += cable(636, Y(352), 1063, Y(354), C.img, 80) + cable(983, Y(352), 1063, Y(241), C.img, 10);
+  s += cable(475, Y(491), 545, Y(398), C.cv, 10) + cable(856, Y(467), 908, Y(364), C.cv, 10) + cable(624, Y(572), 731, Y(504), C.ev, 20);
+  [[222, 350], [322, 334], [636, 352], [735, 337], [983, 352], [1063, 241], [1063, 354], [1063, 476]].forEach(([x, y]) => s += jack(x, Y(y), C.img));
+  s += jack(475, Y(491), C.cv) + jack(856, Y(467), C.cv) + jack(731, Y(504), C.ev, 1) + jack(873, Y(504), '#777', 1) + jack(349, Y(528), '#777', 1) + jack(491, Y(528), '#777', 1);
+  return s;
+}
+const maoMini = (x, y) => { let s = mod(x, y, 176, 120, 'MÃO', 'prata', { scr: false, px: 8 });
+  for (let i = 0; i < 4; i++) { const fx = x + 18 + i * 40; s += R(fx + 4, y + 32, 6, 46, { f: '#1a1d21', s: '#000', r: 3 }) + R(fx - 2, y + 40 + i * 8, 18, 8, { f: '#e9ecef', s: '#888', r: 2 }) + jack(fx + 7, y + 92, C.cv) + T(fx + 7, y + 113, 'M' + (i + 1), { a: 'middle', z: 10, c: '#222' }); }
+  return s; };
+const frame = (top, body) => `${defs}<rect width="1366" height="768" fill="#0b0d10"/>
+  <rect x="10" y="${top}" width="1346" height="${758 - top}" rx="12" fill="url(#mesa)" stroke="#20252c"/><rect x="10" y="${top}" width="1346" height="${758 - top}" rx="12" fill="url(#dots)"/>${body}`;
+const topBg = `<rect width="1366" height="54" fill="#15181d"/><line x1="0" y1="54" x2="1366" y2="54" stroke="#262b32"/>`;
+const music = vfd(12, 12, 288, '128 bpm  ▮▮▮▯  ·  verso');
+
+// ---------- HOJE (só pra referência, dentro do A como 'antes') ----------
+// ---------- A ----------
+const LA = [
+  ['CENA · nome ▾ (o popover de hoje) + PRÓXIMA + GO juntos: o que se toca ao vivo fica ao lado da música.'],
+  ['Vista: − 68% + e ⤢ caber tudo (H). O % clicado volta pra 100%.'],
+  ['Desfazer com o contador; Ctrl+Z igual.'],
+  ['⋯ = ARRUMAR e CABOS (tensão, opacidade), que se usam pouco.'],
+  ['PROGRAMA = ícone de monitor; abre a janela flutuante | fundo | esconde, como hoje.'],
+  ['EQUIPAMENTO só com o ícone da engrenagem (falta largura).'],
+  ['A barra do canvas inteira sai: +48 px de patch.', 1]];
+function drawA() {
+  let s = frame(62, patch(-50));
+  s += topBg + music + key(306, 12, 50, 'TAP');
+  s += R(366, 10, 310, 34, { f: '#1d2128', s: '#3a414c', r: 7 }) + T(376, 32, 'CENA · DEFAULT ▾', { z: 13, ls: '.08em' }) + T(498, 32, 'próx: drop', { z: 12, c: '#ffd9b8', f: 'IBM Plex Mono', w: 500, ls: 0 }) + key(606, 12, 64, 'GO ▸', { on: 1 });
+  s += key(688, 12, 28, '−') + T(734, 32, '68%', { a: 'middle', f: 'IBM Plex Mono', z: 12, ls: 0 }) + key(752, 12, 28, '+') + key(786, 12, 30, '⤢') + key(824, 12, 56, '↶ 7') + key(886, 12, 30, '⋯') + key(922, 12, 34, '▭');
+  s += key(962, 12, 34, '⚙') + fader(1002, 12, 96, 'EFEITOS', 1, 'fx') + fader(1104, 12, 96, 'MASTER', 1) + key(1206, 12, 32, '◎') + key(1244, 12, 116, 'BLACKOUT', { guard: 1 });
+  s += ring(366, 10, 310, 34) + ring(688, 12, 128, 30) + ring(824, 12, 56, 30) + ring(886, 12, 30, 30) + ring(922, 12, 34, 30) + ring(962, 12, 34, 30);
+  s += badge(521, 64, 1) + badge(752, 64, 2) + badge(852, 64, 3) + badge(901, 64, 4) + badge(939, 64, 5) + badge(979, 64, 6);
+  s += `<line x1="10" y1="76" x2="1356" y2="76" stroke="${C.bad}" stroke-width="1.5" stroke-dasharray="6 6" opacity=".7"/>` + badge(30, 92, 7, 1);
+  $('#sA').innerHTML = s;
+}
+// ---------- B ----------
+const LB = [
+  ['CENA · nome ▾ + PRÓXIMA + GO na barra: o que se toca, ao lado da música.'],
+  ['A barra de cima fica só com o show: EQUIPAMENTO mantém o nome.'],
+  ['PROGRAMA = monitor pequeno preso no canto de baixo, em cima da pílula (no ar, borda verde). Clique = janela grande; botão de fundo; ▾ recolhe numa aba "NO AR".'],
+  ['Pílula da vista no canto de baixo: desfazer · − % + · caber · ⋯ (arrumar, cabos).'],
+  ['HUD de fps fica no canto esquerdo, mais apagado.'],
+  ['Módulo MÃO (macros) entra no espaço ganho.'],
+  ['A barra do canvas inteira sai: +48 px de patch.', 1]];
+function drawB() {
+  let s = frame(62, patch(-50) + maoMini(150, 560));
+  s += topBg + music + key(306, 12, 50, 'TAP');
+  s += R(366, 10, 360, 34, { f: '#1d2128', s: '#3a414c', r: 7 }) + T(376, 32, 'CENA · DEFAULT ▾', { z: 13, ls: '.08em' }) + T(500, 32, 'próx: drop', { z: 12, c: '#ffd9b8', f: 'IBM Plex Mono', w: 500, ls: 0 }) + key(646, 12, 74, 'GO ▸', { on: 1 });
+  s += key(784, 12, 136, '⚙  EQUIPAMENTO') + fader(930, 12, 112, 'EFEITOS', 1, 'fx') + fader(1048, 12, 112, 'MASTER', 1) + key(1176, 12, 40, '◎') + key(1228, 12, 124, 'BLACKOUT', { guard: 1 });
+  // monitor do programa
+  s += R(1126, 548, 222, 150, { f: '#14171b', s: C.ok, sw: 2, r: 8 }) + R(1134, 574, 206, 116, { f: '#000', s: '#000', r: 4 }) + T(1136, 566, 'PROGRAMA', { z: 12, ls: '.1em' }) + R(1206, 554, 44, 16, { f: '#16352a', s: C.ok, r: 3 }) + T(1228, 566, 'NO AR', { a: 'middle', z: 10.5, c: '#9ff0c8' }) + T(1336, 566, '▾', { a: 'end', z: 13 });
+  // pílula da vista
+  s += R(1010, 712, 338, 36, { f: '#1b1f25', s: '#353c46', r: 18 }) + T(1030, 735, '↶ 7', { z: 13 }) + `<line x1="1072" y1="720" x2="1072" y2="740" stroke="#353c46"/>` + T(1086, 735, '−', { z: 15 }) + T(1132, 735, '68%', { a: 'middle', f: 'IBM Plex Mono', z: 12, ls: 0 }) + T(1168, 735, '+', { z: 15 }) + `<line x1="1190" y1="720" x2="1190" y2="740" stroke="#353c46"/>` + T(1204, 735, '⤢ caber', { z: 13 }) + `<line x1="1270" y1="720" x2="1270" y2="740" stroke="#353c46"/>` + T(1300, 735, '⋯', { a: 'middle', z: 16 });
+  s += T(24, 744, '60 fps', { f: 'IBM Plex Mono', z: 11, c: '#5b636d', w: 500, ls: 0 });
+  s += ring(366, 10, 360, 34) + ring(784, 12, 568, 30) + ring(1126, 548, 222, 150) + ring(1010, 712, 338, 36) + ring(18, 730, 60, 20) + ring(150, 560, 176, 120);
+  s += badge(546, 64, 1) + badge(1068, 64, 2) + badge(1110, 548, 3) + badge(994, 730, 4) + badge(92, 740, 5) + badge(340, 560, 6);
+  s += badge(30, 92, 7, 1);
+  $('#sB').innerHTML = s;
+}
+// ---------- C ----------
+const LC = [
+  ['Barra de cima = só o sistema: música, TAP, equipamento, efeitos, master, socorro, blackout.'],
+  ['Módulo CENAS: a lista (tecla = letra), a PRÓXIMA acesa em laranja e o jack verde GO (no desenho, a FRASE do relógio troca de cena; Espaço também).'],
+  ['PROGRAMA sai: as SAÍDAS já mostram o que vai pro ar. "Programa de fundo" vira tecla (sem letra: Shift+Espaço).'],
+  ['Módulo MÃO (macros).'],
+  ['HUD do canto: "60 fps · 68%"; clique no % = menu (100%, caber, arrumar, cabos, desfazer). Vista = + / −, H, pinça.'],
+  ['A barra do canvas inteira sai: +48 px de patch.', 1]];
+function drawC() {
+  const cen = (x, y) => { let s = mod(x, y, 176, 150, 'CENAS', 'esc', { scr: false, px: 8 });
+    [['a', 'abertura', 0], ['d', 'default', 1], ['r', 'drop', 2], ['f', 'final', 0]].forEach(([k, n, st], i) => { const yy = y + 36 + i * 22;
+      s += R(x + 10, yy, 120, 18, { f: st === 1 ? '#16352a' : st === 2 ? '#3a2410' : '#e9ecef', s: st === 1 ? C.ok : st === 2 ? C.sel : '#c9ced4', r: 3 }) + T(x + 16, yy + 13, k + '  ' + n, { z: 11, c: st ? '#eee' : '#222', w: 700 }); });
+    return s + T(x + 120, y + 138, 'GO', { a: 'end', z: 11, c: '#ddd' }) + jack(x + 150, y + 134, C.ev, 1); };
+  let s = frame(62, patch(-50) + maoMini(150, 560) + cen(1130, 520) + cable(624, 618, 1280, 654, C.ev, 40));
+  s += topBg + music + key(306, 12, 50, 'TAP');
+  s += key(784, 12, 136, '⚙  EQUIPAMENTO') + fader(930, 12, 112, 'EFEITOS', 1, 'fx') + fader(1048, 12, 112, 'MASTER', 1) + key(1176, 12, 40, '◎') + key(1228, 12, 124, 'BLACKOUT', { guard: 1 });
+  s += R(18, 728, 132, 22, { f: '#1b1f25', s: '#353c46', r: 11 }) + T(30, 744, '60 fps · 68% ▾', { f: 'IBM Plex Mono', z: 11.5, c: '#c4cad1', w: 500, ls: 0 });
+  s += ring(10, 8, 1346, 40) + ring(1130, 520, 176, 150) + ring(1049, 134, 275, 345) + ring(150, 560, 176, 120) + ring(18, 728, 132, 22);
+  s += badge(560, 28, 1) + badge(1120, 520, 2) + badge(1035, 140, 3) + badge(340, 560, 4) + badge(164, 739, 5) + badge(30, 92, 6, 1);
+  $('#sC').innerHTML = s;
+}
+const legend = (el, L) => { $(el).innerHTML = L.map(([t, bad], i) => `<li><i class="${bad ? 'x' : ''}">${i + 1}</i><span>${esc(t)}</span></li>`).join(''); };
+
+// ---------- inventário ----------
+const INV = [
+  ['Visor da música + popup Tempo', 'barra de cima', 'igual', 'igual', 'igual'],
+  ['TAP', 'barra de cima', 'igual', 'igual', 'igual'],
+  ['Avisos de saúde (chips)', 'barra de cima', 'ver escolha 5', 'ver escolha 5', 'ver escolha 5'],
+  ['EQUIPAMENTO', 'barra de cima', 'só o ícone', 'igual', 'igual'],
+  ['EFEITOS / MASTER', 'barra de cima', 'mais estreitos', 'igual', 'igual'],
+  ['SOCORRO / BLACKOUT', 'barra de cima', 'igual', 'igual', 'igual'],
+  ['Zoom − % + e ⤢ caber', 'barra do canvas', 'barra de cima', 'pílula no canto de baixo', 'teclas + menu do HUD'],
+  ['CABOS (tensão, opacidade)', 'barra do canvas', 'menu ⋯ da barra', 'menu ⋯ da pílula', 'menu do HUD'],
+  ['CENAS · nome (lista, grade, duração, transição)', 'barra do canvas', 'barra de cima, à esquerda', 'barra de cima, à esquerda', 'módulo CENAS'],
+  ['PRÓXIMA + GO', 'dentro da janela do PROGRAMA', 'junto da cena, na barra', 'junto da cena, na barra', 'no módulo CENAS (jack GO)'],
+  ['PROGRAMA (janela | fundo | esconder)', 'barra do canvas', 'ícone na barra', 'monitor preso no canto de baixo', 'sai (as SAÍDAS mostram); fundo = tecla'],
+  ['ARRUMAR', 'barra do canvas', 'menu ⋯ da barra', 'menu ⋯ da pílula', 'menu do HUD'],
+  ['DESFAZER (N)', 'barra do canvas', 'barra de cima', 'pílula no canto de baixo', 'Ctrl+Z + menu do HUD'],
+  ['HUD de fps', 'canto de baixo, esquerda', 'igual', 'igual, mais apagado', 'vira o botão da vista'],
+  ['Macros M1–M4', 'coluna #right (invisível)', 'módulo MÃO', 'módulo MÃO', 'módulo MÃO'],
+  ['Pads 1–4 (evento)', 'só MIDI', 'jacks no módulo MÃO', 'jacks no módulo MÃO', 'jacks no módulo MÃO'],
+  ['Lista de movimentos (#right)', 'invisível', 'sai (os alteradores já mostram)', 'sai', 'sai'],
+  ['Roda, painel do módulo, gavetas, visor (#toast)', 'canvas / laterais', 'igual', 'igual', 'igual'],
+];
+$('#inv').innerHTML = '<thead><tr><th>Recurso</th><th>Hoje</th><th>A · barra única</th><th>B · cantos</th><th>C · módulos</th></tr></thead><tbody>' +
+  INV.map(r => '<tr>' + r.map((c, i) => `<td class="${i && /^sai|invis/.test(c) ? 'gone' : i > 1 && c !== 'igual' ? 'mod' : ''}">${esc(c)}</td>`).join('') + '</tr>').join('') + '</tbody>';
+
+// ---------- módulo MÃO grande ----------
+(() => { let s = defs + `<rect width="420" height="250" fill="url(#mesa)"/><rect width="420" height="250" fill="url(#dots)"/>`;
+  s += mod(20, 16, 380, 218, 'MÃO', 'prata', { scr: false, px: 16 }) + T(380, 30, 'macros e pads', { a: 'end', z: 11, c: '#444' });
+  for (let i = 0; i < 4; i++) { const x = 46 + i * 50, v = [.7, .3, .5, .9][i];
+    s += R(x + 6, 46, 8, 92, { f: '#1a1d21', s: '#000', r: 4 }) + R(x - 4, 46 + (1 - v) * 80, 28, 12, { f: '#eef0f2', s: '#777', r: 3 }) + plate(x - 6, 146, 'M' + (i + 1), { w: 32 }) + jack(x + 10, 184, C.cv) + `<rect x="${x - 2}" y="${200}" width="24" height="3" rx="1.5" fill="${C.cv}" opacity="${v}"/>`; }
+  s += `<line x1="250" y1="44" x2="250" y2="214" stroke="#0003"/>`;
+  for (let i = 0; i < 4; i++) { const x = 268 + (i % 2) * 64, y = 52 + Math.floor(i / 2) * 84;
+    s += R(x, y, 44, 44, { f: i === 0 ? '#2f6b4c' : '#3a3f47', s: '#111', r: 6 }) + plate(x + 2, y + 50, 'pad ' + (i + 1), { w: 40 }) + jack(x + 52, y + 22, C.ev, 1); }
+  s += T(150, 228, 'sinal 0..1 → knob', { a: 'middle', z: 11, c: '#5a3d10', w: 700 }) + T(330, 228, 'evento → LIGA, ▶▶, gatilho', { a: 'middle', z: 11, c: '#1f5a3a', w: 700 });
+  $('#mao').innerHTML = s; })();
+
+// ---------- envelopes ----------
+function envSvg(kind) {
+  let s = defs + `<rect width="300" height="210" fill="none"/>`;
+  const x = 60, y = 30, w = 180, h = 128;
+  s += R(x, y, w, h, { f: '#b9bec5', s: '#0007', r: 9 }) + plate(x + 8, y + 8, 'PULSA') + T(x + 10, y + 42, 'envelope · kick', { z: 11, c: '#222' });
+  const scr = (sx, sw) => R(sx, y + 50, sw, 44, { f: '#0a120d', s: '#000', r: 4 }) + `<path d="M${sx + 6} ${y + 88} L${sx + 18} ${y + 58} Q${sx + 40} ${y + 80} ${sx + sw - 6} ${y + 88}" fill="none" stroke="#6fe3a6" stroke-width="1.6"/>`;
+  const line = R(x + 10, y + 104, w - 20, 14, { f: '#2b2f35', s: '#000', r: 3 }) + `<rect x="${x + 60}" y="${y + 109}" width="80" height="4" rx="2" fill="${C.cv}"/>`;
+  const inv = (ix, iy) => R(ix, iy, 22, 18, { f: '#e9ecef', s: '#999', r: 3 }) + `<path d="M${ix + 4} ${iy + 14} L${ix + 9} ${iy + 4} Q${ix + 13} ${iy + 12} ${ix + 18} ${iy + 14}" fill="none" stroke="#222" stroke-width="1.5"/>`;
+  if (kind === 'hoje') {
+    s += scr(x + 10, w - 20) + line + jack(x + w - 18, y + 14, C.cv) + inv(x + w - 29, y + 26) + jack(x, y + 72, C.ev, 1) + jack(x + w, y + 72, '#888', 1) + T(x + w + 4, y + 62, '≥½', { z: 8.5, c: '#aaa' });
+    s += cable(10, 100, x - 6, y + 72, C.ev, 0) + cable(x + w - 18, y + 14, 290, 10, C.cv, -40);
+    s += T(150, 196, '? sem nome    ? duas saídas em lugares diferentes', { a: 'middle', z: 12, c: '#ff9a9d', f: 'IBM Plex Sans', w: 400, ls: 0 });
+  } else if (kind === 'e1') {
+    s += scr(x + 10, w - 20) + line + jack(x + w - 18, y + 14, C.cv) + inv(x + w - 29, y + 26) + jack(x, y + 72, C.ev, 1) + jack(x + w, y + 72, C.ev, 1);
+    s += plate(x - 54, y + 50, 'gatilho ▸', { w: 58, dark: 1 }) + plate(x + w - 4, y + 50, '▸ passou ½', { w: 66, dark: 1 });
+    s += cable(10, 100, x - 6, y + 72, C.ev, 0);
+  } else if (kind === 'e2') {
+    s += scr(x + 52, w - 110) + line + inv(x + w - 30, y + 8);
+    s += jack(x + 24, y + 80, C.ev, 1) + plate(x + 4, y + 54, 'gatilho', { w: 42 }).replace('font-size="11.5"', 'font-size="10"');
+    s += R(x + w - 52, y + 40, 46, 62, { f: '#16191d', s: '#2c3138', r: 5 }) + T(x + w - 29, y + 52, 'OUT', { a: 'middle', z: 10, c: '#dfe3e8', w: 700 }) + jack(x + w - 22, y + 66, C.cv) + jack(x + w - 22, y + 88, C.ev, 1) + T(x + w - 46, y + 92, '½', { z: 11, c: '#ddd' }) + T(x + w - 46, y + 70, '∿', { z: 11, c: '#ddd' });
+    s += cable(10, 110, x + 24, y + 80, C.ev, 0) + cable(x + w - 22, y + 66, 292, 16, C.cv, -30);
+  } else {
+    s += scr(x + 10, w - 20).replace(`height="44"`, `height="34"`) + R(x + 10, y + 90, w - 20, 34, { f: '#d9dde1', s: '#aaa', r: 4 });
+    [['gatilho', 34, C.ev, 1], ['inverte', 76, null], ['sinal', 118, C.cv, 0], ['½', 158, C.ev, 1]].forEach(([l, dx, c, sq]) => { s += c ? jack(x + dx, y + 102, c, sq) : inv(x + dx - 11, y + 94); s += T(x + dx, y + 121, l, { a: 'middle', z: 9.5, c: '#222', w: 700 }); });
+    s += cable(10, 140, x + 34, y + 102, C.ev, 0);
+  }
+  return s;
+}
+const ENVS = [['hoje', 'Hoje', 'Quadrado à esquerda = gatilho (entra); "≥½" à direita = comparador (sai); redondo em cima = sinal.'],
+  ['e1', 'E1 · Plaquetas', 'Fica onde está; cada quadrado ganha nome em plaqueta escura e a seta da direção (▸ entra, ▸ sai). Menor mudança.'],
+  ['e2', 'E2 · Gramática dos módulos de imagem', 'Entrada na borda esquerda com plaqueta clara (como in/másc/opac); as DUAS saídas juntas na plaqueta escura OUT da direita (como o OUT de imagem). Inverter sobe pro canto de cima. A "seção · drop" vira o nome do jack de gatilho.'],
+  ['e3', 'E3 · Fileira no pé', 'VCV clássico: todos os jacks numa fileira embaixo, com nome sob cada um. Lê melhor de longe, mas o módulo cresce e as faixas de/até perdem espaço.']];
+$('#envs').innerHTML = ENVS.map(([k, t, d]) => `<div class="env"><svg viewBox="0 0 300 210" role="img" aria-label="${esc(t)}">${envSvg(k)}</svg><b>${esc(t)}${k === 'e2' ? ' <span class="rec" style="font-size:12px">recomendada</span>' : ''}</b><span>${esc(d)}</span></div>`).join('');
+
+// ---------- escolhas ----------
+const QS = [
+  ['layout', 'Qual distribuição?', 'A barra do canvas sai em todas.', [['A', 'A · barra única'], ['B', 'B · cantos (recomendada)'], ['C', 'C · tudo é módulo']]],
+  ['macros', 'As macros M1–M4', 'Pergunta aberta do PROMPT_REPAGINADA.', [['mao', 'módulo MÃO: faders + pads (recomendado)'], ['faders', 'módulo só com os 4 faders'], ['sai', 'saem (ficam só no MIDI)']]],
+  ['jacks', 'Os quadradinhos do envelope', 'Veja a seção Envelope.', [['e1', 'E1 · plaquetas'], ['e2', 'E2 · gramática da imagem (recomendada)'], ['e3', 'E3 · fileira no pé'], ['hoje', 'deixar como está']]],
+  ['proxgo', 'PRÓXIMA + GO (A e B)', 'Hoje moram dentro da janela do PROGRAMA.', [['barra', 'ao lado da cena, na barra (recomendado)'], ['prog', 'no PROGRAMA, como hoje']]],
+  ['saude', 'Avisos de saúde (chips da barra)', 'A boia do SOCORRO já acende amarelo/vermelho com problema.', [['boia', 'entram na boia: ela mostra quantos, clique = o diagnóstico (recomendado)'], ['ficam', 'ficam na barra']]],
+  ['arrumar', 'ARRUMAR e CABOS', 'Usados pouco.', [['menu', 'no menu ⋯ da vista (recomendado)'], ['roda', 'na roda (centro, ao abrir no vazio)'], ['equip', 'CABOS no Equipamento, ARRUMAR no menu']]],
+  ['geral', 'Nota geral', 'Qualquer coisa que nenhuma opção cobre.', []]];
+const ST = {}; const st = id => ST[id] || (ST[id] = { sel: '', nota: '' });
+$('#qs').innerHTML = QS.map(([id, t, d, o]) => `<div class="q"><h3>${esc(t)}</h3><p>${esc(d)}</p>${o.length ? `<div class="opts">${o.map(([v, l]) => `<button class="opt" data-id="${id}" data-v="${v}">${esc(l)}</button>`).join('')}</div>` : ''}<textarea class="nota" data-id="${id}" placeholder="nota (opcional)" aria-label="nota: ${esc(t)}"></textarea></div>`).join('');
+let db = null; const timers = {}, saveEl = $('#save');
+const flag = (t, c) => { saveEl.textContent = t; saveEl.className = 'save ' + (c || ''); };
+function paint() {
+  document.querySelectorAll('.opt[data-id]').forEach(o => { const on = st(o.dataset.id).sel === o.dataset.v; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+  document.querySelectorAll('textarea.nota').forEach(t => { if (document.activeElement !== t) t.value = st(t.dataset.id).nota || ''; });
+  const n = QS.filter(q => q[3].length); $('#count').textContent = `${n.filter(q => st(q[0]).sel).length}/${n.length} escolhidas`;
+}
+function persist(id) { clearTimeout(timers[id]); flag('salvando…');
+  timers[id] = setTimeout(async () => { const d = { id, sel: st(id).sel, nota: st(id).nota, quando: new Date().toISOString() };
+    try { if (db) await db.collection('escolhas').doc(id).set(d); else localStorage.setItem('prisma-repaginada', JSON.stringify(ST));
+      flag(db ? 'salvo ✓' : 'salvo só neste navegador', db ? 'ok' : 'err'); } catch (e) { flag('não salvou: ' + (e.message || e), 'err'); } }, 400); }
+document.addEventListener('click', e => { const o = e.target.closest('.opt[data-id]'); if (!o) return;
+  const x = st(o.dataset.id); x.sel = x.sel === o.dataset.v ? '' : o.dataset.v; persist(o.dataset.id); paint(); });
+document.addEventListener('input', e => { const t = e.target; if (t.classList.contains('nota')) { st(t.dataset.id).nota = t.value; persist(t.dataset.id); } });
+try { Object.assign(ST, JSON.parse(localStorage.getItem('prisma-repaginada') || '{}')); } catch (e) {}
+drawA(); drawB(); drawC(); legend('#lA', LA); legend('#lB', LB); legend('#lC', LC); paint();
+(async () => {
+  const to = setTimeout(() => { if (!db) flag('sem conexão: salva só neste navegador', 'err'); }, 10000);
+  try { db = await window.claude?.use?.('db'); } catch (e) { db = null; }
+  clearTimeout(to);
+  if (!db) { flag('sem conexão: salva só neste navegador', 'err'); return; }
+  db.collection('escolhas').onSnapshot(snap => {
+    (snap.docs || snap).forEach(d => { const v = typeof d.data === 'function' ? d.data() : d.data; if (v && v.id) ST[v.id] = { sel: v.sel || '', nota: v.nota || '' }; });
+    paint(); flag('salvo ✓', 'ok'); }, err => flag('erro ao ler: ' + (err.message || err), 'err'));
+})();
+}
+</script>
+</body>
+</html>

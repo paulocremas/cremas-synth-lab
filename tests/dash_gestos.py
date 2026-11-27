@@ -1,4 +1,4 @@
-"""TESTES DE GESTO do dash5 (/v5): o dash de verdade num navegador headless, mexido com mouse de verdade (CDP).
+"""TESTES DE GESTO do dash5 (/v6, o canvas dos modulos como jogo; o canvas HTML de reserva e os testes dele sairam em 2026-11-26): o dash de verdade num navegador headless, mexido com mouse de verdade (CDP).
 
 Por que: cada correcao de usabilidade era checada so' na sintaxe; o "conserta um, quebra outro" chegava no usuario.
 Aqui cada gesto da revisao (Claude Doc "PRISMA — revisão de usabilidade") vira um teste: clique, direito, 2 cliques,
@@ -175,28 +175,12 @@ def kill_browser(br):
     br.wait()
 
 
-def load(c, sel=None):
-    """abre o /v5?html (o canvas HTML de reserva) em MONTAR, espera os nos aparecerem; sel = v5sel guardado antes (pra testar o 'abre fechado')"""
-    c.send('Page.navigate', url=f'http://127.0.0.1:{PORT}/v5?html')   # o canvas HTML (reserva): o principal e' o jogo (testes t6_*)
-    time.sleep(0.4)
-    c.js(f"localStorage.setItem('v5mode', JSON.stringify('montar')); {'localStorage.setItem(\"v5sel\", ' + json.dumps(json.dumps(sel)) + ');' if sel else ''} return 1")
-    c.send('Page.reload')
-    for _ in range(80):
-        time.sleep(0.15)
-        try:
-            if c.js("return document.querySelectorAll('#cv-in .bx').length") > 0:
-                break
-        except RuntimeError:
-            pass
-    c.js("if (mode !== 'montar') setMode('montar'); return 1")
-    time.sleep(0.4)
-
-
 def fixture(c):
     """cena FIXA do teste (nao depende do tuning): camera -> Contornar -> Matiz -> saida"""
     ok = c.js("""lastOverlays = lastOverlays.filter(o => !isTapKey(o.file) && !o.kind && !o.dup);   // do zero: so' as fontes
       for (const k of Object.keys(lastBindings)) delete lastBindings[k];
       sel = { key: '', j: -1 }; msel.clear(); selWire = null; cable = null; closeWheel(); document.querySelectorAll('.nmenu').forEach(x => x.remove());
+      if (!lastOverlays.some(o => !isTapKey(o.file))) lastOverlays.push({ file: 'webcam:/dev/video0', opacity: 1 });   // a semente do repo vem VAZIA (revisao geral R1)
       lastOverlays.forEach((o, i) => { o.xy = [40, 160 + i * 300]; });
       const src = lastOverlays.find(o => !isTapKey(o.file)); if (!src) return 'sem fonte';
       const A = 'presets/atomos/Contornar.frag', B = 'presets/atomos/Matiz.frag';
@@ -205,8 +189,7 @@ def fixture(c):
       const b = newNode('@' + a.id, [960, 160], newModule(B));
       newMix('out', '@' + b.id, [1340, 160]);
       const m = newMix('out', '@' + ensureRowId(src), [1340, 560]);
-      inspClosed = selSig(); cvSig = ''; renderBoxes(); placeInsp();
-      zAnim = null; zForget(); setCvZoom(1); CV.scrollLeft = 0; CV.scrollTop = 0; return 'ok'""")   # a vista volta pro comeco (zoom/rolagem de um teste nao vaza pro outro)
+      inspClosed = selSig(); cvSig = ''; renderBoxes(); placeInsp(); return 'ok'""")
     assert ok == 'ok', f'fixture: {ok}'
     time.sleep(0.5)
 
@@ -232,177 +215,6 @@ def gesto(f):
 
 
 ATOM = "Object.keys(lastBindings).find(k => atomNode(k) && rowOf(k) && rowOf(k).xy && boxEls[k])"
-
-
-@gesto
-def t_abre_sem_painel(c):
-    """34: o app abre com o painel FECHADO, mesmo com um no' escolhido da ultima vez"""
-    k = c.js(f"return {ATOM}")
-    time.sleep(1.5)   # o dash grava a cena (debounce) antes de recarregar
-    load(c, {'key': k, 'j': 0})
-    assert c.js("return document.getElementById('insp').hidden"), 'o painel abriu sozinho'
-    if not c.js(f"return {ATOM}"):
-        fixture(c)
-
-
-@gesto
-def t_clique_so_escolhe(c):
-    """7: clique no cabecalho escolhe o no' e NAO abre o painel"""
-    k = c.js(f"return {ATOM}")
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh')
-    c.click(x, y)
-    time.sleep(0.2)
-    assert c.js("return sel.key") == k, 'nao escolheu'
-    assert c.js("return document.getElementById('insp').hidden"), 'clique abriu o painel'
-    time.sleep(0.6)   # senao os 2 cliques viram "2 cliques" (= painel)
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')   # o NOME tambem: so' escolhe (antes abria a lista de troca)
-    c.click(x, y)
-    time.sleep(0.2)
-    assert not c.js("return document.querySelector('.nmenu, .wheel')"), 'clique no nome abriu um menu'
-    assert c.js("return document.getElementById('insp').hidden"), 'clique no nome abriu o painel'
-
-
-@gesto
-def t_direito_abre_painel(c):
-    """8 + 33: direito parado no no' abre o painel; o x nao cobre nenhum botao do cabecalho"""
-    k = c.js(f"return {ATOM}")
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh')
-    c.click(x, y, 'right')
-    time.sleep(0.3)
-    assert not c.js("return document.getElementById('insp').hidden"), 'direito nao abriu o painel'
-    hit = c.js("""const x = document.getElementById('insp-x').getBoundingClientRect();
-      return [...document.querySelectorAll('#ctl > .ihead:first-child button')].filter(b => { const r = b.getBoundingClientRect();
-        return r.width && !(r.right <= x.left || r.left >= x.right || r.bottom <= x.top || r.top >= x.bottom); }).map(b => b.title.slice(0, 30))""")
-    assert not hit, f'o x cobre: {hit}'
-    c.js("inspClosed = selSig(); placeInsp(); return 1")
-
-
-@gesto
-def t_dois_cliques_abre(c):
-    """8: 2 cliques no corpo do no' (fora de knob/botao) abrem o painel"""
-    c.js("document.getElementById('insp').hidden = true; inspClosed = selSig(); return 1")
-    k = c.js(f"return {ATOM}")
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
-    c.click(x, y, clicks=1)
-    c.click(x, y, clicks=2)
-    time.sleep(0.3)
-    assert not c.js("return document.getElementById('insp').hidden"), '2 cliques nao abriram o painel'
-
-
-@gesto
-def t_escolher_nao_refaz(c):
-    """FLUIDEZ: escolher um no' (ou um fio) NAO refaz o canvas — os mesmos elementos, so' o .sel muda de lugar (antes: o canvas inteiro a cada clique)"""
-    ks = c.js("return Object.keys(boxEls).filter(k => rowOf(k) && rowOf(k).xy).slice(0, 2)")
-    assert len(ks) == 2, f'cena sem 2 nos: {ks}'
-    c.js(f"window.__els = Object.values(boxEls); setSel({json.dumps(ks[0])}, -1, true); return 1")
-    x, y = center(c, f'.bx[data-key="{ks[1]}"] > .bh')
-    c.click(x, y)
-    time.sleep(0.25)
-    r = c.js(f"""return {{ mesmos: Object.values(boxEls).every((e, i) => e === __els[i]) && Object.values(boxEls).length === __els.length,
-      a: boxEls[{json.dumps(ks[0])}].classList.contains('sel'), b: boxEls[{json.dumps(ks[1])}].classList.contains('sel'), k: sel.key }}""")
-    assert r['k'] == ks[1] and r['b'] and not r['a'], f'o .sel nao andou: {r}'
-    assert r['mesmos'], 'escolher recriou os nos'
-    ms = c.js(f"""const K = {json.dumps(ks)}, T = []; for (let i = 0; i < 8; i++){{ const t0 = performance.now(); setSel(K[i % 2], -1, true); document.body.offsetHeight; T.push(performance.now() - t0); }}
-      T.sort((a, b) => a - b); return +T[4].toFixed(1)""")
-    PERF['escolher_ms'] = ms
-    print('      escolher:', ms, 'ms')
-    assert ms < 25, f'escolher ficou pesado: {ms} ms'
-
-
-@gesto
-def t_osciloscopio_no_tempo(c):
-    """ENVELOPE: o osciloscopio anda no TEMPO, nao por quadro desenhado — com o dash travado (zoom, layout) a onda nao desacelera nem
-    muda de forma; toda mensagem entra (antes: 1 ponto por quadro processado, as do meio perdidas)"""
-    k = c.js(f"return {ATOM}")
-    n = c.js(f"const s = stackOf({json.dumps(k)})[0]; return knobsOf(s.file)[0]")
-    c.js(f"applyPreset({json.dumps(k)}, 0, {json.dumps(n)}, 'pulsa'); cvSig = ''; renderBoxes(); return 1")
-    time.sleep(0.5)
-    r = c.js("""const id = ctlStore()[ctlStore().length - 1].id, el = CVI.querySelector(`.scope[data-mvs="${id}"]`); if (!el) return 'sem osciloscopio';
-      delete SCOPE[id]; const t0 = performance.now();
-      // 12 mensagens SEGUIDAS sem nenhum quadro no meio (o dash travado): todas entram
-      for (let i = 0; i < 12; i++) scopeIn(`{"x": 1, "mv": {"${id}": ${i % 2}}, "y": 2}`);
-      const n = SCOPE[id].length;
-      SCOPE[id] = [[t0 - 1100, 1], [t0 - 1099, 0]];   // um pulso ha' 1,1 s = metade da janela
-      drawScopes(t0); const p = el.firstChild.firstChild.getAttribute('points').trim().split(' ').map(q => q.split(',').map(Number));
-      return { n, x: p[0][0], y: p[0][1], fim: p[p.length - 1][0] }""")
-    assert r != 'sem osciloscopio', r
-    assert r['n'] == 12, f'mensagens perdidas no osciloscopio: {r}'
-    assert abs(r['x'] - 30) < 1 and r['y'] < 2, f'o pulso de 1,1 s atras nao ficou no meio da janela: {r}'
-    assert r['fim'] == 60, f'o traco nao chega ate agora: {r}'
-    # RAJADA (bug "animacao dos alteradores bugada"): 8 mensagens lidas pelo servidor a cada 33 ms mas ENTREGUES juntas = 8 amostras a 33 ms
-    # (pela hora do servidor, mv_t), nao 8 no mesmo instante
-    d = c.js("""const id = ctlStore()[ctlStore().length - 1].id; delete SCOPE[id]; mvOff = null; const T = performance.now();
-      scopeIn(`{"mv": {"${id}": 0.1}, "mv_t": ${T - 5}}`);   // uma NORMAL: a demora do caminho (5 ms)
-      for (let i = 0; i < 8; i++) scopeIn(`{"mv": {"${id}": ${i % 2}}, "mv_t": ${T - 300 + i * 33}}`);   // a RAJADA: lidas antes, chegando juntas
-      const b = SCOPE[id].slice(-8); return b.slice(1).map((x, i) => +(x[0] - b[i][0]).toFixed(1))""")
-    assert all(abs(x - 33) < 1.5 for x in d), f'rajada virou degrau (espacamento das amostras): {d}'
-
-
-@gesto
-def t_bolinha_liga_desliga(c):
-    """12: a bolinha verde do no' de atomo liga/desliga"""
-    k = c.js(f"return {ATOM}")
-    off0 = bool(c.js(f"return stackOf({json.dumps(k)})[0].off || 0"))
-    c.click(*center(c, f'.bx[data-key="{k}"] .led.pw'))
-    time.sleep(0.3)
-    off1 = bool(c.js(f"return stackOf({json.dumps(k)})[0].off || 0"))
-    assert off1 != off0, 'clique na bolinha nao mudou'
-    c.click(*center(c, f'.bx[data-key="{k}"] .led.pw'))
-    time.sleep(0.3)
-    assert bool(c.js(f"return stackOf({json.dumps(k)})[0].off || 0")) == off0, 'nao voltou'
-
-
-@gesto
-def t_cabo_sobre_outro_fio(c):
-    """16: arrastar um cabo novo (Shift) por cima de outro fio NAO perde o cabo"""
-    c.js("document.querySelectorAll('.nmenu').forEach(x => x.remove()); return 1")
-    k = c.js(f"return {ATOM}")
-    a = center(c, f'.bx[data-key="{k}"] > .port.out')
-    mid = c.js("""const ps = [...document.querySelectorAll('#cv-wires path.w:not(.cv)')]; if (!ps.length) return null;
-      const p = ps[ps.length - 1], L = p.getTotalLength(), q = p.getPointAtLength(L / 2), m = p.getScreenCTM(); return [q.x * m.a + m.e, q.y * m.d + m.f]""")
-    assert mid, 'cena sem fio pra cruzar'
-    g0 = graph(c)
-    c.mods = 8   # SHIFT = cabo NOVO (clique sem Shift numa saida com cabo pega o cabo que existe)
-    seen = c.drag([a, mid, (mid[0] + 40, mid[1] + 60)], check=lambda i: c.js("return !!document.querySelector('#cv-wires path.w.drag')"), cancel=True)
-    c.mods = 0
-    assert all(seen), f'o cabo sumiu no meio do arrasto: {seen}'
-    time.sleep(0.2)
-    assert not c.js("return !!cable || !!document.querySelector('#cv-wires path.w.drag')"), 'Esc nao soltou o cabo'
-    assert graph(c) == g0, 'cancelar o cabo mudou a cena'
-
-
-@gesto
-def t_knob_alcance(c):
-    """22: knob com ativador vira ALCANCE: arrastar pra cima aumenta hi, a base (lo) fica"""
-    k = c.js(f"return {ATOM}")
-    n = c.js(f"const s = stackOf({json.dumps(k)})[0]; return knobsOf(s.file)[0] || 'opacity'")
-    c.js(f"applyPreset({json.dumps(k)}, 0, {json.dumps(n)}, 'respira'); cvSig = ''; renderBoxes(); return 1")
-    time.sleep(0.4)
-    css = f'.bx[data-key="{k}"] .nkr[data-kr="{n}"] .knob'
-    assert c.js(f"const e = document.querySelector({json.dumps(css)}); return !!e && e.classList.contains('alc')"), 'knob nao virou alcance'
-    m0 = c.js(f"return stackOf({json.dumps(k)})[0].mod[{json.dumps(n)}]")
-    x, y = center(c, css)
-    c.js("warpOK = false; return 1")   # sem /warp no teste: o cursor nao volta pro lugar
-    c.drag([(x, y), (x, y - 50)])
-    time.sleep(0.3)
-    m1 = c.js(f"return stackOf({json.dumps(k)})[0].mod[{json.dumps(n)}]")
-    assert abs((m1.get('lo') or 0) - (m0.get('lo') or 0)) < 1e-6, f'a base mexeu: {m0} -> {m1}'
-    assert (m1['hi'] - m1['lo']) > (m0['hi'] - m0['lo']) + 0.05, f'o alcance nao subiu: {m0} -> {m1}'
-
-
-@gesto
-def t_mascara_vira_no(c):
-    """26: mascara solta num no' vira um NO' de mascara ligado na 'másc' dele"""
-    k = c.js(f"return {ATOM}")
-    f = c.js("return lastShaderList.find(f => isMaskFile(f) && f !== LUMA && /Cor|Brilho/.test(f))")
-    assert f, 'sem atomo de mascara'
-    n0 = c.js("return lastOverlays.length")
-    c.js(f"maskNode({json.dumps(k)}, {json.dumps(f)}); return 1")
-    time.sleep(0.3)
-    assert c.js("return lastOverlays.length") == n0 + 1, 'nao criou o no'
-    ok = c.js(f"""const nv = lastOverlays[lastOverlays.length - 1], m = matteOf({json.dumps(k)}) || {{}};
-      return (m.items || []).some(x => (x.ins || [])[0] === '@' + nv.id)""")
-    assert ok, 'o no de mascara nao esta na másc do alvo'
 
 
 # ---------------------------------------------------------------- rodada 1: nos e cabos (itens 1-19 da revisao)
@@ -435,719 +247,11 @@ def wire_mid(c, port='a', margin=20):
       return null""")
 
 
-@gesto
-def t_vazio_desescolhe(c):
-    """2: clique no VAZIO tira a escolha — Delete depois disso nao apaga nada"""
-    k = c.js(f"return {ATOM}")
-    c.click(*center(c, f'.bx[data-key="{k}"] > .bh'))
-    time.sleep(0.6)
-    c.click(*empty_pt(c))
-    time.sleep(0.3)
-    assert not c.js("return sel.key"), f'continua escolhido: {c.js("return sel.key")}'
-    g0 = graph(c)
-    c.key('Delete')
-    time.sleep(0.3)
-    assert graph(c) == g0, 'Delete apagou algo sem nada escolhido'
-
-
-@gesto
-def t_apagar_desfazer(c):
-    """11 + 5: Delete apaga o no' escolhido; Ctrl+Z volta"""
-    k = c.js(f"return {ATOM}")
-    n0 = c.js("return lastOverlays.length")
-    c.click(*center(c, f'.bx[data-key="{k}"] > .bh'))
-    time.sleep(0.6)
-    c.key('Delete')
-    time.sleep(0.4)
-    assert c.js("return lastOverlays.length") == n0 - 1, 'Delete nao apagou o no'
-    c.key('z', 2)
-    time.sleep(0.5)
-    assert c.js("return lastOverlays.length") == n0, 'Ctrl+Z nao trouxe de volta'
-
-
-@gesto
-def t_delete_nao_pega_fio_do_mouse(c):
-    """11: Delete apaga o ESCOLHIDO, nao o fio que estiver embaixo do mouse"""
-    k = c.js(f"return {ATOM}")
-    c.click(*center(c, f'.bx[data-key="{k}"] > .bh'))
-    time.sleep(0.6)
-    w = wire_mid(c)
-    c.mouse('mouseMoved', w[0], w[1])
-    time.sleep(0.2)
-    n0, g0 = c.js("return lastOverlays.length"), graph(c)
-    c.key('Delete')
-    time.sleep(0.4)
-    assert c.js("return lastOverlays.length") == n0 - 1, 'Delete nao apagou o no escolhido (pegou o fio do mouse?)'
-    c.key('z', 2)
-    time.sleep(0.5)
-    assert graph(c) == g0, 'Ctrl+Z nao voltou tudo'
-
-
-@gesto
-def t_retangulo(c):
-    """2: retangulo no vazio pega varios; Delete apaga todos; Ctrl+Z volta todos"""
-    c.js("setCvZoom(0.6); return 1")
-    time.sleep(0.3)
-    box = c.js("""const r = [...document.querySelectorAll('#cv-in .bx')].map(e => e.getBoundingClientRect()), R = CV.getBoundingClientRect();
-      const x0 = Math.min(...r.map(b => b.left)) - 14, y0 = Math.min(...r.map(b => b.top)) - 14, x1 = Math.max(...r.map(b => b.right)) + 14, y1 = Math.max(...r.map(b => b.bottom)) + 14;
-      return [Math.max(R.left + 2, x0), Math.max(R.top + 2, y0), Math.min(R.right - 2, x1), Math.min(R.bottom - 2, y1), r.length]""")
-    t = c.js(f"const t = document.elementFromPoint({box[0]}, {box[1]}); return t === CV || t === CVI || t === WIRES")
-    assert t, 'o canto do retangulo nao cai no vazio'
-    c.drag([(box[0], box[1]), (box[2], box[3])])
-    time.sleep(0.3)
-    n = c.js("return msel.size")
-    assert n >= 3, f'retangulo pegou {n}'
-    n0, g0 = c.js("return lastOverlays.length"), graph(c)
-    c.key('Delete')
-    time.sleep(0.5)
-    assert c.js("return lastOverlays.length") < n0 - 1, 'Delete nao apagou os escolhidos'
-    c.key('z', 2)
-    time.sleep(0.6)
-    assert c.js("return lastOverlays.length") == n0, 'Ctrl+Z nao trouxe todos'
-    c.js("msel.clear(); paintMsel(); setCvZoom(1); return 1")
-    time.sleep(0.3)
-
-
-@gesto
-def t_mover(c):
-    """9: arrastar o cabecalho move o no' (fios juntos), sem abrir painel nem menu"""
-    k = c.js(f"return {ATOM}")
-    xy0 = c.js(f"return rowOf({json.dumps(k)}).xy.slice()")
-    g0 = graph(c)
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
-    c.drag([(x, y), (x + 60, y + 48)])
-    time.sleep(0.4)
-    xy1 = c.js(f"return rowOf({json.dumps(k)}).xy")
-    assert xy1 != xy0, 'nao moveu'
-    assert graph(c) == g0, 'mover mexeu nas ligacoes'
-    assert c.js("return document.getElementById('insp').hidden && !document.querySelector('.nmenu, .wheel')"), 'mover abriu painel/menu'
-
-
-@gesto
-def t_duplicar_ctrl(c):
-    """10: Ctrl+arrastar duplica o no' (copia solta, sem fios); o original fica"""
-    k = c.js(f"return {ATOM}")
-    n0 = c.js("return lastOverlays.length")
-    xy0 = c.js(f"return rowOf({json.dumps(k)}).xy.slice()")
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
-    c.mods = 2
-    c.drag([(x, y), (x + 40, y + 160)])
-    c.mods = 0
-    time.sleep(0.4)
-    assert c.js("return lastOverlays.length") == n0 + 1, 'Ctrl+arrastar nao duplicou'
-    assert c.js(f"return rowOf({json.dumps(k)}).xy") == xy0, 'o original saiu do lugar'
-    c.key('z', 2)
-    time.sleep(0.4)
-
-
-@gesto
-def t_tirar_fio(c):
-    """17: clique no fio escolhe ele; Delete tira so' ele"""
-    w = wire_mid(c)
-    assert w, 'sem fio'
-    c.click(w[0], w[1])
-    time.sleep(0.3)
-    assert c.js("return !!selWire"), 'clique no fio nao escolheu'
-    n0 = c.js("return lastOverlays.length")
-    c.key('Delete')
-    time.sleep(0.4)
-    assert c.js("return lastOverlays.length") == n0, 'Delete no fio apagou um no'
-    assert c.js("return !selWire"), 'fio continua escolhido'
-    c.key('z', 2)
-    time.sleep(0.4)
-
-
-@gesto
-def t_fio_apaga_ao_sair(c):
-    """16: mouse em cima do fio acende ele; tirar o mouse apaga (antes ficava aceso)"""
-    w = wire_mid(c)
-    assert w, 'sem fio exposto'
-    c.mouse('mouseMoved', w[0], w[1])
-    time.sleep(0.2)
-    assert c.js("return document.querySelectorAll('#cv-wires path.w.hl').length") >= 1, 'o fio nao acendeu'
-    c.mouse('mouseMoved', *empty_pt(c))
-    time.sleep(0.2)
-    lit = c.js("return document.querySelectorAll('#cv-wires path.w.hl, #cv-wires path.w.dim').length")
-    assert lit == 0, f'{lit} fio(s) continuam acesos/apagados depois de tirar o mouse'
-
-
-@gesto
-def t_direito_arrasta_vista(c):
-    """1: direito ARRASTANDO (mesmo em cima de um no') move a vista e NAO abre o painel"""
-    k = c.js(f"return {ATOM}")
-    c.js("inspClosed = selSig(); placeInsp(); return 1")
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh')
-    s0 = c.js("return [CV.scrollLeft, CV.scrollTop, lastOverlays.map(o => o.xy[0]).join()]")
-    c.drag([(x, y), (x - 120, y - 80)], button='right')
-    time.sleep(0.3)
-    s1 = c.js("return [CV.scrollLeft, CV.scrollTop, lastOverlays.map(o => o.xy[0]).join()]")
-    assert s1 != s0, 'a vista nao andou'
-    assert c.js("return document.getElementById('insp').hidden"), 'arrastar com o direito abriu o painel'
-
-
-@gesto
-def t_cabo_dois_cliques_roda(c):
-    """2 cliques no CABO abrem a roda de atomos, no fio"""
-    w = wire_mid(c, margin=170)
-    assert w, 'sem fio exposto'
-    c.click(w[0], w[1])
-    c.click(w[0], w[1], clicks=2)
-    time.sleep(0.4)
-    assert c.js("return !!document.querySelector('.wheel')"), '2 cliques no cabo nao abriram a roda'
-    assert c.js("return document.querySelector('.wheel .wh-mid').textContent") == 'no fio', 'a roda nao esta no fio'
-    c.key('Escape')
-    c.js("closeWheel(); return 1")
-
-
-@gesto
-def t_shift_clique_soma(c):
-    """2: Shift+clique em QUALQUER parte do no' soma (o ja' escolhido entra junto); Delete apaga os dois"""
-    ks = c.js("return Object.keys(lastBindings).filter(k => atomNode(k) && boxEls[k]).slice(0, 2)")
-    assert len(ks) == 2, 'precisa de 2 nos de atomo'
-    c.click(*center(c, f'.bx[data-key="{ks[0]}"] > .bh .nm'))
-    time.sleep(0.6)
-    x, y = center(c, f'.bx[data-key="{ks[1]}"] .win')
-    c.mods = 8
-    c.click(x, y)
-    c.mods = 0
-    time.sleep(0.3)
-    assert c.js("return [...msel].sort()") == sorted(ks), f'escolhidos: {c.js("return [...msel]")}'
-    n0 = c.js("return lastOverlays.length")
-    c.key('Delete')
-    time.sleep(0.4)
-    assert c.js("return lastOverlays.length") == n0 - 2, 'Delete nao apagou os 2'
-    c.key('z', 2)
-    time.sleep(0.5)
-
-
-@gesto
-def t_ctrl_a_esc(c):
-    """2: Ctrl+A escolhe todos; Esc tira; Delete depois nao apaga nada"""
-    c.click(*empty_pt(c))
-    c.key('a', 2)
-    time.sleep(0.2)
-    n = c.js("return [msel.size, document.querySelectorAll('#cv-in .bx.msel').length, document.querySelectorAll('#cv-in .bx').length]")
-    assert n[0] == n[2] and n[1] == n[2], f'Ctrl+A: {n}'
-    c.key('Escape')
-    time.sleep(0.2)
-    assert c.js("return msel.size + document.querySelectorAll('.bx.msel').length") == 0, 'Esc nao tirou'
-    g0 = graph(c)
-    c.key('Delete')
-    time.sleep(0.3)
-    assert graph(c) == g0, 'Delete apagou depois do Esc'
-
-
-@gesto
-def t_ctrl_d(c):
-    """Ctrl+D duplica o escolhido (sem fios) e a copia fica escolhida"""
-    k = c.js(f"return {ATOM}")
-    c.click(*center(c, f'.bx[data-key="{k}"] > .bh .nm'))
-    time.sleep(0.6)
-    n0 = c.js("return lastOverlays.length")
-    c.key('d', 2)
-    time.sleep(0.4)
-    assert c.js("return lastOverlays.length") == n0 + 1, 'Ctrl+D nao duplicou'
-    nk = c.js("return sel.key")
-    assert nk and nk != k, 'a copia nao ficou escolhida'
-    assert c.js(f"return rowOf({json.dumps(nk)}).file") == '@-', 'a copia veio com fio'
-
-
-@gesto
-def t_retangulo_um(c):
-    """2: retangulo pegando UM no' + Delete apaga esse no' (o aceso e' o que sai)"""
-    c.click(*empty_pt(c))
-    k = c.js(f"return {ATOM}")
-    r = c.js(f"const b = boxEls[{json.dumps(k)}]; b.scrollIntoView({{block: 'center'}}); const r = b.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]")
-    vazio = lambda p: c.js(f"const t = document.elementFromPoint({p[0]}, {p[1]}); return t === CV || t === CVI || t === WIRES")
-    cand = [(r[0] - 10, r[1] - 10), (r[0] - 6, r[1] - 22), (r[0] + 20, r[1] - 12), (r[0] + 60, r[1] - 14), (r[0] - 14, r[1] + 4)]   # um canto VAZIO (cabo de outro no' pode passar)
-    a = next((p for p in cand if vazio(p)), None)
-    assert a, 'canto nao vazio: ' + str(c.js(f"const t = document.elementFromPoint({cand[0][0]}, {cand[0][1]}); return t && (t.outerHTML || '').slice(0, 160)"))
-    c.drag([a, (r[0] + 30, r[1] + 20)])
-    time.sleep(0.3)
-    assert c.js("return [...msel]") == [k], f'retangulo pegou {c.js("return [...msel]")}'
-    n0 = c.js("return lastOverlays.length")
-    c.key('Delete')
-    time.sleep(0.4)
-    assert c.js("return lastOverlays.length") == n0 - 1, 'Delete nao apagou o no aceso'
-
-
-@gesto
-def t_saida_por_tela(c):
-    """saidas = telas do palco: a roda lista uma por tela; tela que ja' tem saida nao cria outra"""
-    n = c.js("return screenOuts().length")
-    used = c.js("return screenOuts().filter(s => s.o).length")
-    o0 = c.js("return outRows().length")
-    for _ in range(n + 2):   # pede mais saidas do que telas
-        c.js("const f = screenOuts().find(s => !s.o); if (f) outForScreen(f, [900, 600], null); return 1")
-    assert c.js("return outRows().length") == o0 + (n - used), f'saidas: {c.js("return outRows().length")} (telas {n})'
-    c.js("document.getElementById('cvadd-out').click(); return 1")
-    time.sleep(0.2)
-    assert c.js("return outRows().length") == o0 + (n - used), '"saída nova" passou do limite'
-
-
-@gesto
-def t_cards_identificaveis(c):
-    """cards: pictograma do PROPRIO atomo, imagem viva, cor da familia; altura real = a do layout (fios e arrumar)"""
-    r = c.js("""return Object.keys(lastBindings).filter(k => atomNode(k) && boxEls[k]).map(k => { const b = boxEls[k], u = b.querySelector('.bh .ai use');
-      return [fxName(stackOf(k)[0].file), u && u.getAttribute('href'), !!b.querySelector('canvas.lv'), getComputedStyle(b).getPropertyValue('--cc').trim(), b.offsetHeight, boxH(k)]; })""")
-    assert r, 'sem no de atomo'
-    for nm, href, lv, cc, hh, bh in r:
-        assert href and href.startswith('#i-at-'), f'{nm}: sem pictograma proprio ({href})'
-        assert lv, f'{nm}: sem imagem viva'
-        assert cc, f'{nm}: sem cor da familia'
-        assert abs(hh - bh) <= 4, f'{nm}: altura {hh} != layout {bh}'
-    assert len({x[1] for x in r}) == len(r), 'dois atomos com o mesmo pictograma'
-
-
-@gesto
-def t_escolhido_fica(c):
-    """escolhido = contorno inconfundivel; mexer DENTRO dele (knob, bolinha, jack) nao tira; so' clicar FORA tira"""
-    k = c.js(f"return {ATOM}")
-    c.click(*center(c, f'.bx[data-key="{k}"] > .bh .nm'))
-    time.sleep(0.6)
-    st = c.js(f"const s = getComputedStyle(boxEls[{json.dumps(k)}]); return [s.outlineStyle, parseFloat(s.outlineWidth)]")
-    assert st[0] == 'solid' and st[1] >= 2, f'escolhido sem contorno claro: {st}'
-    c.js("warpOK = false; return 1")
-    x, y = center(c, f'.bx[data-key="{k}"] .nkr .knob')
-    c.drag([(x, y), (x, y - 20)])
-    time.sleep(0.3)
-    c.click(*center(c, f'.bx[data-key="{k}"] .led.pw')); time.sleep(0.3)
-    c.click(*center(c, f'.bx[data-key="{k}"] .led.pw')); time.sleep(0.3)
-    c.click(*center(c, f'.bx[data-key="{k}"] .kj')); time.sleep(0.3)
-    c.key('Escape'); c.js("closeWheel(); document.querySelectorAll('.nmenu').forEach(x => x.remove()); return 1")
-    assert mkb(c) == k, f'mexer dentro tirou a escolha: {mkb(c)}'
-    c.click(*empty_pt(c))
-    time.sleep(0.3)
-    assert not c.js("return sel.key"), 'clique fora nao tirou'
-
-
 def mkb(c):
     return c.js("return mkBase(sel.key)")
 
 
-@gesto
-def t_ativador_nasce_embaixo(c):
-    """mini TV: o ativador (controlador) nasce EMBAIXO do no', com o jack de CV dele perto do jack do knob (o CV sai por baixo)"""
-    k = c.js(f"return {ATOM}")
-    n = c.js(f"const s = stackOf({json.dumps(k)})[0]; return knobsOf(s.file)[1] || knobsOf(s.file)[0]")
-    c.js(f"applyPreset({json.dumps(k)}, 0, {json.dumps(n)}, 'pulsa'); cvSig = ''; renderBoxes(); return 1")
-    time.sleep(0.5)
-    r = c.js(f"""const o = rowOf({json.dumps(k)}), m = stackOf({json.dumps(k)})[0].mod[{json.dumps(n)}], ct = ctlStore().find(x => x.id === m.id), e = cvEnd({{key: {json.dumps(k)}, j: 0, n: {json.dumps(n)}}});
-      return [ct.xy[1], o.xy[1] + boxH({json.dumps(k)}), ct.xy[0] + CTL_W - 18, e[0], e[2] || '']""")
-    assert r[0] > r[1], f'nao nasceu embaixo: {r}'
-    assert abs(r[2] - r[3]) < 80, f'o jack do controlador longe do knob: {r}'
-    assert r[4] == 'down', f'o cabo nao chega por baixo: {r}'
-
-
-@gesto
-def t_arrastar_envelope(c):
-    """o envelope (controlador) arrasta por qualquer parte do corpo; o jack de CV fica no canto superior direito"""
-    k = c.js(f"return {ATOM}")
-    n = c.js(f"const s = stackOf({json.dumps(k)})[0]; return knobsOf(s.file)[0]")
-    c.js(f"applyPreset({json.dumps(k)}, 0, {json.dumps(n)}, 'pulsa'); cvSig = ''; renderBoxes(); return 1")
-    time.sleep(0.5)
-    cid = c.js(f"return stackOf({json.dumps(k)})[0].mod[{json.dumps(n)}].id")
-    xy0 = c.js(f"return ctlStore().find(x => x.id === {json.dumps(cid)}).xy.slice()")
-    jk = c.js(f"""const b = ctlEls[{json.dumps(cid)}].getBoundingClientRect(), j = ctlEls[{json.dumps(cid)}].querySelector('.port.cout').getBoundingClientRect();
-      return [j.right > b.right - 12, j.top < b.top + 12]""")
-    assert all(jk), f'o jack do envelope nao esta no canto superior direito: {jk}'
-    x, y = center(c, f'.bx.ctln[data-ctl="{cid}"] .scope')
-    c.drag([(x, y), (x + 120, y + 60)])
-    time.sleep(0.3)
-    xy1 = c.js(f"return ctlStore().find(x => x.id === {json.dumps(cid)}).xy.slice()")
-    assert xy1[0] - xy0[0] > 60 and xy1[1] - xy0[1] > 20, f'o envelope nao arrastou: {xy0} -> {xy1}'
-
-
-@gesto
-def t_mixer(c):
-    """MIXER de N jacks: um jack por linha, jack de cima = na frente; a SAIDA tem uma entrada (o cabo novo troca); saida antiga vira mixer"""
-    r = c.js("""const src = lastOverlays.find(o => !o.kind && !isTapKey(o.file)), a = '@' + ensureRowId(src), b = '@' + Object.values(lastOverlays).find(o => isTapKey(o.file) && o.id).id;
-      const m = newMix('mix', null, [700, 700], 4); cvSig = ''; renderBoxes();
-      plug(b, { key: chKey(m), port: 'L', idx: 902 }); plug(a, { key: chKey(m), port: 'L', idx: 900 });
-      const rows = [...boxEls[chKey(m)].querySelectorAll('.lr')].map(x => x.classList.contains('slot') ? '-' : 'x');
-      const o = newMix('out', a, [1000, 700]); plug(b, { key: chKey(o), port: 'L', idx: 3 });
-      const old = { kind: 'out', id: 'oz' + rid(), n: 9, xy: [1300, 700], layers: [{ from: a }, { from: b }] }; lastOverlays.push(old); graphFix();
-      const mz = lastOverlays.find(x => x.kind === 'mix' && x.jacks && x !== m && old.layers[0].from === '@' + x.id);
-      return { order: m.layers.map(L => [L.from === a ? 'a' : 'b', L.slot]), rows, out: o.layers.map(L => L.from === b ? 'b' : 'a'),
-               mig: mz ? mz.layers.map(L => [L.from === a ? 'a' : 'b', L.slot]) : null, outrows: boxEls[chKey(o)] ? boxEls[chKey(o)].querySelectorAll('.lr').length : -1 }""")
-    assert r['order'] == [['b', 2], ['a', 0]], f'ordem do mixer (de tras pra frente) errada: {r}'
-    assert r['rows'] == ['x', '-', 'x', '-'], f'o mixer nao mostra os 4 jacks no lugar: {r}'
-    assert r['out'] == ['b'], f'a saida nao ficou com UMA entrada (a nova): {r}'
-    assert r['mig'] == [['a', 1], ['b', 0]], f'saida antiga nao virou mixer (a da frente no jack de cima): {r}'
-
-
-@gesto
-def t_hover_suave(c):
-    """mouse num no': os cabos dos outros esmaecem SUAVE — os mesmos elementos (com transicao), nao um redesenho; mexendo em knob ficam fracos, nao somem"""
-    k = c.js(f"return {ATOM}")
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
-    for _ in range(6):   # espera os cabos pararem (um redesenho do SSE no meio nao e' o hover)
-        c.js("window._w0 = [...document.querySelectorAll('#cv-wires path.w')]; return 1")
-        time.sleep(0.35)
-        if c.js("const ps = [...document.querySelectorAll('#cv-wires path.w')]; return ps.length === _w0.length && ps.every((p, i) => p === _w0[i])"):
-            break
-    c.mouse('mouseMoved', x, y)
-    time.sleep(0.2)
-    r = c.js(f"""const ps = [...document.querySelectorAll('#cv-wires path.w')];
-      return [ps.length === _w0.length && ps.every((p, i) => p === _w0[i]), ps.some(p => p.classList.contains('dim')) || ps.every(p => p.dataset.k === {json.dumps(k)} || p.dataset.s === {json.dumps(k)}),
-              parseFloat(getComputedStyle(ps[0]).transitionDuration) > 0]""")
-    assert r[0], 'o hover refez os cabos (sem transicao: apaga seco) ' + str(c.js("return [_w0.length, document.querySelectorAll('#cv-wires path.w').length, cvZoom(), !!zAnim]"))
-    assert r[1] and r[2], f'hover sem esmaecer suave: {r}'
-    c.js("document.body.classList.add('kturn'); return 1")
-    op = c.js("return +getComputedStyle(document.getElementById('cv-wires')).opacity")   # (a transicao anda: le o alvo pela regra)
-    tgt = c.js("""for (const sh of document.styleSheets) for (const r of sh.cssRules) if (r.selectorText === 'body.kturn #cv-wires') return parseFloat(r.style.opacity); return -1""")
-    c.js("document.body.classList.remove('kturn'); return 1")
-    assert tgt >= 0.3, f'mexendo num knob os cabos somem demais: alvo {tgt} (agora {op})'
-
-
-@gesto
-def t_enter_lista(c):
-    """ENTER no MONTAR abre a lista de modulos (como o VCV) onde o mouse esta'; Esc fecha"""
-    c.click(*empty_pt(c))
-    time.sleep(0.2)
-    c.key('Enter')
-    time.sleep(0.3)
-    assert c.js("return !!document.querySelector('.wheel')"), 'Enter nao abriu a lista de modulos'
-    c.key('Escape')
-    c.js("closeWheel(); return 1")
-
-
-@gesto
-def t_previa_nao_pisca(c):
-    """a imagem viva NAO pisca preta: o mesmo canvas sobrevive ao redesenho (clique, zoom) e o PROGRAMA "fundo" aparece atras do canvas"""
-    k = c.js(f"return {ATOM}")
-    same = c.js(f"""const a = boxEls[{json.dumps(k)}].querySelector('canvas.lv'); a.width = 7;   // marca o canvas (o conteudo vai junto)
-      cvSig = ''; renderBoxes(); setCvZoom((cvzNow || 1) * 1.25); cvSig = ''; renderBoxes();
-      const b = boxEls[{json.dumps(k)}].querySelector('canvas.lv'); const r = [a === b, b.width]; setCvZoom(null); return r""")
-    assert same[0] and same[1] == 7, f'o canvas da previa foi trocado (pisca preto): {same}'
-    bg = c.js("return getComputedStyle(CV).backgroundColor + ' | ' + getComputedStyle(CV).backgroundImage")
-    assert bg.startswith('rgba(0, 0, 0, 0)') and bg.endswith('none'), f'o canvas tem fundo proprio (esconde o PROGRAMA "fundo"): {bg}'
-
-
-@gesto
-def t_clique_pega_cabo(c):
-    """VCV: clique numa SAIDA com cabo PEGA o cabo (solto no vazio = tira; Ctrl+Z volta); Shift = cabo NOVO (os que existem ficam)"""
-    k = c.js(f"return {ATOM}")
-    n0 = c.js(f"const ref = '@' + rowOf({json.dumps(k)}).id; return rowsVisible().reduce((a, r) => a + inputsOf(r).filter(w => w.ref === ref).length, 0)")
-    assert n0 >= 1, 'o no de teste nao tem cabo saindo'
-    a = center(c, f'.bx[data-key="{k}"] > .port.out')
-    e = empty_pt(c)
-    c.mods = 8
-    c.drag([a, ((a[0] + e[0]) / 2, (a[1] + e[1]) / 2)], cancel=True)
-    c.mods = 0
-    time.sleep(0.3)
-    n1 = c.js(f"const ref = '@' + rowOf({json.dumps(k)}).id; return rowsVisible().reduce((a, r) => a + inputsOf(r).filter(w => w.ref === ref).length, 0)")
-    assert n1 == n0, f'Shift mexeu nos cabos que existem: {n0} -> {n1}'
-    a = center(c, f'.bx[data-key="{k}"] > .port.out')
-    c.drag([a, e])
-    time.sleep(0.4)
-    c.js("document.querySelectorAll('.nmenu').forEach(x => x.remove()); closeWheel(); return 1")
-    n2 = c.js(f"const ref = '@' + rowOf({json.dumps(k)}).id; return rowsVisible().reduce((a, r) => a + inputsOf(r).filter(w => w.ref === ref).length, 0)")
-    assert n2 == n0 - 1, f'o clique nao pegou (e tirou) o cabo: {n0} -> {n2}'
-
-
-@gesto
-def t_mini_tv(c):
-    """mini TV (rodada 4): liga + fader EM CIMA da tela; a TELA na largura toda; nome embaixo dela; IN/MASC a' ESQUERDA dos knobs (IN na
-    altura do knob, MASC na dos CVs), OUT a' DIREITA na altura do knob (aba escura); jacks LONGE das bordas; knob SEM porcentagem"""
-    k = c.js(f"return {ATOM}")
-    r = c.js(f"""const b = boxEls[{json.dumps(k)}], B = b.getBoundingClientRect(), z = cvZoom(), R = q => {{ const e = b.querySelector(q); return e && e.getBoundingClientRect(); }};
-      const crt = R('.crt'), win = R(':scope > .win'), i = R(':scope > .port.in'), m = R(':scope > .port.pm'), o = R(':scope > .port.out'), kj = R('.kj'), kw = R('.nkr .kw'), f = R('.r1 .fader'), pw = R('.r1 .led.pw'),
-        nm = R(':scope > .bh .nm'), tab = R(':scope > .otab'), lb = [...b.querySelectorAll('.k-lb')], kv = b.querySelector('.k-val'), cy = r => (r.top + r.bottom) / 2;
-      const borda = Math.min(...[i, m, o, kj].map(r => Math.min(r.left - B.left, B.right - r.right, B.bottom - r.bottom))) / z;
-      return {{ tv: b.classList.contains('tv'), fam: [...b.classList].some(c => c.startsWith('fam-')), ar: crt && crt.width / crt.height, palco: tvAR(),
-        tela_larga: (win.left - B.left) / z < 18 && (B.right - win.right) / z < 18,
-        in_esq: i && i.right <= kw.left && Math.abs(cy(i) - cy(kw)) < 4, masc_esq: m && m.right <= kw.left && Math.abs(cy(m) - cy(kj)) < 4,
-        out_dir: o && o.left >= kw.right && Math.abs(cy(o) - cy(kw)) < 4, out_na_aba: o && tab && o.top >= tab.top && o.bottom <= tab.bottom + 1,
-        longe_da_borda: borda >= 12, borda, sem_pct: !kv || getComputedStyle(kv).display === 'none',
-        fader_em_cima: !!f && f.bottom <= crt.top, liga_na_linha: !!pw && Math.abs((pw.top + pw.bottom) / 2 - (f.top + f.bottom) / 2) < 6,
-        nome_embaixo: !!nm && nm.top >= crt.bottom && nm.top < crt.bottom + 30, sem_knob_opac: !b.querySelector('.nkr[data-kr="opacity"]'),
-        rotulo_inteiro: lb.every(e => e.scrollWidth <= e.clientWidth + 1 && !/…/.test(e.textContent)) }}""")
-    assert r['tv'] and r['fam'], f'nao e mini TV: {r}'
-    assert abs(r['ar'] - r['palco']) < 0.05, f'tela fora da proporcao do palco: {r}'
-    for chave in ('tela_larga', 'in_esq', 'masc_esq', 'out_dir', 'out_na_aba', 'longe_da_borda', 'sem_pct', 'fader_em_cima', 'liga_na_linha', 'nome_embaixo', 'sem_knob_opac', 'rotulo_inteiro'):
-        assert r[chave], f'{chave}: {r}'
-    o0 = c.js(f"return stackOf({json.dumps(k)})[0].opacity ?? 1")
-    x, y = center(c, f'.bx[data-key="{k}"] .r1 .fader')
-    c.js("warpOK = false; return 1")   # sem /warp no teste: o cursor nao volta pro lugar
-    c.drag([(x, y), (x - 60, y)])
-    time.sleep(0.3)
-    o1 = c.js(f"return stackOf({json.dumps(k)})[0].opacity ?? 1")
-    assert o1 < o0 - 0.1, f'o fader de opacidade nao mexeu: {o0} -> {o1}'
-
-
-@gesto
-def t_tema(c):
-    """menu VISUAL: foto-real | cel e leve trocam o desenho (classe no body, cabo sem sombra no leve) e ficam lembrados ao reabrir"""
-    c.click(*center(c, '#tema-btn'))
-    time.sleep(0.3)
-    assert c.js("return !!document.getElementById('tema-pop')"), 'o menu visual nao abriu'
-    c.click(*center(c, '#tema-seg button[data-t="cel"]'))
-    time.sleep(0.3)
-    assert c.js("return document.body.classList.contains('cel') && JSON.parse(localStorage.getItem('v5tema')).t === 'cel'"), 'cel nao ligou/gravou'
-    assert c.js("return document.querySelectorAll('#cv-wires path.ws').length") > 0, 'cabo sem contorno no cel'
-    assert c.js("return [...document.querySelectorAll('#cv .lv, #pvw canvas, #pvw img')].every(e => getComputedStyle(e).filter === 'none')"), \
-        'o tema cel mexeu na IMAGEM da previa (o tema muda so as pecas, nunca o que a tela mostra)'
-    c.click(*center(c, '#tema-leve'))
-    time.sleep(0.3)
-    assert c.js("return document.body.classList.contains('leve') && !document.querySelector('#cv-wires path.ws, #cv-wires path.wh')"), 'leve deixou decoracao no cabo'
-    load(c)
-    assert c.js("return document.body.classList.contains('cel') && document.body.classList.contains('leve')"), 'o tema nao foi lembrado ao reabrir'
-    c.js("tema = { t: 'foto', leve: 0 }; LS.set('v5tema', tema); applyTema(); return 1")
-    fixture(c)
-
-
-@gesto
-def t_cabo_escolhido_por_cima(c):
-    """cabo escolhido aparece POR CIMA dos nos; sem o x no cabo"""
-    w = wire_mid(c)
-    c.click(w[0], w[1])
-    time.sleep(0.3)
-    assert c.js("return document.querySelectorAll('#cv-wires-top path').length") >= 1, 'o escolhido nao foi pra cima'
-    assert not c.js("return document.querySelector('.wx')"), 'o x do cabo ainda existe'
-    z = c.js("return [+getComputedStyle(document.getElementById('cv-wires-top')).zIndex, +getComputedStyle(document.querySelector('#cv-in .bx')).zIndex]")
-    assert z[0] > z[1], f'svg de cima nao esta acima dos nos: {z}'
-
-
-@gesto
-def t_sem_maozinha(c):
-    """sem maozinha parada: canvas, titulo e corpo do no' com o cursor normal"""
-    k = c.js(f"return {ATOM}")
-    cur = c.js(f"""const b = boxEls[{json.dumps(k)}]; return [getComputedStyle(CV).cursor, getComputedStyle(b.querySelector('.bh')).cursor,
-      getComputedStyle(b.querySelector('.bh .nm')).cursor, getComputedStyle(b.querySelector('.at') || b).cursor]""")
-    assert all(x in ('default', 'auto') for x in cur), f'cursores: {cur}'
-
-
-@gesto
-def t_zoom_longe(c):
-    """zoom out ate' o PISO (2%): niveis bloco/ponto (no' = bloco na cor da familia, sem pecas), cabos ainda nas bordas; roda = SUAVE e centrada no cursor"""
-    k = c.js(f"return {ATOM}")
-    c.js("setCvZoom(0.001); return 1")
-    z = c.js("return cvZoom()")
-    assert abs(z - 0.02) < 1e-6, f'o piso do zoom nao e 2%: {z}'
-    r = c.js(f"""const b = boxEls[{json.dumps(k)}], n = b.querySelector('.blkn');
-      return {{ cls: [...CVI.classList], knobs: !!b.querySelector('.nkr') && b.querySelector('.nkr').getClientRects().length, blk: getComputedStyle(b).backgroundColor,
-        nome: n && getComputedStyle(n).display, wires: [...document.querySelectorAll('#cv-wires path.w')].map(p => p.getAttribute('d')).filter(d => /^M0 0|NaN/.test(d)).length }}""")
-    assert 'zl-blk' in r['cls'] and 'zl-ponto' in r['cls'], f'nivel de longe: {r}'
-    assert not r['knobs'], f'de longe o no ainda desenha knobs: {r}'
-    assert r['nome'] == 'flex', f'o bloco nao mostra o nome: {r}'
-    assert r['wires'] == 0, f'cabo sem ponta (jack escondido): {r}'
-    c.js("setCvZoom(0.15); return 1")
-    assert 'zl-blk' in c.js("return [...CVI.classList]") and 'zl-ponto' not in c.js("return [...CVI.classList]"), 'nivel bloco'
-    assert c.js(f"return boxEls[{json.dumps(k)}].querySelector('.win').getClientRects().length") > 0, 'no bloco a tela (parada) deveria aparecer'
-    c.js("setCvZoom(1); return 1")
-    # RODA: suave (anda em varios quadros) e o ponto embaixo do cursor fica parado
-    C = center(c, f'.bx[data-key="{k}"] .win')   # em cima de um no' (dentro do mundo: a rolagem nao bate no limite)
-    w0 = c.js(f"const C = CV.getBoundingClientRect(), z = cvZoom(); return [(CV.scrollLeft + {C[0]} - C.left) / z, (CV.scrollTop + {C[1]} - C.top) / z]")
-    c.send('Input.dispatchMouseEvent', type='mouseWheel', x=C[0], y=C[1], deltaX=0, deltaY=-120)
-    z1 = c.js("return cvZoom()")
-    time.sleep(0.6)
-    z2 = c.js("return cvZoom()")
-    assert z2 > 1.15 and z1 < z2, f'a roda nao foi suave ({z1} -> {z2})'
-    w1 = c.js(f"const C = CV.getBoundingClientRect(), z = cvZoom(); return [(CV.scrollLeft + {C[0]} - C.left) / z, (CV.scrollTop + {C[1]} - C.top) / z]")
-    assert abs(w1[0] - w0[0]) < 3 and abs(w1[1] - w0[1]) < 3, f'o zoom nao ficou centrado no cursor: {w0} -> {w1}'
-    c.js("setCvZoom(1); return 1")
-
-
-@gesto
-def t_caber_tudo(c):
-    """H = CABER TUDO: todos os nos dentro da vista; H de novo = volta pro zoom e o lugar de antes"""
-    c.js("const o = lastOverlays.find(x => x.xy && !x.kind); o.xy = [4200, 2600]; cvSig = ''; renderBoxes(); setCvZoom(1.2); CV.scrollLeft = 0; CV.scrollTop = 0; return 1")
-    time.sleep(0.3)
-    z0, s0 = c.js("return [cvZoom(), [CV.scrollLeft, CV.scrollTop]]")
-    c.js("document.activeElement && document.activeElement.blur(); return 1")
-    c.key('h')
-    time.sleep(1.2)
-    r = c.js("""const C = CV.getBoundingClientRect(); return Object.values(boxEls).filter(e => e.isConnected).map(e => { const b = e.getBoundingClientRect();
-      return b.left >= C.left - 1 && b.right <= C.right + 1 && b.top >= C.top - 1 && b.bottom <= C.bottom + 1; })""")
-    assert r and all(r), f'caber tudo deixou no fora da vista: {r}'
-    assert c.js("return document.getElementById('cvz-fit').classList.contains('on')"), 'o botao caber tudo nao acendeu'
-    c.key('h')
-    time.sleep(1.2)
-    z1, s1 = c.js("return [cvZoom(), [CV.scrollLeft, CV.scrollTop]]")
-    assert abs(z1 - z0) < 0.01, f'H de novo nao voltou o zoom: {z0} -> {z1}'
-    assert abs(s1[0] - s0[0]) < 30 and abs(s1[1] - s0[1]) < 30, f'H de novo nao voltou o lugar: {s0} -> {s1}'
-    c.js("setCvZoom(1); return 1")
-
-
 FILHO = "Object.keys(lastBindings).find(k => tvNode(k) && boxEls[k] && boxEls[k].querySelector(':scope > .fil'))"
-
-
-@gesto
-def t_filho(c):
-    """MODULO FILHO: a escolha do atomo (fundo do Contornar) sai do card e vira modulo A' ESQUERDA, NA CORRENTE: o fio de antes chega
-    no IN do filho e o OUT do filho chega no IN do pai por uma LIGACAO FIXA (trilha, sem plugue redondo); teclas mudam o valor"""
-    k = c.js(f"return {FILHO}")
-    assert k, 'nenhum no com filho (o Contornar tem a escolha "fundo")'
-    r = c.js(f"""const b = boxEls[{json.dumps(k)}], f = b.querySelector(':scope > .fil'), B = b.getBoundingClientRect(), F = f.getBoundingClientRect();
-      const fin = f.querySelector('.port.in'), pin = b.querySelector(':scope > .port.in');
-      return {{ esq: F.right <= B.left, n: f.dataset.n, dentro: !!b.querySelector('.nkw, .chseg'), opj: !!b.querySelector('.port.opj'), fin: !!fin, lk: pin && pin.classList.contains('lk'),
-        trilha: document.querySelectorAll('#cv-wires path.lkc').length, teclas: f.querySelectorAll('.fkey').length,
-        chega: inPortEl({json.dumps(k)}, {{ port: 'a' }}) === fin }}""")
-    assert r['esq'], f'o filho nao nasceu a esquerda do pai: {r}'
-    assert not r['dentro'] and not r['opj'], f'a escolha ainda esta dentro do card / jack da opcao velho: {r}'
-    assert r['fin'] and r['lk'] and r['chega'], f'o filho nao esta na corrente (IN do filho = entrada do pai; IN do pai = ligacao fixa): {r}'
-    assert r['trilha'] >= 1, f'sem a ligacao fixa: {r}'
-    assert r['teclas'] == 2, f'escolha de 2 = duas teclas: {r}'
-    v0 = c.js(f"const s = stackOf({json.dumps(k)})[0]; return fxVal({json.dumps(k)}, s, {json.dumps(r['n'])})")
-    c.click(*center(c, f'.bx[data-key="{k}"] > .fil .fkey', 1))
-    time.sleep(0.3)
-    v1 = c.js(f"const s = stackOf({json.dumps(k)})[0]; return fxVal({json.dumps(k)}, s, {json.dumps(r['n'])})")
-    assert abs(v1 - 0.75) < 0.01 and abs(v0 - 0.75) > 0.1, f'a tecla "preto" nao escolheu (valor da opcao 2 de 2 = 0.75): {v0} -> {v1}'
-    assert c.js(f"return boxEls[{json.dumps(k)}].querySelectorAll(':scope > .fil .fkey')[1].classList.contains('on')"), 'a tecla escolhida nao afundou/acendeu'
-    # a LIGACAO FIXA nao se pega e as pontas dela NAO arrastam nada (antes: pegar a ponta arrastava o pai ou o filho)
-    g0 = graph(c)
-    P = lambda: c.js(f"const b = boxEls[{json.dumps(k)}], f = b.querySelector(':scope > .fil'); return [b.offsetLeft, b.offsetTop, f.offsetLeft, f.offsetTop]")
-    for css in (f'.bx[data-key="{k}"] > .port.in', f'.bx[data-key="{k}"] > .fil .fjk'):
-        a = P()
-        x, y = center(c, css)
-        c.drag([(x, y), (x - 70, y + 60)])
-        time.sleep(0.3)
-        assert P() == a, f'puxar a ponta da ligacao fixa ({css}) arrastou um modulo: {a} -> {P()}'
-        assert graph(c) == g0 and not c.js("return !!document.querySelector('.nmenu, .flist, .wheel')"), f'a ligacao fixa se mexeu ({css})'
-    # o IN do filho e' a entrada de verdade: puxar a ponta dali pega o fio que chega no pai
-    x, y = center(c, f'.bx[data-key="{k}"] > .fil .port.in')
-    mid = c.drag([(x, y), (x - 80, y + 90)], check=lambda i: c.js("return wireDrag"), cancel=True)
-    assert mid == ['cable'], f'o IN do filho nao pegou o fio da corrente: {mid}'
-    time.sleep(0.3)
-    assert graph(c) == g0, 'Esc no meio nao devolveu o fio'
-
-
-@gesto
-def t_filho_arrasta(c):
-    """arrastar o FILHO move so' ele (o lugar fica guardado, relativo ao pai); arrastar o PAI leva o filho junto"""
-    k = c.js(f"return {FILHO}")
-    P = lambda: c.js(f"const b = boxEls[{json.dumps(k)}], f = b.querySelector(':scope > .fil'), B = b.getBoundingClientRect(), F = f.getBoundingClientRect(); return [B.left, B.top, F.left, F.top]")
-    a = P()
-    x, y = center(c, f'.bx[data-key="{k}"] > .fil .fnm')
-    a = P()
-    c.drag([(x, y), (x - 60, y + 48)])
-    time.sleep(0.4)
-    b = P()
-    assert abs(b[0] - a[0]) < 2 and abs(b[1] - a[1]) < 2, f'arrastar o filho moveu o pai: {a} -> {b}'
-    assert b[2] < a[2] - 30 and b[3] > a[3] + 30, f'o filho nao andou: {a} -> {b}'
-    off = c.js(f"return (stackOf({json.dumps(k)})[0].filhos || {{}})")
-    assert off and list(off.values())[0][1] > 0 or off, f'o lugar do filho nao foi guardado: {off}'
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
-    a = P()
-    c.drag([(x, y), (x + 96, y + 60)])
-    time.sleep(0.4)
-    b = P()
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    assert dx > 40 and dy > 30, f'o pai nao andou: {a} -> {b}'
-    assert abs((b[2] - a[2]) - dx) < 2 and abs((b[3] - a[3]) - dy) < 2, f'o filho nao foi junto com o pai: {a} -> {b}'
-
-
-@gesto
-def t_zoom_liso(c):
-    """ZOOM LISO (rodada 3: "travando pra dar zoom" e os envelopes paravam): no meio da animacao o zoom do CSS NAO muda (so' o transform,
-    sem refazer o layout) e o ponto do cursor fica parado; no fim o zoom de verdade entra uma vez e o transform sai sem pulo"""
-    k = c.js(f"return {ATOM}")
-    C = center(c, f'.bx[data-key="{k}"] .win')
-    r = c.js(f"""const el = boxEls[{json.dumps(k)}], raf = () => new Promise(r => requestAnimationFrame(r)), R = () => el.getBoundingClientRect();
-      const z0 = cvZoom(), a = R(), px = {C[0]}, py = {C[1]}, fx = (px - a.left) / a.width, fy = (py - a.top) / a.height;
-      setCvZoom(1.5, {{ clientX: px, clientY: py }}, true); await raf(); await raf(); await raf();   // (aproximando: afastando no canto a rolagem bate no 0)
-      const m = R(), meio = {{ css: cvZoom(), tf: CVI.style.transform, dx: m.left + fx * m.width - px, dy: m.top + fy * m.height - py }};
-      let ult = null; while (zAnim){{ await raf(); if (zAnim) ult = R(); }}
-      await raf(); const f = R();
-      return {{ z0, meio, fim: {{ css: cvZoom(), tf: CVI.style.transform, pulo: ult ? Math.hypot(f.left - ult.left, f.top - ult.top) : 0, dx: f.left + fx * f.width - px, dy: f.top + fy * f.height - py }} }}""")
-    assert r['meio']['css'] == r['z0'] and 'scale' in r['meio']['tf'], f'no meio da animacao o zoom do CSS mudou (refaz o layout a cada quadro): {r}'
-    assert abs(r['meio']['dx']) < 2 and abs(r['meio']['dy']) < 2, f'no meio o ponto do cursor andou: {r}'
-    c.js("setCvZoom(1); return 1")
-    assert abs(r['fim']['css'] - 1.5) < 1e-3 and not r['fim']['tf'], f'o fim nao aplicou o zoom / ficou transform: {r}'
-    assert r['fim']['pulo'] < 3 and abs(r['fim']['dx']) < 2 and abs(r['fim']['dy']) < 2, f'o fim pulou: {r}'
-    c.js("setCvZoom(1); return 1")
-
-
-@gesto
-def t_arrasto_leve(c):
-    """ARRASTO LEVE (rodada 3: "arrastar os modulos esta muito ruim"): andando, NADA de redesenhar todos os fios — so' os do no' que anda
-    seguem (a ponta do cabo continua no jack a cada passo); soltar = um redesenho"""
-    k = c.js(f"return {ATOM}")
-    c.js("window.__dbw = 0; const o = drawBoxWires; window.drawBoxWires = function(){ __dbw++; return o.apply(this, arguments); }; return 1")
-    x, y = center(c, f'.bx[data-key="{k}"] > .bh .nm')
-    def chk(i):
-        return c.js(f"""const b = boxEls[{json.dumps(k)}], p = b.querySelector(':scope > .port.out').getBoundingClientRect(), cx = p.left + p.width / 2, cy = p.top + p.height / 2;
-          const g = [...document.querySelectorAll('#cv-wires g.pg')].map(g => g.getBoundingClientRect()).map(r => Math.hypot(r.left + r.width / 2 - cx, r.top + r.height / 2 - cy));
-          return [__dbw, Math.min(...g)]""")
-    mid = c.drag([(x, y), (x + 80, y + 40), (x + 160, y - 20)], check=chk)
-    time.sleep(0.4)
-    n = c.js("const n = __dbw; return n")
-    assert all(m[0] == 0 for m in mid), f'andando, os fios todos foram redesenhados: {mid}'
-    assert all(m[1] < 3 for m in mid), f'o plugue nao acompanhou o jack do no que anda: {mid}'
-    assert n >= 1, 'soltar nao redesenhou'
-
-
-@gesto
-def t_nomes_e_etiquetas(c):
-    """LEITURA (rodada 3): nome do mixer sem numero ("MIXER", nao "mixer 16"); entrada vazia = "livre" (sem numero, pedido); todo texto do
-    gabinete numa placa lisa (a textura nunca atras da letra); o valor do knob inteiro, fora do jack de CV"""
-    r = c.js("""const m = newMix('mix', null, [1300, 160]); if (m) m.jacks = 4; cvSig = ''; renderBoxes();
-      const b = Object.values(boxEls).find(e => e.classList.contains('jk')), nm = b && b.querySelector('.bh .nm').textContent;
-      const k = [...document.querySelectorAll('#cv .bx.tv .nkr')][0], lb = k.querySelector('.k-lb'), v = k.querySelector('.k-val'), j = k.querySelector('.kj');
-      const bg = e => getComputedStyle(e).backgroundImage;
-      return { nm, livre: b && [...b.querySelectorAll('.lr.slot .hint')].map(x => x.textContent), lb: bg(lb), val: bg(v), pct: getComputedStyle(v).display }""")
-    assert r['nm'] and not any(ch.isdigit() for ch in r['nm']), f'o nome do mixer ainda tem numero: {r}'
-    assert r['livre'] and r['livre'][0] == 'livre', f'entrada vazia sem etiqueta "livre" (sem numero: pedido): {r}'
-    assert 'gradient' in r['lb'] and 'gradient' in r['val'], f'o texto do knob nao tem plaqueta (com relevo): {r}'
-    assert r['pct'] == 'none', f'o knob parado mostra a porcentagem (rodada 4: so girando): {r}'
-
-
-@gesto
-def t_arrumar_setores(c):
-    """ARRUMAR por SETOR: fonte 1 em cima com a corrente dela, fonte 2 embaixo; quem mistura as duas fica ENTRE os setores; a fonte no
-    meio do setor dela; a saida na ultima coluna, centrada com o que ela mostra"""
-    r = c.js("""const S = lastOverlays.filter(o => !isTapKey(o.file) && !o.kind && !o.dup);
-      if (S.length < 2){ const f = lastMedia.map(m => m.file).find(f => !S.some(o => o.file === f)) || (lastMedia[0] || {}).file; if (!f) return 'sem 2 fontes'; newBox(f, [40, 900]); }
-      const [s1, s2] = lastOverlays.filter(o => !isTapKey(o.file) && !o.kind).slice(0, 2); s1.xy = [40, 100]; s2.xy = [40, 700];
-      const A = 'presets/atomos/Contornar.frag', B = 'presets/atomos/Matiz.frag';
-      const a1 = newNode('@' + ensureRowId(s1), [400, 900], newModule(A)), a2 = newNode('@' + ensureRowId(s2), [400, 50], newModule(B));
-      const m = newMix('mix', '@' + a1.id, [700, 700], 2); plug('@' + a2.id, { key: chKey(m), port: 'L', idx: 901 });
-      const o = newMix('out', '@' + m.id, [500, 1400]);
-      tidy();
-      const R = x => { const k = chKey(x); return [x.xy[0], x.xy[1] + boxH(k) / 2]; };
-      const mid = (f) => { const L = lastOverlays.filter(x => x.kind !== 'out' && x.xy && f(R(x)[1])); const t = Math.min(...L.map(x => x.xy[1])), b = Math.max(...L.map(x => x.xy[1] + boxH(chKey(x)))); return (t + b) / 2; };
-      return { s1: R(s1), s2: R(s2), a1: R(a1), a2: R(a2), m: R(m), o: R(o), meio1: mid(y => y < R(m)[1] - 60), meio2: mid(y => y > R(m)[1] + 60), maxX: Math.max(...lastOverlays.filter(x => x.kind !== 'out').map(x => x.xy[0])), mL: (m.layers || []).length }""")
-    assert isinstance(r, dict), r
-    assert r['mL'] == 2, f'o mixer de teste nao ficou com as 2 fontes: {r}'
-    assert r['s1'][1] < r['m'][1] < r['s2'][1], f'o que mistura as duas nao ficou ENTRE os setores: {r}'
-    assert r['a1'][1] < r['m'][1] < r['a2'][1], f'a corrente de cada fonte nao ficou no setor dela: {r}'
-    assert abs(r['s1'][1] - r['meio1']) < 30 and abs(r['s2'][1] - r['meio2']) < 30, f'a fonte nao ficou no meio do setor dela: {r}'
-    assert r['o'][0] > r['maxX'] and abs(r['o'][1] - r['m'][1]) < 30, f'a saida nao ficou na direita, centrada com o que mostra: {r}'
-
-
-@gesto
-def t_arrasta_por_qualquer_parte(c):
-    """rodada 4: o modulo arrasta por QUALQUER parte — a TELA (previa), o gabinete; clique parado na tela so' escolhe"""
-    k = c.js(f"return {ATOM}")
-    for css in ('.win', ':scope > .skin'):
-        xy0 = c.js(f"return rowOf({json.dumps(k)}).xy.slice()")
-        center(c, f'.bx[data-key="{k}"] .win')   # (leva a vista ate' o no')
-        x, y = c.js(f"""const b = boxEls[{json.dumps(k)}], e = {'b.querySelector(' + json.dumps(css) + ')' if css != ':scope > .skin' else 'b'}, r = e.getBoundingClientRect();
-          return {'[r.left + r.width / 2, r.top + r.height / 2]' if css == '.win' else '[r.left + r.width - 8, r.top + r.height * 0.55]'}""")
-        c.drag([(x, y), (x + 60, y + 36)])
-        time.sleep(0.4)
-        xy1 = c.js(f"return rowOf({json.dumps(k)}).xy")
-        assert xy1 != xy0 and xy1[0] > xy0[0], f'arrastar por {css} nao moveu o no: {xy0} -> {xy1}'
-    c.js("selectNone(); return 1")
-    time.sleep(0.2)
-    c.click(*center(c, f'.bx[data-key="{k}"] .win'))
-    time.sleep(0.3)
-    assert c.js(f"return mkBase(sel.key) === {json.dumps(k)}"), 'clique parado na tela nao escolheu o no'
-
-
-@gesto
-def t_pct_so_girando(c):
-    """rodada 4: o knob parado NAO mostra porcentagem; girando, o valor aparece (plaqueta solta) e some ao soltar"""
-    k = c.js(f"return {ATOM}")
-    x, y = center(c, f'.bx[data-key="{k}"] .nkr .kw')
-    c.js("warpOK = false; return 1")
-    vis = lambda: c.js(f"return getComputedStyle(boxEls[{json.dumps(k)}].querySelector('.nkr .k-val')).display")
-    assert vis() == 'none', 'parado mostra a porcentagem'
-    mid = c.drag([(x, y), (x, y - 40)], check=lambda i: c.js(f"const v = document.querySelector('.knob.nk.drag .k-val'); return v ? getComputedStyle(v).display : 'sem drag'"))
-    time.sleep(0.3)
-    assert mid and mid[0] == 'block', f'girando o valor nao apareceu: {mid}'
-    assert vis() == 'none', 'soltou e a porcentagem ficou'
 
 
 PERF = {}
@@ -1171,6 +275,10 @@ def v6_open(c):
         except RuntimeError:
             pass
     c.js("if (mode !== 'montar') setMode('montar'); return 1")
+    for _ in range(40):   # (perfil novo abre no TOCAR: o canvas so' ganha tamanho no MONTAR)
+        if c.js("return !!(G6 && G6.scene && G6.scene.nodes.length)"):
+            break
+        time.sleep(0.1)
     fixture(c)
     c.js("document.getElementById('insp').hidden = true; const p = document.getElementById('pvw'); if (p) p.hidden = true; return 1")
     c.js("tidy(); return 1")   # os modulos HORIZONTAIS sao mais largos: a cena fixa (posicoes do v5) se sobrepoe — arrumada, como no uso
@@ -1191,7 +299,6 @@ def v6(f):
                 raise AssertionError('erro de JS no /v6: ' + err[0])
         finally:
             c.mods = 0
-            load(c)
     run.__name__, run.__doc__ = f.__name__, f.__doc__
     return gesto(run)
 
@@ -1356,6 +463,344 @@ def t6_cabo_de_controle(c):
 
 
 @v6
+def t6_cabo_clique_clique(c):
+    """/v6 (2026-11-26, "arrastar os cabos no note e' muito ruim"): CLIQUE PEGA, CLIQUE SOLTA em todo cabo. Imagem: o clique tremido do
+    touchpad (anda 6 px) deixa o cabo na mao; clique na entrada liga. Controle: clique no jack do alterador = cabo na mao; a roda so' faz
+    zoom (o knob embaixo nao gira); clique no knob liga; direito cancela; clique no CENTRO do knob ligado pega a ponta, no vazio tira;
+    Shift+clique junta knobs e o clique no vazio liga os juntados"""
+    c.js("warpOK = false; return 1")
+    mid, sk = c.js(f"return [rowOf({NK('Matiz')}.key).id, {SRC}.key]")
+    o = scr(c, f"G6.outAt({SRC})")
+    c.mods = 8   # Shift = cabo NOVO da saida
+    c.drag([o, (o[0] + 6, o[1] + 2)])
+    c.mods = 0
+    time.sleep(0.3)
+    assert c.js("return !!(cable && cable.sticky)"), 'o clique tremido (6 px) na saida nao deixou o cabo na mao'
+    b = scr(c, f"G6.inAt({NK('Matiz')}, 'a', 0)")
+    c.click(*b)
+    time.sleep(0.5)
+    assert c.js(f"return !cable && nodeKeyOfRef(rowById({json.dumps(mid)}).file) === {json.dumps(sk)}"), 'o 2o clique na entrada A nao ligou o cabo da mao'
+
+    c.js(f"const n = {NK('Contornar')}; applyPreset(n.key, 0, knobsOf(n.an.file)[0], 'pulsa'); cvSig = ''; renderBoxes(); return 1")
+    time.sleep(0.6)
+    c.js("G6.fit(true); return 1")
+    time.sleep(0.4)
+    cid = c.js("return G6.scene.ctls[0].id")
+    uses = lambda: c.js(f"return mvUses({json.dumps(cid)}).length")
+    n0 = uses()
+    cout = "(c => [c.x + c.out[0], c.y + c.out[1]])(G6.scene.ctls[0])"
+    c.click(*scr(c, cout))
+    time.sleep(0.3)
+    assert c.js("return !!(G6.hand() && G6.hand().sticky)"), 'clique no jack do alterador nao deixou o cabo na mao'
+    K = NK('Matiz')
+    v0, z0 = c.js(f"return [{CT(K, 'knob')}.get(), G6.cam.z]")
+    x, y = scr(c, CTXY(K, 'knob'))
+    for _ in range(3):
+        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=-100)
+        time.sleep(0.03)
+    time.sleep(0.5)
+    v1, z1 = c.js(f"return [{CT(K, 'knob')}.get(), G6.cam.z]")
+    assert z1 > z0 * 1.2 and abs(v1 - v0) < 1e-6, f'com o cabo na mao a roda devia so dar zoom: z {z0} -> {z1}, knob {v0} -> {v1}'
+    assert c.js("return !!(G6.hand() && G6.hand().sticky)"), 'o zoom soltou o cabo da mao'
+    c.click(*scr(c, CJXY(K)))
+    time.sleep(0.5)
+    assert uses() == n0 + 1 and not c.js("return G6.hand()"), f'o clique no knob nao ligou: {uses()} (era {n0})'
+
+    c.click(*scr(c, cout))
+    time.sleep(0.3)
+    c.click(*c.js(f"return {FREE}"), button='right')
+    time.sleep(0.3)
+    assert not c.js("return G6.hand()") and uses() == n0 + 1, 'o direito nao cancelou o cabo da mao'
+
+    c.click(*scr(c, CJXY(K)))   # o CENTRO do knob ligado = o jack: pega a ponta
+    time.sleep(0.3)
+    h = c.js("return G6.hand()")
+    assert h and h['sticky'] and h['from'], f'clique no centro do knob ligado nao pegou a ponta: {h}'
+    c.click(*c.js(f"return {FREE}"))
+    time.sleep(0.5)
+    assert uses() == n0 and not c.js("return G6.hand()"), 'clique no vazio com a ponta na mao nao tirou a ligacao'
+
+    c.click(*scr(c, cout))
+    time.sleep(0.3)
+    c.mods = 8
+    c.click(*scr(c, CJXY(K)))
+    c.mods = 0
+    time.sleep(0.3)
+    h = c.js("return G6.hand()")
+    assert h and h['sticky'] and h['n'] == 1 and uses() == n0, f'Shift+clique devia juntar o knob e manter o cabo na mao: {h}'
+    c.click(*c.js(f"return {FREE}"))
+    time.sleep(0.5)
+    assert uses() == n0 + 1 and not c.js("return G6.hand()"), 'o clique no vazio nao ligou o knob juntado'
+
+
+
+BODY = lambda node: f"(n => [n.x + n.G.sx + n.G.sw / 2, n.y + n.G.sy + n.G.sh / 2])({node})"   # o meio da TELA do modulo (arrasta; nao e' controle)
+
+
+@v6
+def t6_fio_recebe_modulo(c):
+    """/v6 (fase 0): modulo SOLTO arrastado ate' um fio entra no MEIO dele (o fio acende antes); modulo LIGADO passando por cima de um fio
+    so' anda (nao religa nada); quem estava em cima abre espaco (nada se sobrepoe depois)"""
+    src_id, out_key = c.js("""const w = G6.scene.wires.find(w => w.a.kind === 'src' && w.b.kind === 'out'); return [rowOf(w.a.key).id || ensureRowId(rowOf(w.a.key)), w.b.key]""")
+    mid = c.js(f"return rowOf({NK('Matiz')}.key).id")
+    up0 = c.js(f"return rowById({json.dumps(mid)}).file")
+    p = wire_pt(c, "w.a.kind === 'src' && w.b.kind === 'out'")
+    assert p, 'sem trecho exposto do fio fonte -> saida'
+    a = scr(c, BODY(NK('Matiz')))   # LIGADO por cima do fio: so' anda
+    c.drag([a, ((a[0] + p[0]) / 2, (a[1] + p[1]) / 2), p])
+    time.sleep(0.6)
+    assert c.js(f"return rowById({json.dumps(mid)}).file") == up0, 'modulo LIGADO solto num fio religou (devia so andar)'
+    c.js(f"G6.fit(true); return 1")
+    time.sleep(0.3)
+    lid = c.js("""const f = 'presets/atomos/Matiz.frag', w = G6.world({ clientX: 40, clientY: 40 });
+      const ov = looseNode([Math.max(160, w[0]), Math.max(160, w[1])], prepItems([{ file: f }])); G6.dirty(); return ov.id""")
+    time.sleep(0.6)
+    assert c.js(f"const k = chKey(rowById({json.dumps(lid)})); return !!G6.scene.by[k]"), 'o modulo solto nao apareceu'
+    p = wire_pt(c, "w.a.kind === 'src' && w.b.kind === 'out'")
+    a = scr(c, BODY(f"G6.scene.by[chKey(rowById({json.dumps(lid)}))]"))
+    hot = c.drag([a, ((a[0] + p[0]) / 2, (a[1] + p[1]) / 2), p, (p[0] + 1, p[1])], check=lambda i: c.js("return G6.hotWire()"))
+    time.sleep(0.6)
+    assert hot[-1], f'o fio nao acendeu com o modulo solto em cima: {hot}'
+    r = c.js(f"""const o = rowById({json.dumps(lid)}), out = rowOf({json.dumps(out_key)}); return [o.file, (out.layers || []).map(L => L.from)]""")
+    assert r[0] == '@' + src_id and '@' + lid in r[1], f'o modulo solto nao entrou no meio do fio fonte -> saida: {r}'
+    over = c.js("""const R = G6.scene.nodes.map(n => [n.x, n.y, n.w, n.h]); let k = 0;
+      for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++){ const a = R[i], b = R[j]; if (a[0] < b[0] + b[2] && a[0] + a[2] > b[0] && a[1] < b[1] + b[3] && a[1] + a[3] > b[1]) k++; } return k""")
+    assert over == 0, f'{over} modulos se sobrepondo depois de entrar no fio (os vizinhos nao abriram espaco)'
+
+
+@v6
+def t6_sacudir_solta(c):
+    """/v6 (fase 0): SACUDIR um modulo arrastando = ele sai da corrente (quem lia ele passa a ler o que ele lia) e fica sem entrada;
+    arrastar normal (sem sacudir) nao solta"""
+    mid, cid = c.js(f"return [rowOf({NK('Matiz')}.key).id, rowOf({NK('Contornar')}.key).id]")
+    out_key = c.js(f"return G6.scene.wires.find(w => w.b.kind === 'out' && w.a.key === {NK('Matiz')}.key).b.key")
+    a = scr(c, BODY(NK('Matiz')))
+    c.drag([a, (a[0] + 40, a[1] + 120)])   # arrastar sem sacudir: continua ligado
+    time.sleep(0.5)
+    assert c.js(f"return nodeKeyOfRef(rowById({json.dumps(mid)}).file) === chKey(rowById({json.dumps(cid)}))"), 'arrastar normal soltou o modulo'
+    a = scr(c, BODY(NK('Matiz')))
+    pts = [a] + [(a[0] + (60 if i % 2 == 0 else -10), a[1]) for i in range(6)] + [(a[0] + 20, a[1] + 160)]
+    c.drag(pts)
+    time.sleep(0.6)
+    r = c.js(f"""const o = rowById({json.dumps(mid)}), out = rowOf({json.dumps(out_key)}); return [nodeKeyOfRef(o.file), (out.layers || []).map(L => L.from)]""")
+    assert r[0] is None and '@' + cid in r[1], f'sacudir nao soltou da corrente / a corrente nao fechou: {r}'
+
+
+@v6
+def t6_touchpad_rola(c):
+    """/v6 (fase 0): no TOUCHPAD dois dedos ROLAM a vista (o zoom fica); a PINCA (wheel + Ctrl, como o Chromium manda) da' zoom"""
+    x, y = c.js(f"return {FREE}")
+    x0, y0, z0 = c.js("return [G6.cam.x, G6.cam.y, G6.cam.z]")
+    for _ in range(6):
+        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=6, deltaY=9.5)
+        time.sleep(0.02)
+    time.sleep(0.4)
+    x1, y1, z1 = c.js("return [G6.cam.x, G6.cam.y, G6.cam.z]")
+    assert z1 == z0 and x1 > x0 and y1 > y0, f'dois dedos deviam rolar sem zoom: ({x0},{y0},{z0}) -> ({x1},{y1},{z1})'
+    for _ in range(6):
+        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=-8, modifiers=2)
+        time.sleep(0.02)
+    time.sleep(0.5)
+    z2 = c.js("return G6.cam.z")
+    assert z2 > z1 * 1.2, f'a pinca nao deu zoom: {z1} -> {z2}'
+
+
+
+@v6
+def t6_teclas_e_desfazer(c):
+    """/v6 (os testes do canvas HTML portados): clique no VAZIO tira a escolha (Delete depois nao apaga nada); Delete apaga o escolhido e
+    Ctrl+Z volta; Ctrl+D duplica sem fios (a copia fica escolhida); Ctrl+A escolhe todos e Esc tira"""
+    k = c.js(f"return {NK('Matiz')}.key")
+    c.click(*scr(c, BODY(NK('Matiz'))))
+    time.sleep(0.4)
+    assert c.js("return mkBase(sel.key)") == k, 'o clique nao escolheu o modulo'
+    c.click(*c.js(f"return {FREE}"))
+    time.sleep(0.3)
+    assert not c.js("return sel.key"), 'clique no vazio nao tirou a escolha'
+    g0 = graph(c)
+    c.key('Delete')
+    time.sleep(0.3)
+    assert graph(c) == g0, 'Delete apagou algo sem nada escolhido'
+    n0 = c.js("return lastOverlays.length")
+    c.click(*scr(c, BODY(NK('Matiz'))))
+    time.sleep(0.4)
+    c.key('Delete')
+    time.sleep(0.4)
+    assert c.js("return lastOverlays.length") == n0 - 1, 'Delete nao apagou o modulo escolhido'
+    c.key('z', 2)
+    time.sleep(0.6)
+    assert c.js("return lastOverlays.length") == n0, 'Ctrl+Z nao trouxe de volta'
+    c.js("G6.dirty(); return 1")
+    time.sleep(0.4)
+    c.click(*scr(c, BODY(NK('Matiz'))))
+    time.sleep(0.4)
+    k = c.js("return mkBase(sel.key)")
+    c.key('d', 2)
+    time.sleep(0.5)
+    nk = c.js("return sel.key")
+    assert c.js("return lastOverlays.length") == n0 + 1 and nk and nk != k, f'Ctrl+D nao duplicou / a copia nao ficou escolhida: {nk}'
+    assert c.js(f"return rowOf({json.dumps(nk)}).file").startswith('@-'), 'a copia veio com fio'
+    c.click(*c.js(f"return {FREE}"))
+    c.key('a', 2)
+    time.sleep(0.3)
+    assert c.js("return msel.size") >= c.js("return G6.scene.nodes.length"), 'Ctrl+A nao escolheu todos'
+    c.key('Escape')
+    time.sleep(0.2)
+    assert c.js("return msel.size") == 0, 'Esc nao tirou a escolha'
+
+
+@v6
+def t6_desempenho(c):
+    """/v6: o quadro do jogo com a cena fixa fica leve (a media do laco, medida pelo proprio G6)"""
+    time.sleep(1.2)
+    st = c.js("return G6.stats")
+    print('      desempenho:', json.dumps(st))
+    assert st and st['fps'] > 0 and st['ms'] < 16, f'quadro pesado: {st}'
+
+
+
+SRCN = "G6.scene.nodes.find(n => n.kind === 'src' && rowOf(n.key) && rowOf(n.key).id === SID)"
+
+
+@v6
+def t6_fonte_cartucho(c):
+    """/v6 (fase 2): a FONTE e' um LEITOR com BANDEJA de cartuchos embaixo da tela — Shift + tecla de avancar = o proximo na hora;
+    clique num cartucho = ele entra (sem BPM a grade nao segura); Ctrl+clique tira da bandeja; o que toca nao sai; a corrente fica"""
+    key, its, sid = c.js("""const n = G6.scene.nodes.find(n => n.kind === 'src'); return [n.key, srcItems().map(x => x[0]), ensureRowId(rowOf(n.key))]""")
+    alts = ([f for f in its if f != key] + ['default/_teste_cartucho_a.png', 'default/_teste_cartucho_b.png'])[:2]   # (o ambiente pode ter 1 midia so')
+    reader = c.js(f"""window.SID = {json.dumps(sid)}; const o = rowOf({json.dumps(key)}); o.tray = [o.file, ...{json.dumps(alts)}]; sendOverlays(true); cvSig = ''; renderBoxes(); return 1""")
+    time.sleep(0.6)
+    readers = c.js(f"return G6.scene.wires.filter(w => w.a.key === {SRCN}.key).length")
+    assert c.js(f"return {SRCN}.ctrls.filter(c => c.kind === 'cart').length") == 3, 'a bandeja nao mostra os 3 cartuchos'
+    adv = scr(c, f"(n => (c => [n.x + c.x, n.y + c.y])(n.ctrls.find(c => c.kind === 'adv')))({SRCN})")
+    c.mods = 8
+    c.click(*adv)
+    c.mods = 0
+    time.sleep(0.6)
+    assert c.js(f"return rowById(SID).file") == alts[0], f'a tecla de avancar nao trocou pro proximo: {c.js("return rowById(SID).file")}'
+    assert c.js(f"return G6.scene.wires.filter(w => w.a.key === {SRCN}.key).length") == readers, 'trocar o cartucho mexeu na corrente'
+    third = scr(c, f"(n => (c => [n.x + c.x, n.y + c.y])(n.ctrls.filter(c => c.kind === 'cart')[2]))({SRCN})")
+    c.click(*third)
+    time.sleep(0.6)
+    assert c.js("return rowById(SID).file") == alts[1], 'clique no cartucho nao fez ele entrar'
+    cur = scr(c, f"(n => (c => [n.x + c.x, n.y + c.y])(n.ctrls.filter(c => c.kind === 'cart')[2]))({SRCN})")
+    c.mods = 2
+    c.click(*cur)   # o que toca: fica
+    c.mods = 0
+    time.sleep(0.4)
+    assert c.js("return trayOf(rowById(SID)).length") == 3, 'Ctrl+clique tirou o cartucho que esta tocando'
+    first = scr(c, f"(n => (c => [n.x + c.x, n.y + c.y])(n.ctrls.filter(c => c.kind === 'cart')[0]))({SRCN})")
+    c.mods = 2
+    c.click(*first)
+    c.mods = 0
+    time.sleep(0.5)
+    assert c.js("return trayOf(rowById(SID)).length") == 2, 'Ctrl+clique nao tirou o cartucho da bandeja'
+
+
+
+def _evt(c, pred):   # um ALVO de evento (G6.evTargets) na tela
+    p = c.js(f"const t = G6.evTargets().find(t => {pred}); return t ? G6.scr(t.at[0], t.at[1]) : null")
+    assert p, f'sem alvo de evento: {pred}'
+    return p
+
+
+@v6
+def t6_evento_cabo(c):
+    """/v6 (fase 3): RELOGIO E SOM = os eventos como jacks QUADRADOS. Clique no jack + clique no LIGA = liga/desliga a cada kick; arrastar
+    do jack ate' o gatilho de um alterador = ele dispara nesse evento (o knob que ele move tambem); no ▶▶ da fonte = troca de cartucho;
+    num seletor = a proxima opcao; clique no cabo de evento + Delete tira; Esc cancela o cabo na mao"""
+    c.js("warpOK = false; return 1")
+    k = c.js(f"const n = {NK('Contornar')}; applyPreset(n.key, 0, knobsOf(n.an.file)[0], 'pulsa'); cvSig = ''; renderBoxes(); return n.key")
+    time.sleep(0.6)
+    c.js(f"const m = {NK('Matiz')}, yb = Math.max(...G6.scene.nodes.map(n => n.y + n.h), ...G6.scene.ctls.map(c => c.y + c.h)); newEvm([m.x, yb + 220]); return 1")   # embaixo de tudo: o cabo passa no vazio
+    time.sleep(0.6)
+    c.js("G6.fit(true); return 1")
+    time.sleep(0.5)
+    mk = c.js(f"return {NK('Matiz')}.key")
+    c.js("const t = document.getElementById('toast'); t.style.pointerEvents = 'none'; t.className = ''; return 1")   # o aviso nao cobre o jack
+    j0 = scr(c, "G6.evJack(0)")
+    assert c.js(f"const k = G6.pick({{ clientX: {j0[0]}, clientY: {j0[1]} }}); return [k && k.kind, document.elementFromPoint({j0[0]}, {j0[1]}).id]") == ['evj', 'gcv'], \
+        c.js(f"const k = G6.pick({{ clientX: {j0[0]}, clientY: {j0[1]} }}); return [k && k.kind, document.elementFromPoint({j0[0]}, {j0[1]}).id, G6.cam.z]")
+    c.click(*scr(c, "G6.evJack(0)"))   # kick
+    time.sleep(0.3)
+    assert c.js("return G6.evHandOn()"), 'clique no jack quadrado nao deixou o cabo de evento na mao'
+    c.key('Escape')
+    time.sleep(0.2)
+    assert not c.js("return G6.evHandOn()"), 'Esc nao cancelou o cabo de evento'
+    c.click(*scr(c, "G6.evJack(0)"))
+    time.sleep(0.3)
+    c.click(*_evt(c, f"t.t === 'led' && t.key === {json.dumps(mk)}"))
+    time.sleep(0.5)
+    assert c.js(f"return (stackOf({json.dumps(mk)})[0].acao || {{}}).alterna") == 'kick', 'o LIGA nao ficou ligado no kick'
+    a = scr(c, "G6.evJack(4)")   # batida -> o gatilho do alterador (arrastando)
+    b = _evt(c, "t.t === 'ctl'")
+    c.drag([a, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 30), b])
+    time.sleep(0.6)
+    r = c.js(f"const s = ctlStore()[0].mod.sinal, m = stackOf({json.dumps(k)})[0].mod[knobsOf(stackOf({json.dumps(k)})[0].file)[0]]; return [s.modo, s.ev.src, m.ev.src]")
+    assert r == ['disparo', 'batida', 'batida'], f'o alterador (e o knob dele) nao passou a disparar na batida: {r}'
+    sk = c.js("return G6.scene.nodes.find(n => n.kind === 'src').key")
+    c.click(*scr(c, "G6.evJack(6)"))   # frase -> o leitor da fonte
+    time.sleep(0.3)
+    c.click(*_evt(c, f"t.t === 'adv' && t.key === {json.dumps(sk)}"))
+    time.sleep(0.5)
+    assert c.js(f"return (rowOf({json.dumps(sk)}).acao || {{}}).proximo") == 'frase', 'o leitor da fonte nao ficou ligado na frase'
+    has_opt = c.js("return G6.evTargets().some(t => t.t === 'opt')")
+    if has_opt:
+        okey, on = c.js("const t = G6.evTargets().find(t => t.t === 'opt'); return [t.key, t.n]")
+        c.click(*scr(c, "G6.evJack(5)"))   # compasso -> um seletor
+        time.sleep(0.3)
+        c.click(*_evt(c, f"t.t === 'opt' && t.key === {json.dumps(okey)} && t.n === {json.dumps(on)}"))
+        time.sleep(0.5)
+        assert c.js(f"return (stackOf({json.dumps(okey)})[0].acao || {{}})['opcao:' + {json.dumps(on)}]") == 'compasso', 'o seletor nao ficou ligado no compasso'
+    p = c.js(f"""const l = G6.evLinks().find(l => l.del && l.del.t === 'led' && l.del.key === {json.dumps(mk)}), a = G6.evJack(0), b = l.at;
+      const t = cableCfg().t, sag = t * (150 + Math.hypot(b[0] - a[0], b[1] - a[1])) * 0.8, C = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + sag];
+      for (let u = 0.3; u < 0.8; u += 0.02){{ const q = [(1 - u) * (1 - u) * a[0] + 2 * (1 - u) * u * C[0] + u * u * b[0], (1 - u) * (1 - u) * a[1] + 2 * (1 - u) * u * C[1] + u * u * b[1]], s = G6.scr(q[0], q[1]);
+        const k = G6.pick({{ clientX: s[0], clientY: s[1] }}); if (k && k.kind === 'ewire' && k.l.del.t === 'led' && document.elementFromPoint(s[0], s[1]) === document.getElementById('gcv')) return s; }} return null""")
+    assert p, 'nao achei um trecho exposto do cabo de evento do LIGA'
+    c.click(*p)
+    time.sleep(0.3)
+    c.key('Delete')
+    time.sleep(0.5)
+    assert not c.js(f"return (stackOf({json.dumps(mk)})[0].acao || {{}}).alterna"), 'clique no cabo de evento + Delete nao tirou a ligacao'
+    assert c.js(f"return rowOf({json.dumps(mk)}) !== null"), 'Delete apagou o modulo em vez do cabo'
+    cid = c.js("return G6.scene.ctls[0].id")   # o COMPARADOR do alterador (saida quadrada da direita) -> o LIGA do Matiz
+    c.click(*scr(c, "(c => [c.x + c.L.cmp[0], c.y + c.L.cmp[1]])(G6.scene.ctls[0])"))   # (E2: o ½ mora na placa OUT)
+    time.sleep(0.3)
+    assert c.js("return G6.evHandOn()"), 'clique no comparador nao deixou o cabo de evento na mao'
+    c.click(*_evt(c, f"t.t === 'led' && t.key === {json.dumps(mk)}"))
+    time.sleep(0.5)
+    assert c.js(f"return (stackOf({json.dumps(mk)})[0].acao || {{}}).alterna") == 'cmp:' + cid, 'o comparador nao ligou no LIGA'
+
+
+
+@v6
+def t6_pele_unica(c):
+    """/v6 (fase 4): BLACKOUT sob TAMPA (1o clique levanta, o 2o aperta; ligado, 1 clique desliga); segurar Esc e soltar antes de 2 s NAO
+    fecha (o anel some); cabo de IMAGEM = azuis, de SINAL = ambar; o visual tem um tema so' (o botao saiu)"""
+    b = c.js("const r = document.getElementById('blk').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]")
+    c.click(*b)
+    time.sleep(0.2)
+    assert c.js("const x = document.getElementById('blk'); return [!!x.dataset.open, x.classList.contains('on')]") == [True, False], 'o 1o clique devia so levantar a tampa'
+    c.click(*b)
+    time.sleep(0.4)
+    assert c.js("return document.getElementById('blk').classList.contains('on')"), 'o 2o clique (tampa levantada) nao ligou o blackout'
+    c.click(*b)
+    time.sleep(0.4)
+    assert not c.js("return document.getElementById('blk').classList.contains('on')"), 'blackout ligado: 1 clique devia desligar (a tampa nao segura a volta)'
+    c.send('Input.dispatchKeyEvent', type='keyDown', key='Escape', code='Escape', windowsVirtualKeyCode=27)
+    time.sleep(0.5)
+    assert c.js("return !!document.getElementById('esc-ring')"), 'segurando Esc o anel nao apareceu'
+    c.send('Input.dispatchKeyEvent', type='keyUp', key='Escape', code='Escape', windowsVirtualKeyCode=27)
+    time.sleep(0.2)
+    assert not c.js("return !!document.getElementById('esc-ring')"), 'soltar o Esc antes de 2 s nao cancelou'
+    c.js(f"const n = {NK('Matiz')}; applyPreset(n.key, 0, knobsOf(n.an.file)[0], 'pulsa'); cvSig = ''; renderBoxes(); return 1")
+    time.sleep(0.6)
+    r = c.js("return [G6.scene.wires.every(w => CABLE_IMG.includes(w.col)), G6.scene.cvs.length > 0 && G6.scene.cvs.every(v => CABLE_CV.includes(v.col))]")
+    assert r == [True, True], f'cor do cabo por tipo (imagem azul, sinal ambar): {r}'
+    assert c.js("return !document.getElementById('tema-btn')"), 'o botao de tema continua na tela'   # (repaginada: saiu do arquivo)
+
+
+@v6
 def t6_vazio_abre_menu(c):
     """/v6: cabo NOVO solto no VAZIO abre o menu (o no' nasce ali, ja' ligado)"""
     o = scr(c, f"G6.outAt({SRC})")
@@ -1369,7 +814,8 @@ def t6_vazio_abre_menu(c):
     assert m, 'soltar no vazio nao abriu o menu'
     w = c.js(f"return G6.world({{clientX: {e[0]}, clientY: {e[1]}}})")
     n0 = c.js("return lastOverlays.length")
-    c.js("document.querySelector('.nmenu .nm-list > *').click(); return 1")
+    b = c.js("const b = document.querySelector('.nmenu .nm-list .nm-it'); const r = b.getBoundingClientRect(); return [r.left + 30, r.top + r.height / 2]")   # a MESMA lista da roda (C11)
+    c.click(*b)
     time.sleep(0.5)
     r = c.js("const o = lastOverlays[lastOverlays.length - 1]; return [lastOverlays.length, o.xy, (inputsOf(o).map(w => nodeKeyOfRef(w.ref)))[0] || null]")
     assert r[0] == n0 + 1, f'escolher no menu nao criou o no: {r}'
@@ -1473,12 +919,18 @@ def t6_fader_liga(c):
     assert bool(c.js(f"return stackOf({json.dumps(k)})[0].off || 0")) == off0, 'o liga nao voltou'
     z0, v0 = c.js(f"return [G6.cam.z, {CT(NK('Matiz'), 'knob')}.get()]")
     kx, ky = scr(c, CTXY(NK('Matiz'), 'knob'))
-    for _ in range(3):
-        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=kx, y=ky, deltaX=0, deltaY=-100)
+    for _ in range(3):   # (fase 0) ALT + roda no knob = gira; a vista fica
+        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=kx, y=ky, deltaX=0, deltaY=-100, modifiers=1)
         time.sleep(0.03)
     time.sleep(0.5)
     z1, v1 = c.js(f"return [G6.cam.z, {CT(NK('Matiz'), 'knob')}.get()]")
-    assert z1 == z0 and v1 > v0, f'a roda no knob: zoom {z0}->{z1}, valor {v0}->{v1}'
+    assert z1 == z0 and v1 > v0, f'Alt + roda no knob: zoom {z0}->{z1}, valor {v0}->{v1}'
+    for _ in range(3):   # SEM Alt a roda nunca mexe no show: zoom
+        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=kx, y=ky, deltaX=0, deltaY=-100)
+        time.sleep(0.03)
+    time.sleep(0.5)
+    z2, v2 = c.js(f"return [G6.cam.z, {CT(NK('Matiz'), 'knob')}.get()]")
+    assert z2 > z1 * 1.2 and abs(v2 - v1) < 1e-6, f'roda sem Alt em cima do knob devia dar zoom e nao girar: zoom {z1}->{z2}, valor {v1}->{v2}'
 
 
 @v6
@@ -1705,10 +1157,311 @@ def t6_barra_zoom(c):
     time.sleep(0.6)
     assert abs(c.js("return G6.cam.z") - 0.8) < 0.02, 'tecla - nao afastou'
     c.js("document.getElementById('cvz-fit').click(); return 1")
-    time.sleep(0.4)
+    time.sleep(0.15)
+    assert c.js("return G6.flying()"), 'o caber tudo devia VOAR (animado), nao pular'
+    time.sleep(0.8)
     r = c.js("""const r = document.getElementById('gcv').getBoundingClientRect(); return G6.scene.nodes.every(n => { const a = G6.scr(n.x, n.y), b = G6.scr(n.x + n.w, n.y + n.h);
       return a[0] >= r.left - 1 && a[1] >= r.top - 1 && b[0] <= r.right + 1 && b[1] <= r.bottom + 1; })""")
     assert r, 'caber tudo deixou no fora da vista'
+
+
+@v6
+def t6_botoes_parados(c):
+    """/v6 (REPAGINADA 2026-11-27, B "cantos"): a barra do canvas SAIU; a VISTA e' uma pilula no canto de baixo a' direita (desfazer, zoom,
+    caber, ⋯). O ⋯ abre POR CIMA dela (arrumar, cabos, programa) sem mexer em nenhum botao; o zoom muda o rotulo sem empurrar; clicar fora fecha"""
+    assert c.js("return !document.getElementById('cv-h') && !document.getElementById('cable-btn') && !document.getElementById('pv-btn')"), 'a barra do canvas devia ter saido'
+    r = c.js("const n = document.getElementById('cv-nav').getBoundingClientRect(), w = document.getElementById('gcv').getBoundingClientRect(); return [n.right <= w.right, n.bottom <= w.bottom, n.bottom > w.bottom - 40, n.left > w.left + w.width / 2]")
+    assert r == [True] * 4, f'a pilula devia morar no canto de baixo a direita: {r}'
+    pos = "return ['undo-btn', 'cvz-out', 'cvz-in', 'cvz-fit', 'nav-more'].map(i => { const r = document.getElementById(i).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; })"
+    p0 = c.js(pos)
+    c.click(*center(c, '#nav-more'))
+    time.sleep(0.3)
+    assert c.js("return !document.getElementById('nav-menu').hidden"), 'o menu ⋯ nao abriu'
+    assert c.js(pos) == p0, f'abrir o menu mexeu nos botoes: {p0} -> {c.js(pos)}'
+    r = c.js("const a = document.getElementById('nav-menu').getBoundingClientRect(), b = document.getElementById('cv-nav').getBoundingClientRect(); return [a.bottom <= b.top + 1, a.right <= b.right + 1, a.width > 200, !!document.querySelector('#nav-menu #tidy-btn'), !!document.querySelector('#nav-menu #cable-t'), document.querySelectorAll('#pv-seg button').length]")
+    assert r == [True, True, True, True, True, 3], f'o menu devia abrir em cima da pilula com arrumar, cabos e programa: {r}'
+    c.js("G6.zoom(0.3); return 1")
+    time.sleep(0.4)
+    c.js("G6.zoom(1); return 1")
+    time.sleep(0.4)
+    assert c.js(pos) == p0, 'o rotulo do zoom mudou de largura e empurrou os botoes'
+    c.click(40, 140)   # o vazio do canvas, longe do menu
+    time.sleep(0.3)
+    assert c.js("return document.getElementById('nav-menu').hidden"), 'clicar fora nao fechou o menu'
+
+
+@v6
+def t6_programa_monitor(c):
+    """/v6 (REPAGINADA 2026-11-27): o PROGRAMA = um monitor preso no canto de BAIXO a' direita, EM CIMA da pilula (nao cobre a pilula);
+    ▾ recolhe numa aba NO AR no mesmo canto; clicar na aba traz de volta; "fundo" pelo menu ⋯"""
+    c.js("setPvw({ st: 'win' }); return 1")
+    time.sleep(0.6)
+    r = c.js("const a = document.getElementById('pvw').getBoundingClientRect(), b = document.getElementById('cv-nav').getBoundingClientRect(); return [!document.getElementById('pvw').hidden, a.bottom <= b.top + 1, Math.abs(a.right - b.right) < 3, a.width > 150]")
+    assert r == [True, True, True, True], f'o monitor devia ficar no canto de baixo, em cima da pilula: {r}'
+    c.click(*center(c, '#pvw-x'))
+    time.sleep(0.4)
+    r = c.js("const t = document.getElementById('pvw-tab'), a = t.getBoundingClientRect(), b = document.getElementById('cv-nav').getBoundingClientRect(); return [document.getElementById('pvw').hidden, !t.hidden, a.bottom <= b.top + 1]")
+    assert r == [True, True, True], f'▾ devia recolher numa aba NO AR em cima da pilula: {r}'
+    c.click(*center(c, '#pvw-tab'))
+    time.sleep(0.4)
+    assert c.js("return !document.getElementById('pvw').hidden && document.getElementById('pvw-tab').hidden"), 'a aba nao trouxe o monitor de volta'
+    c.click(*center(c, '#nav-more'))
+    time.sleep(0.3)
+    c.click(*center(c, '#pv-seg button[data-st="bg"]'))
+    time.sleep(0.4)
+    assert c.js("return document.getElementById('pvw').classList.contains('bg')"), 'o menu ⋯ nao pos o programa de fundo'
+    c.js("setPvw({ st: 'off' }); navPop(false); return 1")
+
+
+@v6
+def t6_cena_vai_volta(c):
+    """/v6 (REPAGINADA 2026-11-27, pedido: "controle de cena tipo vai e volta e atribuir cenas pro MIDI"): ◀ / ▶ na barra de cima trocam pra
+    cena de antes / a seguinte da lista (da' a volta); a PROXIMA aparece do lado e acende o GO; Equipamento › Controle tem um botao de
+    MIDI learn por cena (e ◀ ▶ GO) que arma o learn sem fechar a gaveta"""
+    for nm in ('vv-a', 'vv-b'):
+        if not c.js(f"return lastScenes.some(s => s.name === {json.dumps(nm)})"):
+            c.js(f"scenePost('/scene-new', {{ name: {json.dumps(nm)} }}); return 1")
+            time.sleep(0.8)
+    names = c.js("return lastScenes.map(s => s.name)")
+    assert len(names) >= 2, f'precisava de 2 cenas: {names}'
+    a0 = c.js("return activeScene")
+    i0 = names.index(a0) if a0 in names else -1
+    c.click(*center(c, '#sc-next'))
+    for _ in range(20):
+        time.sleep(0.15)
+        if c.js("return activeScene") != a0:
+            break
+    a1 = c.js("return activeScene")
+    assert a1 == names[(i0 + 1) % len(names)], f'▶ devia ir pra seguinte: {a0} -> {a1} ({names})'
+    c.click(*center(c, '#sc-prev'))
+    for _ in range(20):
+        time.sleep(0.15)
+        if c.js("return activeScene") != a1:
+            break
+    assert c.js("return activeScene") == names[i0 % len(names)], '◀ devia voltar'
+    c.js(f"cueScene({json.dumps(names[-1])}); return 1")
+    time.sleep(0.5)
+    r = c.js("return [document.getElementById('cue-name').textContent, document.getElementById('go-top').classList.contains('ready')]")
+    assert r == [names[-1], True], f'a PROXIMA devia aparecer na barra e acender o GO: {r}'
+    c.js("cueScene(''); openDrawer('eq', 'controle'); return 1")
+    time.sleep(0.6)
+    n = c.js("return document.querySelectorAll('#midi-box .mscenes button').length")
+    assert n == 3 + len(names), f'um botao de MIDI por cena + ◀ ▶ GO: {n}'
+    c.click(*center(c, '#midi-box .mscenes button', 0))
+    time.sleep(0.3)
+    r = c.js("return [MIDI.learn, MIDI.armed, drawer]")
+    assert r == [True, 'scene:prev', 'eq'], f'o botao devia armar o learn pra ◀ sem fechar a gaveta: {r}'
+    c.js("setLearn(false); openDrawer(''); return 1")
+
+
+@v6
+def t6_saude_na_boia(c):
+    """/v6 (REPAGINADA 2026-11-27): os avisos de saude sairam da barra (os chips) e moram NA BOIA: o numero de problemas em cima dela e a
+    lista no titulo; clique = o diagnostico"""
+    assert c.js("return !document.getElementById('ann') && !document.querySelector('#top .hc')"), 'os chips de saude deviam ter saido da barra'
+    r = c.js("renderHealth.sig = ''; renderHealth(); const bad = healthRows.filter(r => SEV[r.sev] > 0).length, n = document.querySelector('#sos-btn .cnt'); return [bad, n ? n.textContent : null, n ? n.hidden : null]")
+    assert r[1] == (str(r[0]) if r[0] else '') and r[2] == (not r[0]), f'a boia devia mostrar quantos problemas: {r}'
+
+
+@v6
+def t6_mao(c):
+    """/v6 (REPAGINADA 2026-11-27, as macros: "viram o modulo MAO"): o modulo da roda (Mao) tem 4 faders M1-M4 e 4 pads. Arrastar o fader
+    muda a macro; clique no jack do fader + clique num knob = o knob segue a macro (faixa de/ate' dentro da MAO); o pad manda pad:N na hora;
+    escolher + Delete tira a MAO e solta os knobs"""
+    c.js("const yb = Math.max(...G6.scene.nodes.map(n => n.y + n.h)); newMao([40, yb + 40]); G6.fit(true); return 1")
+    time.sleep(0.8)
+    assert c.js("return [maoStore().length, ctlStore().filter(c => isMaoId(c.id)).length, G6.scene.maos.length, G6.scene.ctls.filter(c => c.mao).length].join()") == '1,4,1,4', 'a MAO nao nasceu inteira'
+    c.js("newMao([0, 0]); return 1")
+    assert c.js("return maoStore().length") == 1, 'so\' uma MAO por cena'
+    c.js("G6.zoom(1); const m = G6.scene.maos[0], r = document.getElementById('gcv').getBoundingClientRect(); G6.cam.x = m.x - 200; G6.cam.y = m.y - 200; G6.dirty(); return 1")
+    time.sleep(0.5)
+    a = scr(c, "(m => [m.x + 85, m.y + 118])(G6.scene.maos[0])")
+    b = scr(c, "(m => [m.x + 85, m.y + 52])(G6.scene.maos[0])")
+    c.drag([a, b])
+    time.sleep(0.4)
+    assert c.js("return macroV[1]") > 0.8, f'arrastar o fader M2 pra cima devia subir a macro: {c.js("return macroV")}'
+    c.js("window.__grid = []; const f0 = window.fetch; window.fetch = (u, o) => { if (String(u).includes('/grid')) __grid.push(o && o.body); return f0(u, o); }; return 1")
+    c.click(*scr(c, "(m => [m.x + 230, m.y + 60])(G6.scene.maos[0])"))
+    time.sleep(0.3)
+    assert any('pad:1' in (x or '') for x in c.js("return __grid")), 'o pad 1 nao mandou o evento'
+    c.js("G6.fit(true); return 1")
+    time.sleep(0.4)
+    K = NK('Matiz')
+    c.click(*scr(c, "(m => [m.x + 39, m.y + 166])(G6.scene.maos[0])"))
+    time.sleep(0.3)
+    assert c.js("return !!(G6.hand() && G6.hand().sticky)"), 'clique no jack do fader nao deixou o cabo na mao'
+    c.click(*scr(c, CTXY(K, 'knob')))
+    time.sleep(0.6)
+    kn = c.js(f"const n = {K}; return ((stackOf(n.key)[0].mod || {{}})[knobsOf(n.an.file)[0]] || {{}}).id || ''")
+    assert kn == 'mao-m1', f'o knob devia seguir o M1: {kn!r}'
+    assert c.js("return G6.scene.maos[0].rows.length === 1 && G6.scene.cvs.some(v => v.c.id === 'mao-m1')"), 'a faixa/cabo do M1 nao apareceu'
+    c.click(*scr(c, "(m => [m.x + 150, m.y + 20])(G6.scene.maos[0])"))
+    time.sleep(0.3)
+    assert c.js("return msel.has('mao:' + G6.scene.maos[0].id)"), 'clicar no corpo devia escolher a MAO'
+    c.key('Delete')
+    time.sleep(0.6)
+    r = c.js(f"const n = {K}; return [maoStore().length, ctlStore().filter(c => isMaoId(c.id)).length, !!((stackOf(n.key)[0].mod || {{}})[knobsOf(n.an.file)[0]])]")
+    assert r == [0, 0, False], f'Delete devia tirar a MAO e soltar o knob: {r}'
+
+
+@v6
+def t6_envelope_e2(c):
+    """/v6 (REPAGINADA 2026-11-27, E2): o GATILHO (entrada de evento) mora na coluna da esquerda com o nome em plaqueta; as DUAS saidas
+    (sinal redondo e o ½ quadrado) juntas na placa OUT da direita; o evento sem modulo (secao) vira o NOME do gatilho; o gatilho e' alvo"""
+    c.js(f"const n = {NK('Matiz')}; applyPreset(n.key, 0, knobsOf(n.an.file)[0], 'pulsa'); cvSig = ''; renderBoxes(); return 1")
+    time.sleep(0.5)
+    c.js(f"const n = {NK('Contornar')}; applyPreset(n.key, 0, knobsOf(n.an.file)[1], 'drop'); cvSig = ''; renderBoxes(); return 1")
+    time.sleep(0.6)
+    r = c.js("""return G6.scene.ctls.filter(c => !c.mao).map(c => [c.L.gin[0] > 0 && c.L.gin[0] < 50, c.L.out[0] === c.L.cmp[0], c.L.out[0] > c.w - 40, c.L.cmp[1] > c.L.out[1],
+      c.L.gin[0] < c.L.scr.x && c.L.out[0] > c.L.scr.x + c.L.scr.w, c.trig])""")
+    assert len(r) == 2 and all(x[:5] == [True] * 5 for x in r), f'gatilho a esquerda, sinal e ½ juntos na placa OUT: {r}'
+    assert sorted(x[5] for x in r) == ['drop', 'gatilho'], f'o evento sem modulo (secao drop) devia virar o nome do gatilho: {r}'
+    assert c.js("const c = G6.scene.ctls.find(c => !c.mao); return G6.evTargets().some(t => t.t === 'ctl' && t.id === c.id && Math.abs(t.at[0] - c.x - c.L.gin[0]) < 1)"), 'o gatilho devia ser alvo de cabo de evento'
+
+
+
+@v6
+def t6_peles(c):
+    """/v6 (PELES 2026-11-27, "faça todas podendo mudar" + "faça tudo escuro"): o menu ⋯ troca a pele na hora (lembrada); cada pele desenha sem
+    erro, e' ESCURA (corpo dos modulos e mesa) e cumpre o contraste prometido (texto >= 4,5:1, ponteiro >= 3:1); 'Hoje' volta ao de sempre"""
+    ids = c.js("return Object.keys(SKINS)")
+    assert len(ids) >= 10, ids
+    c.click(*center(c, '#nav-more'))
+    time.sleep(0.3)
+    assert c.js("return document.querySelectorAll('#skin-list button').length") == len(ids), 'o menu devia listar as peles'
+    c.click(*center(c, '#skin-list button[data-skin="neon"]'))
+    time.sleep(0.6)
+    assert c.js("return [document.body.dataset.skin, document.body.classList.contains('skinned'), LS.get('v6skin', '')].join()") == 'neon,true,neon', 'o clique nao trocou a pele'
+    c.js("navPop(false); return 1")
+    for sk in ids:
+        c.js(f"setSkin({json.dumps(sk)}); return 1")
+        time.sleep(0.5)
+        bad = c.js("return skinContrast(SK.id).filter(r => r[1] < r[2])")
+        assert not bad, f'{sk}: contraste abaixo do minimo: {bad}'
+        if sk != 'atual':
+            dk = c.js("return [relL(SK.mod.base[0]), relL(SK.mod.base[1])]")
+            assert max(dk) < 0.2, f'{sk}: os modulos deviam ser escuros: {dk}'
+        assert c.js("return G6.stats.fps > 0 && G6.scene.nodes.length > 0"), f'{sk}: o quadro parou'
+    c.js("setSkin('atual'); return 1")
+    time.sleep(0.4)
+    assert c.js("return [document.body.dataset.skin, document.body.classList.contains('skinned'), !!SK.mod].join()") == 'atual,false,false', 'Hoje devia voltar ao de sempre'
+
+
+OUT_SRC = "G6.scene.nodes.find(n => n.kind === 'out' && inputsOf(rowOf(n.key)).some(w => nodeKeyOfRef(w.ref) === ({SRC}).key))".replace('{SRC}', SRC)
+
+
+@v6
+def t6_cabo_cor_fixa(c):
+    """/v6 (2026-11-26, pedido: "ao pegar um cabo ele muda de cor, isso nao deve acontecer"): pegar a ponta de um cabo de IMAGEM = a mao tem
+    a cor DELE; ligado noutra entrada, continua com ela. Cabo de CONTROLE: pegar no centro do knob = a mao com a cor dele; noutro knob, a mesma"""
+    w0 = f"G6.scene.wires.find(w => w.b === {NK('Matiz')} && w.wid.t === 'a')"
+    col0 = c.js(f"return {w0}.col")
+    c.click(*scr(c, f"G6.inAt({NK('Matiz')}, 'a', 0)"))
+    time.sleep(0.3)
+    assert c.js("return !!(cable && cable.sticky)"), 'clique na entrada ligada nao pegou a ponta'
+    assert c.js("return cable.col") == col0, f'a mao mudou a cor do cabo: {col0} -> {c.js("return cable.col")}'
+    out2 = c.js(f"return {OUT_SRC}.key")
+    c.click(*scr(c, f"(n => [n.x + n.ports.L[0][0], n.y + n.ports.L[0][1]])(G6.scene.by[{json.dumps(out2)}])"))
+    time.sleep(0.6)
+    col1 = c.js(f"return (G6.scene.wires.find(w => w.b.key === {json.dumps(out2)} && w.a === {NK('Contornar')}) || {{}}).col")
+    assert col1 == col0, f'ligado noutra entrada o cabo trocou de cor: {col0} -> {col1}'
+
+    c.js(f"const n = {NK('Matiz')}; applyPreset(n.key, 0, knobsOf(n.an.file)[0], 'pulsa'); cvSig = ''; renderBoxes(); return 1")
+    time.sleep(0.6)
+    c.js("G6.fit(true); return 1")
+    time.sleep(0.4)
+    cc0 = c.js(f"return G6.scene.cvs.find(v => v.n === {NK('Matiz')}).col")
+    c.click(*scr(c, CJXY(NK('Matiz'))))
+    time.sleep(0.3)
+    assert c.js("return G6.hand() && G6.hand().col") == cc0, f'a mao do cabo de controle mudou de cor: {cc0} -> {c.js("return G6.hand() && G6.hand().col")}'
+    c.click(*scr(c, CJXY(NK('Contornar'))))
+    time.sleep(0.6)
+    cc1 = c.js(f"return (G6.scene.cvs.find(v => v.n === {NK('Contornar')}) || {{}}).col")
+    assert cc1 == cc0, f'o cabo de controle ligado noutro knob trocou de cor: {cc0} -> {cc1}'
+
+
+@v6
+def t6_inverter_alterador(c):
+    """/v6 (2026-11-26, pedido: "botao no envelope pra inverter o sinal: o que sobe no kick passa a descer"): a tecla do alterador vira a faixa
+    de TODAS as ligacoes (de > ate'); ligacao nova de um invertido ja' nasce invertida; de novo = volta"""
+    kn = c.js(f"const n = {NK('Matiz')}, k = knobsOf(n.an.file)[0]; applyPreset(n.key, 0, k, 'pulsa'); cvSig = ''; renderBoxes(); return k")
+    time.sleep(0.6)
+    c.js("G6.fit(true); return 1")
+    time.sleep(0.4)
+    cid = c.js("return G6.scene.ctls[0].id")
+    lohi = lambda: c.js(f"return mvUseLoHi(ctlRowsOf({json.dumps(cid)})[0])")
+    lo, hi = lohi()
+    assert lo < hi, f'o pulsa devia nascer subindo: {lo} {hi}'
+    b = scr(c, "(c => [c.x + c.L.inv[0], c.y + c.L.inv[1]])(G6.scene.ctls[0])")
+    c.click(*b)
+    time.sleep(0.5)
+    lo2, hi2 = lohi()
+    assert abs(lo2 - hi) < 1e-3 and abs(hi2 - lo) < 1e-3, f'a tecla nao inverteu a faixa: {lo},{hi} -> {lo2},{hi2}'
+    assert c.js(f"return ctlInverted({json.dumps(cid)})"), 'o alterador nao ficou invertido'
+    c.js(f"const n = {NK('Contornar')}; linkMv(n.key, 0, knobsOf(n.an.file)[0], {json.dumps(cid)}); return 1")
+    time.sleep(0.4)
+    r = c.js(f"return ctlRowsOf({json.dumps(cid)}).map(u => mvUseLoHi(u))")
+    assert len(r) == 2 and all(a > b_ for a, b_ in r), f'a ligacao nova de um invertido devia nascer invertida: {r}'
+    c.js("G6.fit(true); return 1")
+    time.sleep(0.4)
+    c.click(*scr(c, "(c => [c.x + c.L.inv[0], c.y + c.L.inv[1]])(G6.scene.ctls[0])"))
+    time.sleep(0.5)
+    r = c.js(f"return ctlRowsOf({json.dumps(cid)}).map(u => mvUseLoHi(u))")
+    assert all(a < b_ for a, b_ in r), f'a 2a vez nao voltou ao normal: {r}'
+
+
+@v6
+def t6_trocar_fonte(c):
+    """/v6 (2026-11-26, pedido: "trocar a fonte de algo que ja' existe direto no canvas"): o "+" no fim da bandeja abre ali a lista de
+    fontes (a que toca marcada); escolher outra = o leitor passa a tocar ela (e ela entra na bandeja); Esc fecha"""
+    ADD = f"(n => {{ const q = n.ctrls.find(c => c.kind === 'addc'); return [n.x + q.x, n.y + q.y]; }})({SRC})"
+    c.click(*scr(c, ADD))
+    time.sleep(0.4)
+    r = c.js("const l = document.querySelector('.nmenu.wh-list'); return l ? [l.querySelector('.nm-h').textContent, l.querySelectorAll('.nm-it').length, l.querySelectorAll('.nm-it.cur').length] : null")
+    n_src, has = c.js(f"return [srcItems().length, srcItems().some(x => x[0] === rowOf({SRC}.key).file)]")
+    assert r and r[0] == 'trocar a fonte' and r[1] == n_src and r[2] == (1 if has else 0), f'o "+" devia abrir a lista de TODAS as fontes ({n_src}), a que toca marcada ({has}): {r}'
+    if r[1] - r[2] >= 1:
+        sid, f0 = c.js(f"const o = rowOf({SRC}.key); return [o.id, o.file]")
+        c.js("tpCfg.quant = ''; return 1")
+        i = c.js("return [...document.querySelectorAll('.nmenu.wh-list .nm-it')].findIndex(b => !b.classList.contains('cur'))")
+        c.click(*center(c, '.nmenu.wh-list .nm-it', i))
+        time.sleep(0.6)
+        f1 = c.js(f"return rowById({json.dumps(sid)}).file")
+        assert f1 != f0, 'escolher outra fonte nao trocou o leitor'
+        assert c.js(f"return trayOf(rowById({json.dumps(sid)})).includes({json.dumps(f0)})"), 'a fonte de antes devia ficar na bandeja'
+    else:
+        print("      (nenhuma outra fonte no ambiente: a troca em si nao foi testada)")
+        c.key('Escape')
+        time.sleep(0.3)
+        assert not c.js("return !!document.querySelector('.nmenu.wh-list')"), 'Esc nao fechou a lista'
+
+
+@v6
+def t6_modo_unico(c):
+    """/v6 (2026-11-26, pedido: "abandonar o TOCAR: toca nessa tela mesmo, tipo um VCV"): sem TOCAR|MONTAR, F1 nao muda nada, sem o botao
+    MISTURA (o mixer vem da roda), SOCORRO = so' o icone sem tampa"""
+    r = c.js("return [document.body.dataset.mode, !!document.getElementById('mode-seg'), !!document.getElementById('add-mix'), document.getElementById('sos-btn').textContent.replace(/\\d+/g, '').trim(), !!document.getElementById('sos-btn').dataset.guard]")
+    assert r == ['montar', False, False, '', False], f'modo unico / barra: {r}'
+    c.key('F1')
+    time.sleep(0.3)
+    assert c.js("return document.body.dataset.mode === 'montar' && document.getElementById('gcv').getBoundingClientRect().width > 300"), 'F1 mexeu na tela'
+
+
+@v6
+def t6_equipamento_abas(c):
+    """/v6 (revisao 2026-11-26): as 5 abas do EQUIPAMENTO desenham o que mostram — o CONTROLE abria VAZIO (o onEqShow esperava os nomes
+    velhos 'midi'/'teclas'); a ajuda das teclas sem TOCAR; na BIBLIOTECA o cartao de grupos legado some vazio e renomear/apagar so' com o mouse"""
+    c.js("openDrawer('eq', 'controle'); return 1")
+    time.sleep(0.5)
+    r = c.js("return [document.getElementById('midi-box').children.length, document.getElementById('keyhelp').children.length, document.getElementById('keyhelp').textContent]")
+    assert r[0] > 0 and r[1] > 5, f'a aba CONTROLE abriu vazia: midi {r[0]}, teclas {r[1]}'
+    assert 'TOCAR' not in r[2] and 'MONTAR' not in r[2], 'a ajuda das teclas ainda fala de TOCAR/MONTAR'
+    c.js("openDrawer('eq', 'lib'); return 1")
+    time.sleep(0.6)
+    r = c.js("""const b = document.querySelector('#eq .lrow .btn'); return [!!document.getElementById('group-admin'), b ? getComputedStyle(b).opacity : null]""")
+    assert not r[0], 'o cartao de GRUPOS (v4) saiu na limpeza (revisao geral, Frente 6)'
+    assert r[1] in (None, '0'), f'renomear/apagar deviam aparecer so com o mouse em cima: opacidade {r[1]}'
+    c.js("openDrawer(''); return 1")
 
 
 @v6
@@ -1977,7 +1730,7 @@ def t6_knob_jack_peca(c):
     assert c.js(f"const k = G6.pick({{ clientX: {x}, clientY: {y} }}); return k && k.kind === 'ctrl' && k.c.kind === 'knob' && k.zone !== 'jack'"), 'a saia nao e a zona de girar'
     c.drag([(x, y), (x, y - 30), (x, y - 60)])
     for _ in range(3):
-        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=-100)
+        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=-100, modifiers=1)
         time.sleep(0.03)
     time.sleep(0.4)
     assert c.js(f"return stackOf({json.dumps(k)})[0].mod[{json.dumps(n)}]") == lohi0, 'ligado, o knob ainda edita a faixa (saia ou roda)'
@@ -2035,7 +1788,7 @@ def t6_alterador_faixa(c):
     assert abs((hi3 - lo3) - (hi2 - lo2)) < 0.005 and lo3 < lo2 - 0.15, f'arrastar o MEIO nao moveu as duas juntas: {lo2, hi2} -> {lo3, hi3}'
     m = _rgpt(c, (lo3 + hi3) / 2)
     for _ in range(3):
-        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=m[0], y=m[1], deltaX=0, deltaY=-100)
+        c.send('Input.dispatchMouseEvent', type='mouseWheel', x=m[0], y=m[1], deltaX=0, deltaY=-100, modifiers=1)   # (fase 0) Alt = a roda mexe no controle
         time.sleep(0.03)
     time.sleep(0.5)
     lo4, hi4 = _rg(c, k, n)
@@ -2053,7 +1806,7 @@ def t6_alterador_faixa(c):
     x, y = scr(c, CTXY(NK('Matiz'), 'knob', f' && c.kn.n === {json.dumps(n)}'))
     r0 = _rg(c, k, n)
     c.drag([(x, y), (x, y - 30), (x, y - 60)])
-    c.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=-100)
+    c.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=-100, modifiers=1)
     time.sleep(0.4)
     assert _rg(c, k, n) == r0, 'o knob ligado editou a faixa'
     assert c.js(f"return pieceCtl({json.dumps(k)}, 0, {json.dumps(n)}).classList.contains('ro')"), 'o painel do knob ainda edita a faixa'
@@ -2086,7 +1839,7 @@ def t6_roda_categorias(c):
     c.js("const r = document.getElementById('gcv').getBoundingClientRect(); openWheel({ clientX: r.left + r.width * 0.4, clientY: r.top + r.height * 0.5 }); return 1")
     time.sleep(0.5)
     r = c.js("""const S = wheelSectors(), B = [...document.querySelectorAll('.wheel .wh-s:not(.in)')], BI = [...document.querySelectorAll('.wheel .wh-s.in')];
-      const all = lastShaderList.filter(f => isAtomFile(f) && metaOf(f).atom && f !== LUMA), seen = {};
+      const all = lastShaderList.filter(f => isAtomFile(f) && metaOf(f).atom && f !== LUMA && !metaOf(f).oculto), seen = {};   // // oculto: (B3) fica fora de proposito
       for (const s of S) for (const it of s.items()) if (it.spec && it.spec.kind === 'mod') seen[it.spec.file] = (seen[it.spec.file] || 0) + 1;
       for (const s of S) if (s.id === 'cat:mascara') for (const it of s.items()) seen[lastShaderList.find(f => fxName(f) === it.t && catOf(f) === 'mascara')] = 1;
       const ctr = BI.map(b => { const r = b.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }), mid = document.querySelector('.wheel .wh-mid').getBoundingClientRect();
@@ -2193,7 +1946,7 @@ def t6_seletores(c):
     time.sleep(0.3)
     assert _fx(c, MX, 'modo') == 2, f'Shift+clique nao voltou uma: {_fx(c, MX, "modo")}'
     rx, ry = scr(c, f"(n => {{ const r = n.ctrls.find(c => c.kind === 'rot'); return [n.x + r.x, n.y + r.y + 19]; }})({MX})")   # na SAIA (o centro = jack)
-    c.send('Input.dispatchMouseEvent', type='mouseWheel', x=rx, y=ry, deltaX=0, deltaY=100)
+    c.send('Input.dispatchMouseEvent', type='mouseWheel', x=rx, y=ry, deltaX=0, deltaY=100, modifiers=1)   # (fase 0) Alt = a roda mexe no controle
     time.sleep(0.3)
     assert _fx(c, MX, 'modo') == 3, f'a roda nao passou pra proxima: {_fx(c, MX, "modo")}'
     c.drag([(rx, ry), (rx, ry - 25), (rx, ry - 50)])   # arrastar pra cima = passa por entalhes (pra frente)
@@ -2234,59 +1987,325 @@ def t6_seletores(c):
     assert c.js(f"const s = stackOf({json.dumps(k)})[0]; return fxVal({json.dumps(k)}, s, 'modo')") == v1, 'ligada, o rotulo ainda troca a opcao na mao'
 
 
-@gesto
-def t_desempenho(c):
-    """desempenho: 40 nos (8 correntes x 5 atomos) — redesenhar e arrastar a vista sem travar (mede e guarda)"""
-    ok = c.js("""const src = lastOverlays.find(o => !isTapKey(o.file) && !o.kind); if (!src) return 'sem fonte';
-      const A = lastShaderList.filter(f => /presets\\/atomos\\//.test(f) && !isMaskFile(f)).slice(0, 12); if (A.length < 5) return 'sem atomos';
-      for (let r = 0; r < 8; r++){ let prev = '@' + ensureRowId(src);
-        for (let i = 0; i < 5; i++){ const n = newNode(prev, [360 + i * 300, 40 + r * 420], newModule(A[(r + i) % A.length])); prev = '@' + n.id; } }
-      cvSig = ''; renderBoxes(); return 'ok'""")
-    assert ok == 'ok', f'cena de desempenho: {ok}'
+@v6
+def t6_fader_rotulo(c):
+    """/v6 (revisao geral R4, 2026-11-27): o rotulo de um fader nunca quebra em 2 linhas nem cobre o valor ('BRILHO MAXIMO' em cima do 100%)"""
+    c.js("openDrawer('eq', 'saida'); return 1")
     time.sleep(0.6)
-    r = c.js("""const T = []; for (let i = 0; i < 6; i++){ const t0 = performance.now(); cvSig = ''; renderBoxes(); document.body.offsetHeight; drawBoxWires(); document.body.offsetHeight; T.push(performance.now() - t0); }
-      T.shift(); T.sort((a, b) => a - b);
-      return { nos: document.querySelectorAll('#cv-in .bx').length, render_ms: +T[Math.floor(T.length / 2)].toFixed(1),
-               tema: document.body.classList.contains('cel') ? 'cel' : 'foto', leve: document.body.classList.contains('leve') }""")
-    c.send('Performance.enable')
-    met = lambda: {m['name']: m['value'] for m in c.send('Performance.getMetrics')['metrics']}
-    m0 = met()   # ARRASTAR A VISTA: 90 quadros rolando o canvas; o custo = trabalho da linha principal (script + estilo + layout + pintura)
-    c.js("""await new Promise(res => { let n = 0; const step = () => { CV.scrollLeft += 4; CV.scrollTop += 2; if (++n < 90) requestAnimationFrame(step); else res(); };
-      requestAnimationFrame(step); }); return 1""")
-    m1 = met()
-    r['quadro_ms'] = round((m1['TaskDuration'] - m0['TaskDuration']) * 1000 / 90, 2)
-    r['pintura_ms'] = round(((m1.get('LayoutDuration', 0) - m0.get('LayoutDuration', 0)) + (m1.get('RecalcStyleDuration', 0) - m0.get('RecalcStyleDuration', 0))) * 1000 / 90, 2)
-    c.js("setCvZoom(0.02); return 1")   # ZOOM MINIMO: todos os nos na vista, de bloco
+    r = c.js("""return [...document.querySelectorAll('.fader')].filter(f => f.offsetParent && !f.classList.contains('mini')).map(f => {
+        const l = f.querySelector('.f-lb'), v = f.querySelector('.f-val'); if (!l || !l.textContent || !v) return null;
+        const a = l.getBoundingClientRect(), b = v.getBoundingClientRect();
+        return [l.textContent, Math.round(a.height), a.right > b.left + 1 ? 1 : 0, Math.round(f.getBoundingClientRect().width)]; }).filter(Boolean)""")
+    c.js("openDrawer(''); return 1")
+    assert r, 'nenhum fader com rotulo visivel na aba Saida'
+    bad = [x for x in r if x[1] > 16 or x[2]]
+    assert not bad, f'rotulo de fader quebrado ou por cima do valor: {bad}'
+    lim = [x for x in r if 'brilho' in x[0].lower()]
+    assert lim and lim[0][3] >= 200, f'o fader do brilho maximo encolheu: {lim}'
+
+
+@v6
+def t6_desfazer_por_cena(c):
+    """/v6 (revisao geral C4): trocar de cena GUARDA o desfazer daquela cena (antes zerava) e Ctrl+Shift+Z / Ctrl+Y refaz"""
+    k0 = c.js("return undoStack.length")
+    c.js("const o = lastOverlays.find(o => !o.kind && !isTapKey(o.file)); o.opacity = 0.42; sendOverlays(true); return 1")
     time.sleep(0.3)
-    r2 = c.js("""const T = []; for (let i = 0; i < 6; i++){ const t0 = performance.now(); cvSig = ''; renderBoxes(); document.body.offsetHeight; drawBoxWires(); document.body.offsetHeight; T.push(performance.now() - t0); }
-      T.shift(); T.sort((a, b) => a - b); return +T[Math.floor(T.length / 2)].toFixed(1)""")
-    m0 = met()
-    c.js("""await new Promise(res => { let n = 0; const step = () => { zoomFrame(0.02 + (n % 2) * 0.002, 300, 200, 4000, 3000); CV.scrollLeft += 2; if (++n < 60) requestAnimationFrame(step); else res(); };
-      requestAnimationFrame(step); }); return 1""")   # = um quadro do zoom suave (zoomFrame) + rolar, de longe
-    m1 = met()
-    r['longe_render_ms'] = r2
-    r['longe_quadro_ms'] = round((m1['TaskDuration'] - m0['TaskDuration']) * 1000 / 60, 2)
-    c.js("setCvZoom(1); return 1")
-    PERF.update(r)
-    print('      desempenho:', json.dumps(r))
-    assert r['nos'] >= 40, f'cena pequena: {r}'
-    assert r['render_ms'] < 600, f'redesenho lento: {r}'
-    assert r['longe_quadro_ms'] < 40, f'zoom de longe pesado: {r}'
-    assert r['quadro_ms'] < 40, f'arrastar a vista ficou pesado (base antes da mini TV: ~23 ms headless sem GPU): {r}'
+    assert c.js("return undoStack.length") == k0 + 1, 'a mudanca nao entrou no desfazer'
+    c.key('z', 2)   # Ctrl+Z
+    time.sleep(0.3)
+    assert c.js("return [undoStack.length, redoStack.length, lastOverlays.find(o => !o.kind && !isTapKey(o.file)).opacity]")[:2] == [k0, 1], 'Ctrl+Z nao foi pro refazer'
+    c.key('z', 2 | 8)   # Ctrl+Shift+Z
+    time.sleep(0.3)
+    r = c.js("return [undoStack.length, redoStack.length, lastOverlays.find(o => !o.kind && !isTapKey(o.file)).opacity]")
+    assert r == [k0 + 1, 0, 0.42], f'Ctrl+Shift+Z nao refez: {r}'
+    c.js("window._cena0 = activeScene; sceneLeft(_cena0, 'outra cena'); return 1")   # sai pra outra cena: a pilha dela (vazia)
+    assert c.js("return undoStack.length") == 0, 'a cena nova herdou o desfazer da outra'
+    c.js("sceneLeft('outra cena', _cena0); return 1")   # volta: a pilha de antes
+    assert c.js("return undoStack.length") == k0 + 1, 'voltar pra cena perdeu o desfazer dela'
+
+
+@v6
+def t6_cena_segurar(c):
+    """/v6 (revisao geral C5): a LETRA de uma cena so' poe no ar SEGURADA (como 1-9); tocada sem querer so' avisa"""
+    c.js("window._went = []; window._goScene0 = goScene; goScene = n => _went.push(n); lastScenes.push({name: 'teste q', key: 'q'}); return 1")
+    try:
+        c.key('q')   # toque rapido
+        time.sleep(0.7)
+        assert c.js("return _went.length") == 0, 'uma letra TOCADA pos a cena no ar'
+        assert 'segure Q' in c.js("return document.getElementById('toast').textContent"), 'o toque nao avisou que e pra segurar'
+        c.send('Input.dispatchKeyEvent', type='keyDown', key='q', code='KeyQ', windowsVirtualKeyCode=81)
+        time.sleep(0.7)
+        c.send('Input.dispatchKeyEvent', type='keyUp', key='q', code='KeyQ', windowsVirtualKeyCode=81)
+        assert c.js("return _went") == ['teste q'], 'segurar a letra nao pos a cena no ar'
+    finally:
+        c.js("goScene = _goScene0; lastScenes = lastScenes.filter(s => s.name !== 'teste q'); return 1")
+
+
+def _wheel_pick(c, x, y, typed):
+    """abre a roda em (x, y) pelo Enter (o mouse la'), digita e clica no 1o item da lista"""
+    c.mouse('mouseMoved', x, y)
+    time.sleep(0.1)
+    c.key('Enter')
+    time.sleep(0.3)
+    mid = c.js("const m = document.querySelector('.wheel .wh-mid'); return m ? m.textContent : null")
+    c.send('Input.insertText', text=typed)   # (revisao geral B1-A) a lista ja' abre com o cursor no campo
+    time.sleep(0.4)
+    b = c.js("const b = document.querySelector('.wh-list .nm-it'); if (!b) return null; const r = b.getBoundingClientRect(); return [r.left + 30, r.top + r.height / 2]")
+    assert b, 'a lista da roda nao mostrou nada pra ' + typed
+    c.click(*b)
+    time.sleep(0.6)
+    return mid
+
+
+@v6
+def t6_ir_ate(c):
+    """/v6 (revisao geral C1): Ctrl+F abre o IR ATE'; digitar o nome + Enter escolhe o modulo e a vista VOA ate' ele (de longe ate' perto)"""
+    c.js("G6.zoomTo(0.25); return 1")
+    time.sleep(0.6)
+    c.key('f', 2)
+    time.sleep(0.3)
+    assert c.js("return !!document.querySelector('.cfind')"), 'Ctrl+F nao abriu o ir ate'
+    c.send('Input.insertText', text='matiz')
+    time.sleep(0.2)
+    assert c.js("return document.querySelectorAll('.cfind .nm-it').length") >= 1, 'a busca nao achou o Matiz'
+    c.key('Enter')
+    time.sleep(1.0)
+    r = c.js("""const n = G6.scene.by[mkBase(sel.key)], R = document.getElementById('gcv').getBoundingClientRect(), [sx, sy] = G6.scr(n.x + n.w / 2, n.y + n.h / 2);
+      return [visName(mkBase(sel.key)), Math.round(sx - (R.left + R.width / 2)), Math.round(sy - (R.top + R.height / 2)), G6.cam.z, !!document.querySelector('.cfind')]""")
+    assert r[0] == 'Matiz' and abs(r[1]) < 40 and abs(r[2]) < 40 and r[3] > 0.5 and not r[4], f'nao voou ate o Matiz: {r}'
+    c.js("selectNone(); G6.fit(true); return 1")
+
+
+@v6
+def t6_roda_depois_do_escolhido(c):
+    """/v6 (revisao geral C2): com um modulo escolhido, o atomo da roda ENTRA DEPOIS dele (no fio que sai dele, se for um so'); antes nascia solto"""
+    k = c.js("const n = G6.scene.nodes.find(n => n.an && /Matiz/.test(n.an.file)); setSel(n.key, 0, true); return n.key")
+    nw = c.js(f"return G6.outWires(mkBase({json.dumps(k)})).length")
+    e = c.js(f"return {FREE}")
+    mid = _wheel_pick(c, *e, 'desfocar')
+    r = c.js(f"""const o = rowOf(mkBase(sel.key)); return [visName(mkBase(sel.key)), o.file, '@' + rowOf(mkBase({json.dumps(k)})).id,
+      G6.outWires(mkBase({json.dumps(k)})).length, G6.outWires(mkBase(sel.key)).length]""")
+    assert r[0] != 'Matiz' and r[1] == r[2], f'o novo nao le o escolhido: {r}'
+    if nw == 1:
+        assert r[3] == 1 and r[4] == 1, f'com um fio saindo, o novo devia entrar NO fio (quem lia o Matiz le o novo): {r}'
+    c.js("undo(); selectNone(); return 1")
+    time.sleep(0.4)
+
+
+@v6
+def t6_alvo_24px(c):
+    """/v6 (revisao geral C6): na abertura (~60%) a area de pegar um JACK tem >= 24 px na tela (WCAG 2.5.8; antes ~18 px a 68%)"""
+    c.js("G6.zoomTo(0.58); return 1")
+    time.sleep(0.6)
+    r = c.js("""const n = G6.scene.nodes.find(n => n.an && /Matiz/.test(n.an.file)), o = G6.outAt(n), [sx, sy] = G6.scr(o[0], o[1]);
+      const hit = dx => { const p = G6.pick({ clientX: sx + dx, clientY: sy }); return !!(p && p.kind === 'out'); }; return [hit(11), hit(-11), hit(0)]""")
+    c.js("G6.fit(true); return 1")
+    assert all(r), f'o jack OUT nao pega a 11 px do centro (alvo < 24 px): {r}'
+
+
+@v6
+def t6_enquadrar_e_nome_longe(c):
+    """/v6 (revisao geral C7, C8): G enquadra o ESCOLHIDO (de novo = volta); de longe (< 42%) o nome do modulo continua escrito (plaqueta fixa)"""
+    c.js("G6.fit(true); const n = G6.scene.nodes.find(n => n.an && /Contornar/.test(n.an.file)); setSel(n.key, 0, true); return 1")
+    z0 = c.js("return G6.cam.z")
+    c.key('g')
+    time.sleep(0.9)
+    z1 = c.js("return G6.cam.z")
+    assert z1 > z0 * 1.2, f'G nao enquadrou o escolhido: {z0} -> {z1}'
+    c.key('g')
+    time.sleep(0.9)
+    assert abs(c.js("return G6.cam.z") - z0) < 0.02, 'G de novo nao voltou pra vista de antes'
+    c.js("selectNone(); G6.zoomTo(0.25); return 1")
+    time.sleep(0.8)
+    # a plaqueta: um pixel CLARO no topo do modulo (texto branco sobre fundo escuro)
+    r = c.js("""const n = G6.scene.nodes.find(n => n.an && /Contornar/.test(n.an.file)), [sx, sy] = G6.scr(n.x + n.w / 2, n.y), cv = document.getElementById('gcv'),
+      R = cv.getBoundingClientRect(), d = devicePixelRatio, px = cv.getContext('2d').getImageData(Math.round((sx - R.left - 30) * d), Math.round((sy - R.top + 4) * d), Math.round(60 * d), Math.round(14 * d)).data;
+      let hi = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 220 && px[i + 1] > 220 && px[i + 2] > 220) hi++; return hi""")
+    c.js("G6.fit(true); return 1")
+    assert r > 8, f'de longe o nome do modulo sumiu (pixels de texto: {r})'
+
+
+@v6
+def t6_menu_direito(c):
+    """/v6 (revisao geral C9, C10): DIREITO num fio = ir a' origem / ao destino / tirar; DIREITO num knob = aprender MIDI ali mesmo"""
+    p = wire_pt(c, "w.b.an && /Matiz/.test(w.b.an.file)")
+    assert p, 'sem um ponto exposto do fio que chega no Matiz'
+    c.click(*p, button='right')
+    time.sleep(0.3)
+    its = c.js("return [...document.querySelectorAll('.ctxm .nm-it b')].map(b => b.textContent)")
+    assert its == ['ir à origem', 'ir ao destino', 'tirar o fio'], f'o menu do fio veio errado: {its}'
+    c.js("[...document.querySelectorAll('.ctxm .nm-it')][1].click(); return 1")
+    time.sleep(0.9)
+    r = c.js("""const n = G6.scene.nodes.find(n => n.an && /Matiz/.test(n.an.file)), R = document.getElementById('gcv').getBoundingClientRect(), [sx, sy] = G6.scr(n.x + n.w / 2, n.y + n.h / 2);
+      return [Math.round(sx - (R.left + R.width / 2)), Math.round(sy - (R.top + R.height / 2))]""")
+    assert abs(r[0]) < 40 and abs(r[1]) < 40, f'"ir ao destino" nao levou a vista ate o Matiz: {r}'
+    c.js("G6.fit(true); return 1")
+    time.sleep(0.4)
+    k = scr(c, "(() => { const n = " + NK('Contornar') + ", kn = n.ctrls.find(q => q.kind === 'knob' || q.kind === 'rot'); return [n.x + kn.x, n.y + kn.y]; })()")
+    c.click(*k, button='right')
+    time.sleep(0.3)
+    its = c.js("return [...document.querySelectorAll('.ctxm .nm-it b')].map(b => b.textContent)")
+    assert its and its[0] == 'aprender MIDI', f'o menu do knob nao oferece aprender MIDI: {its}'
+    c.js("[...document.querySelectorAll('.ctxm .nm-it')][0].click(); return 1")
+    time.sleep(0.2)
+    r = c.js("return [MIDI.learn, MIDI.armed]")
+    c.js("setLearn(false); return 1")
+    assert r[0] and r[1], f'aprender MIDI nao armou o knob: {r}'
+
+
+@v6
+def t6_proxima_visivel(c):
+    """/v6 (revisao geral R3): cada cena que NAO esta' no ar tem a tecla "próx" a' vista (antes marcar a PROXIMA era so' clique direito)"""
+    c.js("lastScenes.push({name: 'outra q', key: ''}); sceneSig = ''; renderScenes(); document.body.classList.add('cn-open'); return 1")
+    time.sleep(0.2)
+    r = c.js("""const b = [...document.querySelectorAll('#scenes .pad')].map(p => [p.querySelector('.nm').textContent, !!p.querySelector('.nx'), p.querySelector('.nx') ? Math.round(p.querySelector('.nx').getBoundingClientRect().height) : 0]); return b""")
+    c.js("lastScenes = lastScenes.filter(s => s.name !== 'outra q'); sceneSig = ''; renderScenes(); document.body.classList.remove('cn-open'); return 1")
+    o = [x for x in r if x[0] == 'outra q']
+    assert o and o[0][1] and o[0][2] >= 22, f'a cena fora do ar nao tem o "próx" a vista (ou e pequeno): {r}'
+    act = c.js("return activeScene")
+    assert not [x for x in r if x[0] == act and x[1]], f'a cena NO AR nao devia ter "próx": {r} (no ar: {act})'
+
+
+@v6
+def t6_lista_unica(c):
+    """/v6 (revisao geral B1-A, B3, B5): a roda abre JA' com a lista "procurar em tudo" e o cursor no campo; a ★ fixa o item no topo
+    (favoritos) e o usado entra em recentes; sem o Fundo (= Assunto invertido, oculto) e sem alterador de nome repetido"""
+    c.js("libFav = []; libRec = []; LS.set('v6fav', []); LS.set('v6rec', []); return 1")
+    e = c.js(f"return {FREE}")
+    c.mouse('mouseMoved', *e)
+    c.key('Enter')
+    time.sleep(0.4)
+    r = c.js("const q = document.querySelector('.wh-list input'); return [!!q, document.activeElement === q]")
+    assert r == [True, True], f'a roda nao abriu com a busca em foco: {r}'
+    c.js("const st = [...document.querySelectorAll('.wh-list .nm-it')].find(b => b.querySelector('.nm-t').textContent === 'Matiz').querySelector('.star'); st.click(); return 1")
+    time.sleep(0.2)
+    top = c.js("const g = document.querySelector('.wh-list .pgt'), b = document.querySelector('.wh-list .nm-it .nm-t'); return [g && g.textContent, b && b.textContent]")
+    assert top == ['★ favoritos', 'Matiz'], f'a estrela nao pos o Matiz no topo: {top}'
+    c.key('Escape')
+    c.js("closeWheel(); return 1")
+    names = c.js("return wheelSectors().flatMap(s => s.items().map(i => i.t))")
+    assert 'Fundo' not in names and 'Assunto' in names, 'o Fundo (oculto) ainda aparece pra montar'
+    ct = c.js("return ctlItems().map(c => c.name)")
+    assert len(ct) == len(set(ct)), f'alterador com nome repetido: {sorted(ct)}'
+    c.js("libFav = []; LS.set('v6fav', []); return 1")
+
+
+@v6
+def t6_entrada_simples(c):
+    """/v6 (revisao geral A1-A5): a ENTRADA abre SIMPLES (volume, kick, grave, medio, agudo + auto-ganho); o medidor cheio = o que o ALTERADOR
+    recebe (depois do limiar), o claro = o que entra; AVANCADO mostra as 8 faixas com nome em portugues; PERFIL salva e lista"""
+    c.js("LS.set('v6audio', 'simples'); setAudModo('simples'); openDrawer('eq', 'entrada'); return 1")
+    time.sleep(0.6)
+    r = c.js("""return [document.getElementById('eq-audio').classList.contains('simples'), document.querySelectorAll('#aud-simple .asc').length,
+      !!document.querySelector('#aud-ag'), document.getElementById('cols').offsetParent === null, [...document.querySelectorAll('#aud-simple .asc .cn')].map(e => e.textContent)]""")
+    assert r[:4] == [True, 5, True, True] and r[4] == ['volume', 'kick', 'grave', 'médio', 'agudo'], f'a entrada simples veio errada: {r}'
+    c.js("""bandGate['Sub-bass'] = {m: 'ativa', th: 0.7}; renderSimple({bands: [{name: 'amp', raw_level: 0.5, final: 0.5}, {name: 'Sub-bass', raw_level: 0.8, final: 0.6},
+      {name: 'Low-mid', raw_level: 0.1, final: 0.1}], kick: {decay: 0.3, final: 0.9}}); return 1""")
+    r = c.js("return [ASC.grave.iIn.tgt, ASC.grave.iOut.tgt, ASC.kick.iOut.tgt, ASC.grave.th.hidden]")
+    assert abs(r[0] - 0.8) < 1e-6 and abs(r[1] - 0.1) < 1e-6 and abs(r[2] - 0.9) < 1e-6 and r[3] is False, f'o medidor nao mostra o que entra x o que o alterador recebe: {r}'
+    c.js("delete bandGate['Sub-bass']; setAudModo('avancado'); return 1")
+    time.sleep(0.3)
+    r = c.js("return [document.getElementById('cols').offsetParent !== null, [...document.querySelectorAll('#cols .cn')].map(e => e.textContent)]")
+    assert r[0] and 'sub' in r[1] and 'Sub-bass' not in r[1] and 'volume' in r[1], f'o avancado nao mostrou as faixas em portugues: {r}'
+    c.js("setAudModo('simples'); window._pf = null; perfilPost('salvar', 'mic da casa').then(x => window._pf = x); return 1")
+    time.sleep(0.6)
+    r = c.js("return [window._pf && window._pf.perfis, [...document.querySelectorAll('#aud-perfil option')].map(o => o.value)]")
+    assert r[0] == ['mic da casa'] and 'mic da casa' in r[1], f'o perfil nao salvou/listou: {r}'
+    c.js("perfilPost('apagar', 'mic da casa'); openDrawer(''); return 1")
+    time.sleep(0.3)
+
+
+@v6
+def t6_telao(c):
+    """/v6 (revisao geral P1-P5): TELAO = aba propria com os passos 1 Palco / 2 Raster / 3 Saidas e a barra de LOAD-IN (teste por bloco,
+    identificar, exportar PNG, casa); setas movem a tela escolhida 1 px no raster (Shift = 10); a casa salva e lista"""
+    c.js("openDrawer('eq', 'telao'); return 1")
+    time.sleep(0.6)
+    r = c.js("""return [document.getElementById('eq-telas').offsetParent !== null, document.getElementById('eq-saida').offsetParent === null,
+      [...document.querySelectorAll('#stg-view button')].map(b => b.textContent), !!document.getElementById('tl-loadin').offsetParent]""")
+    assert r[0] and r[1] and r[2] == ['1 · Palco', '2 · Raster', '3 · Saídas no palco'] and r[3], f'a aba Telao veio errada: {r}'
+    c.js("""lastScreens = [{name: 'esq', x: 0, y: 0, w: 2, h: 1, pw: 400, ph: 200, ox: 10, oy: 20}, {name: 'dir', x: 2.2, y: 0, w: 2, h: 1, pw: 400, ph: 200, ox: 410, oy: 20}];
+      lastPM = {on: 1, w: 820, h: 240}; pmTouched = scrTouched = now(); sendScreens(false); scrSel = 0; setStgView('raster'); return 1""")
+    time.sleep(0.3)
+    c.send('Input.dispatchKeyEvent', type='keyDown', key='ArrowRight', code='ArrowRight', windowsVirtualKeyCode=39)
+    c.send('Input.dispatchKeyEvent', type='keyUp', key='ArrowRight', code='ArrowRight', windowsVirtualKeyCode=39)
+    c.send('Input.dispatchKeyEvent', type='keyDown', key='ArrowDown', code='ArrowDown', windowsVirtualKeyCode=40, modifiers=8)
+    c.send('Input.dispatchKeyEvent', type='keyUp', key='ArrowDown', code='ArrowDown', windowsVirtualKeyCode=40, modifiers=8)
+    time.sleep(0.2)
+    r = c.js("return [lastScreens[0].ox, lastScreens[0].oy]")
+    assert r == [11, 30], f'as setas nao moveram o bloco 1 px (Shift = 10): {r}'
+    r = c.js("const cv = mapPng(); return [cv.width, cv.height]")
+    assert r[0] == 1600 and r[1] > 300, f'o PNG do mapa nao saiu: {r}'
+    c.js("window._cs = null; casaPost('salvar', 'galpao').then(x => window._cs = x); return 1")
+    time.sleep(0.6)
+    r = c.js("return [window._cs && window._cs.casas, [...document.querySelectorAll('#tl-casa option')].map(o => o.value)]")
+    assert r[0] == ['galpao'] and 'galpao' in r[1], f'a casa nao salvou/listou: {r}'
+    c.js("casaPost('apagar', 'galpao'); scrSel = -1; openDrawer(''); return 1")
+    time.sleep(0.3)
+
+
+@v6
+def t6_js_python_concordam(c):
+    """(revisao geral F4) o que o PAINEL (JS) e o MOTOR (Python) precisam concordar: ids estaveis, migracao de cena antiga, eixos da tela
+    girada, nomes de faixa/evento/forma de LFO/presets/modos de mistura — antes ~20 pares copiados a mao sem teste"""
+    import dash_data as D, dash_server as DS
+    keys = ['webcam:/dev/video0', 'default/a.mp4#2', 'presets/atomos/Matiz.frag', 'ção']
+    assert c.js(f"return {json.dumps(keys)}.map(stableId)") == [D.stable_id(k) for k in keys], 'stableId != dash_data.stable_id'
+    old = [{'file': 'webcam:/dev/video0', 'opacity': 0.5}, {'file': 'default/a.mp4', 'off': 1}, {'file': 'default/b.png', 'blend': 'soma'}]
+    js = c.js(f"const o0 = lastOverlays; lastOverlays = {json.dumps(old)}; migrateGraph(); const r = JSON.parse(JSON.stringify(lastOverlays)); lastOverlays = o0; return r")
+    py = D.migrate_graph(json.loads(json.dumps(old)))
+    strip = lambda L: [{k: v for k, v in o.items() if k not in ('xy', 'n', 'nome')} for o in L]
+    assert strip(js) == strip(py), f'migrateGraph != migrate_graph:\n JS {js}\n PY {py}'
+    t = {'x': 1, 'y': 0.5, 'w': 2, 'h': 1, 'rot': 30}
+    ax = c.js(f"const a = shapeAxes({json.dumps(t)}); return [a.o || a[0], a.ex || a[1], a.ey || a[2]]")
+    py = D.screen_axes(t)
+    flat = lambda v: [round(float(x), 6) for p in v for x in (p if isinstance(p, (list, tuple)) else [p['x'] if isinstance(p, dict) else p])]
+    jsf = [round(float(x), 6) for p in ax for x in (p if isinstance(p, list) else [p[k] for k in ('x', 'y')] if isinstance(p, dict) else [p])]
+    assert jsf == flat(py), f'shapeAxes != screen_axes: {ax} x {py}'
+    r = c.js("return [BAND_NAMES, SOUND_EV, LFO_SHAPES.map(x => x[0]), Object.keys(PRESET_TXT), LAYER_BLENDS.map(x => x[0]), GRP_BANDS]")
+    assert r[0] == list(D.BAND_NAMES), f'faixas: {r[0]}'
+    assert r[1] == list(D.SOUND_EVENTS), f'eventos do som: {r[1]}'
+    assert r[2] == list(D.LFO_SHAPES), f'formas de LFO: {r[2]}'
+    assert set(D.MOV_PRESETS) <= set(r[3]), f'preset sem texto no painel: {set(D.MOV_PRESETS) - set(r[3])}'
+    assert r[4] == list(DS.LAYER_BLENDS), f'modos de mistura: {r[4]}'
+    uni = dict(zip(D.BAND_NAMES, ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air')))
+    assert {g: [uni[b] for b in bs] for g, bs in r[5].items()} == {g: list(v) for g, v in D.SOUND_GROUPS.items()}, f'grupos grave/medio/agudo: {r[5]}'
+
+
+@v6
+def t6_canvas_vazio(c):
+    """/v6 (revisao geral R1): canvas VAZIO diz por onde comecar (antes: preto, sem dica; a 1a abertura do app vinha com a webcam e um video
+    que nao existiam); a gaveta do Equipamento deixa o canvas a' vista (<= 640 px)"""
+    c.js("lastOverlays = []; for (const k of Object.keys(lastBindings)) delete lastBindings[k]; sendOverlays(true); sendBindings(true); cvSig = ''; renderBoxes(); G6.dirty(); return 1")
+    time.sleep(1.2)
+    r = c.js("""const cv = document.getElementById('gcv'), d = devicePixelRatio, R = cv.getBoundingClientRect(), px = cv.getContext('2d').getImageData(Math.round(R.width / 2 * d - 150 * d), Math.round(R.height / 2 * d - 26 * d), Math.round(300 * d), Math.round(20 * d)).data;
+      let hi = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 200 && px[i + 1] > 200 && px[i + 2] > 200) hi++; return [G6.scene.nodes.filter(n => n.an || (n.L && n.L.kind === 'src')).length, hi]""")
+    assert r[0] == 0 and r[1] > 40, f'o canvas vazio nao mostrou a dica: {r}'
+    c.js("openDrawer('eq', 'entrada'); return 1")
+    time.sleep(0.4)
+    w = c.js("return Math.round(document.getElementById('eq').getBoundingClientRect().width)")
+    c.js("openDrawer(''); return 1")
+    assert w <= 640, f'a gaveta do Equipamento cobre o canvas: {w} px'
+
+
+@v6
+def t6_hud_motor(c):
+    """/v6 (revisao geral R5): o HUD do canvas mostra o MOTOR (fps de verdade da saida e os ms de trabalho por quadro), nao so' o painel"""
+    c.js("renderTop({output: {fps: 41.5, fps_target: 60, ms: 21.3}}); return 1")
+    r = c.js("return motorHud && [motorHud.fps, motorHud.tgt, motorHud.ms]")
+    assert r == [41.5, 60, 21.3], f'o HUD nao recebeu o motor: {r}'
 
 
 def main(filt):
     c, br, tmp, tpath = boot()
     fails = 0
     try:
-        load(c)
         for t in T:
             if filt and not any(w in t.__name__ for w in filt):
                 continue
             c.events.clear()
             try:
                 c.mods = 0
-                fixture(c)
                 t(c)
                 err = errors(c)
                 if err:

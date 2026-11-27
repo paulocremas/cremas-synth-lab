@@ -744,16 +744,6 @@ def config_dir():
     return os.path.join(base or os.path.join(os.path.expanduser('~'), '.config'), 'prisma')
 
 
-def data_dir():
-    """Onde o app roda e guarda os dados do usuario: ~/.local/share/prisma | %LOCALAPPDATA%\\prisma
-    ($PRISMA_HOME ganha)."""
-    if os.environ.get('PRISMA_HOME'):
-        return os.environ['PRISMA_HOME']
-    if IS_WIN:
-        return os.path.join(os.environ.get('LOCALAPPDATA') or os.path.expanduser('~'), 'prisma')
-    return os.path.join(os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share'), 'prisma')
-
-
 def app_browser(names):
     """1o Chromium achado (Brave/Chrome/Edge — o dash abre em --app). Windows: tambem nos lugares
     de instalacao padrao (nao ficam no PATH); o Edge vem com o Windows."""

@@ -44,7 +44,7 @@ def parse_meta(src):
     src = src or ''
     m = re.search(r'(?m)^//\s*cat:\s*(\S+)', src)
     i = re.search(r'(?m)^//\s*in:\s*(.+)$', src)
-    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala|B|entra|marca|montagem):)\s*(.+)$', src)
+    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala|B|entra|marca|montagem|oculto):)\s*(.+)$', src)
     mo = re.search(r'(?m)^//\s*mod:\s*(.+)$', src)
     desc = d.group(1).strip() if d else ''
     nome = ''
@@ -72,6 +72,9 @@ def parse_meta(src):
     est = parse_estado(src)
     if est:                            # ATOMO v2: atomo com MEMORIA (o dash oferece semear/limpar)
         out['estado'] = est
+    oc = re.search(r'(?m)^//\s*oculto:\s*(.+)$', src)
+    if oc:   # (revisao geral B3) RODA mas NAO aparece pra montar (cena antiga continua): "// oculto: use o Assunto com inverter"
+        out['oculto'] = oc.group(1).strip()[:80]
     mt = re.search(r'(?m)^//\s*montagem:\s*(.+)$', src)
     if mt:   # DECLARADO de montagem (ajusta uma vez pro lugar, ex. Lente): pode ter ate' ATOM_MAX_KNOBS_MONTAGEM knobs
         out['montagem'] = mt.group(1).strip()[:80]
@@ -117,7 +120,7 @@ def knob_switches(src):
 # PADRAO ATOMO (shaders/ATOMO.md): o que um .frag de shaders/presets/atomos/ pode e nao pode
 ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador', 'mascara')
 ATOM_DRAW_CATS = ('gerador', 'forma')   # quem DESENHA/gera: vai POR CIMA da corrente; o resto e' FILTRO (TROCA, ATOMO §5)
-# EM CIMA (PLANO_CONVERSA.md §2.1): a MARCA de um filtro = a saida dele onde |saida - entrada| (pre-multiplicada, o maior
+# EM CIMA (historico/PLANO_CONVERSA.md §2.1): a MARCA de um filtro = a saida dele onde |saida - entrada| (pre-multiplicada, o maior
 # canal) passa de LO; a partir de HI vale inteira. Abaixo de LO o fundo sai intacto; o erro de identidade fica < ~0.4 * HI.
 MARCA_LO, MARCA_HI = 0.012, 0.06
 
@@ -156,7 +159,6 @@ MASK_UNIFORMS = {'u_subject', 'u_subject_on'}   # so' atomo de MASCARA (dash v5)
 MASK_UNIFORMS |= {'u_rosto', 'u_olhos', 'u_rosto_on', 'u_corpo', 'u_corpo_on', 'u_obj', 'u_obj_p', 'u_obj_on', 'u_olho', 'u_olho_on'}   # + o RASTREIO (src/rastreio.py)
 ATOM_MAX_KNOBS = 3   # minimalismo: o principal + ate' 2 detalhes essenciais; mais que isso = dividir em atomos
 ATOM_MAX_KNOBS_MONTAGEM = 6   # "// montagem: <o que descreve>" = ajuste de LUGAR (geometria do telao), mexe uma vez, nao no show
-ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_phrase', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
 
 # PRELUDIO do ATOMO v2 (shaders/ATOMO.md §3): o motor poe ISTO antes de todo .frag de presets/atomos/ (atom_source).
 # O atomo nao declara estes uniforms nem copia funcoes: a mesma palavra faz a mesma coisa em todo atomo. Texturas
@@ -318,6 +320,16 @@ def atom_check(src):
             w.append('// estado: acumula com u_dt/decai(), nao com u_time (o rastro muda com o fps)')
     elif re.search(r'\b(u_state|u_vista|u_fase|u_semear|E\s*\()', code):
         q.append('le o estado (E()/u_state/u_vista) sem "// estado:"')
+    op = re.search(r'(?m)^//\s*opcoes:\s*(.+)$', src)   # (revisao geral F3) nomes da ESCOLHA que nao batem com o floor(u_fx_X * K): viravam "1..N" calado
+    if op:
+        for part in re.split(r'[;,]\s*(?=\w+=)', op.group(1)):
+            k, _, v = part.partition('=')
+            k, names = k.strip(), [x.strip() for x in v.split('|') if x.strip()]
+            m = re.search(r'floor\(\s*u_fx_' + re.escape(k) + r'\s*\*\s*([0-9.]+)\s*\)', code)
+            if not m:
+                w.append(f'// opcoes: {k} sem floor(u_fx_{k} * N) no codigo (nao vira escolha)')
+            elif int(round(float(m.group(1)))) != len(names):
+                w.append(f'// opcoes: {k} tem {len(names)} nomes mas o codigo divide em {int(round(float(m.group(1))))} (aparece "1..N")')
     if 'gl_FragColor' not in code:
         q.append('sem gl_FragColor')
     return {'quebra': q, 'avisos': w, 'ouve': sorted(set(ouve)), 've': sorted(set(ve))}

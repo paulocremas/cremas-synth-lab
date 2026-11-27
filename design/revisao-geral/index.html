@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRISMA — revisão geral</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: laudo de bancada — o técnico abre o equipamento, mede, fotografa e diz o que trocar, com a conta na mão.
+   IDEA: a ficha de manutenção do rack: cada achado é uma etiqueta com a medida, a técnica e a fonte; você marca a opção.
+   PICTURE: as fotos reais do app (1366×768, o notebook) e os mockups desenhados no mesmo material escuro.
+   COLOUR/TYPE: a pele do PRISMA (metal escuro; imagem azul, sinal âmbar, evento verde, escolhido laranja, perigo vermelho); Barlow Condensed + Plex.
+   LAYOUT: veredito → método → 6 frentes (achados com opções) → o resto → plano de limpeza → escolhas. */
+:root { color-scheme: dark;
+  --bg: #0b0c0e; --card: #121418; --card2: #16191e; --line: #22262c; --tx: #e6e9ed; --tx2: #a3acb6; --tx3: #727b86;
+  --sel: #ff9d52; --ok: #3fd08f; --bad: #ff5b61; --img: #4f8fe8; --cv: #e8a33a; --ev: #4fd08a;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif; --body: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace; }
+:root[data-theme=light], :root[data-theme=dark] { color-scheme: dark; }
+* { box-sizing: border-box; min-width: 0; }
+html { scroll-padding-top: 72px; }
+body { margin: 0; background: var(--bg); color: var(--tx); font: 16px/1.55 var(--body); overflow-x: clip; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px max(2vw, 16px) 90px; display: grid; gap: 40px; }
+h1 { font: 700 46px/1.05 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 32px/1.1 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 700 20px/1.2 var(--display); margin: 0; }
+p, li { color: var(--tx2); max-width: 80ch; } p { margin: 0; }
+b, strong { color: var(--tx); font-weight: 600; }
+a { color: #8fb8ff; }
+code { font: 500 14px var(--mono); color: #ffd9b8; overflow-wrap: anywhere; }
+.top { position: sticky; top: 0; z-index: 10; display: flex; gap: 4px 14px; align-items: center; flex-wrap: wrap; padding: 8px max(2vw, 16px); background: #0b0c0eee; border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.top a { color: var(--tx2); text-decoration: none; font: 600 14px var(--body); padding: 8px 2px; }
+.top a:hover { color: var(--tx); } .top .grow { flex: 1; }
+.save { font: 600 13px var(--mono); color: var(--tx3); } .save.ok { color: var(--ok); } .save.err { color: #ff8a8a; }
+section { display: grid; gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
+.card ul, .card ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.good { border-color: #1f4a35; } .good h3 { color: var(--ok); } .badc { border-color: #4a2224; } .badc h3 { color: #ff8a8a; }
+.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 22px; align-items: center; }
+.hero img { width: 100%; border-radius: 12px; border: 1px solid #1c2025; display: block; }
+.big { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+.big div { display: grid; } .big b { font: 700 34px/1 var(--display); color: var(--tx); } .big span { font-size: 14px; color: var(--tx3); }
+figure { margin: 0; display: grid; gap: 6px; }
+figure img { width: 100%; border-radius: 10px; border: 1px solid #1c2025; display: block; background: #0e1013; }
+figcaption { font-size: 14px; color: var(--tx3); }
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 700 14px var(--display); letter-spacing: .05em; color: var(--tx); text-transform: uppercase; background: var(--bg); }
+td { color: var(--tx2); } td:first-child { color: var(--tx); font-weight: 600; }
+td.n { text-align: right; font: 600 14px var(--mono); color: var(--tx); white-space: nowrap; }
+td.n.down { color: var(--ok); }
+.scroll { overflow-x: auto; }
+.seq { font: 500 12px var(--mono); color: var(--tx3); overflow-wrap: anywhere; }
+.f { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; }
+.f .hd { display: flex; gap: 8px 12px; align-items: baseline; flex-wrap: wrap; }
+.f .id { font: 700 13px var(--mono); color: #1a1006; background: var(--sel); border-radius: 6px; padding: 1px 7px; }
+.f h3 { flex: 1 1 280px; }
+.tag { font: 600 12px var(--body); border-radius: 999px; padding: 2px 9px; border: 1px solid var(--line); color: var(--tx2); white-space: nowrap; }
+.tag.alto { color: #ffd9b8; border-color: #6a4220; } .tag.baixo { color: #9fe3c2; border-color: #1f4a35; } .tag.med { color: #cfd6de; }
+.f dl { margin: 0; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 12px; font-size: 15px; }
+.f dt { color: var(--tx3); font: 600 13px var(--body); padding-top: 2px; } .f dd { margin: 0; color: var(--tx2); }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { font: 600 14px var(--body); color: var(--tx2); background: #181b20; border: 1px solid var(--line); border-radius: 999px; padding: 9px 15px; min-height: 44px; cursor: pointer; text-align: left; }
+.opt:hover { color: var(--tx); background: #20242b; }
+.opt.rec { border-color: #6a4220; }
+.opt.on { background: #3a2410; border-color: var(--sel); color: #ffd9b8; } .opt.on::before { content: '✓ '; }
+button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+textarea.nota { width: 100%; min-height: 44px; resize: vertical; background: #0d0f12; color: var(--tx); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 16px var(--body); }
+.mock { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+.mk { display: grid; gap: 8px; align-content: start; }
+.mk svg { width: 100%; height: auto; display: block; background: radial-gradient(ellipse at 50% 20%, #1b1e23, #0e1013); border-radius: 10px; border: 1px solid #1c2025; }
+.mk b { font: 700 18px var(--display); letter-spacing: .04em; } .mk span { font-size: 15px; color: var(--tx2); }
+.rec-b { font: 700 12px var(--body); color: #ffd9b8; background: #3a2410; border: 1px solid var(--sel); border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
+.map { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.box { background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.box h4 { margin: 0; font: 700 16px var(--display); letter-spacing: .05em; text-transform: uppercase; }
+.box p { font-size: 14px; }
+.box.img h4 { color: #9cc1ff; } .box.cv h4 { color: #ffc874; } .box.ev h4 { color: #7fe3ac; } .box.sv h4 { color: #cfd6de; }
+pre { margin: 0; background: #0d0f12; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font: 500 13px/1.5 var(--mono); color: var(--tx2); }
+.src { font-size: 13px; color: var(--tx3); } .src a { color: #7fa6e8; }
+.note { font-size: 14px; color: var(--tx3); }
+details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+details summary { cursor: pointer; font: 700 17px var(--display); letter-spacing: .04em; color: var(--tx); }
+details[open] summary { margin-bottom: 10px; }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .f dl { grid-template-columns: 1fr; } .f dt { padding-top: 6px; } }
+@media (max-width: 600px) { h1 { font-size: 34px; } h2 { font-size: 27px; } table { font-size: 13px; }
+  .stack thead { display: none; } .stack tr { display: grid; padding-block: 10px; } .stack td { display: flow-root; border: 0; padding: 3px 0; padding-inline-start: 8em; text-align: start; }
+  .stack td::before { content: attr(data-l); float: inline-start; width: 7.5em; margin-inline-start: -8em; white-space: normal; color: var(--tx3); font-weight: 600; } .stack td:empty { display: none; } }
+@media (prefers-reduced-motion: no-preference) { .opt { transition: background .15s, border-color .15s; } }
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<nav class="top scroll" aria-label="seções">
+  <a href="#veredito">Veredito</a><a href="#metodo">Método</a><a href="#canvas">1 · Canvas</a><a href="#biblioteca">2 · Biblioteca</a>
+  <a href="#pixel">3 · Pixel map</a><a href="#audio">4 · Áudio</a><a href="#framework">5 · Framework</a><a href="#codigo">6 · Código</a>
+  <a href="#resto">O resto</a><a href="#escolhas">Escolhas</a><span class="grow"></span><span class="save" id="save" aria-live="polite">—</span>
+</nav>
+<main>
+
+<section id="veredito">
+  <div class="hero">
+    <div style="display:grid;gap:16px">
+      <h1>PRISMA, revisão geral: o canvas toca bem, mas não se acha nada nele</h1>
+      <p>Revisão de 27/11/2026 em cima do branch <code>dashboard-channels-output</code>, sem mexer em nada. Seis frentes, cada achado com a <b>medida no app</b>, a <b>técnica</b> que o pegou e a <b>fonte</b> da pesquisa. Você escolhe embaixo de cada um; depois implemento em rodadas pequenas, com teste.</p>
+      <div class="big">
+        <div><b>12</b><span>tarefas percorridas (KLM)</span></div>
+        <div><b id="nAch">—</b><span>achados com opções</span></div>
+        <div><b>~900</b><span>linhas mortas achadas</span></div>
+        <div><b>16</b><span>fatias na roda</span></div>
+      </div>
+    </div>
+    <figure><img src="img/tela.jpg" alt="A tela do PRISMA hoje: barra do show em cima, canvas com fonte, Contornar, Matiz, envelopes, relógio e som e três saídas" width="1092" height="614"><figcaption>Hoje, 1366×768, zoom de abertura 68% (a cena fixa dos testes).</figcaption></figure>
+  </div>
+  <div class="card" style="border-color:#1f4a35"><h3 style="color:var(--ok)">Aplicado em 27/11 (as recomendadas, em 8 rodadas)</h3>
+    <p>Sem escolhas marcadas, valeram as <b>recomendadas</b>; cada rodada foi testada (gestos + self-checks) e entregue no app. Trocas de rota, com o motivo:
+    <b>C5</b> cena = <b>segurar</b> a letra (Shift já é "na hora" na grade); <b>C7</b> H = sempre tudo, <b>G</b> = o escolhido (Houdini);
+    <b>B2</b> só a Espelho saiu (18 das 19 receitas de um átomo trazem um movimento: a lista diz "+ movimento"); <b>B3</b> só o Fundo ficou oculto
+    (= Assunto invertido; os outros usam modelos ou entradas diferentes); <b>R1</b> a semente ficou vazia com a dica (não há vídeo no git pra ir no pacote).
+    Ficaram pra rodadas próprias: F1, F6, F7, F8, o build novo, dividir o motor e o painel em pasta — ver o <code>BACKLOG.md</code>. Decisões: <code>DECISOES.md</code>.</p></div>
+  <div class="cols">
+    <div class="card good"><h3>O que está bom (e à frente dos concorrentes)</h3><ul>
+      <li><b>Touchpad primeiro.</b> Todo cabo é clique-pega/clique-solta, a roda sem Alt não gira controle e tolera 8 px de tremido. O VCV precisou de um módulo de terceiros (Clarity) pra isso.</li>
+      <li><b>Cor do cabo = o que passa</b> (imagem azul, sinal âmbar, evento verde) e estável, como no Bitwig Grid.</li>
+      <li><b>Imagem viva em cada módulo</b> + monitor do programa: o que o TouchDesigner tem e o VCV não.</li>
+      <li><b>Fio recebe módulo</b> e <b>sacudir solta</b>, os dois gestos do Blender e do Houdini, já feitos.</li>
+      <li><b>Segurança do show</b>: BLACKOUT com tampa e tecla, SOCORRO fixo, anti-estrobo. Nenhum dos editores de nós pesquisados tem isso pronto.</li>
+      <li><b>Desempenho do canvas</b>: 36 módulos a 60 fps, 2,2 ms de JS por quadro, no navegador sem GPU.</li>
+      <li><b>Contrato do átomo</b> escrito (<code>ATOMO.md</code>) e a matriz que testa todo par.</li></ul></div>
+    <div class="card badc"><h3>O que está ruim</h3><ul>
+      <li><b>Patch grande = cego.</b> Sem busca no canvas e, de longe (20%), nenhum nome legível.</li>
+      <li><b>Quatro listas</b> pra pegar um módulo (roda, menu do cabo, "trocar", Equipamento › Biblioteca), a roda sem campo de busca à vista e o módulo da roda nasce <b>solto</b>: montar 3 módulos leva ~39 s pelo caminho que se descobre.</li>
+      <li><b>Alvos pequenos</b>: jack ≈ 18 px na tela a 68% (WCAG pede 24).</li>
+      <li><b>Desfazer some</b> ao trocar de cena e não tem refazer; uma <b>letra</b> põe cena no ar sem querer.</li>
+      <li><b>Entrada de áudio</b>: 100 controles crus, nomes em inglês e "rel/atk/mem"; sem ganho nem o sinal que o alterador recebe.</li>
+      <li><b>Pixel map</b> sem teste por bloco, sem exportar, sem preset da casa.</li>
+      <li><b>Por dentro</b>: a cena é migrada só pelo JS, cada kick com ação regrava o <code>tuning.py</code>, átomo quebrado some calado, ~20 pares JS↔Python sem teste.</li>
+      <li><b>1ª abertura</b> = o <code>tuning.py</code> de trabalho (webcam <code>/dev/video0</code> + um vídeo que não vai no pacote).</li></ul></div>
+  </div>
+</section>
+
+<section id="metodo">
+  <h2>Método: como cada número foi tirado</h2>
+  <div class="cols">
+    <div class="card"><h3>KLM no touchpad</h3>
+      <p>Operadores de Card, Moran &amp; Newell (1980), com o apontar ajustado pro touchpad: o throughput do touchpad é 1–2,9 bits/s contra 3,7–4,9 do mouse (Soukoreff &amp; MacKenzie 2004), então <b>P ≈ 1,8 s</b> (mouse: 1,1). Arrastar custa ~35% a mais e erra ~3× (MacKenzie, Sellen &amp; Buxton 1991).</p>
+      <table><tbody>
+        <tr><td>P</td><td>apontar + clicar no touchpad</td><td class="n">2,0 s</td></tr>
+        <tr><td>D</td><td>apontar + 2 cliques</td><td class="n">2,2 s</td></tr>
+        <tr><td>A</td><td>arrastar (apontar com botão)</td><td class="n">2,6 s</td></tr>
+        <tr><td>M</td><td>preparar a mente (achar, decidir)</td><td class="n">1,35 s</td></tr>
+        <tr><td>K</td><td>uma tecla</td><td class="n">0,2 s</td></tr>
+        <tr><td>H</td><td>mão touchpad ↔ teclado/MIDI</td><td class="n">0,4 s</td></tr>
+      </tbody></table>
+      <p class="src">Fontes: <a href="https://www.cs.umd.edu/~golbeck/INST631/KSM.pdf">Kieras, KLM</a> · <a href="https://www.yorku.ca/mack/ijhcs2004.pdf">Soukoreff &amp; MacKenzie 2004</a> · <a href="https://www.yorku.ca/mack/CHI91.html">MacKenzie et al. 1991</a> · <a href="https://www.yorku.ca/mack/CHI98.html">MacKenzie &amp; Oniszczak 1998</a></p></div>
+    <div class="card"><h3>As outras técnicas</h3><ul>
+      <li><b>Heurísticas de Nielsen</b> (H1–H10) em cada superfície. <a href="https://www.nngroup.com/articles/ten-usability-heuristics/">nngroup</a></li>
+      <li><b>Percurso cognitivo</b>: as 4 perguntas de Wharton et al. 1994 (vai tentar? vai ver a ação? vai ligar ação e efeito? vai ver que andou?) em cada passo das 12 tarefas.</li>
+      <li><b>Fitts</b>: alvos medidos no código (raio de pegar do jack <code>max(13, 9/z)</code> px do mundo) × zoom; mínimo WCAG 2.5.8 = 24 px.</li>
+      <li><b>Hick</b> só onde vale (lista conhecida e ordenada); em lista desconhecida a busca visual cresce em <b>linha</b> com o número de itens (Landauer &amp; Nachbar 1985).</li>
+      <li><b>Memória de trabalho</b> ~4 itens (Cowan 2001); <b>memória espacial</b> (CommandMaps, Scarr et al. 2012).</li>
+      <li>Fotos: <code>tests/estetica.py</code> + roteiros próprios (patch de 36 módulos, gavetas roladas), Chromium sem tela, 1366×768.</li></ul>
+      <p class="note">O que <b>não</b> medi: fps do motor numa máquina fraca de verdade (não tenho uma aqui) e uso com MIDI físico. Os dois viram tarefa no plano.</p></div>
+  </div>
+</section>
+
+<section id="canvas">
+  <h2>Frente 1 · Usabilidade, com foco no canvas</h2>
+  <p>As 12 tarefas do prompt, percorridas do zero. <b>Hoje</b> = o caminho que se descobre pela tela; <b>proposta</b> = com os achados abaixo. A sequência de operadores está embaixo de cada tarefa (a conta é feita na página).</p>
+  <div class="scroll"><table class="stack" id="tasks"><thead><tr><th>Tarefa</th><th>Hoje</th><th>Proposta</th><th>Onde trava (técnica)</th></tr></thead><tbody></tbody></table></div>
+  <div class="shots">
+    <figure><img src="img/roda.jpg" alt="A roda aberta: 12 fatias de fora e 4 de dentro, sem campo de busca" loading="lazy" width="1092" height="614"><figcaption>A roda: 16 fatias, nenhum campo de busca à vista (digitar procura, mas nada diz). Forma e tempo têm 1 módulo cada.</figcaption></figure>
+    <figure><img src="img/longe40.jpg" alt="Patch de 36 módulos a 20%: nenhum nome legível" loading="lazy" width="1092" height="614"><figcaption>36 módulos, H (caber tudo) = 20%: nenhum nome se lê. 60 fps, 2,2 ms.</figcaption></figure>
+    <figure><img src="img/perto.jpg" alt="Módulos a 100%: jacks de 22 px" loading="lazy" width="1092" height="614"><figcaption>A 100% o jack tem ~26 px de alvo; a 68% (abertura), ~18 px.</figcaption></figure>
+    <figure><img src="img/painel.jpg" alt="O painel do módulo Contornar aberto" loading="lazy" width="1092" height="614"><figcaption>Painel do módulo: presets de movimento em 1 toque (o caminho mais curto pra "envelope num knob").</figcaption></figure>
+  </div>
+  <div id="f-canvas" style="display:grid;gap:12px"></div>
+</section>
+
+<section id="biblioteca">
+  <h2>Frente 2 · A biblioteca está comprida demais</h2>
+  <div class="cols">
+    <div class="card"><h3>O tamanho, medido</h3><table><tbody>
+      <tr><td>Roda, anel de fora</td><td>12 fatias: Fontes 1 · cor 5 · luz 7 · forma 1 · geometria 7 · distorção 3 · textura 4 · tempo 1 · gerador 8 · máscaras 9 · mistura e saída 7 · receitas 35</td></tr>
+      <tr><td>Roda, anel de dentro</td><td>4 fatias: Relógio 7 · Som 11 · Imagem e corpo 4 · Mão 1</td></tr>
+      <tr><td>Receitas</td><td><b>35, das quais 18 têm UM átomo só</b> (Brilho, Espelho, Gota, Listras, Vinheta… repetem o nome de um átomo)</td></tr>
+      <tr><td>Alteradores</td><td>21; "segue o grave" aparece 2×; "pulsa" mora em Som</td></tr>
+      <tr><td>Equipamento › Biblioteca</td><td>89 arquivos numa lista corrida (image.frag + 49 átomos + 39 clássicos ocultos das cenas antigas), renomear/apagar no mesmo lugar</td></tr>
+      <tr><td>Listas diferentes</td><td>4: a roda (2 cliques no vazio / Enter), o menu do cabo no vazio (com busca, sem receitas), o "trocar" (clique no nome), a da gaveta</td></tr>
+    </tbody></table></div>
+    <figure><img src="img/roda-lista.jpg" alt="A lista da fatia cor ao lado da roda, com busca" loading="lazy" width="1092" height="614"><figcaption>A busca só aparece DEPOIS de escolher uma fatia. Achar "Espelhar" exige saber que mora em geometria.</figcaption></figure>
+  </div>
+  <p><b>A conta:</b> achar um módulo pelo nome pela roda = 2 cliques + adivinhar a fatia (16, e a família nem sempre é óbvia: ~1,5 tentativa) + a lista ≈ <b>10,6 s</b>. Digitando (se souber que pode) ≈ <b>4,6 s</b>. Busca à vista com foco ≈ <b>4,6 s pra todos</b>, e com favoritos/recentes no vazio, o mais usado em <b>1 clique</b> (menus divididos: 17–58% mais rápidos, <a href="https://www.cs.umd.edu/~ben/papers/Sears1994Split.pdf">Sears &amp; Shneiderman 1994</a>).</p>
+  <div class="mock" id="mk-lib"></div>
+  <div id="f-lib" style="display:grid;gap:12px"></div>
+</section>
+
+<section id="pixel">
+  <h2>Frente 3 · Pixel mapping: palco, telas, telão</h2>
+  <div class="shots">
+    <figure><img src="img/palco.jpg" alt="Equipamento, Saída, Telas do palco" loading="lazy" width="1092" height="614"><figcaption>Telas do palco: a 3ª seção da aba Saída (depois da janela e da calibração). "pixel map" é uma caixinha separada das abas.</figcaption></figure>
+    <figure><img src="img/pixelmap.jpg" alt="Vista Pixel map: um bloco no raster 800×600" loading="lazy" width="1092" height="614"><figcaption>Pixel map: grade ou desenhar; não há teste por bloco, exportar nem preset da casa.</figcaption></figure>
+    <figure><img src="img/saida.jpg" alt="Aba Saída: janela de saída vazia e o selo BRILHO MÁXIMO sobreposto ao 100%" loading="lazy" width="1092" height="614"><figcaption>Sem o motor: campos vazios e um quadro preto grande; o selo "BRILHO MÁXIMO" cobre o "100%" (defeito).</figcaption></figure>
+  </div>
+  <div class="card"><h3>O load-in hoje, como o técnico de LED faria</h3>
+    <p>Equipamento (1) → Saída (2) → rolar 2 telas até "Telas do palco" → + tela → 4 medidas em metros e o px → aba Pixel map → marcar "pixel map" → dividir em grade → conferir… <b>no olho</b>, pela imagem da cena. KLM ≈ <b id="klmTelao">—</b> pra uma tela, e o pior: <b>nenhuma verificação</b> — o padrão de teste roda no canvas do palco inteiro, não por bloco, e não há "identificar" que acenda o bloco na saída real. Vocabulário do técnico (Resolume/NovaStar/Brompton): <i>raster, slice, gabinete, test pattern, identify, preset</i>. Nosso: <i>tela, bloco, pixel map, canvas</i> — dá pra manter com o termo do técnico no <code>title</code>.</p></div>
+  <div class="mock" id="mk-pixel"></div>
+  <div id="f-pixel" style="display:grid;gap:12px"></div>
+</section>
+
+<section id="audio">
+  <h2>Frente 4 · A mixagem do áudio que entra</h2>
+  <div class="shots">
+    <figure><img src="img/entrada.jpg" alt="Equipamento, Entrada: faixas e colunas" loading="lazy" width="1092" height="614"><figcaption>As 8 faixas (em inglês) e 9 colunas que não cabem na largura (Air some à direita).</figcaption></figure>
+    <figure><img src="img/entrada-2.jpg" alt="Entrada: knobs rel, atk, mem e Mais ajustes" loading="lazy" width="1092" height="614"><figcaption>"rel · atk · mem" em cada coluna, campos de Hz crus; "Mais ajustes" repete conceitos (attack/release, auto-gain).</figcaption></figure>
+  </div>
+  <div class="card"><h3>Percurso cognitivo: "a música está baixa e nada pulsa"</h3><ol>
+    <li><b>Vai tentar o efeito certo?</b> Sim: quer "mais sensível". Mas não existe "ganho de entrada" com esse nome; o ganho mora em "amp · ganho" (coluna 2) e em "AUTO-GAIN · memória".</li>
+    <li><b>Vai ver a ação?</b> Não: são 100 controles (51 knobs, 19 campos) e nenhum diz "sensibilidade".</li>
+    <li><b>Vai ligar ação e efeito?</b> Não: o medidor mostra o nível da FAIXA, não o sinal que o alterador recebe depois do limiar, ataque e soltura.</li>
+    <li><b>Vai ver que andou?</b> Só no canvas, no osciloscópio do alterador — longe dali, coberto pela gaveta (que ocupa 975 de 1366 px).</li></ol>
+    <p class="src">Como os outros resolvem: medidor ANTES e DEPOIS do ganho (<a href="https://maestrodmx.freshdesk.com/support/solutions/articles/153000069597">MaestroDMX</a>); portão de ruído antes do AGC e AGC com velocidade escolhida (<a href="https://mm.kno.wled.ge/soundreactive/Sound-Settings">WLED</a>); 3 bandas no simples e editáveis no avançado (<a href="https://docs.derivative.ca/Palette:audioAnalysis">TouchDesigner</a>, <a href="https://vdmx.vidvox.net/tutorials/audio-analysis-basics">VDMX</a>); valor relativo ao normal da faixa (<a href="https://www.geisswerks.com/milkdrop/milkdrop_preset_authoring.html">MilkDrop</a>); Level × Hits × Presence (<a href="https://app.synesthesia.live/docs/ssf/audio_uniforms.html">Synesthesia</a>).</p></div>
+  <div class="mock" id="mk-audio"></div>
+  <div id="f-audio" style="display:grid;gap:12px"></div>
+</section>
+
+<section id="framework">
+  <h2>Frente 5 · O framework interno de efeitos</h2>
+  <p>O mapa de quem mora onde e quem chama quem. Azul = imagem, âmbar = sinal, verde = evento, cinza = gravação.</p>
+  <div class="map">
+    <div class="box img"><h4>Átomo (.frag)</h4><p><code>shaders/presets/atomos/</code> (49). Cabeçalho lido SÓ no Python: <code>dash_data.parse_meta / atom_check / atom_replaces</code> → <code>_shader_meta</code> → <code>GET /shaders</code> → o dash lê <code>lastMeta</code> (<code>metaOf/knobsOf/catOf</code>). O motor compila com <code>ATOM_PRELUDE</code> em <code>layer_program</code>.</p></div>
+    <div class="box img"><h4>Grafo</h4><p>Cena = <code>OVERLAYS</code> (nós: fonte | <code>@id</code> | mix | out) + <code>BINDINGS</code> (pilha de cada nó). Native: <code>_graph = migrate_graph + resolve_mirrors</code> → <code>graph_order</code> → <code>render_mix</code> → <code>run_row</code> (<code>mark_tex</code>, <code>run_state</code>) / <code>mix_node</code> → SCENE_GRADE → transição → OUTPUT_GRADE → OUTPUT_MAP_SRC.</p></div>
+    <div class="box cv"><h4>Movimento</h4><p><code>mod[knob] = {b, lo, hi, modo, lfo, ev, env, seg, q, id, nome, mais, sinal}</code> → <code>_norm_mod1</code> (server) → <code>_mod_total/_mod_value</code> (native, estado em <code>_MV</code>) → <code>MV_OUT</code> → SSE <code>mv</code> → osciloscópio. Corpos: pilhas <code>~ctl</code>, <code>~mao</code> (só o JS as entende).</p></div>
+    <div class="box ev"><h4>Eventos</h4><p><code>audio_thread</code> → <code>ritmo.Tempo/Ataque</code> → <code>_music_events</code> = CONTADORES (batida…frase, kick/caixa/chimbal/golpe, <code>secao:*</code>, <code>pad:N</code>, <code>cmp:&lt;id&gt;</code>) → <code>acao</code> → <code>grid_q</code> → <code>grid_apply</code> (thread, <b>grava</b>). Corpo: <code>~ev</code>.</p></div>
+    <div class="box sv"><h4>Gravação</h4><p><code>src/tuning.py</code> = banco: 24 chamadas de <code>_write_atomic</code>, blocos trocados por regex; OVERLAYS/BINDINGS repetidos dentro de SCENES. Setter = grava + patcha o módulo vivo.</p></div>
+    <div class="box sv"><h4>Painel (dash5.html)</h4><p>9 509 linhas num escopo global: decisões 1–289, CSS 290–1852, HTML 1853–2246, JS 2247–9508 (G6 = 7957–9478). <code>graphFix</code> = o migrador DE VERDADE (<code>migrateGraph, normalizeNodes, flattenPosts, topoOrder, syncCtls</code>), roda a cada SSE e grava.</p></div>
+  </div>
+<pre>tuning.py ◄─grava── dash_server (setters, _norm_overlays, _norm_mod1) ◄─POST── dash5 (graphFix, G6, gavetas)
+    │  patch do módulo vivo                     │ SSE (estado por diferença)          ▲
+    ▼                                           ▼                                      │
+native_synth.main ──► _graph(migrate_graph) ──► render_mix ──► saída / telão / vcam     │
+    ▲ audio_thread → ritmo → _music_events → _mod_value → knobs ──► MV_OUT ─── SSE mv ─┘
+    └── acao → grid_q → dash_server.grid_apply (thread) ──► grava tuning.py  ← a cada evento</pre>
+  <div id="f-fw" style="display:grid;gap:12px"></div>
+</section>
+
+<section id="codigo">
+  <h2>Frente 6 · Limpar e organizar o código</h2>
+  <div class="scroll"><table class="stack" id="inv"><thead><tr><th>Pasta / arquivo</th><th>Tamanho</th><th>Veredito</th><th>Nota</th></tr></thead><tbody></tbody></table></div>
+  <div class="cols">
+    <div class="card"><h3>Estrutura-alvo (simples, sem quebrar o launcher)</h3>
+<pre>raiz/  README · CLAUDE · INSTALAR · BACKLOG · DECISOES · requirements.txt
+├── src/        Python PLANO (o launcher copia src/*.py; subpasta quebraria
+│               o glob, o check_imports, o CI e deixaria cópia velha na pasta de dados)
+│   native_synth.py  main + loop GL (fica menor)
+│   motor_grafo.py · movimento.py · captura.py · analise_audio.py
+│   analise_imagem.py · saida.py           ← saem do native, nomes NOVOS
+│   ritmo · rastreio · luzes · plat · telao_sim · matriz
+│   dash_server.py · dash_data.py · tuning.py (DADO: não mover)
+├── painel/     index.html + css/ + js/    ← dash5.html (fase final)
+├── shaders/ transitions/ models/ media/   DADO
+├── packaging/  (+ dev: install.sh, watch_synth.sh)
+├── tests/      tudo.sh · dash_gestos · estetica · tela_foto
+├── docs/       só o que o GitHub Pages publica
+├── estudo/     MAPA.md + glsl/ + sc/
+└── historico/  PROMPT_*, PLANO_*, RODADA6_PROGRESSO, design/ (PNG fora do git)</pre></div>
+    <div class="card"><h3>O que está morto (medido)</h3><ul>
+      <li><b>dash5 CSS</b>: 472 regras sem uso ≈ 507 linhas (canvas HTML antigo <code>#cv .bx</code> ≈ 440, <code>body.cel</code> 57, <code>#cv-h</code>, <code>#tema-pop</code>).</li>
+      <li><b>dash5 JS</b>: <code>setTema</code>, <code>swapAtom</code> (o CLAUDE.md ainda cita!), <code>wireOwnerId</code>, a 1ª <code>feeds</code> (declarada 2×), ramos <code>cel</code>, 6 <code>closest('.bx')</code>, <code>renderPalette</code> rodando escondida.</li>
+      <li><b>Python ≈ 300 linhas</b>: 8 rotas de "sets" sem cliente, <code>/groups</code>, <code>_list_shaders</code>, <code>tuning.TELAO</code> (52 linhas que ninguém lê), <code>plat.data_dir</code>.</li>
+      <li><b>Arquivos</b>: <code>tests/v6_foto.py</code> e <code>webcam.html</code> quebrados, <code>install_launcher.sh</code>, <code>docs/mock_v6.html</code>, <code>build/</code> (536 MB), o .deb de 23/09 (27 MB), 12 PROMPT_ + 3 PLANO_ cumpridos.</li>
+      <li><b>NÃO morto</b>: <code>flattenPosts</code> (migra cena velha), <code>#right/#left</code> (guardam o monitor e as cenas), <code>pub</code>. Os 4 dashes velhos em <code>dist/prisma/</code> <b>ainda são lidos</b> pelo binário de 26/10: só saem depois de um build novo.</li></ul></div>
+  </div>
+  <h3>Plano em etapas (cada uma: suíte inteira verde + app entregue antes da próxima)</h3>
+  <div class="scroll"><table class="stack" id="etapas"><thead><tr><th>Etapa</th><th>O que</th><th>Risco</th><th>Como se prova</th></tr></thead><tbody></tbody></table></div>
+  <div id="f-cod" style="display:grid;gap:12px"></div>
+</section>
+
+<section id="resto">
+  <h2>O resto: gavetas, MIDI, cenas, 1º minuto, erros, documentação</h2>
+  <div class="shots">
+    <figure><img src="img/socorro.jpg" alt="Gaveta SOCORRO" loading="lazy" width="1092" height="614"><figcaption>SOCORRO: bom (fixo, grande). "desfazer (7)" vale só pra cena atual.</figcaption></figure>
+    <figure><img src="img/cenas.jpg" alt="Lista de cenas" loading="lazy" width="1092" height="614"><figcaption>Cenas: PRÓXIMA = clique DIREITO numa cena (só no title do botão).</figcaption></figure>
+    <figure><img src="img/mao.jpg" alt="Módulo MÃO e envelopes" loading="lazy" width="1092" height="614"><figcaption>MÃO: bonita e clara; o MIDI learn dela fica a 3 cliques, na gaveta.</figcaption></figure>
+    <figure><img src="img/lib.jpg" alt="Equipamento, Biblioteca" loading="lazy" width="1092" height="614"><figcaption>Biblioteca da gaveta: gestão de arquivo misturada com "pegar pra usar".</figcaption></figure>
+  </div>
+  <div id="f-resto" style="display:grid;gap:12px"></div>
+</section>
+
+<section id="escolhas">
+  <h2>Escolhas</h2>
+  <p>Cada achado acima já tem as opções embaixo dele; aqui está o resumo do que você marcou e uma nota geral. Salva sozinho (<span id="count">—</span>).</p>
+  <div class="scroll"><table class="stack" id="resumo"><thead><tr><th>#</th><th>Achado</th><th>Sua escolha</th></tr></thead><tbody></tbody></table></div>
+  <div class="f"><h3>Nota geral</h3><p>Ordem das rodadas, o que adiar, o que juntar.</p><textarea class="nota" data-id="geral" placeholder="nota (opcional)" aria-label="nota geral"></textarea></div>
+  <details><summary>Fontes da pesquisa (completas)</summary><div class="src" id="fontes"></div></details>
+</section>
+</main>
+
+<script>
+{
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const OP = { P: 2.0, D: 2.2, A: 2.6, M: 1.35, K: 0.2, H: 0.4 };
+const klm = s => s.replace(/\s/g, '').replace(/\((\w+)\)×(\d)/g, (_, g, n) => g.repeat(+n)).split('').reduce((t, c) => t + (OP[c] || 0), 0);
+const fmt = v => v.toFixed(1).replace('.', ',') + ' s';
+
+// ---------- tarefas (KLM) ----------
+const TASKS = [
+  ['Abrir e trocar a fonte', 'M P M P', 'M P M KKKK K', '"+" da bandeja com ~15 px de alvo; a lista de fontes não tem busca nem nome legível de arquivo (YTDOWNCOM_YOUT…). Fitts, H6.'],
+  ['Corrente de 3 módulos', '(DMPMPPP)×3', '(DMKKKKK)×3', 'Pela roda o módulo nasce SOLTO ("puxe um fio até a entrada"): 2 cliques a mais por módulo. O caminho rápido (cabo na mão → vazio → busca, 19 s) só se descobre pelo aviso do cabo. Percurso: P2 falha.'],
+  ['Pôr um módulo no meio de um cabo', 'DMPMP', 'DMKKKKK', 'Os 2 cliques no fio só estão no Equipamento › Teclas. Fio com faixa de pegar de ~14 px. H6, H10.'],
+  ['Envelope no kick → um knob', 'DMPMPPP', 'PPMP', 'Achar "envelope: kick" no anel de DENTRO (Som, 11 itens); o centro do knob tem ~9 px de raio a 68%. Fitts, Hick.'],
+  ['MÃO + MIDI', 'DMPMP PP MPPPP HK', 'DMPMP PP MPP HK', 'MIDI learn fica em Equipamento › Controle › aprender (a gaveta cobre o canvas e fecha sozinha). H7 (atalho), memória espacial.'],
+  ['Marcar a PRÓXIMA e dar GO', 'PMPP', 'PMPP', 'Marcar = clique DIREITO na cena (só no title). Espaço = GO em qualquer lugar fora de campo. H6, H5.'],
+  ['Mixer com 2 fontes → saída', 'DMPMP PPPPPP', 'DMKKKKK PPPPPP', 'Mixer em "mistura e saída" junto de 3 átomos de mistura. OK depois de achar.'],
+  ['Máscara: só o rosto', 'DMPMP PPPP', 'DMKKKKK PPPP', 'A máscara é um NÓ cuja saída vai na "másc" de outro: conceito novo, sem dica no jack. Percurso: P3 falha.'],
+  ['Telão: 1 tela no pixel map', 'PP AA P MKKKK MKKKK MKKKK MKKKK P P P', 'PP P MKKKK MKKKK P P', 'Seções na ordem errada (calibração antes das telas), "pixel map" numa caixinha fora das abas, sem verificação. H2, H5.'],
+  ['Socorro: algo deu errado', 'MK', 'MK', 'BLACKOUT na tecla "." é ótimo. Mas o Ctrl+Z não volta a TROCA de cena e some ao trocar. H3.'],
+  ['Achar um módulo pelo nome', 'D (MP)×1 M P M P', 'D MKKKK K', 'A busca só aparece depois da fatia; família nem sempre óbvia (Espelhar = geometria?). ~1,5 tentativa. H6.'],
+  ['Achar um módulo num patch grande', 'K M AAA M AA', 'KK M KKKK K', 'Sem busca no canvas; a 20% nenhum nome se lê (foto). H6, zoom semântico.']];
+$('#tasks tbody').innerHTML = TASKS.map(([t, a, b, w]) => { const x = klm(a), y = klm(b);
+  return `<tr><td>${esc(t)}</td><td class="n">${fmt(x)}<div class="seq">${esc(a)}</div></td><td class="n down">${fmt(y)}<div class="seq">${esc(b)}</div></td><td>${esc(w)}</td></tr>`; }).join('');
+$('#klmTelao').textContent = fmt(klm(TASKS[8][1]));
+
+// ---------- achados: [id, frente, titulo, evidencia, tecnica+fonte, impacto, esforco, opcoes [[v, rotulo]], recomendada] ----------
+const F = [
+ ['C1', 'canvas', 'Busca no canvas: Ctrl+F que VOA até o módulo', 'Patch de 36 módulos: H = 20%, nenhum nome legível (foto). Achar um módulo hoje = pan + zoom no escuro (~12 s); com busca ≈ 3 s + o voo que já existe (flyTo).', 'H6 reconhecer > lembrar; Houdini Ctrl+F e ">"/"<", Blender Find Node (centraliza), Notch Ctrl+F. <a href="https://www.sidefx.com/docs/houdini/network/navigate.html">sidefx</a>', 'alto', 'baixo', [['ctrlf', 'Ctrl+F: digita, Enter voa, Enter de novo = o próximo (recomendado)'], ['lista', 'lista de módulos numa gaveta'], ['nao', 'não agora']], 'ctrlf'],
+ ['C2', 'canvas', 'Módulo da roda nasce LIGADO depois do escolhido', 'Corrente de 3 pela roda: 38,7 s / 15 cliques; o módulo nasce solto e pede "puxe um fio". Com nó escolhido nascendo ligado (e quem o lia passa a ler o novo): 13,7 s.', 'KLM; Max Shift+N (objeto já ligado), Unreal menu de contexto; Blender auto-offset. <a href="https://docs.cycling74.com/max8/vignettes/patching_mechanics">cycling74</a>', 'alto', 'baixo', [['sel', 'com um módulo escolhido, entra DEPOIS dele (recomendado)'], ['shift', 'só com Shift'], ['solto', 'continua nascendo solto']], 'sel'],
+ ['C3', 'canvas', 'Uma lista só pra pegar módulo, com a BUSCA à vista', '4 listas diferentes (roda, menu do cabo, "trocar", gaveta); a roda não mostra que digitar procura. Ver Frente 2.', 'H4 consistência; Bitwig "just start typing", Blender Shift+A com busca. <a href="https://bitwig.com/userguide/latest/common_browser_elements">bitwig</a>', 'alto', 'médio', [['uma', 'um componente só, aberto pelos 4 caminhos (recomendado)'], ['roda', 'só pôr o campo de busca no centro da roda'], ['nao', 'deixar']], 'uma'],
+ ['C4', 'canvas', 'Desfazer que sobrevive à troca de cena + refazer', '<code>sceneLeft()</code> zera a pilha ao trocar de cena; não existe Ctrl+Shift+Z. No show: mexer, trocar de cena, voltar = o desfazer sumiu.', 'H3 controle e liberdade; Unreal reclama de ação fora do desfazer (fórum). Prevenção de erro.', 'alto', 'baixo', [['cena', 'uma pilha POR CENA, guardada + refazer (recomendado)'], ['global', 'uma pilha global + refazer'], ['so-refazer', 'só acrescentar o refazer']], 'cena'],
+ ['C5', 'canvas', 'Teclas que põem coisa no AR sem querer', 'Qualquer letra com cena dispara <code>goScene</code> na hora; Espaço = GO em qualquer foco fora de campo; 1–9 segurado liga/desliga nas saídas. Uma mão que escorrega no teclado troca a cena.', 'H5 prevenção de erro; Resolume sugere o pânico NUMA tecla dedicada; TouchDesigner separa Perform Mode. <a href="https://resolume.com/article/61">resolume</a>', 'alto', 'baixo', [['shift', 'cena = Shift+letra; letra sozinha só destaca a cena (recomendado)'], ['manter', 'manter as letras e mostrar no visor "cena X · ◀ volta"'], ['tirar', 'tirar as letras (só ◀ ▶, GO e MIDI)']], 'shift'],
+ ['C6', 'canvas', 'Alvo mínimo de 24 px na tela, em qualquer zoom', 'Jack: raio <code>max(13, 9/z)</code> → ~18 px a 68%; centro do knob ~18 px; "+" da bandeja ~15 px; botões da pílula 30 px. Touchpad: 1–2,9 bits/s.', 'Fitts; WCAG 2.5.8 (24 px); arrastar erra ~3×. <a href="https://www.yorku.ca/mack/ijhcs2004.pdf">Soukoreff &amp; MacKenzie</a>', 'médio', 'baixo', [['area', 'só a ÁREA de pegar cresce (invisível, mín. 12 px de raio na tela) (recomendado)'], ['zoom', 'abrir a 100% em vez de 68%'], ['nao', 'deixar']], 'area'],
+ ['C7', 'canvas', 'Vista: caber a SELEÇÃO e VOLTAR à vista anterior', 'H só enquadra tudo (de novo = volta). Não há "enquadrar o escolhido" nem histórico de vista.', 'Houdini H/G/crase; Figma Shift+1/Shift+2. Memória espacial.', 'médio', 'baixo', [['hsel', 'H com algo escolhido = enquadra ele; Backspace = vista anterior (recomendado)'], ['marcas', 'também marcas de vista (Ctrl+F1..F4)'], ['nao', 'deixar']], 'hsel'],
+ ['C8', 'canvas', 'De LONGE, o nome do módulo continua legível', 'Nível "blocos" (20%): o módulo vira miniatura sem texto (foto 36 módulos).', 'Zoom semântico (Pad++, Bederson &amp; Hollan 1994); ComfyUI troca o desenho abaixo de 8 px de fonte. <a href="https://docs.comfy.org/interface/settings/lite-graph">comfy</a>', 'médio', 'baixo', [['nome', 'nome numa plaqueta de tamanho FIXO na tela (recomendado)'], ['icone', 'só o ícone da família'], ['nao', 'deixar']], 'nome'],
+ ['C9', 'canvas', 'Fio: ir até a outra ponta / escolher a corrente', 'Achar de onde vem um cabo entre muitos = seguir com o olho (foto 36 módulos). Já existe destacar no hover.', 'TouchDesigner (direito no fio: origem/destino), Houdini "Frame input/output", Blender L/Shift+L. <a href="https://derivative.ca/UserGuide/Wire">derivative</a>', 'médio', 'médio', [['menu', 'clique DIREITO no fio: ir à origem · ir ao destino · tirar (recomendado)'], ['nao', 'deixar']], 'menu'],
+ ['C10', 'canvas', 'MIDI learn no próprio controle', 'MÃO + MIDI: 7 gestos e a gaveta no caminho; o learn hoje fica a 3 cliques do controle.', 'H7 atalho pro experiente; Ableton/Resolume: clique direito → mapear. Memória espacial.', 'médio', 'baixo', [['direito', 'clique direito num knob/fader/pad → "aprender MIDI" (recomendado)'], ['tecla', 'tecla M liga o learn sem abrir a gaveta'], ['nao', 'deixar']], 'direito'],
+ ['C11', 'canvas', 'O "cabo na mão → vazio → busca" vira o caminho que se VÊ', 'É o caminho mais rápido (6,4 s por módulo) e só aparece no aviso do cabo. Com C3, o vazio abre a MESMA lista, já filtrada pelo que encaixa.', 'Unreal: soltar o fio no vazio abre o menu filtrado; Notch Ctrl+Espaço sobre a linha. <a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/blueprint-editor-cheat-sheet-in-unreal-engine">epic</a>', 'médio', 'baixo', [['sim', 'sim, junto com C3 (recomendado)'], ['nao', 'deixar']], 'sim'],
+ ['C12', 'canvas', 'Minimapa?', 'O H já cumpre boa parte; com 36 módulos tudo cabe na tela. Estudo: quem tinha visão geral fez as tarefas ~20% mais devagar.', 'Hornbæk, Bederson &amp; Plaisant 2002. <a href="https://hjemmesider.diku.dk/~kash/papers/TOCHI2002_hornbaek.pdf">TOCHI</a>. Preferir tirar.', 'baixo', 'médio', [['nao', 'não fazer: C1 + C7 resolvem (recomendado)'], ['tecla', 'minimapa sob demanda numa tecla']], 'nao'],
+
+ ['B1', 'lib', 'Qual caminho pra biblioteca?', 'Ver os 3 mockups acima. Medidas: 16 fatias, listas de 1 a 35 itens, 4 listas diferentes.', 'Hick só vale pra lista conhecida (Landauer &amp; Nachbar 1985); amplo e raso &gt; fundo (Larson &amp; Czerwinski 1998); split menus (Sears &amp; Shneiderman 1994).', 'alto', 'médio', [['A', 'A · busca primeiro + favoritos (recomendado)'], ['B', 'B · por intenção'], ['C', 'C · navegador lateral fixo']], 'A'],
+ ['B2', 'lib', 'Curar as receitas', '18 das 35 têm um átomo só (são o átomo com outro nome); "Brilho", "Espelho", "Gota", "Listras", "Vinheta" competem com os átomos de mesmo nome.', 'Carga cognitiva; H8 minimalismo; preferir tirar.', 'médio', 'baixo', [['tirar', 'tirar as 18 de um átomo só (o átomo já está na lista) (recomendado)'], ['ajuste', 'virar "ajustes salvos" dentro do átomo'], ['manter', 'manter']], 'tirar'],
+ ['B3', 'lib', 'Juntar átomos parecidos (um com seletor no lugar de vários)', 'Máscaras: Assunto e Fundo (o mesmo modelo, invertido); Rosto e Olhos (o mesmo rastreio); Brilho/Cor/Luma (máscara POR quê). 10 máscaras → 5.', 'Revelação progressiva; Bitwig/Resolume: um efeito com modos.', 'médio', 'médio', [['mascaras', 'juntar só as máscaras (recomendado)'], ['nada', 'não juntar']], 'mascaras'],
+ ['B4', 'lib', 'Separar GESTÃO de arquivo de PEGAR pra usar', 'Equipamento › Biblioteca = 89 arquivos com renomear/apagar ao lado; os 39 clássicos ocultos aparecem misturados.', 'H5 (apagar no ao vivo); VCV Library × Module Browser; Figma publicar × inserir.', 'médio', 'baixo', [['arquivos', 'a aba vira "Arquivos" (gestão) e some dela o que é pra montar (recomendado)'], ['manter', 'manter']], 'arquivos'],
+ ['B5', 'lib', 'Alteradores: nomes e duplicados', '"segue o grave" 2×; "pulsa" mora em Som; família Mão com 1 item; o mesmo objeto se chama alterador/controlador/movimento/ativador (ver F5).', 'H4 consistência.', 'baixo', 'baixo', [['sim', 'tirar o duplicado e revisar os nomes (recomendado)'], ['nao', 'deixar']], 'sim'],
+
+ ['P1', 'pixel', 'Qual caminho pro mapa?', 'Ver os 3 mockups. Hoje: 4ª seção de uma aba rolada, sem ordem de load-in.', 'Resolume separa Input Selection × Output Transformation e tem preset de saída. <a href="https://resolume.com/article/50">resolume</a>', 'alto', 'médio', [['A', 'A · aba TELÃO em 3 passos (recomendado)'], ['B', 'B · assistente de load-in'], ['C', 'C · o mapa vira módulo no canvas']], 'A'],
+ ['P2', 'pixel', 'Padrão de teste POR BLOCO na saída real', 'O teste de hoje roda no canvas inteiro; nada identifica o bloco. Erro típico: bloco trocado ou 1 px deslocado passa sem ninguém ver.', 'NovaStar "mapping" mostra o nº do gabinete; Resolume Test Card com diagonal móvel (denuncia quadro travado); disguise Border/Grid. <a href="https://resolume.com/article/20">resolume</a>', 'alto', 'baixo', [['sim', 'borda 1 px + nome + nº + grade + diagonal andando, por bloco (recomendado)'], ['nao', 'não']], 'sim'],
+ ['P3', 'pixel', 'Exportar o mapa em PNG (pra quem faz conteúdo)', 'Hoje não existe. O técnico e o conteudista precisam do gabarito.', 'disguise "export current frame as PNG"; gabarito no mesmo aspecto. <a href="https://help.disguise.one/designer/mapping/mapping-types/feed-mapping">disguise</a>', 'médio', 'baixo', [['sim', 'palco e raster em PNG (recomendado)'], ['nao', 'não']], 'sim'],
+ ['P4', 'pixel', 'Preset por casa de show', 'Telas + raster + calibração do telão moram no tuning; trocar de casa = refazer.', 'Resolume: preset de Advanced Output em .xml separado da composição. <a href="https://resolume.com/article/21">resolume</a>', 'médio', 'baixo', [['sim', 'salvar/abrir "casa" (.json) (recomendado)'], ['nao', 'não']], 'sim'],
+ ['P5', 'pixel', 'Precisão de 1 px e escala inteira', 'Hoje só arrastar ou campo. Escala não inteira borra (não há aviso).', 'Resolume setas 1 px / Shift 10, campo aceita conta; Brompton "snap" e Fit × Stretch.', 'médio', 'baixo', [['sim', 'setas 1 px, Shift 10, aviso de escala não inteira (recomendado)'], ['nao', 'não']], 'sim'],
+ ['P6', 'pixel', 'Várias saídas, warp, borda suave', 'BACKLOG: um raster só. LED não leva warp; projetor sim (≥15% de sobreposição no edge blend).', 'Resolume edge blending; Dataton warp. Grande: deixar pra depois do resto.', 'baixo', 'alto', [['depois', 'depois (recomendado)'], ['agora', 'entra nesta revisão']], 'depois'],
+
+ ['A1', 'audio', 'Qual caminho pra Entrada?', 'Ver os 3 mockups. 100 controles, 8 faixas em inglês, colunas que não cabem.', 'Revelação progressiva; TouchDesigner (3 bandas) e VDMX (bandas editáveis). <a href="https://docs.derivative.ca/Palette:audioAnalysis">derivative</a>', 'alto', 'médio', [['A', 'A · Simples (grave/médio/agudo) + Avançado (recomendado)'], ['B', 'B · mesa de canal'], ['C', 'C · assistente "calibrar a sala"']], 'A'],
+ ['A2', 'audio', 'Medidor duplo: o que entra × o que o alterador recebe', 'O medidor mostra a faixa crua; o efeito de limiar/ataque/soltura só se vê no canvas, coberto pela gaveta.', 'MaestroDMX Pre-Gain/Post-Gain; Synesthesia Level × Hits. <a href="https://maestrodmx.freshdesk.com/support/solutions/articles/153000069597">maestro</a>', 'alto', 'baixo', [['sim', 'sim (recomendado)'], ['nao', 'não']], 'sim'],
+ ['A3', 'audio', 'Ganho de entrada + auto-ganho com velocidade', 'O "ganho" está na coluna amp e o auto-gain em "Mais ajustes · memória 0,999" (número cru).', 'WLED: squelch antes do AGC, AGC Off/Normal/Vivo/Lento. <a href="https://mm.kno.wled.ge/soundreactive/Sound-Settings">WLED</a>', 'alto', 'baixo', [['sim', 'um fader de GANHO + auto: desl./normal/lento (recomendado)'], ['nao', 'não']], 'sim'],
+ ['A4', 'audio', 'Nomes em português e sem abreviação', 'Sub-bass, Low-mid, Midrange, High-mid, Presence, Treble, Brilliance, Air; "rel · atk · mem"; "corte b|m".', 'H2 linguagem do usuário; regra da casa (pt-BR, legibilidade).', 'médio', 'baixo', [['pt', 'sub, grave, médio-grave, médio, médio-agudo, presença, agudo, ar; "solta · ataque · memória" (recomendado)'], ['manter', 'manter']], 'pt'],
+ ['A5', 'audio', 'Ajuste salvo por casa/fonte', 'Só o silêncio é por fonte. Microfone da casa × linha da mesa pedem ajustes diferentes.', 'MaestroDMX sensibilidade por gênero; preset por local.', 'médio', 'baixo', [['sim', 'perfis de entrada (mic da casa, linha, sistema) (recomendado)'], ['nao', 'não']], 'sim'],
+ ['A6', 'audio', 'Silêncio entre faixas e música comprimida', 'Comprimida: o nível fica sempre alto (o "Level" não varia) → usar ataques; silêncio: kick já para. Falta mostrar isso.', 'Synesthesia: usar Hits com música comprimida; FadeInOut = 0 entre faixas; MilkDrop relativo à média.', 'baixo', 'médio', [['sim', 'um selo "música comprimida: use ataques" + relativo à média (recomendado)'], ['nao', 'não']], 'sim'],
+
+ ['F1', 'fw', 'A cena tem DOIS migradores (o de verdade é o JS)', 'O Python só roda <code>migrate_graph</code>; o JS reescreve a cena em <code>graphFix</code> a cada SSE com ids aleatórios (<code>rid()</code>, 42 usos). Com o painel fechado o motor desenha a cena "crua"; a cena semente do release é v3.', 'Consistência; Green &amp; Petre: dependência escondida.', 'alto', 'alto', [['py', 'migração única em dash_data, ids determinísticos, ao ler a cena (recomendado)'], ['teste', 'só um teste que compara os dois'], ['nao', 'deixar']], 'py'],
+ ['F2', 'fw', 'Evento de música grava no disco a cada vez', '<code>grid_apply</code> chama <code>set_bindings(save=True)</code> (dash_server:2449): um kick a 2 Hz com ação = ~4 regravações de 20 KB/s, em threads concorrentes.', 'Prevenção de erro (perda de atualização); "nada no loop".', 'alto', 'baixo', [['mem', 'estado do show em memória + gravar com atraso, uma fila (recomendado)'], ['nao', 'deixar']], 'mem'],
+ ['F3', 'fw', 'Átomo quebrado some calado', '<code>.quebra</code> tem 0 usos no dash5; o erro de compilação vai num campo global que o próximo apaga; <code>// opcoes:</code> com N errado vira "1..N"; <code>// ritmo:</code> não faz nada (8 átomos declaram).', 'H9 ajudar a reconhecer erros.', 'alto', 'baixo', [['sim', 'erro por arquivo no meta, na biblioteca (!) e no SOCORRO (recomendado)'], ['nao', 'deixar']], 'sim'],
+ ['F4', 'fw', '~20 pares duplicados JS↔Python sem teste', 'stableId, migrateGraph, chKey, LAYER_PROPS, shapeAxes/stageOf/polyOf, lfoNow, LFO_SHAPES, SOUND_EV, EV_JACKS, MOD_BANDS, CATS/FAMHUE… Já divergem: <code>promoteMirrors</code> × <code>MIRROR_PROPS</code>, <code>stageOf</code> sem <code>MAX_CANVAS_PX</code>.', 'Consistência; o <code>/vocab</code> já manda parte e o JS ignora.', 'médio', 'baixo', [['teste', 'teste CDP que compara + o JS lê do /vocab (recomendado)'], ['nao', 'deixar']], 'teste'],
+ ['F5', 'fw', 'UM nome pro que mexe no knob', 'No dash5: movimento 100×, controlador 70×, alterador 67×, ativador 11×, modulador 4×. "Receita" tem 2 sentidos.', 'H4; glossário (GLOSS) da doc.', 'médio', 'baixo', [['alterador', 'ALTERADOR (o corpo) + movimento (o que ele faz) (recomendado)'], ['controlador', 'controlador'], ['movimento', 'movimento']], 'alterador'],
+ ['F6', 'fw', 'Pilhas fantasma ~ctl/~ev/~mao dentro de BINDINGS', 'O motor itera elas como pilha de efeito (<code>_no_wants</code>, <code>resolve_mirrors</code>, loop de <code>acao</code>).', 'Separar responsabilidades.', 'médio', 'médio', [['bloco', 'bloco próprio CONTROLES fora de BINDINGS, com migração (recomendado)'], ['nao', 'deixar']], 'bloco'],
+ ['F7', 'fw', 'tuning.py como banco de dados', '24 <code>_write_atomic</code>, troca por regex, OVERLAYS/BINDINGS repetidos em SCENES.', 'Risco alto (launcher, sync_data, hot-reload).', 'médio', 'alto', [['depois', 'depois de F1/F2 (recomendado)'], ['json', 'scenes.json já'], ['nao', 'nunca']], 'depois'],
+ ['F8', 'fw', 'O motor do grafo não tem teste no CI', '<code>render_mix</code> = ~600 linhas de closure num <code>main()</code> de 1826; a matriz precisa de GPU (pulada no CI).', 'Extrair o PLANO do quadro (ordem, quem lê o quê) numa função pura.', 'médio', 'médio', [['plano', 'extrair o plano e testar no CI (recomendado)'], ['nao', 'deixar']], 'plano'],
+
+ ['E1', 'cod', 'Decisões do topo do dash5 → DECISOES.md', '289 linhas de comentário no HTML, a maioria SUBSTITUÍDA por decisões de baixo; o leitor precisa ler tudo pra saber o que vale.', 'Carga cognitiva; um lugar pra cada coisa.', 'médio', 'baixo', [['md', 'DECISOES.md com o que VALE + histórico; o topo do dash5 vira índice de 20 linhas (recomendado)'], ['topo', 'continuar no topo, só consolidado']], 'md'],
+ ['E2', 'cod', 'Separar o dash5.html em arquivos', '9 509 linhas, 446 funções num escopo. Exige rota /painel/, mtime da pasta, launcher e build.sh conhecendo a pasta.', 'Risco: CSS baixo, JS médio-baixo.', 'médio', 'médio', [['ultima', 'por último, depois da poda (recomendado)'], ['ja', 'logo depois da poda do CSS'], ['nao', 'não separar']], 'ultima'],
+ ['E3', 'cod', 'Um comando roda todos os testes', 'Hoje 8 comandos espalhados; a suíte de gestos leva ~4–5 min e fica fora do CI.', 'Prevenção de erro.', 'médio', 'baixo', [['tudo', 'tests/tudo.sh rápido (selfchecks) e --lento (gestos, matriz) (recomendado)'], ['nao', 'deixar']], 'tudo'],
+
+ ['R1', 'resto', 'A 1ª abertura: uma cena de boas-vindas', 'O release leva o <code>tuning.py</code> de trabalho: webcam <code>/dev/video0</code> (não existe no Windows) e um vídeo que não está em <code>media/default</code>. A pessoa nova vê erro e módulo vazio.', 'H10 ajuda; H1 estado visível; percurso P1.', 'alto', 'baixo', [['demo', 'cena curada: o vídeo que vai no pacote + 3 módulos + dica "2 cliques no vazio" (recomendado)'], ['vazia', 'tela vazia com a dica no centro'], ['manter', 'manter']], 'demo'],
+ ['R2', 'resto', 'A gaveta Equipamento cobre 71% da tela', '975 de 1366 px; abrir a Entrada esconde o alterador que reage ao som.', 'Foco + contexto.', 'médio', 'baixo', [['metade', 'gaveta mais estreita (≤ 640 px) com as colunas que cabem (recomendado)'], ['manter', 'manter']], 'metade'],
+ ['R3', 'resto', 'PRÓXIMA só pelo clique direito', 'O caminho só está no title. No touchpad, clique direito = 2 dedos (descobre-se pouco).', 'H6; gesto sem tecla alternativa.', 'médio', 'baixo', [['botao', 'tecla "próx" em cada cena da lista (recomendado)'], ['manter', 'manter']], 'botao'],
+ ['R4', 'resto', 'Defeitos pequenos achados', '"BRILHO MÁXIMO" cobre o "100%" (Saída); janela de saída sem o motor = campos vazios + quadro preto; comentário do teclado fala de F1/F2 e 3×Esc; CLAUDE.md cita <code>swapAtom</code> (morta) e o técnico como <code>docs/index.html</code>.', 'H1, H9.', 'baixo', 'baixo', [['sim', 'consertar na 1ª rodada (recomendado)']], 'sim'],
+ ['R5', 'resto', 'Medir o fps do MOTOR numa máquina fraca', 'Medi só o painel (60 fps, 2,2 ms com 36 módulos, sem GPU). O motor não medi fora desta máquina.', 'Medir, não supor (regra da casa).', 'médio', 'baixo', [['hud', 'HUD do motor (fps, ms por passe) + um teste de carga gravado (recomendado)'], ['nao', 'não']], 'hud']];
+
+const FRT = { canvas: '#f-canvas', lib: '#f-lib', pixel: '#f-pixel', audio: '#f-audio', fw: '#f-fw', cod: '#f-cod', resto: '#f-resto' };
+const IMP = { alto: 'alto', 'médio': 'med', baixo: 'baixo' };
+for (const k in FRT) $(FRT[k]).innerHTML = F.filter(x => x[1] === k).map(([id, , t, ev, tec, imp, esf, opts, rec]) => `
+  <article class="f" id="a-${id}"><div class="hd"><span class="id">${id}</span><h3>${esc(t)}</h3>
+    <span class="tag ${IMP[imp]}">impacto ${imp}</span><span class="tag ${esf === 'baixo' ? 'baixo' : esf === 'alto' ? 'alto' : 'med'}">esforço ${esf}</span></div>
+    <dl><dt>evidência</dt><dd>${ev}</dd><dt>técnica</dt><dd>${tec}</dd></dl>
+    <div class="opts">${opts.map(([v, l]) => `<button class="opt${v === rec ? ' rec' : ''}" data-id="${id}" data-v="${v}">${esc(l)}</button>`).join('')}</div>
+    <textarea class="nota" data-id="${id}" placeholder="nota (opcional)" aria-label="nota: ${esc(t)}"></textarea></article>`).join('');
+$('#nAch').textContent = F.length;
+
+// ---------- inventario + etapas ----------
+const INV = [['src/ (10 .py)', '14 967 linhas', 'VIVO', 'tuning.py é DADO; native 5 944, server 4 146'], ['dash5.html', '9 509 linhas', 'VIVO', 'CSS 1 562 (≈507 mortas), JS 7 261'],
+  ['packaging/', '144 KB', 'VIVO', 'sem .spec versionado (o build.sh gera)'], ['.github/workflows', 'release.yml', 'VIVO', 'Node 20 depreciado'],
+  ['shaders/', '1,6 MB', 'VIVO', '49 átomos, 35 receitas; presets/default + sortidos = legado de cena antiga (39)'], ['transitions/ · models/', '40 KB · 15 MB', 'VIVO', ''],
+  ['media/', '6,2 MB', 'DADO', 'fora do git; não tem o vídeo que a cena semente pede'], ['tests/dash_gestos.py', '2 015 linhas', 'VIVO', '57 testes, ~4–5 min, fora do CI'],
+  ['tests/estetica.py · tela_foto.py', '175 linhas', 'VIVO', 'ainda fora do git'], ['tests/v6_foto.py', '137 linhas', 'MORTO', 'quebrado (D.load)'],
+  ['docs/ (Pages)', '2,3 MB', 'VIVO', 'tecnico.html desatualizado (3×Esc); mock_v6.html e img/modulos.png mortos'], ['docs/glsl · docs/sc · MAPA.md', '756 KB', 'ESTUDO', 'vai pra estudo/'],
+  ['design/', '53 MB', 'HISTÓRICO', '44 MB fora do git; repaginada-impl (18 MB) ninguém cita'], ['PROMPT_* (12) · PLANO_* (3) · RODADA6', '~2 400 linhas', 'HISTÓRICO', 'todos cumpridos, menos este'],
+  ['install_launcher.sh · webcam.html', '188 linhas', 'MORTO', 'substituído / quebrado'], ['build/', '536 MB', 'GERADO', 'descartável'],
+  ['dist/prisma/', '262 MB', 'EM USO', 'os 4 dashes velhos ainda são lidos pelo binário de 26/10'], ['dist/*.deb', '27 MB', 'MORTO', 'de 23/09']];
+$('#inv tbody').innerHTML = INV.map(r => `<tr>${r.map((c, i) => `<td${i === 1 ? ' class="n"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('');
+const ET = [['0 · consertos', 'links do CLAUDE/README, swapAtom no CLAUDE, v6_foto.py, defeitos R4', 'mínimo', 'suíte de gestos + leitura'],
+  ['1 · poda do painel', 'CSS morto (≈507), JS sem chamada, ramos cel, renderPalette escondida', 'baixo', 'gestos + tests/estetica.py antes/depois idênticos'],
+  ['2 · poda do servidor', 'rotas de sets/grupos sem cliente, TELAO, _list_shaders', 'baixo', 'selfchecks (267 asserts) + gestos'],
+  ['3 · arrumar a raiz', 'historico/, estudo/, apagar build/ e o .deb, webcam.html, install_launcher.sh', 'mínimo (só caminhos em comentários)', 'grep dos nomes + CI'],
+  ['4 · build novo', 'packaging/build.sh → depois apagar os 4 dashes de dist/prisma e da pasta de dados', 'médio (o app do menu)', 'abrir o app do menu + check_imports'],
+  ['5 · DECISOES.md + CLAUDE.md curto', 'E1; CLAUDE.md aponta pros lugares', 'mínimo', 'leitura'],
+  ['6 · testes num comando', 'E3: tests/tudo.sh', 'baixo', 'ele mesmo, no CI'],
+  ['7 · dividir o native', 'motor_grafo, movimento, captura, analise_*, saida (nomes NOVOS: nada de cópia velha na pasta de dados)', 'médio', 'selfcheck + matriz + rodar com a webcam (PRISMA_HIDDEN)'],
+  ['8 · painel em pasta', 'E2: painel/index.html + css/ + js/ (scripts clássicos, mesma ordem), rota com lista branca, mtime da pasta, launcher e build.sh', 'médio', 'gestos + hot-reload + build + Windows no CI']];
+$('#etapas tbody').innerHTML = ET.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('');
+
+// ---------- mockups (SVG) ----------
+const C = { pnl: '#1a1d22', pnl2: '#22262c', line: '#30353d', tx: '#e6e9ed', tx2: '#a3acb6', tx3: '#6c7580', sel: '#ff9d52', img: '#4f8fe8', cv: '#e8a33a', ev: '#4fd08a', bad: '#ff5b61' };
+const R = (x, y, w, h, o = {}) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${o.r ?? 6}" fill="${o.f || C.pnl}" stroke="${o.s || C.line}" stroke-width="${o.sw || 1}"/>`;
+const T = (x, y, t, o = {}) => `<text x="${x}" y="${y}" fill="${o.c || C.tx2}" font-size="${o.z || 12}" font-weight="${o.w || 500}" font-family="IBM Plex Sans, sans-serif"${o.a ? ` text-anchor="${o.a}"` : ''}>${esc(t)}</text>`;
+const row = (x, y, w, t, d, o = {}) => R(x, y, w, 30, { f: o.on ? '#3a2410' : C.pnl2, s: o.on ? C.sel : C.line }) + `<circle cx="${x + 15}" cy="${y + 15}" r="6" fill="${o.col || C.img}"/>` + T(x + 28, y + 19, t, { c: C.tx, w: 600 }) + (d ? T(x + w - 8, y + 19, d, { a: 'end', c: C.tx3, z: 11 }) : '');
+const svg = (b, lbl) => `<svg viewBox="0 0 360 250" role="img" aria-label="${esc(lbl)}">${b}</svg>`;
+function mkLib(k){ let s = '';
+  if (k === 'A'){ s += R(20, 14, 320, 222, { r: 12 }) + R(32, 26, 296, 34, { f: '#0d0f12', s: C.sel }) + T(44, 48, 'esp|', { c: C.tx, z: 14 }) + T(320, 48, 'Ctrl+F · Enter', { a: 'end', c: C.tx3, z: 10 });
+    s += T(34, 78, 'RESULTADO', { c: C.tx3, z: 10, w: 700 }) + row(32, 84, 296, 'Espelhar', 'geometria', { on: 1 }) + row(32, 118, 296, 'Espelho (receita)', 'pronto', { col: C.cv });
+    s += T(34, 166, 'VAZIO = ★ FAVORITOS · RECENTES', { c: C.tx3, z: 10, w: 700 }); ['★ Matiz', '★ Desfocar', '↺ Contornar', '↺ env. kick'].forEach((t, i) => { s += R(32 + i * 74, 174, 70, 28, { f: C.pnl2 }) + T(67 + i * 74, 192, t, { a: 'middle', z: 11, c: C.tx }); });
+    s += T(180, 226, 'a roda continua: as fatias ficam EM VOLTA do campo', { a: 'middle', c: C.tx3, z: 11 }); }
+  if (k === 'B'){ const G = [['mexer na cor', 9, C.img], ['luz e brilho', 8, C.img], ['deformar', 10, C.img], ['desenhar / gerar', 9, C.img], ['textura e tempo', 5, C.img], ['recortar', 5, C.img], ['mexer sozinho', 18, C.cv], ['fontes e saídas', 9, C.ev]];
+    s += R(20, 14, 320, 222, { r: 12 }) + T(34, 36, 'O QUE VOCÊ QUER FAZER?', { c: C.tx3, z: 11, w: 700 });
+    G.forEach(([t, n, c], i) => { const x = 32 + (i % 2) * 150, y = 46 + Math.floor(i / 2) * 44; s += R(x, y, 144, 38, { f: i === 2 ? '#3a2410' : C.pnl2, s: i === 2 ? C.sel : C.line }) + `<circle cx="${x + 14}" cy="${y + 19}" r="5" fill="${c}"/>` + T(x + 26, y + 23, t, { c: C.tx, w: 600 }) + T(x + 136, y + 23, n, { a: 'end', c: C.tx3, z: 11 }); });
+    s += T(180, 230, '8 grupos de 5–18 · receitas viram "prontos" dentro de cada um', { a: 'middle', c: C.tx3, z: 11 }); }
+  if (k === 'C'){ s += R(10, 14, 120, 222, { r: 10 }) + R(136, 14, 214, 222, { r: 10, f: '#101216' });
+    ['★ favoritos', '↺ recentes', 'cor', 'luz', 'geometria', 'distorção', 'gerador', 'máscaras', 'alteradores', 'prontos'].forEach((t, i) => { s += T(22, 36 + i * 20, t, { c: i === 4 ? C.sel : C.tx2, z: 12, w: i === 4 ? 700 : 500 }); });
+    s += R(146, 24, 194, 26, { f: '#0d0f12' }) + T(156, 41, 'procurar…', { c: C.tx3 }); ['Dobrar', 'Espelhar', 'Esticar', 'Polar', 'Rodar'].forEach((t, i) => { s += row(146, 58 + i * 34, 194, t, '', {}); });
+    s += T(243, 232, 'sempre aberto à esquerda: custa largura', { a: 'middle', c: C.tx3, z: 11 }); }
+  return s; }
+const LIB = [['A', 'A · Busca primeiro + favoritos', 'Abrir (2 cliques no vazio, Enter, cabo no vazio, Ctrl+F) = o CAMPO já com foco no meio da roda; vazio mostra ★ e ↺; digitar procura em átomos, prontos, alteradores, fontes. Quem navega continua com a roda. Menor mudança, maior ganho: KLM 12,3 → 4,6 s.', 1],
+  ['B', 'B · Agrupar por INTENÇÃO', 'As 16 fatias viram 8 grupos do que a pessoa quer ("deformar", "mexer sozinho"). Ajuda quem não sabe o nome; exige reclassificar os átomos e reaprender a roda.', 0],
+  ['C', 'C · Navegador lateral fixo (tipo Ableton)', 'Coluna sempre aberta com categorias, favoritos e busca. O mais completo, mas ocupa a largura do canvas no notebook (contra "preferir tirar").', 0]];
+$('#mk-lib').innerHTML = LIB.map(([k, t, d, r]) => `<div class="mk">${svg(mkLib(k), t)}<b>${esc(t)}${r ? '<span class="rec-b">recomendada</span>' : ''}</b><span>${esc(d)}</span></div>`).join('');
+
+function mkPix(k){ let s = '';
+  if (k === 'A'){ s += R(10, 14, 340, 26, { f: C.pnl2 }); ['1 · PALCO', '2 · RASTER', '3 · TESTE', 'casa: Galpão ▾'].forEach((t, i) => { s += T(24 + i * 84, 32, t, { c: i === 2 ? C.sel : C.tx2, w: 700, z: 11 }); });
+    s += R(10, 48, 166, 150, { f: '#0d0f12' }) + R(184, 48, 166, 150, { f: '#0d0f12' });
+    s += R(26, 92, 60, 40, { f: '#1b2a40', s: C.img }) + R(92, 92, 60, 40, { f: '#1b2a40', s: C.img }) + T(93, 70, 'metros', { a: 'middle', c: C.tx3, z: 10 });
+    [[192, 56], [256, 56], [192, 104], [256, 104]].forEach(([x, y], i) => { s += R(x, y, 60, 42, { f: '#000', s: '#fff', r: 0 }) + `<line x1="${x}" y1="${y + 42}" x2="${x + 60}" y2="${y}" stroke="${C.sel}"/>` + T(x + 30, y + 26, 'B' + (i + 1), { a: 'middle', c: '#fff', w: 700, z: 14 }); });
+    s += T(267, 170, 'teste NA SAÍDA REAL, por bloco', { a: 'middle', c: C.tx2, z: 10 }) + R(10, 206, 340, 34, { f: C.pnl2 }) + T(22, 228, 'identificar · exportar PNG · salvar casa · setas 1 px', { c: C.tx, z: 12 }); }
+  if (k === 'B'){ ['tamanho das telas', 'a saída (detectar)', 'blocos no raster', 'teste por bloco', 'salvar a casa'].forEach((t, i) => { const y = 22 + i * 42, on = i === 3; s += `<circle cx="34" cy="${y + 14}" r="12" fill="${on ? C.sel : i < 3 ? '#1f4a35' : C.pnl2}" stroke="${C.line}"/>` + T(34, y + 18, i < 3 ? '✓' : String(i + 1), { a: 'middle', c: on ? '#1a1006' : C.tx, w: 700 }) + R(56, y, 280, 28, { f: on ? '#3a2410' : C.pnl2, s: on ? C.sel : C.line }) + T(68, y + 18, t, { c: C.tx, w: 600 }); });
+    s += T(180, 238, 'um passo por vez, “voltar” e “pular”', { a: 'middle', c: C.tx3, z: 11 }); }
+  if (k === 'C'){ s += R(20, 60, 120, 90, { f: '#9aa0a6', r: 10 }) + T(80, 82, 'SAÍDA 1', { a: 'middle', c: '#222', w: 700 }) + R(32, 92, 96, 48, { f: '#000' });
+    s += R(200, 40, 140, 150, { f: '#9aa0a6', r: 10 }) + T(270, 62, 'TELÃO', { a: 'middle', c: '#222', w: 700 }) + R(212, 72, 116, 80, { f: '#000' }) + R(218, 78, 50, 32, { f: '#1b2a40', s: C.img, r: 0 }) + R(272, 78, 50, 32, { f: '#1b2a40', s: C.img, r: 0 });
+    s += `<path d="M140 105 C170 105 170 110 200 110" stroke="${C.img}" stroke-width="4" fill="none"/>` + T(180, 222, 'o mapa vira módulo: bonito, mas mistura MONTAR a casa com o show', { a: 'middle', c: C.tx3, z: 10 }); }
+  return s; }
+const PIX = [['A', 'A · Aba TELÃO em 3 passos', 'Sai da aba Saída e ganha aba própria na ordem do load-in: PALCO (metros) → RASTER (blocos em px, detectar) → TESTE (por bloco, na saída real). Embaixo, sempre: identificar, exportar PNG, salvar/abrir a CASA, setas 1 px.', 1],
+  ['B', 'B · Assistente de load-in', 'Cinco passos guiados com ✓. Ótimo na 1ª vez, lento pra quem já sabe (e o técnico volta pra ajustar um bloco só).', 0],
+  ['C', 'C · O mapa vira módulo do canvas', 'SAÍDA → TELÃO como módulos. Coerente com "tudo é módulo", mas o mapa é da CASA, não do show: mexe-se uma vez.', 0]];
+$('#mk-pixel').innerHTML = PIX.map(([k, t, d, r]) => `<div class="mk">${svg(mkPix(k), t)}<b>${esc(t)}${r ? '<span class="rec-b">recomendada</span>' : ''}</b><span>${esc(d)}</span></div>`).join('');
+
+function meter(x, y, h, v, c, lbl){ return R(x, y, 16, h, { f: '#0d0f12', r: 3 }) + R(x + 2, y + h - 2 - (h - 4) * v, 12, (h - 4) * v, { f: c, s: 'none', r: 2 }) + T(x + 8, y + h + 14, lbl, { a: 'middle', z: 10, c: C.tx2 }); }
+function mkAud(k){ let s = '';
+  if (k === 'A'){ s += R(10, 14, 340, 26, { f: C.pnl2 }) + T(22, 32, 'ENTRADA: mesa da mesa ▾', { c: C.tx, w: 600, z: 11 }) + R(250, 18, 92, 18, { f: '#0d0f12', r: 9 }) + R(252, 20, 44, 14, { f: '#3a2410', s: C.sel, r: 7 }) + T(274, 31, 'simples', { a: 'middle', z: 9, c: '#ffd9b8' }) + T(320, 31, 'avançado', { a: 'middle', z: 9, c: C.tx3 });
+    [['ganho', .6, C.tx2], ['kick', .9, C.ev], ['grave', .7, C.cv], ['médio', .45, C.cv], ['agudo', .3, C.cv]].forEach(([l, v, c], i) => { s += meter(30 + i * 62, 54, 120, v, c, l); if (i) s += `<line x1="${26 + i * 62}" x2="${50 + i * 62}" y1="${54 + 120 * .35}" y2="${54 + 120 * .35}" stroke="${C.sel}" stroke-dasharray="3 2"/>`; });
+    s += T(180, 216, 'cada coluna: 1 medidor + 1 limiar (traço) + sensibilidade', { a: 'middle', c: C.tx3, z: 10 }) + T(180, 234, 'as 8 faixas, ataque/soltura e Hz só no avançado', { a: 'middle', c: C.tx3, z: 10 }); }
+  if (k === 'B'){ s += R(10, 14, 340, 222, { r: 12 }); s += meter(34, 40, 150, .85, C.tx2, 'entra') + T(42, 30, 'GANHO', { a: 'middle', z: 10, c: C.tx3, w: 700 });
+    s += R(66, 40, 40, 150, { f: C.pnl2 }) + R(70, 100, 32, 14, { f: '#ccc', r: 3 }) + T(86, 204, '+6 dB', { a: 'middle', z: 10 });
+    s += meter(122, 40, 150, .7, C.tx2, 'auto') + T(130, 30, 'AUTO', { a: 'middle', z: 10, c: C.tx3, w: 700 });
+    ['desl.', 'normal', 'lento'].forEach((t, i) => { s += R(156, 46 + i * 30, 56, 24, { f: i === 1 ? '#3a2410' : C.pnl2, s: i === 1 ? C.sel : C.line }) + T(184, 62 + i * 30, t, { a: 'middle', z: 11, c: C.tx }); });
+    s += meter(240, 40, 150, .55, C.cv, 'grave') + meter(270, 40, 150, .9, C.ev, 'kick') + meter(300, 40, 150, .3, C.cv, 'agudo') + T(285, 30, 'O QUE O ALTERADOR RECEBE', { a: 'middle', z: 9, c: C.tx3, w: 700 }); }
+  if (k === 'C'){ ['1 · silêncio na sala (5 s)', '2 · toque a música mais alta', '3 · toque a mais baixa', '4 · pronto: ganho e limiares'].forEach((t, i) => { const y = 24 + i * 48, on = i === 1; s += R(20, y, 320, 38, { f: on ? '#3a2410' : C.pnl2, s: on ? C.sel : C.line }) + T(34, y + 24, t, { c: C.tx, w: 600 }); if (on) s += R(250, y + 12, 80, 14, { f: '#0d0f12', r: 7 }) + R(252, y + 14, 50, 10, { f: C.ev, s: 'none', r: 5 }); });
+    s += T(180, 232, 'guarda num PERFIL (mic da casa, linha da mesa…)', { a: 'middle', c: C.tx3, z: 11 }); }
+  return s; }
+const AUD = [['A', 'A · Simples + Avançado', 'Simples (padrão): GANHO + kick + grave/médio/agudo, cada um com 1 medidor do sinal que o alterador recebe e 1 limiar. Avançado = as 8 faixas de hoje, com nomes em português. Revelação progressiva (TouchDesigner/VDMX).', 1],
+  ['B', 'B · Mesa de canal', 'Estrutura de ganho visível da esquerda pra direita: entra → ganho → auto-ganho (desl./normal/lento) → o que o alterador recebe. Ensina o caminho do sinal (MaestroDMX/WLED). Combina com A.', 0],
+  ['C', 'C · Assistente "calibrar a sala"', 'O CALIBRAR SILÊNCIO de hoje vira 4 passos e grava um PERFIL da casa/fonte. Ótimo no load-in; não resolve o ajuste durante o show.', 0]];
+$('#mk-audio').innerHTML = AUD.map(([k, t, d, r]) => `<div class="mk">${svg(mkAud(k), t)}<b>${esc(t)}${r ? '<span class="rec-b">recomendada</span>' : ''}</b><span>${esc(d)}</span></div>`).join('');
+
+// ---------- fontes ----------
+const SRC = [['Card, Moran & Newell / Kieras — KLM', 'https://www.cs.umd.edu/~golbeck/INST631/KSM.pdf'], ['Soukoreff & MacKenzie 2004 — Fitts, throughput', 'https://www.yorku.ca/mack/ijhcs2004.pdf'],
+  ['MacKenzie, Sellen & Buxton 1991 — apontar × arrastar', 'https://www.yorku.ca/mack/CHI91.html'], ['MacKenzie & Oniszczak 1998 — touchpad', 'https://www.yorku.ca/mack/CHI98.html'],
+  ['Nielsen — 10 heurísticas', 'https://www.nngroup.com/articles/ten-usability-heuristics/'], ['Sears & Shneiderman 1994 — split menus', 'https://www.cs.umd.edu/~ben/papers/Sears1994Split.pdf'],
+  ['Findlater & McGrenere 2004 — menus adaptáveis', 'https://www.cs.ubc.ca/labs/edapt/papers/findlater2004.pdf'], ['Scarr et al. 2012 — CommandMaps', 'https://hci.cs.umanitoba.ca/publications/details/improving-command-selection-with-commandmaps'],
+  ['Hornbæk, Bederson & Plaisant 2002 — visão geral', 'https://hjemmesider.diku.dk/~kash/papers/TOCHI2002_hornbaek.pdf'], ['Green & Petre — Cognitive Dimensions', 'https://www.cl.cam.ac.uk/~afb21/CognitiveDimensions/CDtutorial.pdf'],
+  ['Pad++ (Bederson & Hollan 1994)', 'https://www.cs.umd.edu/projects/hcil/jazz/learn/papers/uist-94-pad.pdf'], ['Houdini — navegar na rede', 'https://www.sidefx.com/docs/houdini/network/navigate.html'],
+  ['TouchDesigner — Wire / OP Create / Perform', 'https://derivative.ca/UserGuide/Wire'], ['Resolume — Wire fast patching', 'https://www.resolume.com/support/en/fast-patching'],
+  ['Unreal — Blueprint cheat sheet', 'https://dev.epicgames.com/documentation/en-us/unreal-engine/blueprint-editor-cheat-sheet-in-unreal-engine'], ['Bitwig — browser', 'https://bitwig.com/userguide/latest/common_browser_elements'],
+  ['VCV — menu View / Browser', 'https://vcvrack.com/manual/MenuBar'], ['VCV fórum — Clarity', 'https://community.vcvrack.com/t/clarity-a-module-to-enhance-rack-ux/26103'],
+  ['ComfyUI — LOD', 'https://docs.comfy.org/interface/settings/lite-graph'], ['Resolume — Advanced Output', 'https://resolume.com/article/50'], ['Resolume — Test Card / Identify', 'https://resolume.com/article/20'],
+  ['Resolume — presets de saída', 'https://resolume.com/article/21'], ['disguise — feed mapping', 'https://help.disguise.one/designer/mapping/mapping-types/feed-mapping'],
+  ['Resolume — edge blending', 'https://resolume.com/support/en/edge-blending'], ['MaestroDMX — ganho', 'https://maestrodmx.freshdesk.com/support/solutions/articles/153000069597'],
+  ['WLED — som', 'https://mm.kno.wled.ge/soundreactive/Sound-Settings'], ['MilkDrop — bass/mid/treb', 'https://www.geisswerks.com/milkdrop/milkdrop_preset_authoring.html'],
+  ['Synesthesia — uniforms de áudio', 'https://app.synesthesia.live/docs/ssf/audio_uniforms.html'], ['TouchDesigner — audioAnalysis', 'https://docs.derivative.ca/Palette:audioAnalysis'],
+  ['VDMX — análise de áudio', 'https://vdmx.vidvox.net/tutorials/audio-analysis-basics'], ['Bello et al. 2005 — onset', 'https://www.cs.bu.edu/fac/snyder/cs583/Literature%20and%20Resources/bello_onset_tutorial.pdf']];
+$('#fontes').innerHTML = '<ul>' + SRC.map(([t, u]) => `<li><a href="${esc(u)}">${esc(t)}</a></li>`).join('') + '</ul><p class="note">Os relatórios completos das 5 pesquisas (com cada linha citada) ficam nos arquivos da sessão; o que não pude confirmar está marcado lá.</p>';
+
+// ---------- escolhas (db) ----------
+const ST = {}; const st = id => ST[id] || (ST[id] = { sel: '', nota: '' });
+let db = null; const timers = {}, saveEl = $('#save');
+const flag = (t, c) => { saveEl.textContent = t; saveEl.className = 'save ' + (c || ''); };
+function paint(){
+  document.querySelectorAll('.opt[data-id]').forEach(o => { const on = st(o.dataset.id).sel === o.dataset.v; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+  document.querySelectorAll('textarea.nota').forEach(t => { if (document.activeElement !== t) t.value = st(t.dataset.id).nota || ''; });
+  $('#count').textContent = `${F.filter(x => st(x[0]).sel).length}/${F.length} escolhidas`;
+  $('#resumo tbody').innerHTML = F.map(([id, , t, , , , , opts]) => { const v = st(id).sel, o = opts.find(x => x[0] === v);
+    return `<tr><td><a href="#a-${id}">${id}</a></td><td>${esc(t)}</td><td>${o ? esc(o[1]) : '<span class="note">—</span>'}${st(id).nota ? `<div class="note">${esc(st(id).nota)}</div>` : ''}</td></tr>`; }).join('');
+}
+function persist(id){ clearTimeout(timers[id]); flag('salvando…');
+  timers[id] = setTimeout(async () => { const d = { id, sel: st(id).sel, nota: st(id).nota, quando: new Date().toISOString() };
+    try { if (db) await db.collection('escolhas').doc(id).set(d); else localStorage.setItem('prisma-revisao-geral', JSON.stringify(ST));
+      flag(db ? 'salvo ✓' : 'salvo só neste navegador', db ? 'ok' : 'err'); } catch (e) { flag('não salvou: ' + (e.message || e), 'err'); } }, 400); }
+document.addEventListener('click', e => { const o = e.target.closest('.opt[data-id]'); if (!o) return;
+  const x = st(o.dataset.id); x.sel = x.sel === o.dataset.v ? '' : o.dataset.v; persist(o.dataset.id); paint(); });
+document.addEventListener('input', e => { const t = e.target; if (t.classList.contains('nota')) { st(t.dataset.id).nota = t.value; persist(t.dataset.id); } });
+document.addEventListener('change', e => { if (e.target.classList.contains('nota')) paint(); });
+try { Object.assign(ST, JSON.parse(localStorage.getItem('prisma-revisao-geral') || '{}')); } catch (e) {}
+paint();
+(async () => {
+  const to = setTimeout(() => { if (!db) flag('sem conexão: salva só neste navegador', 'err'); }, 10000);
+  try { db = await window.claude?.use?.('db'); } catch (e) { db = null; }
+  clearTimeout(to);
+  if (!db) { flag('sem conexão: salva só neste navegador', 'err'); return; }
+  db.collection('escolhas').onSnapshot(snap => {
+    (snap.docs || snap).forEach(d => { const v = typeof d.data === 'function' ? d.data() : d.data; if (v && v.id) ST[v.id] = { sel: v.sel || '', nota: v.nota || '' }; });
+    paint(); flag('salvo ✓', 'ok'); }, err => flag('erro ao ler: ' + (err.message || err), 'err'));
+})();
+}
+</script>
+</body>
+</html>

@@ -981,6 +981,14 @@ def _music_events(st, tp, mem, bars=PHRASE_BARS):
         ev.update({'secao:' + k: n for k, n in sc.n.items()})
     for k, n in (st.get('ev_man') or {}).items():
         ev[k] = ev.get(k, 0) + n
+    cm = mem.setdefault('cmp', {})   # COMPARADOR (plano fase 3): cada movimento vira o evento 'cmp:<id>', que sobe quando o sinal dele PASSA
+    for mid, x in list(MV_OUT.items()):   # de 0,5 pra cima (histerese: arma em 0,6, desarma em 0,4 — o som nao faz tremer)
+        q = cm.setdefault(mid, [0, False])
+        if not q[1] and x >= 0.6:
+            q[0], q[1] = q[0] + 1, True
+        elif q[1] and x <= 0.4:
+            q[1] = False
+        ev['cmp:' + str(mid)] = q[0]
     st['ev'] = ev
     return ev
 
@@ -1321,16 +1329,23 @@ def _pool_reader(e):
     _kill(e['proc'])
 
 
+def _tray_files():
+    """os arquivos nas BANDEJAS das fontes (o leitor de cartuchos do dash): os proximos de uma troca"""
+    return {f for o in state.get('overlays') or [] if isinstance(o, dict) for f in (o.get('tray') or ()) if isinstance(f, str)}
+
+
 def _desired_pool():
-    """[(path, v-dict)] dos videos do set de midia ativo — com tecla primeiro, ate VIDEO_POOL_MAX."""
+    """[(path, v-dict)] dos videos quentes: os CARTUCHOS das bandejas das fontes primeiro (plano fase 2: trocar sem buraco preto),
+    depois os do set de midia ativo com tecla, ate VIDEO_POOL_MAX."""
     if not getattr(tuning, 'VIDEO_POOL', 0):
         return []
     ms = getattr(tuning, 'MEDIA_SET', 'default')
     cap = max(0, int(getattr(tuning, 'VIDEO_POOL_MAX', 4)))
     keys = getattr(tuning, 'MEDIA_KEYS', {}).get(ms, {})
+    tray = _tray_files()
     items = [m for m in dash_server.media_items(MEDIA_DIR)
-             if m.get('kind') == 'video' and _media_set_of(m.get('file', '')) == ms]
-    items.sort(key=lambda m: m.get('name', '') not in keys)  # False (com tecla) antes de True
+             if m.get('kind') == 'video' and (_media_set_of(m.get('file', '')) == ms or m.get('file', '') in tray)]
+    items.sort(key=lambda m: (m.get('file', '') not in tray, m.get('name', '') not in keys))  # bandeja, depois com tecla
     out = []
     for m in items[:cap]:
         p = os.path.join(MEDIA_DIR, m.get('file', ''))
@@ -1793,7 +1808,7 @@ def video_thread(mode, region=None, device=None):
         while running:
             # pool: reconstroi quando muda set / lista de video / tamanho de janela / os flags
             sig = (getattr(tuning, 'MEDIA_SET', 'default'), (FIT_W, FIT_H),
-                   getattr(tuning, 'VIDEO_POOL', 0), getattr(tuning, 'VIDEO_POOL_MAX', 4),
+                   getattr(tuning, 'VIDEO_POOL', 0), getattr(tuning, 'VIDEO_POOL_MAX', 4), tuple(sorted(_tray_files())),
                    tuple((m.get('file', ''), m.get('fit'), bool(m.get('bounce')))
                          for m in dash_server.media_items(MEDIA_DIR) if m.get('kind') == 'video'))
             if sig != pool_sig:
@@ -3537,7 +3552,7 @@ void main() {
 """
 LAYER_BLEND_UNIT_BASE, LAYER_BLEND_UNIT_LAYER, LAYER_BLEND_UNIT_MASK = 5, 6, 7   # fora das do preset (0..4)
 
-# EM CIMA (PLANO_CONVERSA.md §2): o atomo solto EM CIMA de outro age so' na MARCA dele = o que ele fez. Tudo em orientacao
+# EM CIMA (historico/PLANO_CONVERSA.md §2): o atomo solto EM CIMA de outro age so' na MARCA dele = o que ele fez. Tudo em orientacao
 # GL (como lt['layer'] e lt['src']), alfa DIRETO. op 0 = MARCA de um FILTRO: a saida dele onde ela difere da entrada (quem
 # desenha ja' tem a marca no alfa); op 1 = DENTRO (quem desenha em cima: alpha lock, a cobertura nao cresce); op 2 = TROCA
 # com opacidade (cor, espaco, memoria: a saida do de cima vale u_a). Junta de volta POR CIMA da entrada (u_aout 3).
@@ -3622,7 +3637,37 @@ uniform int u_nblk;
 uniform vec4 u_ba[16];
 uniform vec4 u_bb[16];
 uniform vec4 u_bc[16];
+uniform float u_test, u_ident, u_time;   // PADRAO DE TESTE POR BLOCO (revisao geral P2) | o bloco que PISCA (identificar) | relogio
 """ + POLY_GLSL + """
+float bar_(vec2 p, vec2 a, vec2 b, float t) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return step(length(pa - ba * h), t); }
+float bit_(float c, float s) { return mod(floor(c / pow(2.0, s)), 2.0); }
+float glyph(vec2 p, float n) {   // um algarismo em 7 SEGMENTOS; p 0..1 na caixa dele (y pra baixo)
+    if (any(lessThan(p, vec2(0.0))) || any(greaterThan(p, vec2(1.0)))) return 0.0;
+    float c = n < 0.5 ? 63.0 : n < 1.5 ? 6.0 : n < 2.5 ? 91.0 : n < 3.5 ? 79.0 : n < 4.5 ? 102.0 : n < 5.5 ? 109.0 : n < 6.5 ? 125.0 : n < 7.5 ? 7.0 : n < 8.5 ? 127.0 : 111.0;
+    vec2 A = vec2(0.2, 0.1), B = vec2(0.8, 0.1), C = vec2(0.8, 0.5), D = vec2(0.8, 0.9), E = vec2(0.2, 0.9), F = vec2(0.2, 0.5);
+    float t = 0.09, r = 0.0;
+    r = max(r, bit_(c, 0.0) * bar_(p, A, B, t)); r = max(r, bit_(c, 1.0) * bar_(p, B, C, t)); r = max(r, bit_(c, 2.0) * bar_(p, C, D, t));
+    r = max(r, bit_(c, 3.0) * bar_(p, E, D, t)); r = max(r, bit_(c, 4.0) * bar_(p, F, E, t)); r = max(r, bit_(c, 5.0) * bar_(p, A, F, t));
+    r = max(r, bit_(c, 6.0) * bar_(p, F, C, t));
+    return r;
+}
+vec3 hue_(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
+vec3 testCard(float i, vec2 l, vec2 sz) {   // o bloco i: fundo na cor dele, grade 8x8, as 2 diagonais, a diagonal que ANDA, o NUMERO e a borda de 1 px
+    vec2 px = l * sz;
+    vec3 col = hue_(i / 7.0) * 0.28;
+    vec2 g = abs(fract(l * 8.0 + 0.5) - 0.5) * sz / 8.0;
+    if (min(g.x, g.y) < 0.5) col = vec3(0.35);
+    float m = min(sz.x, sz.y), d1 = abs(l.x - l.y) * m, d2 = abs(l.x + l.y - 1.0) * m;
+    if (min(d1, d2) < 0.7) col = vec3(0.55);
+    if (fract(l.x + l.y - u_time * 0.25) < 0.012) col = vec3(1.0, 0.62, 0.32);   // parada = quadro travado (Test Card do Resolume)
+    float n = i + 1.0, gh = 0.32 * m, gw = gh * 0.6;
+    vec2 c0 = sz * 0.5;
+    float dig = n < 9.5 ? glyph((px - c0 + vec2(gw * 0.5, gh * 0.5)) / vec2(gw, gh), n)
+        : max(glyph((px - c0 + vec2(gw * 1.05, gh * 0.5)) / vec2(gw, gh), floor(n / 10.0)), glyph((px - c0 + vec2(-0.05 * gw, gh * 0.5)) / vec2(gw, gh), mod(n, 10.0)));
+    if (dig > 0.5) col = vec3(1.0);
+    if (min(min(px.x, px.y), min(sz.x - px.x, sz.y - px.y)) < 1.0) col = vec3(1.0);   // a BORDA: o limite exato do bloco (pixel deslocado aparece)
+    return col;
+}
 void main() {
     vec2 r = (gl_FragCoord.xy / u_res - u_box.xy) / u_box.zw;
     vec2 p = vec2(r.x, 1.0 - r.y) * u_rast;   // px do raster, origem em cima
@@ -3633,6 +3678,9 @@ void main() {
         if (a.z <= 0.0) continue;
         vec2 l = (p - a.xy) / a.zw;
         if (any(lessThan(l, vec2(0.0))) || any(greaterThan(l, vec2(1.0)))) continue;
+        if (u_test > 0.5) {
+            col = testCard(float(i), l, a.zw);
+        } else {
         vec2 uv = l;
         if (c.z > 2.5) uv = vec2(1.0 - l.y, l.x);
         else if (c.z > 1.5) uv = 1.0 - l;
@@ -3640,6 +3688,8 @@ void main() {
         if (!inShape(float(i), c.w, uv)) continue;
         vec2 q = b.xy + uv.x * b.zw + uv.y * c.xy;
         col = texture2D(u_canvas, vec2(q.x, 1.0 - q.y)).rgb;
+        }
+        if (abs(u_ident - float(i)) < 0.5 && fract(u_time * 2.0) < 0.5) col = mix(col, vec3(1.0), 0.85);   // IDENTIFICAR: o bloco pisca
     }
     gl_FragColor = vec4(col, 1.0);
 }
@@ -3654,7 +3704,7 @@ STATE_MAX_STEPS = 2   # passo fixo: no maximo 2x os passos de 1/60 s num quadro 
 def build_output_map_program():
     p = build_program(OUTPUT_MAP_SRC)
     _use_basic(p)
-    u = _locs(p, 'u_res', 'u_box', 'u_rast', 'u_canvas', 'u_nblk', 'u_ba', 'u_bb', 'u_bc', 'u_poly')
+    u = _locs(p, 'u_res', 'u_box', 'u_rast', 'u_canvas', 'u_nblk', 'u_ba', 'u_bb', 'u_bc', 'u_poly', 'u_test', 'u_ident', 'u_time')
     glUniform1i(u['u_canvas'], OUTPUT_MAP_UNIT)
     glUniform1i(u['u_poly'], POLY_UNIT)
     return p, u
@@ -3857,8 +3907,9 @@ def main():
             prog = build_program(dash_data.atom_source(rel, src))   # atomo: + PRELUDIO (ATOMO v2 §3)
         except (RuntimeError, OSError) as e:
             print('erro no shader', rel, '->\n', e)
-            state['output']['shader_status'] = f'erro em {os.path.basename(rel)}'
-            state['output']['shader_error'] = f'{rel}\n{e}'[:2000]   # detalhe no clique da saude (dash v2)
+            # ERRO POR ARQUIVO (revisao geral F3): antes o proximo shader que compilava APAGAVA o aviso do quebrado (que seguia fora do ar)
+            state['output'].setdefault('shader_errors', {})[rel] = str(e)[:1500]
+            _shader_health()
             layer_bad[lp] = mt
             return None
         if hit:
@@ -3869,9 +3920,22 @@ def main():
         locs['troca'] = dash_data.atom_replaces(rel, src)   # FILTRO: substitui a entrada (TROCA); quem desenha vai POR CIMA
         locs['marca'] = dash_data.atom_marca(rel, src)       # EM CIMA: 'mudanca' (filtro) = extrai a marca; 'alfa' = a saida como esta'
         prog_cache[lp] = (mt, prog, src, manifest, locs)
-        state['output']['shader_status'] = 'ok'
-        state['output'].pop('shader_error', None)
+        (state['output'].get('shader_errors') or {}).pop(rel, None)
+        _shader_health()
         return prog_cache[lp]
+
+    def _shader_health():   # a SAUDE do shader = os erros de AGORA, por arquivo; arquivo que saiu de todas as pilhas deixa de contar
+        errs = state['output'].setdefault('shader_errors', {})
+        usados = {it.get('file') for b in (state.get('bindings') or {}).values() if isinstance(b, dict) for it in (b.get('shaders') or []) if isinstance(it, dict)}
+        for k in [k for k in errs if usados and k not in usados]:
+            errs.pop(k, None)
+        if errs:
+            first = next(iter(errs))
+            state['output']['shader_status'] = f'erro em {os.path.basename(first)}' + (f' (+{len(errs) - 1})' if len(errs) > 1 else '')
+            state['output']['shader_error'] = '\n\n'.join(f'{k}\n{v}' for k, v in errs.items())[:4000]   # detalhe no clique da saude
+        else:
+            state['output']['shader_status'] = 'ok'
+            state['output'].pop('shader_error', None)
 
     blend_prog, blend_u = build_layer_blend_program()
     stack_prog, stack_u = build_stack_program()
@@ -4104,24 +4168,26 @@ def main():
     subj_tex = {}         # fonte base -> [textura, mascara subida] (subject_thread)
     comp_last = [None, None]   # [assinatura das fontes da mistura na CPU, frame_in]
     pace_t = [time.perf_counter()]   # prazo do ultimo quadro (ritmo da saida, fim do loop)
+    work_ms = [0.0]   # (revisao geral R5) ms de trabalho por quadro, media movel -> state.output.ms (HUD do canvas)
     comp_t = [0.0]             # quando a mistura da CPU foi refeita (sem a sim: no maximo 15x/s)
     out_img = {'peaks': {'edge': 1e-6, 'motion': 1e-6, 'sharpness': 1e-6, 'colorfulness': 1e-6},
                'prev_val': [None], 'prev_mean': [None]}
-    esc_t = []   # instantes dos ultimos Esc: 3 em ESC_QUIT_S fecha o app (no dash: POST /quit)
-    ESC_QUIT_S = 1.2
+    esc_down = None   # (plano fase 4, 2026-11-26) SEGURAR Esc 2 s fecha o app — 3x Esc tambem cancelava coisas e fechava junto
+    ESC_HOLD_S = 2.0
     while running:
+        if esc_down is not None and time.monotonic() - esc_down >= ESC_HOLD_S:
+            running = False
+            break
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYUP and event.key == pygame.K_ESCAPE:
+                esc_down = None
             elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_F11):
                 # Esc SAI da tela cheia (1 Esc so nao fecha: era o gesto natural e derrubava o
-                # show); 3x Esc seguidos fecha o app. F11 alterna. Mesmo caminho do dash (output_req)
-                if event.key == pygame.K_ESCAPE:
-                    now = time.monotonic()
-                    esc_t = [t for t in esc_t if now - t < ESC_QUIT_S] + [now]
-                    if len(esc_t) >= 3:
-                        running = False
-                        break
+                # show); SEGURAR Esc 2 s fecha o app. F11 alterna. Mesmo caminho do dash (output_req)
+                if event.key == pygame.K_ESCAPE and esc_down is None:
+                    esc_down = time.monotonic()
                 if event.key == pygame.K_F11 or out_cfg.get('fullscreen'):
                     fs = not out_cfg.get('fullscreen')
                     set_output({**out_cfg, 'fullscreen': fs, **({} if fs else {'w': 0, 'h': 0})})   # janela = tamanho padrao
@@ -5259,6 +5325,10 @@ def main():
             glUniform4fv(map_u['u_ba'], len(scr_rects), ba)
             glUniform4fv(map_u['u_bb'], len(scr_rects), bb)
             glUniform4fv(map_u['u_bc'], len(scr_rects), bc)
+            _tn = time.time(); _mi = state.get('map_ident')   # (revisao geral P2) padrao de teste por bloco / identificar (dash_server.map_test)
+            glUniform1f(map_u['u_test'], 1.0 if (state.get('map_test') or 0) > _tn else 0.0)
+            glUniform1f(map_u['u_ident'], float(_mi[0]) if _mi and _mi[1] > _tn else -1.0)
+            glUniform1f(map_u['u_time'], _tn % 1000.0)
             glActiveTexture(GL_TEXTURE0 + POLY_UNIT)
             glBindTexture(GL_TEXTURE_2D, poly_tex[0])
             glActiveTexture(GL_TEXTURE0 + OUTPUT_MAP_UNIT)
@@ -5418,19 +5488,35 @@ def main():
         pb_ = int(getattr(tuning, 'PHRASE_BARS', PHRASE_BARS) or PHRASE_BARS)
         evs = state.get('ev') or {}
         for o in state.get('overlays') or []:
-            for verb, name in (o.get('acao') or {}).items():   # cena antiga: a caixa na SAIDA
+            for verb, name in (o.get('acao') or {}).items():   # a FONTE: proximo cartucho (fase 3); cena antiga: a caixa na SAIDA
                 ak = (o.get('id') or _chkey(o), verb)
                 c_ = evs.get(name, 0)
                 if ak in acao_mem and c_ > acao_mem[ak]:
-                    state.setdefault('grid_q', []).append({'op': 'box_off', 'key': _chkey(o), 'off': int(verb == 'desliga'), 'unit': ''})
+                    if verb == 'proximo':
+                        state.setdefault('grid_q', []).append({'op': 'src_next', 'key': _chkey(o), 'id': o.get('id'), 'dir': 1, 'unit': ''})
+                    else:
+                        state.setdefault('grid_q', []).append({'op': 'box_off', 'key': _chkey(o), 'unit': '',
+                                                               'off': int(verb == 'desliga' or (verb == 'alterna' and not o.get('off')))})
                 acao_mem[ak] = c_
             for L in o.get('layers') or ():                    # grafo: a CAMADA de um staging/saida
                 for verb, name in (L.get('acao') or {}).items():
                     ak = (_chkey(o), L.get('from'), verb)
                     c_ = evs.get(name, 0)
                     if ak in acao_mem and c_ > acao_mem[ak]:
-                        state.setdefault('grid_q', []).append({'op': 'layer_off', 'node': _chkey(o), 'from': L.get('from'),
-                                                               'off': int(verb == 'desliga'), 'unit': ''})
+                        state.setdefault('grid_q', []).append({'op': 'layer_off', 'node': _chkey(o), 'from': L.get('from'), 'unit': '',
+                                                               'off': int(verb == 'desliga' or (verb == 'alterna' and not L.get('off')))})
+                    acao_mem[ak] = c_
+        for bk, bv in (state.get('bindings') or {}).items():   # (fase 3: EVENTO VIRA CABO) o ATOMO: o LIGA alterna, o seletor anda
+            for j, it in enumerate((bv or {}).get('shaders') or ()):
+                for verb, name in (it.get('acao') or {}).items():
+                    ak = (bk, it.get('id') or j, verb)
+                    c_ = evs.get(name, 0)
+                    if ak in acao_mem and c_ > acao_mem[ak]:
+                        if verb.startswith('opcao:'):
+                            state.setdefault('grid_q', []).append({'op': 'opt_next', 'key': bk, 'j': j, 'file': it.get('file'), 'n': verb[6:], 'unit': ''})
+                        else:
+                            state.setdefault('grid_q', []).append({'op': 'fx_off', 'key': bk, 'j': j, 'file': it.get('file'), 'unit': '',
+                                                                   'off': int(verb == 'desliga' or (verb == 'alterna' and not it.get('off')))})
                     acao_mem[ak] = c_
         gq = state.get('grid_q')
         if gq:
@@ -5484,6 +5570,7 @@ def main():
         per = 1.0 / fps_t
         nxt = pace_t[0] + per
         t_now = time.perf_counter()
+        work_ms[0] = work_ms[0] * 0.9 + min(1000.0, (t_now - pace_t[0]) * 1000.0) * 0.1   # (revisao geral R5) o TRABALHO do quadro, sem a espera do ritmo
         if nxt < t_now - per:
             nxt = t_now
         if nxt - t_now > 0.0012:
@@ -5495,6 +5582,7 @@ def main():
         frame_n += 1
         if frame_n % 15 == 0:
             state['output']['fps'] = round(clock.get_fps(), 1)
+            state['output']['ms'] = round(work_ms[0], 1)   # ms de trabalho por quadro (media); > 1000/alvo = nao da' conta
             state['output']['fps_target'] = fps_t
             # dims originais da midia ativa (botao "tamanho da mídia" no dash). So le o cache:
             # _probe_dims ja rodou quando a midia abriu; ffprobe aqui travaria o render.
@@ -5898,6 +5986,32 @@ def _selfcheck():
     import matriz   # MATRIZ DE EMERGENCIA (ATOMO.md §11): todo atomo, todo par, estado 300 passos — so' com GL
     fails = matriz.run()
     assert not fails, 'matriz de emergencia:\n  ' + '\n  '.join(fails)
+    if fails is not None:   # com GL: o PADRAO DE TESTE POR BLOCO (revisao geral P2) desenha borda de 1 px, numero e fundo de cada bloco
+        _selfcheck_test_card()
+
+
+def _selfcheck_test_card():
+    W, H = 400, 200
+    prog, u = build_output_map_program()
+    vbo = glGenBuffers(1); glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, np.array([-1, -1, 3, -1, -1, 3], np.float32), GL_STATIC_DRAW)
+    tex = glGenTextures(1); glBindTexture(GL_TEXTURE_2D, tex)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, None)
+    fbo = glGenFramebuffers(1); glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0)
+    glViewport(0, 0, W, H); _use_basic(prog)
+    glUniform2f(u['u_res'], W, H); glUniform4f(u['u_box'], 0, 0, 1, 1); glUniform2f(u['u_rast'], W, H); glUniform1i(u['u_nblk'], 2)
+    glUniform4fv(u['u_ba'], 2, np.array([0, 0, 200, 200, 200, 0, 200, 200], np.float32))
+    glUniform4fv(u['u_bb'], 2, np.zeros(8, np.float32)); glUniform4fv(u['u_bc'], 2, np.array([0, 0, 0, -1, 0, 0, 0, -1], np.float32))
+    glUniform1f(u['u_test'], 1.0); glUniform1f(u['u_ident'], -1.0); glUniform1f(u['u_time'], 0.0)
+    glDrawArrays(GL_TRIANGLES, 0, 3)
+    px = np.frombuffer(glReadPixels(0, 0, W, H, GL_RGB, GL_UNSIGNED_BYTE), np.uint8).reshape(H, W, 3)[::-1]
+    white = lambda y0, y1, x0, x1: int((px[y0:y1, x0:x1] == 255).all(axis=2).sum())
+    assert (px[0, 50] == 255).all() and (px[100, 199] == 255).all() and (px[100, 200] == 255).all(), 'teste por bloco: sem a borda de 1 px'
+    assert white(80, 120, 80, 120) > 100 and white(80, 120, 280, 320) > 200, 'teste por bloco: sem o NUMERO do bloco'
+    assert tuple(px[30, 40]) != tuple(px[30, 240]), 'teste por bloco: os blocos tem a mesma cor de fundo'
+    glDeleteFramebuffers(1, [fbo]); glDeleteTextures([tex]); glBindFramebuffer(GL_FRAMEBUFFER, 0)
+    print('native_synth padrao de teste por bloco ok')
 
 
 if __name__ == '__main__':

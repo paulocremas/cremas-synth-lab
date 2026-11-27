@@ -6,7 +6,7 @@ interligação). Quem garante que a combinação faz sentido são as regras abai
 texto e a **matriz de emergência** (`src/matriz.py`, no `--selfcheck`) renderiza todo par. Regra que só serve pra um
 átomo = falta uma regra geral.
 
-## 0. Declarar, não proibir (2026-11-05, `PLANO_CONVERSA.md` §9)
+## 0. Declarar, não proibir (2026-11-05, `historico/PLANO_CONVERSA.md` §9)
 Tudo abaixo é o PADRÃO — o que faz um átomo encaixar bem em qualquer outro. Não é cerca: todo `.frag` que **roda**
 entra na biblioteca. `dash_data.atom_check` separa **QUEBRA** (não compila por redeclarar o prelúdio/`#version`, sem
 `gl_FragColor`, estado sem `// estado:` ou sem `u_vista` — o arquivo não entra) de **FORA DO PADRÃO** (mais de 3 knobs,
@@ -47,6 +47,7 @@ mostrar a escolha. Vetor no fio = RG centrado em 0.5 em 8 bits (o Hydra usa RG s
 // bipolar: angulo                              (knob de dois lados: 0.5 = nada)
 // ritmo: velocidade                            (knob de rapidez: pode travar no BPM — UI no próximo chat)
 // montagem: a geometria dos telões             (ajuste do LUGAR, não do show: até 6 knobs)
+// oculto: use o Assunto com inverter           (RODA, mas não aparece pra montar: o que ficou repetido; cena antiga segue)
 // estado: canais=4, passos=8, fases=1, escala=0.35   (átomo com memória, §6)
 // mod: forca=pulsa                             (movimento SUGERIDO)
 // ATOMOS · Deslocar. Uma frase do que faz. Depois, o que cada knob faz.
@@ -111,7 +112,7 @@ Cada ligação é uma **entrada com nome na borda do nó** (cabos como no VCV Ra
 o fio que fecha um laço lê o quadro anterior).
 1. **Corrente (A)**: o nó que este lê (`file: '@<id>'`). 2. **Entrada B** (`ins`: o fio na bolinha B; sem fio = `src` (a crua)
 ou `fb` (ele mesmo 1 quadro atrás)). 3. **Máscara** da caixa (§9; um fio na bolinha "máscara" = átomo Luma).
-4. **EM CIMA** (átomo solto NO CARD de outro, `post: [ids]`; `PLANO_CONVERSA.md` §2): age **só no que o de baixo FEZ** —
+4. **EM CIMA** (átomo solto NO CARD de outro, `post: [ids]`; `historico/PLANO_CONVERSA.md` §2): age **só no que o de baixo FEZ** —
 a **MARCA** dele, nunca no fundo. Marca de quem desenha = o que desenhou (alfa); de um FILTRO = a saída dele onde difere
 da entrada (`smoothstep(MARCA_LO, MARCA_HI, |saída − entrada|)`, `STACK_SRC` op 0). O de cima lê a marca como `A()` (RGBA) e
 entra pela regra de sempre: filtro TROCA (cor troca, espaço move a cobertura, memória deixa rastro da marca, opacidade =
