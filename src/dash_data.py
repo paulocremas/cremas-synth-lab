@@ -44,7 +44,7 @@ def parse_meta(src):
     src = src or ''
     m = re.search(r'(?m)^//\s*cat:\s*(\S+)', src)
     i = re.search(r'(?m)^//\s*in:\s*(.+)$', src)
-    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala|B|entra|marca|montagem):)\s*(.+)$', src)
+    d = re.search(r'(?m)^//(?!\s*(?:fx|cat|in|mod|opcoes|bipolar|ritmo|estado|escala|B|entra|marca|montagem|oculto):)\s*(.+)$', src)
     mo = re.search(r'(?m)^//\s*mod:\s*(.+)$', src)
     desc = d.group(1).strip() if d else ''
     nome = ''
@@ -72,6 +72,9 @@ def parse_meta(src):
     est = parse_estado(src)
     if est:                            # ATOMO v2: atomo com MEMORIA (o dash oferece semear/limpar)
         out['estado'] = est
+    oc = re.search(r'(?m)^//\s*oculto:\s*(.+)$', src)
+    if oc:   # (revisao geral B3) RODA mas NAO aparece pra montar (cena antiga continua): "// oculto: use o Assunto com inverter"
+        out['oculto'] = oc.group(1).strip()[:80]
     mt = re.search(r'(?m)^//\s*montagem:\s*(.+)$', src)
     if mt:   # DECLARADO de montagem (ajusta uma vez pro lugar, ex. Lente): pode ter ate' ATOM_MAX_KNOBS_MONTAGEM knobs
         out['montagem'] = mt.group(1).strip()[:80]
@@ -117,7 +120,7 @@ def knob_switches(src):
 # PADRAO ATOMO (shaders/ATOMO.md): o que um .frag de shaders/presets/atomos/ pode e nao pode
 ATOM_CATS = ('cor', 'luz', 'forma', 'geometria', 'distorcao', 'textura', 'tempo', 'mistura', 'gerador', 'mascara')
 ATOM_DRAW_CATS = ('gerador', 'forma')   # quem DESENHA/gera: vai POR CIMA da corrente; o resto e' FILTRO (TROCA, ATOMO §5)
-# EM CIMA (PLANO_CONVERSA.md §2.1): a MARCA de um filtro = a saida dele onde |saida - entrada| (pre-multiplicada, o maior
+# EM CIMA (historico/PLANO_CONVERSA.md §2.1): a MARCA de um filtro = a saida dele onde |saida - entrada| (pre-multiplicada, o maior
 # canal) passa de LO; a partir de HI vale inteira. Abaixo de LO o fundo sai intacto; o erro de identidade fica < ~0.4 * HI.
 MARCA_LO, MARCA_HI = 0.012, 0.06
 
@@ -156,7 +159,6 @@ MASK_UNIFORMS = {'u_subject', 'u_subject_on'}   # so' atomo de MASCARA (dash v5)
 MASK_UNIFORMS |= {'u_rosto', 'u_olhos', 'u_rosto_on', 'u_corpo', 'u_corpo_on', 'u_obj', 'u_obj_p', 'u_obj_on', 'u_olho', 'u_olho_on'}   # + o RASTREIO (src/rastreio.py)
 ATOM_MAX_KNOBS = 3   # minimalismo: o principal + ate' 2 detalhes essenciais; mais que isso = dividir em atomos
 ATOM_MAX_KNOBS_MONTAGEM = 6   # "// montagem: <o que descreve>" = ajuste de LUGAR (geometria do telao), mexe uma vez, nao no show
-ATOM_UNIFORMS = {'u_resolution', 'u_time', 'u_beat', 'u_bar', 'u_phrase', 'u_texture_0', 'u_texture_1', 'u_texture_2', 'u_texture_src'}
 
 # PRELUDIO do ATOMO v2 (shaders/ATOMO.md §3): o motor poe ISTO antes de todo .frag de presets/atomos/ (atom_source).
 # O atomo nao declara estes uniforms nem copia funcoes: a mesma palavra faz a mesma coisa em todo atomo. Texturas
@@ -318,6 +320,16 @@ def atom_check(src):
             w.append('// estado: acumula com u_dt/decai(), nao com u_time (o rastro muda com o fps)')
     elif re.search(r'\b(u_state|u_vista|u_fase|u_semear|E\s*\()', code):
         q.append('le o estado (E()/u_state/u_vista) sem "// estado:"')
+    op = re.search(r'(?m)^//\s*opcoes:\s*(.+)$', src)   # (revisao geral F3) nomes da ESCOLHA que nao batem com o floor(u_fx_X * K): viravam "1..N" calado
+    if op:
+        for part in re.split(r'[;,]\s*(?=\w+=)', op.group(1)):
+            k, _, v = part.partition('=')
+            k, names = k.strip(), [x.strip() for x in v.split('|') if x.strip()]
+            m = re.search(r'floor\(\s*u_fx_' + re.escape(k) + r'\s*\*\s*([0-9.]+)\s*\)', code)
+            if not m:
+                w.append(f'// opcoes: {k} sem floor(u_fx_{k} * N) no codigo (nao vira escolha)')
+            elif int(round(float(m.group(1)))) != len(names):
+                w.append(f'// opcoes: {k} tem {len(names)} nomes mas o codigo divide em {int(round(float(m.group(1))))} (aparece "1..N")')
     if 'gl_FragColor' not in code:
         q.append('sem gl_FragColor')
     return {'quebra': q, 'avisos': w, 'ouve': sorted(set(ouve)), 've': sorted(set(ve))}
@@ -396,6 +408,34 @@ def band_gate(v, g):
     return min(v, th) if g.get('m') == 'teto' else (v if v >= th else 0.0)
 
 
+BAND_NAMES = ('Sub-bass', 'Low-mid', 'Midrange', 'High-mid', 'Presence', 'Treble', 'Brilliance', 'Air')
+SIL_MARGEM = 1.5     # CALIBRAR SILENCIO: o limiar = o MAIOR valor do ruido medido x isso (o chiado nunca passa dele)
+SIL_SEGUNDOS = 3.0   # quanto tempo o native ouve o silencio
+SIL_MAX_AMP = 0.15   # medido acima disso nao e' silencio (tinha musica): recusa a calibracao
+
+
+def _f4(x):
+    return float(f'{max(0.0, float(x)):.4g}')
+
+
+def norm_silencio(d):
+    """PISO DE RUIDO medido pelo "calibrar silencio" (tuning.SILENCIO) -> {amp, bass, bands: {faixa: magnitude}, flux: {ataque:
+    fluxo}, quando} so' com o que e' conhecido (4 algarismos); vazio/lixo = {} (= sem calibracao, vale o SILENCE_AMP/pisos fixos)."""
+    if not isinstance(d, dict):
+        return {}
+    try:
+        out = {'amp': _f4(d.get('amp', 0)), 'bass': _f4(d.get('bass', 0)),
+               'bands': {n: _f4(v) for n, v in (d.get('bands') or {}).items() if n in BAND_NAMES},
+               'flux': {n: _f4(v) for n, v in (d.get('flux') or {}).items() if n in ATAQUE_FAIXAS}}
+    except (TypeError, ValueError, AttributeError):
+        return {}
+    if isinstance(d.get('quando'), str):
+        out['quando'] = d['quando'][:16]
+    if isinstance(d.get('fonte'), str) and d['fonte']:   # a calibracao so' vale NESSA fonte de audio (mic != monitor)
+        out['fonte'] = d['fonte'][:300]
+    return out if out['amp'] or out['bass'] or out['bands'] else {}
+
+
 def norm_band_gate(d, names):
     """{nome: {th, m}} do dash -> so' faixas conhecidas, th 0..1 (3 casas), m em GATE_MODES; neutro (ativa 0 / teto 1) sai."""
     out = {}
@@ -446,7 +486,12 @@ MOV_MODES = ('loop', 'disparo', 'segue')
 TRACK_SIGNALS = ('rosto.x', 'rosto.y', 'rosto.tam', 'mao.x', 'mao.y', 'corpo.x', 'corpo.abre', 'obj.x', 'obj.y', 'obj.tam')
 TRACK_GATES = ('rosto.on', 'mao.on', 'corpo.on', 'obj.on')
 SECOES = ('intro', 'sobe', 'drop', 'pausa')
-EVENTS = ('batida', 'compasso', 'frase', 'kick', 'golpe') + tuple('secao:' + x for x in SECOES) + TRACK_GATES \
+# SOM em grupos de faixas (2026-11-19, "usar outras faixas de mixagem"): o NIVEL de cada grupo = a mais forte das faixas finas
+# dele (native: state[grupo]); os ATAQUES (eventos) = kick (detector do grave) + ritmo.Ataque nos Hz das faixas de ATAQUE_FAIXAS
+SOUND_GROUPS = {'grave': ('subbass', 'lowmid'), 'medio': ('midrange', 'highmid', 'presence'), 'agudo': ('treble_hi', 'brilho', 'air')}
+ATAQUE_FAIXAS = {'caixa': ('Midrange', 'Presence'), 'chimbal': ('Brilliance', 'Air'), 'golpe': ('Sub-bass', 'Air')}   # da 1a a' ultima
+SOUND_EVENTS = ('kick', 'caixa', 'chimbal', 'golpe')   # eventos do SOM: param sem som (ev.rel = 1: seguem o relogio, kick~...)
+EVENTS = ('batida', 'compasso', 'frase') + SOUND_EVENTS + tuple('secao:' + x for x in SECOES) + TRACK_GATES \
     + ('pad:1', 'pad:2', 'pad:3', 'pad:4')
 # presets de 1 gesto (dash: botao do knob). faixa = (de, ate') RELATIVA ao valor do knob (None = absoluta 0..1)
 MOV_PRESETS = {
@@ -455,7 +500,7 @@ MOV_PRESETS = {
     'anda':    {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'saw', 'r': 16, 'ph': 0}}, 'faixa': None},
     'passos':  {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'passos', 'r': 4, 'ph': 0, 'st': [1, 0, 0.5, 0, 0.75, 0, 0.25, 0]}}, 'faixa': (-0.3, 0.3)},
     'acaso':   {'mod': {'b': ['lfo'], 'modo': 'loop', 'lfo': {'f': 'sh', 'r': 1, 'ph': 0}}, 'faixa': (-0.3, 0.3)},
-    'grave':   {'mod': {'b': ['subbass'], 'modo': 'segue', 'seg': {'a': 10, 'r': 200}}, 'faixa': (0.0, 1.0)},
+    'grave':   {'mod': {'b': ['grave'], 'modo': 'segue', 'seg': {'a': 10, 'r': 200}}, 'faixa': (0.0, 1.0)},
     'drop':    {'mod': {'b': [], 'modo': 'disparo', 'ev': {'src': 'secao:drop'}, 'env': {'a': 0, 'd': 8}}, 'faixa': (0.0, 1.0)},
     'abaixa':  {'mod': {'b': [], 'modo': 'disparo', 'ev': {'src': 'kick'}, 'env': {'a': 0, 'd': 0.5}}, 'faixa': (0.0, -0.5)},
 }
@@ -949,6 +994,10 @@ if __name__ == '__main__':  # self-check (roda: python dash_data.py)
     assert pin_rect({'box': [0, 0, 1000, 800], 'onde': 'nw', 'tam': 0.3, 'aspect': 1.5})[:2] == (16, 16) and norm_pin({'box': [1, 2]}) is None
     assert band_gate(0.3, None) == 0.3 and band_gate(0.3, {'th': 0.4, 'm': 'ativa'}) == 0.0 and band_gate(0.5, {'th': 0.4}) == 0.5, 'limiar ativa = gate'
     assert band_gate(0.9, {'th': 0.6, 'm': 'teto'}) == 0.6 and band_gate(0.2, {'th': 0.6, 'm': 'teto'}) == 0.2, 'limiar teto = limite'
+    assert norm_silencio({'amp': 0.0123456, 'bass': 1e-5, 'bands': {'Air': 0.002, 'lixo': 9}, 'flux': {'chimbal': 0.5, 'x': 1},
+                          'quando': '2026-11-19 10:00'}) == {'amp': 0.01235, 'bass': 1e-5, 'bands': {'Air': 0.002}, 'flux': {'chimbal': 0.5},
+                                                              'quando': '2026-11-19 10:00'}, 'silencio normalizado'
+    assert norm_silencio(None) == {} and norm_silencio({'amp': 'x'}) == {} and norm_silencio({'amp': 0}) == {}, 'lixo/vazio = sem calibracao'
     assert norm_band_gate({'Air': {'th': 2, 'm': 'x'}, 'amp': {'th': 1, 'm': 'teto'}, 'lixo': {'th': .5}, 'kick': {'th': 0}}, ('Air', 'amp', 'kick')) \
         == {'Air': {'th': 1.0, 'm': 'ativa'}}, 'limiar: so\' faixa conhecida, neutro sai'
     # GRAFO: a cena antiga vira saida 1 com as caixas no ar, na mesma ordem; ja' migrada = a mesma lista

@@ -1,5 +1,6 @@
 // fx: limiar=0.5, borda=0.3
 // cat: mascara
+// oculto: igual ao Assunto com a chave inverter ligada — a biblioteca mostra so' o Assunto (cenas antigas seguem rodando)
 // ATOMOS · Fundo. Máscara do FUNDO: tudo menos a pessoa/objeto principal (IA U²-Net; o contrário do Assunto).
 // Efeitos da caixa só no fundo. limiar = a partir de que certeza é pessoa; borda = macia/dura. Pra TIRAR o fundo
 // (transparente), use o Assunto com "recortar" na caixa. Sem a detecção ainda = fundo inteiro.

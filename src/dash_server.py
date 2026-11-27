@@ -29,16 +29,11 @@ import luzes      # luzes: procurar na rede (Art-Net/WLED)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))          # src/
 _ROOT = os.path.dirname(_HERE)                              # raiz do repo
-_HTML = os.path.join(_ROOT, 'dash.html')
-_HTML2 = os.path.join(_ROOT, 'dash2.html')                   # v2 (ao vivo), servido em /v2
-_HTML3 = os.path.join(_ROOT, 'dash3.html')                   # v3 (modulos encadeados), servido em /v3
-_HTML4 = os.path.join(_ROOT, 'dash4.html')                   # v4 (canvas de fluxo: pecas, ramos, moduladores), /v4
 _HTML5 = os.path.join(_ROOT, 'dash5.html')                   # v5 (canvas de caixas de atomos + SAIDA), /v5
 _FAVICON = os.path.join(_ROOT, 'favicon.png')  # copia do de paulocremas.github.io
 _SHADERS = os.path.join(_ROOT, 'shaders')                   # image.frag + presets/*.frag
 _MEDIA = os.path.join(_ROOT, 'media')                       # galeria da aba Visuais (imgs/videos)
 _TRANS = os.path.join(_ROOT, 'transitions')                 # galeria "Transições": *.glsl
-_GROUPS = os.path.join(_SHADERS, 'grupos')                  # ATOMOS COMPOSTOS (dash v4): <nome>.json = {desc, items}
 _RECIPES = os.path.join(_SHADERS, 'receitas')               # RECEITAS (dash v5): cada clássico refeito em átomos + controladores
 _DEFAULT_TUNING = os.path.join(_HERE, 'tuning.py')
 
@@ -202,6 +197,120 @@ def set_band_gate(d, tuning_path=None):
                       'limiar por faixa (dash: coluna do mixer de audio) — ativa = gate, teto = limite', tuning_path)
 
 
+def save_silencio(res, tuning_path=None):
+    """CALIBRAR SILENCIO: grava o piso de ruido medido pelo native (audio_thread, dash_data.norm_silencio) em tuning.SILENCIO.
+    {} = limpar (volta aos pisos fixos). Chamado de uma thread do native no fim da medicao."""
+    return _write_var('SILENCIO', dash_data.norm_silencio(res),
+                      'piso de ruido (dash: calibrar silencio) — o chiado medido; o native ignora numa fonte de audio diferente', tuning_path)
+
+
+def calibrar_silencio(op, tuning_path=None):
+    """POST /silencio: 'medir' = o native ouve SIL_SEGUNDOS (state['cal_req'] -> audio_thread) | 'limpar' = sem calibracao."""
+    if op == 'medir':
+        if _state is not None:
+            _state['cal_req'] = 1
+            _state['cal'] = {'on': 1, 'left': dash_data.SIL_SEGUNDOS}
+        return {'on': 1}
+    if op == 'limpar':
+        save_silencio({}, tuning_path)
+        if _state is not None:
+            _state['cal'] = {'on': 0, 'ok': 1, 'msg': 'sem calibração (pisos fixos)'}
+        return {'on': 0}
+    raise ValueError('op: medir | limpar')
+
+
+# PERFIS DE ENTRADA (revisao geral A5, 2026-11-27): "mic da casa", "linha da mesa"... = um retrato do ajuste do som (faixas, limiares,
+# faixas desligadas, dinamica por faixa e os knobs de kick/volume) em tuning.AUDIO_PERFIS; abrir = reaplica pelos setters de sempre.
+AUDIO_PERFIL_KNOBS = ('AMP_SCALE', 'AMP_SMOOTHING', 'AMP_ATTACK_RATIO', 'KICK_THRESHOLD', 'KICK_DECAY_FRACTION', 'KICK_FADE_FLOOR')
+
+
+def audio_perfil(op, nome='', tuning_path=None):
+    """POST /audio-perfil {op: listar | salvar | abrir | apagar, nome}. Devolve {perfis: [nomes]} (+ aplicado no abrir)."""
+    path = tuning_path or _cfg['tuning_path']
+    ns = {}
+    exec(open(path, encoding='utf-8').read(), ns)
+    perfis = {k: v for k, v in (ns.get('AUDIO_PERFIS') or {}).items() if isinstance(v, dict)}
+    nome = str(nome or '').strip()[:40]
+    if op == 'listar':
+        return {'perfis': sorted(perfis)}
+    if not nome:
+        raise ValueError('falta o nome do perfil')
+    if op == 'salvar':
+        perfis[nome] = {'gate': ns.get('BAND_GATE') or {}, 'off': list(ns.get('BANDS_OFF') or []),
+                        'ranges': [list(r) for r in ns.get('FREQ_BAND_HZ') or []], 'overlap': int(ns.get('HZ_OVERLAP') or 0),
+                        'enabled': int(ns.get('BANDS_ENABLED', 1)),
+                        'tweaks': {k: list(ns[k]) for k in ('BAND_SMOOTHING', 'BAND_ATTACK', 'BAND_PEAK_DECAY') if isinstance(ns.get(k), list)},
+                        'knobs': {k: ns[k] for k in AUDIO_PERFIL_KNOBS if isinstance(ns.get(k), (int, float))}}
+    elif op == 'abrir':
+        q = perfis.get(nome)
+        if not q:
+            raise ValueError('perfil nao existe: ' + nome)
+        set_band_gate(q.get('gate') or {}, path)
+        set_bands_off(q.get('off') or [], path)
+        if q.get('ranges'):
+            set_band_ranges(q.get('overlap', 0), q['ranges'], path, enabled=q.get('enabled', 1))
+        if q.get('tweaks'):
+            set_band_tweaks(q['tweaks'], path)
+        for k, v in (q.get('knobs') or {}).items():
+            if k in AUDIO_PERFIL_KNOBS:
+                set_knob(k, v, path)
+        return {'perfis': sorted(perfis), 'aberto': nome}
+    elif op == 'apagar':
+        perfis.pop(nome, None)
+    else:
+        raise ValueError('op: listar | salvar | abrir | apagar')
+    _write_var('AUDIO_PERFIS', perfis, 'perfis de entrada de som (dash: Equipamento > Entrada > perfil) — mic da casa, linha da mesa...', path)
+    return {'perfis': sorted(perfis)}
+
+
+# CASA DE SHOW (revisao geral P4; Resolume: o preset de Advanced Output e' um arquivo separado da composicao): o mapa de um lugar =
+# telas do palco (SCREENS), raster (PIXEL_MAP) e a calibracao do telao (OUTPUT_GRADE) em tuning.CASAS; abrir = reaplica pelos setters.
+def casa(op, nome='', tuning_path=None):
+    """POST /casa {op: listar | salvar | abrir | apagar, nome}. Devolve {casas: [nomes]} (+ aberta no abrir)."""
+    path = tuning_path or _cfg['tuning_path']
+    ns = {}
+    exec(open(path, encoding='utf-8').read(), ns)
+    casas = {k: v for k, v in (ns.get('CASAS') or {}).items() if isinstance(v, dict)}
+    nome = str(nome or '').strip()[:40]
+    if op == 'listar':
+        return {'casas': sorted(casas)}
+    if not nome:
+        raise ValueError('falta o nome da casa')
+    if op == 'salvar':
+        casas[nome] = {'screens': ns.get('SCREENS') or [], 'pixel_map': ns.get('PIXEL_MAP') or {}, 'grade': ns.get('OUTPUT_GRADE') or {}}
+    elif op == 'abrir':
+        q = casas.get(nome)
+        if not q:
+            raise ValueError('casa nao existe: ' + nome)
+        set_screens(q.get('screens') or [], True, path)
+        if q.get('pixel_map'):
+            set_pixel_map(q['pixel_map'], path)
+        if q.get('grade'):
+            set_output_grade(q['grade'], True, path)
+        return {'casas': sorted(casas), 'aberta': nome}
+    elif op == 'apagar':
+        casas.pop(nome, None)
+    else:
+        raise ValueError('op: listar | salvar | abrir | apagar')
+    _write_var('CASAS', casas, 'casas de show (dash: Equipamento > Telao > casa) — o mapa de cada lugar: telas, raster, calibracao', path)
+    return {'casas': sorted(casas)}
+
+
+MAP_TEST_S = 300   # o PADRAO DE TESTE por bloco desliga sozinho (o dash renova enquanto a aba Telao esta' aberta): nunca fica esquecido no ar
+
+
+def map_test(d):
+    """POST /map-test {test: 0|1, ident: <indice do bloco>}: liga o padrao de teste POR BLOCO na saida real (native OUTPUT_MAP_SRC) e/ou
+    faz um bloco PISCAR 3 s (identificar). So' estado vivo (nada grava)."""
+    if _state is None:
+        return {}
+    if 'test' in d:
+        _state['map_test'] = time.time() + MAP_TEST_S if d.get('test') else 0
+    if d.get('ident') is not None:
+        _state['map_ident'] = [int(d['ident']), time.time() + 3.0]
+    return {'test': 1 if (_state.get('map_test') or 0) > time.time() else 0}
+
+
 TEMPO_QUANTS = ('', 'beat', 'bar', 'phrase')   # GRADE de toda acao discreta: na hora / batida / "1" do compasso / "1" da frase
 KEY_COLOR_MODES = ('quintas', 'scriabin')  # cor do tom: circulo das quintas / tabela do Scriabin (ritmo.key_rgb)
 
@@ -334,16 +443,6 @@ def _shader_set_dir(setname):
 def _active_shader_set():
     return getattr(_tuning, 'SHADER_SET', 'default') or 'default'
 
-
-def _list_shaders(setname=None):
-    """image.frag (base, aparece em todo set) + presets do set `setname` (ativo se None).
-    Caminhos relativos a shaders/ ('image.frag' | 'presets/<set>/x.frag')."""
-    if setname is None:
-        setname = _active_shader_set()
-    out = ['image.frag'] if os.path.isfile(os.path.join(_SHADERS, 'image.frag')) else []
-    for p in sorted(glob.glob(os.path.join(_SHADERS, 'presets', setname, '*.frag'))):
-        out.append(os.path.relpath(p, _SHADERS).replace(os.sep, '/'))
-    return out
 
 
 def _shader_manifests(names, defaults=False):
@@ -600,7 +699,7 @@ def bind_shader_key(name, key, tuning_path=None):
 
 
 # ---------------- galeria de midia (aba Visuais): MEDIA + MEDIA_KEYS ----------------
-# espelhado no accept= do <input id="media-file"> do dash.html — manter os dois iguais
+# espelhado no accept= do <input id="media-file"> do dash5.html — manter os dois iguais
 _MEDIA_EXT = {'image': {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'},
               'video': {'.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v'}}
 _MEDIA_CHUNK = 1024 * 1024       # upload vai do socket pro disco em blocos (memoria constante)
@@ -922,7 +1021,8 @@ def _norm_rect(r):
 
 
 # fontes de som de um knob com ♪ (= chaves do state no native: as 8 faixas + o kick), ordem do espectro
-MOD_SOURCES = ('subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
+MOD_SOURCES = ('grave', 'medio', 'agudo',   # GRUPOS (dash_data.SOUND_GROUPS): a mais forte das faixas finas de cada um
+               'subbass', 'lowmid', 'midrange', 'highmid', 'presence', 'treble_hi', 'brilho', 'air', 'kick',
                'm1', 'm2', 'm3', 'm4',   # m1..m4 = MACROS (faders no Palco): a mesma faixa lo->hi, movida a mao/MIDI
                'luz', 'mov',              # IMAGEM de entrada: brilho e movimento (dash_data.img_mod_levels)
                'lfo',                     # OSCILADOR no tempo da musica (dash v4: modulador como peca); forma em 'lfo'
@@ -958,8 +1058,10 @@ def _norm_mod1(v, extra=True):
     if v.get('modo') in dash_data.MOV_MODES:
         d['modo'] = v['modo']
     e = v.get('ev') if isinstance(v.get('ev'), dict) else None
-    if d.get('modo') == 'disparo' and e and e.get('src') in dash_data.EVENTS:
+    if d.get('modo') == 'disparo' and e and _ev_ok(e.get('src')):
         ev = {'src': e['src']}
+        if e.get('rel') and e['src'] in dash_data.SOUND_EVENTS:   # "sem som: segue o relogio" (native: contador kick~/golpe~)
+            ev['rel'] = 1
         c = e.get('cond') if isinstance(e.get('cond'), dict) else {}
         if c.get('first'):
             ev['cond'] = {'first': 1}
@@ -988,6 +1090,14 @@ def _norm_mod1(v, extra=True):
         if mais:
             d['mais'] = mais
     return d if d['b'] or 'ev' in d else None
+
+
+def _ev_ok(v):   # nome de EVENTO valido: o vocabulario + o COMPARADOR de um alterador (fase 3: 'cmp:<id>' sobe quando o sinal dele passa de 0,5)
+    return isinstance(v, str) and (v in dash_data.EVENTS or bool(re.fullmatch(r'cmp:[A-Za-z0-9_-]{1,24}', v)))
+
+
+def _acao_verb(k):   # (fase 3: EVENTO VIRA CABO) o que um evento faz no destino
+    return k in ('liga', 'desliga', 'alterna', 'proximo') or bool(re.fullmatch(r'opcao:\w{1,32}', str(k)))
 
 
 def _norm_overlays(items, dedupe=True):
@@ -1041,6 +1151,10 @@ def _norm_overlays(items, dedupe=True):
                 o['gname'] = str(it['gname'])[:40]
         if it.get('auto'):  # fonte com AUTO-NIVEL (native _auto_levels: faixa estavel na troca de camera/luz)
             o['auto'] = 1
+        if isinstance(it.get('tray'), list):   # BANDEJA de cartuchos da fonte (plano fase 2): as fontes que o leitor troca num clique
+            tr = [str(x).replace('\\', '/').lstrip('/') for x in it['tray'] if x and isinstance(x, str) and '..' not in x][:8]
+            if tr:
+                o['tray'] = list(dict.fromkeys(tr))
         if it.get('audio') and not aud:   # 🔊 video = fonte de audio no lugar do PulseAudio (so' 1)
             o['audio'], aud = 1, True
         if isinstance(it.get('fx'), dict):   # forcas desta entrada da pilha (ausente = fx[shader] da fonte)
@@ -1058,9 +1172,9 @@ def _norm_overlays(items, dedupe=True):
                 del o['xy']
         except (KeyError, TypeError, ValueError):
             pass
-        ac = {k: it['acao'][k] for k in ('liga', 'desliga') if isinstance(it.get('acao'), dict) and it['acao'].get(k) in dash_data.EVENTS
-              and not it['acao'][k].endswith('.on')}
-        if ac:              # ACAO da caixa por EVENTO (native): {liga: 'secao:drop', desliga: 'secao:pausa'} -> off na SAIDA
+        ac = {k: v for k, v in (it.get('acao') or {}).items() if isinstance(it.get('acao'), dict) and _acao_verb(k) and _ev_ok(v)
+              and not v.endswith('.on')}
+        if ac:              # ACAO por EVENTO (native): {liga|desliga|alterna: ev} = o LIGA; {proximo: ev} = o leitor da fonte; {'opcao:<knob>': ev} = o seletor
             o['acao'] = ac
         est = {k: it['estado'][k] for k in ('semear', 'limpar') if isinstance(it.get('estado'), dict)
                and it['estado'].get(k) in dash_data.EVENTS and not it['estado'][k].endswith('.on')}
@@ -1106,7 +1220,7 @@ def _norm_layer(L):
         m = {'opacity': d for n, v in L['mod'].items() if n == 'opacity' and (d := _norm_mod1(v))}
         if m:
             o['mod'] = m
-    ac = {k: L['acao'][k] for k in ('liga', 'desliga') if isinstance(L.get('acao'), dict) and L['acao'].get(k) in dash_data.EVENTS
+    ac = {k: L['acao'][k] for k in ('liga', 'desliga', 'alterna') if isinstance(L.get('acao'), dict) and _ev_ok(L['acao'].get(k))
           and not L['acao'][k].endswith('.on')}
     if ac:
         o['acao'] = ac
@@ -1642,6 +1756,7 @@ def request_scene(name):
     """Pedido de troca vindo do dash / tecla: valida e deixa pro loop GL aplicar no fim do
     frame (ele captura a imagem que sai pra transicao). Sem loop GL (testes): aplica direto."""
     _find_scene(name)
+    grid_flush()   # a acao por evento da cena que SAI vai pro disco antes da troca (F2)
     if _state is not None and _state.get('gl_running'):
         _state['scene_pending'] = {'name': name, 'transition': True}
     else:
@@ -2322,20 +2437,6 @@ def set_try(key, variants):
     return len(vs)
 
 
-def _list_groups(gdir=None):
-    """Biblioteca de ATOMOS COMPOSTOS: [{name, desc, items}] (items = pilha normalizada, sem grp)."""
-    out = []
-    for f in sorted(glob.glob(os.path.join(gdir or _GROUPS, '*.json'))):
-        try:
-            with open(f, encoding='utf-8') as fh:
-                g = json.load(fh)
-            items = _norm_overlays(g.get('items'), dedupe=False)
-        except (OSError, ValueError, TypeError, AttributeError):
-            continue
-        if items:
-            out.append({'name': os.path.splitext(os.path.basename(f))[0], 'desc': str(g.get('desc') or '')[:200], 'items': items})
-    return out
-
 
 def _list_recipes(rdir=None):
     """RECEITAS (2026-11-04): os presets CLASSICOS (sortidos/, default/) refeitos como corrente de ATOMOS, com o som/giro
@@ -2360,23 +2461,9 @@ def _list_recipes(rdir=None):
     return out
 
 
-def save_group(name, items, desc='', gdir=None):
-    """Grava um grupo (varios modulos -> 1 peca, com os knobs publicados) em shaders/grupos/<nome>.json."""
-    name, d = _slugify(str(name or '')), gdir or _GROUPS
-    clean = [{k: v for k, v in o.items() if k not in ('grp', 'gname')} for o in _norm_overlays(items, dedupe=False)]
-    if not clean:
-        raise ValueError('grupo vazio')
-    os.makedirs(d, exist_ok=True)
-    _write_atomic(os.path.join(d, name + '.json'), json.dumps({'desc': str(desc or '')[:200], 'items': clean},
-                                                             ensure_ascii=False, indent=1))
-    return name
 
 
-def delete_group(name, gdir=None):
-    os.remove(os.path.join(gdir or _GROUPS, _slugify(str(name or '')) + '.json'))
-
-
-GRID_OPS = ('fx_off', 'box_off', 'layer_off', 'ev')
+GRID_OPS = ('fx_off', 'box_off', 'layer_off', 'ev', 'src_set', 'src_next', 'opt_next')   # src_*: o LEITOR (fase 2); opt_next: o seletor (fase 3)   # src_*: o LEITOR de cartuchos (fase 2)
 
 
 def grid_request(g):
@@ -2385,7 +2472,7 @@ def grid_request(g):
     (tuning.SCENE_QUANT: batida/compasso/frase). Devolve o pedido normalizado."""
     if not isinstance(g, dict) or g.get('op') not in GRID_OPS:
         raise ValueError('op desconhecida')
-    q = {k: g[k] for k in ('op', 'key', 'j', 'file', 'off', 'name', 'node', 'from') if k in g}
+    q = {k: g[k] for k in ('op', 'key', 'j', 'file', 'off', 'name', 'node', 'from', 'dir', 'id', 'n') if k in g}
     q['unit'] = '' if g.get('now') else str(getattr(_tuning, 'SCENE_QUANT', '') or '')
     q['t'] = time.time()
     if not q['unit'] or _state is None:
@@ -2395,8 +2482,50 @@ def grid_request(g):
     return q
 
 
+# A GRADE NAO GRAVA A CADA EVENTO (revisao geral F2, 2026-11-27): um kick com acao chamava set_*(save=True) + save_active_scene() a cada
+# disparo (~4 regravacoes de 20 KB/s, threads concorrentes perdiam atualizacao). Agora a acao muda SO' o estado vivo (sob _GRID_LOCK) e o
+# disco espera GRID_SAVE_S parado (_grid_persist_later); trocar de cena / sair grava antes (grid_flush).
+_GRID_LOCK = threading.RLock()
+_grid_save_t = None
+GRID_SAVE_S = 1.5
+
+
+def _grid_persist_later():
+    global _grid_save_t
+    with _GRID_LOCK:
+        if _grid_save_t is not None:
+            _grid_save_t.cancel()
+        _grid_save_t = threading.Timer(GRID_SAVE_S, grid_flush)
+        _grid_save_t.daemon = True
+        _grid_save_t.start()
+
+
+def grid_flush():
+    """Grava no tuning.py o que as acoes da grade mudaram (se ha' algo pendente)."""
+    global _grid_save_t
+    with _GRID_LOCK:
+        t, _grid_save_t = _grid_save_t, None
+        if t is None:
+            return False
+        t.cancel()
+        if _state is None or not _cfg.get('tuning_path'):
+            return False
+        set_bindings(_current_bindings(), save=True)
+        set_overlays([dict(o) for o in _current_layers('overlays', 'OVERLAYS')], save=True)
+        save_active_scene()
+        return True
+
+
+atexit.register(grid_flush)
+
+
 def grid_apply(g):
-    """Aplica UMA acao da grade (chamado pelo native na fronteira, numa thread; ou na hora)."""
+    """Aplica UMA acao da grade (chamado pelo native na fronteira, numa thread; ou na hora). So' o estado vivo: o disco = grid_flush."""
+    with _GRID_LOCK:
+        return _grid_apply(g)
+
+
+def _grid_apply(g):
     op = g.get('op')
     if op == 'ev':
         if g.get('name') in dash_data.EVENTS and _state is not None:
@@ -2413,7 +2542,31 @@ def grid_apply(g):
             it[j]['off'] = 1
         else:
             it[j].pop('off', None)
-        set_bindings(b, save=True)
+        set_bindings(b, save=False)
+    elif op == 'opt_next':   # SELETOR (fase 3): a proxima opcao do knob de escolha n do atomo key[j] (o valor da opcao i = (i + 0.5) / N)
+        b = _current_bindings()
+        bb = b.get(g.get('key')) or {}
+        it, j, n = bb.get('shaders') or [], g.get('j'), str(g.get('n') or '')
+        if not isinstance(j, int) or not 0 <= j < len(it) or (g.get('file') and it[j].get('file') != g['file']):
+            return
+        try:
+            with open(os.path.join(_SHADERS, it[j]['file']), encoding='utf-8', errors='replace') as f:
+                src = f.read()
+        except OSError:
+            return
+        N = len(dash_data.knob_choices(src).get(n) or [])
+        if N < 2:
+            return
+        own = isinstance(it[j].get('fx'), dict)
+        fx = it[j]['fx'] if own else bb.setdefault('fx', {}).setdefault(it[j]['file'], {})
+        v = fx.get(n, dash_data.parse_fx_defaults(src).get(n, 0.0))
+        i = min(N - 1, max(0, int(float(v) * N)))
+        fx[n] = round(((i + 1) % N + 0.5) / N, 4)
+        set_bindings(b, save=False)
+    elif op in ('src_set', 'src_next'):   # LEITOR (fase 2): a fonte {key | id} passa a ler file (src_set) ou o proximo cartucho da bandeja
+        src_swap(g)                       # (src_next, dir = +1 | -1); a corrente que le ela fica (os atomos leem '@<id>', nao o arquivo)
+        _grid_persist_later()
+        return
     elif op in ('box_off', 'layer_off'):   # layer_off = CAMADA de um staging/saida: {node: '+<id>', from: '@<id>', off}
         cur = [dict(o) for o in _current_layers('overlays', 'OVERLAYS')]
         for o in cur:
@@ -2425,8 +2578,54 @@ def grid_apply(g):
             elif op == 'layer_off' and o.get('kind') and _chkey(o) == g.get('node'):
                 o['layers'] = [dict(L, off=1) if L.get('from') == g.get('from') and g.get('off') else
                                {k: v for k, v in L.items() if k != 'off' or L.get('from') != g.get('from')} for L in o['layers']]
-        set_overlays(cur, save=True)
-    save_active_scene()
+        set_overlays(cur, save=False)
+    _grid_persist_later()
+
+
+def src_swap(g):
+    """Troca o CARTUCHO de uma fonte (grid_apply): acha a fonte pela chave (ou pelo id, se ela ja' trocou desde o pedido), muda o
+    file (dup igual ao renameRowKey do dash), poe o novo na bandeja, move a pilha/mascara dela pra chave nova e liga no pool."""
+    cur = [dict(o) for o in _current_layers('overlays', 'OVERLAYS')]
+    o = next((x for x in cur if not x.get('kind') and g.get('id') and x.get('id') == g.get('id')), None) or \
+        next((x for x in cur if not x.get('kind') and _chkey(x) == g.get('key')), None)
+    if not o or str(o.get('file', '')).startswith('@'):
+        return None
+    tray = list(o.get('tray') or [o['file']])
+    if o['file'] not in tray:
+        tray.insert(0, o['file'])
+    if g.get('op') == 'src_next':
+        i = tray.index(o['file'])
+        f = tray[(i + (-1 if int(g.get('dir') or 1) < 0 else 1)) % len(tray)]
+    else:
+        f = str(g.get('file') or '').replace('\\', '/').lstrip('/')
+    if not f or '..' in f or f == o['file']:
+        return None
+    old = _chkey(o)
+    same = [x for x in cur if x is not o and not x.get('kind') and x.get('file') == f]
+    o['file'] = f
+    if same:
+        o['dup'] = max(int(x.get('dup') or 1) for x in same) + 1
+    else:
+        o.pop('dup', None)
+    if f not in tray:
+        tray.append(f)
+    o['tray'] = tray[-8:]
+    new = _chkey(o)
+    if new != old:
+        b = _current_bindings()
+        if old in b:
+            b[new] = b.pop(old)
+            for x in b.values():
+                for it in x.get('shaders') or []:
+                    if (it.get('ins') or [None])[0] == old:
+                        it['ins'] = [new]
+            set_bindings(b, save=False)
+    set_overlays(cur, save=False)
+    _pool_add('sources', f)
+    return new
+
+
+_EVC = ('kick', 'caixa', 'chimbal', 'golpe', 'batida', 'compasso', 'frase')
 
 
 def _payload():
@@ -2440,14 +2639,17 @@ def _payload():
         'lights': {'cfg': getattr(_tuning, 'LIGHTS', None) or {'on': 0, 'fixtures': []},   # luzes.py (painel: depois)
                    'live': _state.get('lights_live', []),
                    'scan': {k: v for k, v in (_state.get('light_scan') or {}).items()}},   # mapeamento pela camera
-        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), bar=round(_state.get('bar', 0.0), 3), phrase=round(_state.get('phrase', 0.0), 3)),
+        'tempo': dict(_state.get('tempo') or {}, cfg=_tempo_cfg(), sub=int(_state.get('ev_sub') or 0), bar=round(_state.get('bar', 0.0), 3), phrase=round(_state.get('phrase', 0.0), 3)),   # sub = sem som: kick~/golpe~ no relogio
         'macros': [_state.get(f'm{i}', 0.0) for i in range(1, 5)],   # faders M1..M4 (set_macros)
         'mv': {k: round(v, 3) for k, v in list((_state.get('mv') or {}).items())},   # sinal VIVO de cada movimento (id)
         'mv_t': round(time.monotonic() * 1000, 1),   # QUANDO o sinal foi lido (ms): o osciloscopio do dash espaca pelo servidor, nao pela chegada (rajadas)
         'mv_freeze': int(_state.get('mv_freeze') or 0),
+        'evc': {k: int(v) for k, v in (_state.get('ev') or {}).items() if k in _EVC},   # (fase 3) contadores dos EVENTOS: o modulo relogio e som pisca
         'grid': [{k: g.get(k) for k in ('op', 'key', 'j', 'off', 'name', 'unit')} for g in list(_state.get('grid_q') or [])],
         'cue': _state.get('scene_cue') or '',                         # PROXIMA cena (preview/GO)
         'limit': dict(_state.get('limit') or {}, cfg=_limits_cfg()),
+        'silencio': {'cfg': {k: v for k, v in (getattr(_tuning, 'SILENCIO', None) or {}).items() if k in ('quando', 'amp', 'fonte')},
+                     'cal': _state.get('cal') or {}},   # CALIBRAR SILENCIO: quando/ruido + a medicao em andamento (left) ou o resultado (msg)
         'vcam': dict(_state.get('vcam') or {}, cfg=dash_data.vcam_cfg(getattr(_tuning, 'VCAM', None))),   # webcam virtual    # protecao: ganho agora + motivo   # ritmo.py: BPM, TAP, tom, compasso
         'dominant': [round(c, 3) for c in _state.get('dominant', (0.0, 0.0, 0.0))],
         'knobs': _read_knobs(),
@@ -2496,11 +2698,7 @@ def _payload():
         'scene': _active_scene_name(),   # set ativo (a lista vem de /scenes)
         'bounce_busy': [os.path.relpath(p, _media_dir()).replace(os.sep, '/')
                         for p in _state.get('bounce_busy', [])],
-        'html_mtime': os.path.getmtime(_HTML),   # cliente recarrega a aba quando muda
-        'html2_mtime': os.path.getmtime(_HTML2) if os.path.exists(_HTML2) else 0,   # idem, v2
-        'html3_mtime': os.path.getmtime(_HTML3) if os.path.exists(_HTML3) else 0,   # idem, v3
-        'html4_mtime': os.path.getmtime(_HTML4) if os.path.exists(_HTML4) else 0,   # idem, v4
-        'html5_mtime': os.path.getmtime(_HTML5) if os.path.exists(_HTML5) else 0,   # idem, v5
+        'html5_mtime': os.path.getmtime(_HTML5) if os.path.exists(_HTML5) else 0,   # cliente recarrega a aba quando o dash5 muda
     }
 
 
@@ -2524,18 +2722,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split('?')[0]
-        if path in ('/', '/dash.html'):
-            self._send(200, 'text/html; charset=utf-8', open(_HTML, 'rb').read())
-        elif path in ('/v2', '/dash2.html'):
-            self._send(200, 'text/html; charset=utf-8', open(_HTML2, 'rb').read())
-        elif path in ('/v3', '/dash3.html'):
-            self._send(200, 'text/html; charset=utf-8', open(_HTML3, 'rb').read())
-        elif path in ('/v4', '/dash4.html'):
-            self._send(200, 'text/html; charset=utf-8', open(_HTML4, 'rb').read())
-        elif path in ('/v5', '/dash5.html', '/v6'):   # /v6 = o mesmo dash5 com o canvas dos modulos como jogo (prova)
+        if path in ('/', '/v5', '/dash5.html', '/v6'):   # o dash = dash5 (o canvas dos modulos como jogo); v1-v4 apagados (2026-11-26, plano fase 1)
             self._send(200, 'text/html; charset=utf-8', open(_HTML5, 'rb').read())
-        elif path == '/groups':   # atomos compostos (dash v4)
-            self._send(200, 'application/json', json.dumps({'list': _list_groups()}).encode())
         elif path == '/receitas':   # classicos refeitos em atomos (dash v5)
             self._send(200, 'application/json', json.dumps({'list': _list_recipes()}).encode())
         elif path in ('/favicon.png', '/favicon.ico'):  # navegador tambem sonda /favicon.ico
@@ -2560,6 +2748,23 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(204, 'text/plain', b'')
             else:
                 data, w, h = got
+                # (fase 1, 2026-11-26) ?w= a largura que a previa OCUPA na tela (o modulo de longe pede menos: passo inteiro, sem
+                # interpolar) e ?fmt=rgba (o dash poe direto num ImageData, sem o laco rgb->rgba no JS a cada quadro)
+                want = int((q.get('w') or ['0'])[0] or 0)
+                rgba = (q.get('fmt') or [''])[0] == 'rgba'
+                if (0 < want < w) or rgba:
+                    try:
+                        import numpy as np
+                        a = np.frombuffer(data, np.uint8).reshape(h, w, 3)
+                        if 0 < want < w:
+                            k = max(1, w // want)
+                            a = a[::k, ::k]
+                        if rgba:
+                            a = np.concatenate([a, np.full(a.shape[:2] + (1,), 255, np.uint8)], 2)
+                        h, w = a.shape[:2]
+                        data = np.ascontiguousarray(a).tobytes()
+                    except (ImportError, ValueError):
+                        pass
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/octet-stream')
                 self.send_header('Content-Length', str(len(data)))
@@ -2607,6 +2812,8 @@ class _Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, 'text/plain', b'nope')
 
+    _SSE_DIFF = ('overlays', 'bindings', 'pool', 'source_fit')   # so' quando mudam (+ refresco a cada 1 s)
+
     def _sse(self):
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream')
@@ -2615,10 +2822,21 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             # `self.server is _cfg['srv']` deixa de bater quando um hot-reload troca o servidor
             # -> este loop sai, o EventSource do browser cai e reconecta sozinho no novo.
+            # ESTADO POR DIFERENCA (plano, fase 1, 2026-11-26): o patch (overlays/bindings/pool/fit) so' vai quando MUDA (+ 1x por
+            # segundo de refresco): antes ia inteiro 30x/s e o dash trocava os objetos dos nos no meio dos gestos (boxDrag, TOUCH_MS)
+            last, tick = {}, 0
             while _cfg['is_running']() and self.server is _cfg.get('srv'):
-                self.wfile.write(b'data: ' + json.dumps(_payload()).encode() + b'\n\n')
+                p, tick = _payload(), tick + 1
+                for k in self._SSE_DIFF:
+                    if k in p:
+                        sk = json.dumps(p[k], sort_keys=True)
+                        if sk == last.get(k) and tick % 30:
+                            del p[k]
+                        else:
+                            last[k] = sk
+                self.wfile.write(b'data: ' + json.dumps(p).encode() + b'\n\n')
                 self.wfile.flush()
-                time.sleep(1 / 30)  # 30 Hz — audio novo a ~43 Hz; o dash v2 interpola a 60 fps
+                time.sleep(1 / 30)  # 30 Hz — audio novo a ~43 Hz
         except (BrokenPipeError, ConnectionResetError):
             pass  # aba fechou
 
@@ -2658,17 +2876,6 @@ class _Handler(BaseHTTPRequestHandler):
                 b = json.loads(raw.decode())
                 self._send(200, 'application/json', json.dumps({'n': set_try(b.get('key'), b.get('variants'))}).encode())
             except (KeyError, ValueError, TypeError, AttributeError) as e:
-                self._send(400, 'text/plain', str(e).encode())
-            return
-        if path in ('/group-save', '/group-del'):   # {name, items, desc} | {name}
-            try:
-                b = json.loads(raw.decode())
-                if path == '/group-save':
-                    save_group(b['name'], b['items'], b.get('desc', ''))
-                else:
-                    delete_group(b['name'])
-                self._send(200, 'application/json', json.dumps({'list': _list_groups()}).encode())
-            except (KeyError, ValueError, TypeError, AttributeError, OSError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
         if path == '/vcam':   # {on, w, fps}
@@ -2777,6 +2984,27 @@ class _Handler(BaseHTTPRequestHandler):
                 out = set_bands_off(json.loads(raw.decode())['off'])
                 self._send(200, 'application/json', json.dumps({'off': out}).encode())
             except (KeyError, ValueError, TypeError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path in ('/casa', '/map-test'):   # casa de show (P4) | padrao de teste por bloco / identificar (P2)
+            try:
+                b = json.loads(raw.decode() or '{}')
+                out = casa(b.get('op', 'listar'), b.get('nome', '')) if path == '/casa' else map_test(b)
+                self._send(200, 'application/json', json.dumps(out).encode())
+            except (KeyError, ValueError, TypeError, OSError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/audio-perfil':   # {op: listar | salvar | abrir | apagar, nome} — perfis de entrada (A5)
+            try:
+                b = json.loads(raw.decode() or '{}')
+                self._send(200, 'application/json', json.dumps(audio_perfil(b.get('op', 'listar'), b.get('nome', ''))).encode())
+            except (KeyError, ValueError, TypeError, OSError) as e:
+                self._send(400, 'text/plain', str(e).encode())
+            return
+        if path == '/silencio':   # {op: 'medir' | 'limpar'} — CALIBRAR SILENCIO
+            try:
+                self._send(200, 'application/json', json.dumps(calibrar_silencio(json.loads(raw.decode()).get('op'))).encode())
+            except (ValueError, AttributeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
         if path == '/band-gate':   # {gate: {'Sub-bass': {th: 0.3, m: 'ativa'|'teto'}, 'amp': ...}}
@@ -3009,8 +3237,9 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, TypeError) as e:
                 self._send(400, 'text/plain', str(e).encode())
             return
-        if path == '/quit':   # 3x Esc no dash = Alt+F4 em tudo: SIGTERM no proprio processo -> o
+        if path == '/quit':   # Esc segurado 2 s no dash = Alt+F4 em tudo: SIGTERM no proprio processo -> o
             # handle_sigterm do native zera running (sai pelo fluxo normal) e o atexit fecha o Brave
+            grid_flush()   # o que a grade mudou e ainda nao foi pro disco (F2)
             self._send(200, 'application/json', b'{"ok":true}')
             threading.Timer(0.1, plat.quit_self).start()
             return
@@ -3213,9 +3442,9 @@ def start(state, tuning_mod, tuning_path, is_running, audio_source='', video_mod
     # poll_interval curto: stop() (shutdown) volta em ~0.1s em vez de 0.5s -> hot-reload sem glitch
     threading.Thread(target=lambda: srv.serve_forever(poll_interval=0.1), daemon=True).start()
     url = f'http://127.0.0.1:{port}'
-    print(f'dash: {url}  (tabs Audio/Image no header, ou ?panel=audio | ?panel=image p/ popup)')
+    print(f'dash: {url}/v6')
     if open_browser:
-        _open_dash_window(url + '/v6')   # o dash principal: dash5 com o canvas de JOGO (/v5?html = o canvas HTML de reserva); v4 em /v4, v3 em /v3, v2 em /v2, v1 em /
+        _open_dash_window(url + '/v6')   # o dash: dash5 com o canvas de JOGO
 
 
 # navegadores com --app/--user-data-dir (familia Chromium), na ordem de preferencia
@@ -3354,6 +3583,10 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert _norm_mod1({'b': ['lfo'], 'lfo': {'f': 'passos', 'st': [1, 0, 2, 'x']}})['lfo']['st'] == [1.0, 0.0, 1.0]
     assert _norm_mod1({'b': ['mao.y', 'rosto.on'], 'q': 'energia'}) == {'b': ['mao.y', 'rosto.on'], 'q': 'energia'}
     assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'compasso', 'cond': {'a': 9, 'b': 4}}})['ev']['cond'] == {'a': 4, 'b': 4}
+    assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'kick', 'rel': True}})['ev'] == {'src': 'kick', 'rel': 1}, 'sem som: relogio'
+    assert 'rel' not in _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'batida', 'rel': 1}})['ev'], 'rel so' + "'" + ' nos eventos do som'
+    assert _norm_mod1({'b': [], 'modo': 'disparo', 'ev': {'src': 'chimbal', 'rel': 1}})['ev'] == {'src': 'chimbal', 'rel': 1}
+    assert _norm_mod1({'b': ['grave', 'agudo'], 'modo': 'segue'})['b'] == ['grave', 'agudo'], 'grupos de faixas = fontes'
     ac = _norm_overlays([{'file': 'x.mp4', 'acao': {'liga': 'secao:drop', 'desliga': 'mao.on', 'x': 'kick'}}])[0]
     assert ac['acao'] == {'liga': 'secao:drop'}, ac
     assert not ({'id', 'grp', 'pub', 'gname'} & set(v4[1])), 'id/grp invalidos e pub que nao e lista somem'
@@ -3389,20 +3622,6 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     assert set_try('cam', []) == 0 and _state['try'] is None, 'lista vazia para a previa'
     assert select_source('@k7') == '@k7' and _state['selected'] == '@k7', 'ramo: selecionar nao abre captura'
     _state = _st0
-    gd = tempfile.mkdtemp()
-    assert save_group('Neon sujo!', [{'file': 'x.frag', 'grp': 'g1', 'gname': 'N', 'pub': ['forca']}, {'file': 'y.frag'}], 'contorno + cor', gd) == 'Neonsujo'
-    gl = _list_groups(gd)
-    assert gl == [{'name': 'Neonsujo', 'desc': 'contorno + cor', 'items': [{'file': 'x.frag', 'opacity': 1.0, 'pub': ['forca']},
-                                                                            {'file': 'y.frag', 'opacity': 1.0}]}], gl
-    open(os.path.join(gd, 'quebrado.json'), 'w', encoding='utf-8').write('{nao e json')
-    assert [g['name'] for g in _list_groups(gd)] == ['Neonsujo'], 'json quebrado e pulado'
-    delete_group('Neonsujo', gd)
-    assert _list_groups(gd) == []
-    try:
-        save_group('x', [], '', gd)
-        raise AssertionError('grupo vazio devia falhar')
-    except ValueError:
-        pass
     assert _norm_overlays([{'file': 'a.png', 'opacity': 1, 'off': True}, {'file': 'b.png', 'off': 0}]) == \
         [{'file': 'a.png', 'opacity': 1.0, 'off': 1}, {'file': 'b.png', 'opacity': 1.0}], 'off (desligada) se perdeu'
     assert [o.get('audio') for o in _norm_overlays([{'file': 'a.mp4', 'audio': 1}, {'file': 'b.mp4', 'audio': True},
@@ -3483,10 +3702,31 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
     except ValueError:
         pass
     assert set_bands_off(['Air', 'lixo', 'kick'], p) == ['kick', 'Air'], 'faixas desligadas: validas, ordem fixa'
+    assert save_silencio({'amp': 0.01, 'bass': 0.002, 'bands': {'Air': 0.001}, 'fonte': 'mic'}, p)['bands'] == {'Air': 0.001} \
+        and save_silencio({}, p) == {} and open(p, encoding='utf-8').read().count('SILENCIO = ') == 1, 'silencio: grava e limpa ({} e\' valido)'
     assert set_band_gate({'Air': {'th': 0.4, 'm': 'teto'}, 'amp': {'th': 0}}, p) == {'Air': {'th': 0.4, 'm': 'teto'}} \
         and open(p, encoding='utf-8').read().count('BAND_GATE = ') == 1, 'limiar por faixa: grava so\' o que nao e\' neutro'
     assert set_bands_off(['Sub-bass'], p) == ['Sub-bass'] and open(p, encoding='utf-8').read().count('BANDS_OFF = ') == 1, \
         'sem a linha: cria no fim; com ela: reescreve'
+    # PERFIS DE ENTRADA (A5): salvar retrata o ajuste; mudar; abrir volta; apagar tira
+    assert audio_perfil('salvar', 'mic da casa', p)['perfis'] == ['mic da casa']
+    set_bands_off(['Air'], p); set_band_gate({'Air': {'th': 0.7, 'm': 'ativa'}}, p)
+    assert audio_perfil('abrir', 'mic da casa', p)['aberto'] == 'mic da casa'
+    ns = {}; exec(open(p, encoding='utf-8').read(), ns)
+    assert ns['BANDS_OFF'] == ['Sub-bass'] and ns['BAND_GATE'] == {'Air': {'th': 0.4, 'm': 'teto'}}, ('perfil nao voltou', ns['BANDS_OFF'], ns['BAND_GATE'])
+    assert audio_perfil('apagar', 'mic da casa', p)['perfis'] == [] and audio_perfil('listar', '', p) == {'perfis': []}
+    # CASA DE SHOW (P4): salvar retrata telas + raster; mudar; abrir volta
+    set_screens([{'name': 'esq', 'x': 0, 'y': 0, 'w': 2, 'h': 1, 'pw': 400, 'ph': 200}], True, p); set_pixel_map({'on': 1, 'w': 800, 'h': 600}, p)
+    assert casa('salvar', 'galpão', p)['casas'] == ['galpão']
+    set_screens([], True, p); set_pixel_map({'on': 0, 'w': 1920, 'h': 1080}, p)
+    assert casa('abrir', 'galpão', p)['aberta'] == 'galpão'
+    ns = {}; exec(open(p, encoding='utf-8').read(), ns)
+    assert [t['name'] for t in ns['SCREENS']] == ['esq'] and ns['PIXEL_MAP'] == {'on': 1, 'w': 800, 'h': 600}, ('casa nao voltou', ns['SCREENS'], ns['PIXEL_MAP'])
+    assert casa('apagar', 'galpão', p)['casas'] == []
+    try:
+        audio_perfil('abrir', 'nao existe', p); raise AssertionError('abrir perfil inexistente devia falhar')
+    except ValueError:
+        pass
 
     # --- channels: lista de tamanho livre, sem slot fixo ---
     open(p, 'w', encoding='utf-8').write('CHANNELS = [\n    {"name": "kick", "src": "", "output": ""},\n]\n')
@@ -3985,10 +4225,32 @@ if __name__ == '__main__':  # self-check do parser de linha (roda: python dash_s
                  save=True, tuning_path=p2)
     ns = {}; exec(open(p2, encoding='utf-8').read(), ns)
     assert ns['OVERLAYS'][1]['nome'] == 'saída 1' and len(ns['OVERLAYS'][1]['layers']) == 2, ns['OVERLAYS']
+    _cfg0 = _cfg.get('tuning_path'); _cfg['tuning_path'] = p2   # a GRADE grava (com atraso, F2) no tuning do CFG: no teste, o temporario
     grid_apply({'op': 'layer_off', 'node': '+o1', 'from': '@c1', 'off': 1})
     assert [L.get('off') for L in _current_overlays()[1]['layers']] == [1, 1], _current_overlays()
     grid_apply({'op': 'layer_off', 'node': '+o1', 'from': '@c1', 'off': 0})
     assert [L.get('off') for L in _current_overlays()[1]['layers']] == [None, None]
+    grid_flush(); _m0 = os.path.getmtime(p2); time.sleep(0.02)
+    grid_apply({'op': 'layer_off', 'node': '+o1', 'from': '@c1', 'off': 1})   # F2: a grade muda o estado vivo, o disco ESPERA
+    assert os.path.getmtime(p2) == _m0, 'a grade gravou o tuning.py na hora (devia esperar GRID_SAVE_S)'
+    assert grid_flush() and os.path.getmtime(p2) > _m0, 'o grid_flush nao gravou o que estava pendente'
+    _ns = {}; exec(open(p2, encoding='utf-8').read(), _ns)
+    assert [L.get('off') for L in _ns['OVERLAYS'][1]['layers']] == [1, 1], _ns['OVERLAYS']
+    assert not grid_flush(), 'sem nada pendente o flush nao grava'
+    grid_apply({'op': 'layer_off', 'node': '+o1', 'from': '@c1', 'off': 0})
+    # LEITOR de cartuchos (fase 2): a bandeja grava; src_next anda nela (e volta pro 1o); src_set poe um novo na bandeja
+    set_overlays([{'file': 'default/a.mp4', 'id': 's1', 'tray': ['default/a.mp4', 'default/b.mp4', '../x']}], save=True, tuning_path=p2)
+    assert _current_overlays()[0]['tray'] == ['default/a.mp4', 'default/b.mp4'], _current_overlays()
+    grid_apply({'op': 'src_next', 'key': 'default/a.mp4'})
+    assert _current_overlays()[0]['file'] == 'default/b.mp4'
+    grid_apply({'op': 'src_next', 'key': 'default/b.mp4'})
+    assert _current_overlays()[0]['file'] == 'default/a.mp4'
+    grid_apply({'op': 'src_set', 'id': 's1', 'key': 'velha', 'file': 'default/c.png'})   # chave velha: acha pelo id
+    assert _current_overlays()[0]['file'] == 'default/c.png' and _current_overlays()[0]['tray'][-1] == 'default/c.png'
+    grid_flush(); _cfg['tuning_path'] = _cfg0   # nada pendente pode sobrar pro tuning de verdade
+    ac = _norm_overlays([{'file': 'x.frag', 'acao': {'alterna': 'kick', 'opcao:modo': 'compasso', 'proximo': 'frase', 'opcao:a b': 'kick', 'x': 'kick'}}], dedupe=False)[0]
+    assert ac['acao'] == {'alterna': 'kick', 'opcao:modo': 'compasso', 'proximo': 'frase'}, ac   # (fase 3) os verbos do evento-cabo
+    assert _norm_overlays([{'file': 'x.frag', 'acao': {'alterna': 'cmp:v12', 'proximo': 'cmp:a b'}}], dedupe=False)[0]['acao'] == {'alterna': 'cmp:v12'}   # o comparador
     set_overlays(_o0 or [], save=True, tuning_path=p2)
     globals().update(_SHADERS=_g0[0], _MEDIA=_g0[1], _TRANS=_g0[2], _tuning=None, _state={})
     _cfg['on_set_input'] = _g0[3]

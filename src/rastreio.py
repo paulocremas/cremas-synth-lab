@@ -40,10 +40,6 @@ COCO = ('pessoa bicicleta carro moto aviao onibus trem caminhao barco semaforo h
         'mesa privada tv notebook mouse controle teclado celular microondas forno torradeira pia geladeira livro relogio '
         'vaso tesoura ursinho secador escova').split()
 
-# ossos do esqueleto do MediaPipe (pares de pontos); o atomo Corpo desenha a mesma lista em GLSL
-OSSOS = ((11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (11, 23), (12, 24), (23, 24),
-         (23, 25), (25, 27), (24, 26), (26, 28), (27, 31), (28, 32), (15, 19), (16, 20))
-
 
 class Rosto:
     W = 320                      # largura em que roda (~2 ms)

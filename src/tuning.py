@@ -21,14 +21,14 @@ BANDS_ENABLED = 1
 # BANDS_OFF: faixas desligadas UMA a UMA (botao na coluna da aba Audio): nomes + "kick" = 0 pro shader/♪
 BANDS_OFF = []
 # BAND_GATE: LIMIAR por faixa (coluna do mixer de audio): {nome: {th, m}}; m "ativa" = gate (abaixo vale 0), "teto" = limite
-BAND_GATE = {}
+BAND_GATE = {"Brilliance": {"th": 0.324, "m": "ativa"}}
 
 # OUT_ANALYSIS_ENABLED: liga a leitura da imagem sintetizada (pos-shader) pros mesmos
 # medidores do Source Image (cor dominante, brilho, grids, histogramas), ~5x/s — tab
 # "Output Image" no dash. Desliga por padrao: e' leitura de GPU (glReadPixels), custa
 # CPU/GPU a mais mesmo raro; liga so quando for de fato calibrar/usar essa aba.
 OUT_ANALYSIS_ENABLED = 1
-OUTPUT_FPS = 60            # fps da janela de saida (dash v2 > Saida: 24/30/50/60)
+OUTPUT_FPS = 30            # fps da janela de saida (dash v2 > Saida: 24/30/50/60)
 PARAM_SMOOTH_MS = 80       # knobs/opacidades/intensidade deslizam ate o valor novo nesse tempo (0 = pula seco)
 # LUZES (Art-Net: refletores DMX, fitas LED/WLED) seguindo a cor da saida + o som — formato em src/luzes.py
 LIGHTS = {"on": 0, "host": "255.255.255.255", "fps": 40, "fixtures": []}
@@ -67,7 +67,7 @@ ATTACK_RATIO = 0.4
 # agora cada faixa tem o SEU release/attack/auto-gain, editado pelo popup da faixa no dash
 # (POST /tweaks reescreve estas 3 listas). Sempre 8 valores cada; o range Hz da faixa fica
 # em FREQ_BAND_HZ. Ver SMOOTHING / ATTACK_RATIO / PEAK_DECAY para o que cada um significa.
-BAND_SMOOTHING  = [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95]  # RELEASE por faixa
+BAND_SMOOTHING  = [0.95, 0.95, 0.94, 0.95, 0.95, 0.95, 0.95, 0.95]  # RELEASE por faixa
 BAND_ATTACK     = [0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]          # fator attack/release por faixa
 BAND_PEAK_DECAY = [0.999, 0.999, 0.999, 0.999, 0.999, 0.999, 0.999, 0.999]  # memoria do teto por faixa
 
@@ -160,6 +160,7 @@ FX = {
 # SUBSTITUI o valor calculado por ela ENQUANTO tiver "src" bound — sem src, a variavel
 # original (FFT do mix principal) continua normal, sem fallback implicito por nome.
 CHANNELS = [
+    {"name": "", "src": "", "output": ""},
 ]
 
 # galeria de midia (aba "Visuals" do dash) — imagens e videos locais que viram o INPUT de
@@ -214,22 +215,49 @@ VIDEO_POOL_MAX = 4
 
 # SETS (cenas) da aba Visuals: fonte + camadas + shader + camadas de shader + forca dos efeitos (dash, sub-aba Sets)
 SCENES = [
-    {"name": "default", "key": "", "transition": "", "selected": "webcam:/dev/video0#2", "sources": [{"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2}, {"file": "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_1080p.mp4", "opacity": 1.0, "off": 1, "rect": [0.1809, 0.0402, 0.5, 0.4598]}], "bindings": {"webcam:/dev/video0": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "region": "bg", "fx": {"temperatura": 0.0, "matiz": 1.0, "exposicao": 0.0, "contraste": 0.0, "realces": 0.5, "sombras": 0.0, "brancos": 0.0, "pretos": 1.0, "claridade": 0.0, "neblina": 0.0, "vibracao": 1.0, "saturacao": 1.0}}, {"file": "image.frag", "opacity": 1.0, "region": "bg", "fx": {}}], "fx": {}}, "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}}, "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}}, "webcam:/dev/video0#2": {"shaders": [{"file": "image.frag", "opacity": 0.133, "off": 1, "fx": {"grayscale": 1.0}}, {"file": "presets/default/Crescendo.frag", "opacity": 0.475, "off": 1, "fx": {}}, {"file": "presets/default/Revelar.frag", "opacity": 0.836, "off": 1, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"]}, "matiz": {"b": ["subbass"]}, "sombras": {"b": ["subbass"]}}}, {"file": "presets/sortidos/CicloDeCor.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/sortidos/Ondular.frag", "opacity": 0.518, "in": "chain", "fx": {"forca": 0.408, "base": 0.084, "layer": 0.937, "freq": 1.0}, "mod": {"forca": {"b": ["subbass"], "lo": 0.0, "hi": 1.0}}}, {"file": "presets/sortidos/Contorno.frag", "opacity": 1.0, "in": "chain", "fx": {"forca": 0.946, "layer": 0.721, "matiz": 0.5, "on_brilliance": 0.0, "base": 1.0, "giro": 0.854, "fundo": 0.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0}}}], "fx": {}}}, "grade": {"on": 1, "fx": {"azul": 0.613, "contraste": 0.383, "exposicao": 0.858}}},
+    {"name": "default", "key": "", "transition": "", "selected": "webcam:/dev/video0", "sources": [{"kind": "out", "id": "o1", "n": 1, "nome": "saída 1", "xy": [2592, 408], "layers": [{"from": "@crprivi"}]}, {"file": "webcam:/dev/video0", "opacity": 1.0, "id": "cy5oemm", "xy": [828, 72], "n": 2}, {"file": "@cy5oemm", "opacity": 1.0, "dup": 2, "id": "crprivi", "xy": [1548, 192], "n": 8}, {"file": "@cy5oemm", "opacity": 1.0, "dup": 3, "id": "cnt8glk", "xy": [936, 432], "n": 9}], "bindings": {"webcam:/dev/video0": {"shaders": [], "fx": {}}, "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}}, "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}}, "webcam:/dev/video0#2": {"shaders": [], "fx": {}}, "~ctl": {"shaders": [], "fx": {}}, "@-#3": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.836, "off": 1, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"], "id": "vpffkvx"}, "matiz": {"b": ["subbass"], "id": "vdx9o72"}, "sombras": {"b": ["subbass"], "id": "vj0lezo"}}}], "fx": {}}, "@-#4": {"shaders": [{"file": "presets/sortidos/CicloDeCor.frag", "opacity": 1.0, "fx": {}}], "fx": {}}, "@-#5": {"shaders": [{"file": "presets/sortidos/Ondular.frag", "opacity": 0.518, "in": "chain", "fx": {"forca": 0.408, "base": 0.084, "layer": 0.937, "freq": 1.0}, "mod": {"forca": {"b": ["subbass"], "lo": 0.0, "hi": 1.0, "id": "vt8lea7"}}}], "fx": {}}, "@-#6": {"shaders": [{"file": "presets/sortidos/Contorno.frag", "opacity": 1.0, "in": "chain", "fx": {"forca": 0.946, "layer": 0.721, "matiz": 0.5, "on_brilliance": 0.0, "base": 1.0, "giro": 0.854, "fundo": 0.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0, "id": "vsbmaij"}}}], "fx": {}}, "@c381jqo": {"shaders": [{"file": "presets/atomos/Onda.frag", "opacity": 1.0, "off": 1, "in": "chain", "id": "poqzvi", "fx": {"forca": 0.445, "tamanho": 0.595, "velocidade": 1.0}}], "fx": {}}, "@cugc06i": {"shaders": [], "fx": {}}, "@c47a91r": {"shaders": [], "fx": {}}, "@c47a91r#2": {"shaders": [{"file": "presets/atomos/Desfocar.frag", "opacity": 0.0, "in": "chain", "id": "ujj7yr", "fx": {"tamanho": 0.05}}], "fx": {}}, "@c381jqo#2": {"shaders": [{"file": "presets/atomos/Contornar.frag", "opacity": 1.0, "in": "chain", "id": "4hlkjd", "fx": {"fundo": 0.75, "limiar": 0.12, "espessura": 0.0, "borda": 0.245}}], "fx": {}}, "@c4g7vmy": {"shaders": [{"file": "presets/atomos/Paleta.frag", "opacity": 1.0, "in": "chain", "id": "5aocyr", "fx": {"forca": 1.0, "paleta": 0.375, "matiz": 0.68}, "mod": {"matiz": {"b": ["lfo"], "lo": 0.948, "hi": 0.891, "lfo": {"f": "sin", "r": 4.0, "ph": 0.0}, "modo": "loop", "id": "vvuugv8", "nome": "respira"}}}], "fx": {}}, "@ci884qn": {"shaders": [{"file": "presets/atomos/Lente.frag", "opacity": 1.0, "off": 1, "in": "chain", "id": "qfrgzh", "fx": {"dobra": 1.0, "onde": 0.5, "modo": 0.75}}], "fx": {}}, "@cwqn92c": {"shaders": [{"file": "presets/atomos/Paleta.frag", "opacity": 1.0, "in": "chain", "id": "y421nb", "fx": {"forca": 1.0, "paleta": 0.125, "matiz": 0.68}, "mod": {"matiz": {"b": ["lfo"], "lo": 0.948, "hi": 0.891, "lfo": {"f": "sin", "r": 4.0, "ph": 0.0}, "modo": "loop", "id": "vvuugv8", "nome": "respira"}}}], "fx": {}}, "@c4g7vmy#2": {"shaders": [{"file": "presets/atomos/Polar.frag", "opacity": 1.0, "in": "chain", "id": "v85gz8", "fx": {"giro": 0.315, "sentido": 0.75, "forca": 0.045}}], "fx": {}}, "@c381jqo#3": {"shaders": [{"file": "presets/atomos/Olhos.frag", "opacity": 1.0, "in": "chain", "id": "gf5m88", "fx": {}}], "fx": {}}, "@c93zl7n": {"shaders": [{"file": "presets/atomos/Paleta.frag", "opacity": 1.0, "in": "chain", "id": "khx7ke", "fx": {"paleta": 0.625}}], "fx": {}}, "@c38inyv": {"shaders": [{"file": "presets/atomos/Rampa.frag", "opacity": 0.0, "in": "chain", "id": "ssp6zz", "fx": {"forma": 0.833, "quantos": 0.01, "angulo": 1.0}}], "fx": {}}, "@cxc5m1e": {"shaders": [{"file": "presets/atomos/Brilhar.frag", "opacity": 1.0, "in": "chain", "id": "kx51ac", "fx": {"forca": 0.89, "limiar": 0.11, "tamanho": 0.27}}], "fx": {}}, "@c9xar51": {"shaders": [{"file": "presets/atomos/Matiz.frag", "opacity": 0.5, "in": "chain", "id": "2mzz0m", "fx": {"giro": 0.0}, "mod": {"giro": {"b": ["lfo"], "lo": 0.0, "hi": 1.0, "lfo": {"f": "saw", "r": 32.0, "ph": 0.0}, "modo": "loop", "id": "v9bs1je"}}}], "fx": {}}, "@czc37sc": {"shaders": [{"file": "presets/atomos/Fatias.frag", "opacity": 1.0, "in": "chain", "id": "gmbyl9", "fx": {"quantos": 0.965, "giro": 0.5}, "mod": {"giro": {"b": ["lfo"], "lo": 0.0, "hi": 0.142, "lfo": {"f": "saw", "r": 32.0, "ph": 0.0}, "modo": "loop", "id": "vgzo6jx"}}}], "fx": {}}, "@cy5oemm#3": {"shaders": [{"file": "presets/atomos/Contornar.frag", "opacity": 1.0, "in": "chain", "id": "16pze5", "fx": {"fundo": 0.75, "limiar": 0.13, "espessura": 0.0}}], "fx": {}}, "@cy5oemm#4": {"shaders": [{"file": "presets/atomos/Cor.frag", "opacity": 1.0, "in": "chain", "id": "axc4ju", "fx": {"limiar": 1.0, "borda": 0.97}}], "fx": {}}, "@cv6oor9": {"shaders": [], "fx": {}}, "@cy5oemm": {"shaders": [], "fx": {}}, "@cy5oemm#2": {"shaders": [{"file": "presets/atomos/Matiz.frag", "opacity": 1.0, "in": "chain", "id": "lxejud", "fx": {"giro": 0.42}}], "fx": {}, "matte": {"items": [{"file": "presets/atomos/Luma.frag", "opacity": 1.0, "ins": ["@cnt8glk"], "id": "y47z4m", "fx": {}}]}}}, "grade": {"on": 1, "fx": {"azul": 0.613, "contraste": 0.383, "exposicao": 0.858}}},
 ]
 SCENE = "default"
 
 # camadas de midia por cima da fonte (dash, aba Visuals)
 OVERLAYS = [
-    {"file": "webcam:/dev/video0", "opacity": 0.276, "dup": 2},
-    {"file": "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_1080p.mp4", "opacity": 1.0, "off": 1, "rect": [0.1809, 0.0402, 0.5, 0.4598]},
+    {"kind": "out", "id": "o1", "n": 1, "nome": "sa\u00edda 1", "xy": [2592, 408], "layers": [{"from": "@crprivi"}]},
+    {"file": "webcam:/dev/video0", "opacity": 1.0, "id": "cy5oemm", "xy": [828, 72], "n": 2},
+    {"file": "@cy5oemm", "opacity": 1.0, "dup": 2, "id": "crprivi", "xy": [1548, 192], "n": 8},
+    {"file": "@cy5oemm", "opacity": 1.0, "dup": 3, "id": "cnt8glk", "xy": [936, 432], "n": 9},
 ]
 
 # fonte/midia -> shaders dela (+ forca dos efeitos), dash aba Visuals > Sets
 BINDINGS = {
-    "webcam:/dev/video0": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 1.0, "region": "bg", "fx": {"temperatura": 0.0, "matiz": 1.0, "exposicao": 0.0, "contraste": 0.0, "realces": 0.5, "sombras": 0.0, "brancos": 0.0, "pretos": 1.0, "claridade": 0.0, "neblina": 0.0, "vibracao": 1.0, "saturacao": 1.0}}, {"file": "image.frag", "opacity": 1.0, "region": "bg", "fx": {}}], "fx": {}},
+    "webcam:/dev/video0": {"shaders": [], "fx": {}},
     "default/2026-09-2601-34-33.mp4#2": {"shaders": [{"file": "image.frag", "opacity": 1.0, "fx": {}}], "fx": {}},
     "default/YTDowncom_YouTube_Animals-On-Trampolines-Compilation_Media_Yp40RfTWRAs_001_100p.mp4": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.505, "fx": {"contraste": 0.0, "vibracao": 1.0, "temperatura": 1.0, "matiz": 1.0, "exposicao": 1.0}}, {"file": "presets/default/Ondas.frag", "opacity": 0.0, "fx": {"foco": 0.392}}, {"file": "presets/default/TipoFumaca.frag", "opacity": 0.3, "fx": {}}], "fx": {}},
-    "webcam:/dev/video0#2": {"shaders": [{"file": "image.frag", "opacity": 0.133, "off": 1, "fx": {"grayscale": 1.0}}, {"file": "presets/default/Crescendo.frag", "opacity": 0.475, "off": 1, "fx": {}}, {"file": "presets/default/Revelar.frag", "opacity": 0.836, "off": 1, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"]}, "matiz": {"b": ["subbass"]}, "sombras": {"b": ["subbass"]}}}, {"file": "presets/sortidos/CicloDeCor.frag", "opacity": 1.0, "fx": {}}, {"file": "presets/sortidos/Ondular.frag", "opacity": 0.518, "in": "chain", "fx": {"forca": 0.408, "base": 0.084, "layer": 0.937, "freq": 1.0}, "mod": {"forca": {"b": ["subbass"], "lo": 0.0, "hi": 1.0}}}, {"file": "presets/sortidos/Contorno.frag", "opacity": 1.0, "in": "chain", "fx": {"forca": 0.946, "layer": 0.721, "matiz": 0.5, "on_brilliance": 0.0, "base": 1.0, "giro": 0.854, "fundo": 0.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0}}}], "fx": {}},
+    "webcam:/dev/video0#2": {"shaders": [], "fx": {}},
+    "~ctl": {"shaders": [], "fx": {}},
+    "@-#3": {"shaders": [{"file": "presets/default/Revelar.frag", "opacity": 0.836, "off": 1, "fx": {"temperatura": 0.363, "matiz": 1.0, "sombras": 0.0, "brancos": 0.927, "pretos": 0.0, "neblina": 1.0, "vibracao": 1.0}, "mod": {"temperatura": {"b": ["subbass", "lowmid", "midrange"], "id": "vpffkvx"}, "matiz": {"b": ["subbass"], "id": "vdx9o72"}, "sombras": {"b": ["subbass"], "id": "vj0lezo"}}}], "fx": {}},
+    "@-#4": {"shaders": [{"file": "presets/sortidos/CicloDeCor.frag", "opacity": 1.0, "fx": {}}], "fx": {}},
+    "@-#5": {"shaders": [{"file": "presets/sortidos/Ondular.frag", "opacity": 0.518, "in": "chain", "fx": {"forca": 0.408, "base": 0.084, "layer": 0.937, "freq": 1.0}, "mod": {"forca": {"b": ["subbass"], "lo": 0.0, "hi": 1.0, "id": "vt8lea7"}}}], "fx": {}},
+    "@-#6": {"shaders": [{"file": "presets/sortidos/Contorno.frag", "opacity": 1.0, "in": "chain", "fx": {"forca": 0.946, "layer": 0.721, "matiz": 0.5, "on_brilliance": 0.0, "base": 1.0, "giro": 0.854, "fundo": 0.0}, "mod": {"forca": {"b": ["subbass", "lowmid", "midrange", "highmid", "kick"], "lo": 0.0, "hi": 1.0, "id": "vsbmaij"}}}], "fx": {}},
+    "@c381jqo": {"shaders": [{"file": "presets/atomos/Onda.frag", "opacity": 1.0, "off": 1, "in": "chain", "id": "poqzvi", "fx": {"forca": 0.445, "tamanho": 0.595, "velocidade": 1.0}}], "fx": {}},
+    "@cugc06i": {"shaders": [], "fx": {}},
+    "@c47a91r": {"shaders": [], "fx": {}},
+    "@c47a91r#2": {"shaders": [{"file": "presets/atomos/Desfocar.frag", "opacity": 0.0, "in": "chain", "id": "ujj7yr", "fx": {"tamanho": 0.05}}], "fx": {}},
+    "@c381jqo#2": {"shaders": [{"file": "presets/atomos/Contornar.frag", "opacity": 1.0, "in": "chain", "id": "4hlkjd", "fx": {"fundo": 0.75, "limiar": 0.12, "espessura": 0.0, "borda": 0.245}}], "fx": {}},
+    "@c4g7vmy": {"shaders": [{"file": "presets/atomos/Paleta.frag", "opacity": 1.0, "in": "chain", "id": "5aocyr", "fx": {"forca": 1.0, "paleta": 0.375, "matiz": 0.68}, "mod": {"matiz": {"b": ["lfo"], "lo": 0.948, "hi": 0.891, "lfo": {"f": "sin", "r": 4.0, "ph": 0.0}, "modo": "loop", "id": "vvuugv8", "nome": "respira"}}}], "fx": {}},
+    "@ci884qn": {"shaders": [{"file": "presets/atomos/Lente.frag", "opacity": 1.0, "off": 1, "in": "chain", "id": "qfrgzh", "fx": {"dobra": 1.0, "onde": 0.5, "modo": 0.75}}], "fx": {}},
+    "@cwqn92c": {"shaders": [{"file": "presets/atomos/Paleta.frag", "opacity": 1.0, "in": "chain", "id": "y421nb", "fx": {"forca": 1.0, "paleta": 0.125, "matiz": 0.68}, "mod": {"matiz": {"b": ["lfo"], "lo": 0.948, "hi": 0.891, "lfo": {"f": "sin", "r": 4.0, "ph": 0.0}, "modo": "loop", "id": "vvuugv8", "nome": "respira"}}}], "fx": {}},
+    "@c4g7vmy#2": {"shaders": [{"file": "presets/atomos/Polar.frag", "opacity": 1.0, "in": "chain", "id": "v85gz8", "fx": {"giro": 0.315, "sentido": 0.75, "forca": 0.045}}], "fx": {}},
+    "@c381jqo#3": {"shaders": [{"file": "presets/atomos/Olhos.frag", "opacity": 1.0, "in": "chain", "id": "gf5m88", "fx": {}}], "fx": {}},
+    "@c93zl7n": {"shaders": [{"file": "presets/atomos/Paleta.frag", "opacity": 1.0, "in": "chain", "id": "khx7ke", "fx": {"paleta": 0.625}}], "fx": {}},
+    "@c38inyv": {"shaders": [{"file": "presets/atomos/Rampa.frag", "opacity": 0.0, "in": "chain", "id": "ssp6zz", "fx": {"forma": 0.833, "quantos": 0.01, "angulo": 1.0}}], "fx": {}},
+    "@cxc5m1e": {"shaders": [{"file": "presets/atomos/Brilhar.frag", "opacity": 1.0, "in": "chain", "id": "kx51ac", "fx": {"forca": 0.89, "limiar": 0.11, "tamanho": 0.27}}], "fx": {}},
+    "@c9xar51": {"shaders": [{"file": "presets/atomos/Matiz.frag", "opacity": 0.5, "in": "chain", "id": "2mzz0m", "fx": {"giro": 0.0}, "mod": {"giro": {"b": ["lfo"], "lo": 0.0, "hi": 1.0, "lfo": {"f": "saw", "r": 32.0, "ph": 0.0}, "modo": "loop", "id": "v9bs1je"}}}], "fx": {}},
+    "@czc37sc": {"shaders": [{"file": "presets/atomos/Fatias.frag", "opacity": 1.0, "in": "chain", "id": "gmbyl9", "fx": {"quantos": 0.965, "giro": 0.5}, "mod": {"giro": {"b": ["lfo"], "lo": 0.0, "hi": 0.142, "lfo": {"f": "saw", "r": 32.0, "ph": 0.0}, "modo": "loop", "id": "vgzo6jx"}}}], "fx": {}},
+    "@cy5oemm#3": {"shaders": [{"file": "presets/atomos/Contornar.frag", "opacity": 1.0, "in": "chain", "id": "16pze5", "fx": {"fundo": 0.75, "limiar": 0.13, "espessura": 0.0}}], "fx": {}},
+    "@cy5oemm#4": {"shaders": [{"file": "presets/atomos/Cor.frag", "opacity": 1.0, "in": "chain", "id": "axc4ju", "fx": {"limiar": 1.0, "borda": 0.97}}], "fx": {}},
+    "@cv6oor9": {"shaders": [], "fx": {}},
+    "@cy5oemm": {"shaders": [], "fx": {}},
+    "@cy5oemm#2": {"shaders": [{"file": "presets/atomos/Matiz.frag", "opacity": 1.0, "in": "chain", "id": "lxejud", "fx": {"giro": 0.42}}], "fx": {}, "matte": {"items": [{"file": "presets/atomos/Luma.frag", "opacity": 1.0, "ins": ["@cnt8glk"], "id": "y47z4m", "fx": {}}]}},
 }
 
 # imagem da CENA ativa (calibrar.frag na mistura, antes da transicao); copia do campo "grade" do set ativo
@@ -247,7 +275,7 @@ PIXEL_MAP = {"on": 0, "w": 800, "h": 600}
 
 # telas do palco fisico (dash v2 > Saida): metros (x, y, w, h; origem em cima a esquerda) + pixels (pw, ph). O canvas e' o contorno delas
 SCREENS = [
-    {"name": "coluna 1", "x": 0.05, "y": 1.75, "w": 1.64, "h": 1.15, "pw": 418, "ph": 295, "ox": 0, "oy": 0},
+    {"name": "coluna 1", "x": 0.05, "y": 1.75, "w": 1.11, "h": 0.7, "pw": 283, "ph": 180, "ox": 0, "oy": 0},
 ]
 
 # telao do simulador (dash v2 > Saida): paineis no raster dele (ox/oy/pw/ph/poly, vem do telao) + o que cada um mostra (x/y/w/h/rot em cima do canvas, metros)
@@ -306,9 +334,7 @@ TELAO = {
 
 # calibracao da saida (telao): shaders/calibrar.frag, knobs na aba Output Image. fx ausente = padrao do .frag
 OUTPUT_GRADE = {
-    "fx": {
-        "exposicao": 1.0
-    },
+    "fx": {},
     "on": 1,
     "test": 0
 }

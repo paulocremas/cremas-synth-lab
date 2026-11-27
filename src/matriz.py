@@ -7,7 +7,7 @@ shaders/presets/atomos/ e' compilado COM o preludio (dash_data.atom_source) e re
   - TRANSPARENCIA (o fio leva o alfa): filtro nao fura a corrente opaca; entrada com vazio -> sem NaN, cor nao mexe na
     cobertura; junta como o motor (dash_data.atom_replaces: filtro = TROCA, quem desenha = POR CIMA);
   - ESTADO: 300 passos com a entrada andando -> nao satura nem morre; limpar zera; todo filtro no loop RETORNO;
-  - EM CIMA (PLANO_CONVERSA.md §2): todo par X ↑ Y (Y solto em cima de X age so' na MARCA de X): sem NaN; cor/luz em cima
+  - EM CIMA (historico/PLANO_CONVERSA.md §2): todo par X ↑ Y (Y solto em cima de X age so' na MARCA de X): sem NaN; cor/luz em cima
     deixa o FUNDO intacto (onde X nao mexeu sai a entrada); Y no neutro = X sozinho; com memoria em cima roda.
 Falhou = buraco no CONTRATO (ou o atomo quebra o contrato), nao "combinacao proibida".
 Sem GL (CI sem tela/GPU) -> run() devolve None e o selfcheck so' avisa. `python src/matriz.py [pasta]` roda

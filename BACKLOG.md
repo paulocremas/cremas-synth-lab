@@ -10,8 +10,7 @@ Ideias combinadas e ainda não feitas. Ao começar uma, mover pro código/commit
 - Ableton Link / MIDI clock como relógio externo; pinça (dois dedos) pro zoom no toque.
 - Movimento com gesto de rastreio em `disparo` compartilhado entre caixas: o contador é por caixa — id próprio por caixa.
 
-## Em cima / v6 (PLANO_CONVERSA.md; feito: marca, em cima com memória/espaço/B/opacidade, card ↳, zona = card, auditoria §5.3)
-- Aprovar o mockup `docs/mock_v6.html` → fases §8.5 (TOCAR novo, mistura = saída, MONTAR, cadeado → TOCAR/MONTAR).
+## Em cima / v6 (historico/PLANO_CONVERSA.md; feito: marca, em cima com memória/espaço/B/opacidade, card ↳, zona = card, auditoria §5.3)
 - Prévia fora do ar ao soltar EM CIMA (o `/try` só troca a pilha principal).
 - Arrastar a linha ↳ pra FORA do card (vira nó no fio) e um nó do fio PRA DENTRO de outro card (vira em cima).
 - Filtro que RECORTA (alfa < entrada) com algo em cima: a marca volta por cima da entrada e o recorte some ali.
@@ -66,9 +65,6 @@ Ainda não:
 - **Várias saídas**: no grafo já há várias SAÍDAS (cada uma um `rect` no palco), mas o pixel map (`PIXEL_MAP` + blocos
   `ox/oy/pw/ph`) segue um raster/janela só. Falta mais de um (uma janela por saída/monitor) pra parede maior que um 4K ou
   LED + projetor. Espelho por bloco.
-- **Load-in**: padrão de teste POR BLOCO no raster (borda 1 px, nome, grade — hoje o Teste.frag/calibração
-  rodam no canvas do palco); exportar PNG do pixel map e do canvas do palco (template pro técnico de LED e
-  pra quem faz conteúdo).
 - **Rotação** e **recorte** (crop) por OBJETO (fonte no canvas). Tela com keystone/quad livre (projeção;
   hoje o painel é retângulo girado + polígono). Ímã com tela girada (hoje desliga).
 - Imagem da cena e calibração ainda passam na janela inteira; a análise/fumaça (`_composite` na
@@ -92,3 +88,63 @@ Ainda não:
 - Release final `v0.1.0`: juntar `dashboard-channels-output` no `master` e taggear de lá.
 - Actions avisa Node 20 depreciado (`checkout@v4`, `setup-python@v5`) — subir as versões.
 - Instalador/zip sem assinatura de código (SmartScreen avisa).
+
+## Plano geral 2026-11-26 (Claude Doc "PRISMA — plano geral: gestos, estética e fluidez") — o que ficou de fora
+- **Verbos de patch com versão** (cada gesto = uma operação pequena + desfazer pela inversa): feito só o "estado por diferença" no SSE;
+  as travas `boxDrag`/`TOUCH_MS`/`swallowClick` continuam. Mexe no formato da cena — fazer com calma, com teste de cada gesto.
+- **Duas camadas de canvas** e **separar o `dash5.html` em arquivos**: adiados — o quadro mede < 1 ms; separar exige o launcher/hot-reload
+  conhecerem os arquivos novos e um build novo do executável.
+- **Executável**: o `launcher.py` novo copia só `dash5.html` + `favicon.png`; o binário de agora ainda copia os 4 dashes antigos (por isso
+  eles continuam só dentro de `dist/prisma/`). Refazer o build (`packaging/build.sh`) e aí apagar `dist/prisma/dash{,2,3,4}.html`.
+- **Leitor de cartuchos**: controles do VÍDEO (pausa, velocidade, voltar ao início) — o motor não tem; arrastar um cartucho PRA FORA da
+  bandeja (hoje: Ctrl+clique tira).
+- **Evento vira cabo**: gate de verdade com duração (hoje os eventos são instantes: o LIGA ALTERNA a cada evento); pads MIDI e seção
+  (`secao:*`, `pad:N`) como jacks no módulo (hoje só pelo cabo que já exista); o evento que dispara ação grava o `tuning.py` a cada vez
+  (`grid_apply` com `save=True`) — se pesar, aplicar só ao vivo.
+- **Pele única**: o código do tema `cel` (56 lugares) e o CSS do canvas HTML apagado continuam no arquivo, sem uso; o corpo do PAINEL ainda
+  usa os controles web (só a tampa e o cabeçalho mudaram); a letra condensada não entrou no canvas (decisão fechada dos módulos).
+
+## Acabamento 2026-11-26 (topo do `dash5.html`, "ACABAMENTO"; fotos e patch em `design/acabamento/`) — o que ficou
+- **Painel do módulo**: só a tampa de borda a borda, separadores mais leves e o nome em 2 linhas; as fichas (parado/normal/soma…) e as
+  linhas continuam web — fazer com as peças do canvas (tecla, seletor de entalhes).
+- **Cartucho, fader e seletor**: ainda sem a luz única (sombra/brilho do acabamento); o osciloscópio do alterador podia ter o
+  traço com brilho de fósforo (halo do `led()`).
+- **Modo leve**: liga pelo custo do JS (`G6.stats.ms`), que não vê rasterização — medir também o fps real antes de ligar.
+
+## Poda 2026-11-26 (TOCAR saiu) — próximos cortes
+- **Coluna da direita** (`#right`): as macros viraram o módulo MÃO (repaginada 2026-11-27); o `#right` ainda existe escondido (os
+  faders `#macros` registram o MIDI `macro:N`, o `#pgm-p`/`#next-p` são levados pra janela do PROGRAMA) — desmontar com calma.
+- **Código morto que ficou**: os ramos JS do tema `cel` (o CSS saiu), o código depois dos `if (G6) return` (canvas HTML antigo) e a
+  geometria /v5 (`tvH`/`tvGeo`: ainda servem a módulo dobrado e espelho), `s.pub` nas cenas, `renderPalette` (roda escondida).
+- **Socorro**: os avisos já moram na boia (2026-11-27); se o "congelar movimentos" e a "imagem crua" ganharem tecla, a gaveta pode virar só o diagnóstico.
+- **Seção como jack** no RELÓGIO E SOM (os pads já são jacks na MÃO; o envelope por seção mostra o nome no gatilho, sem cabo).
+
+## Revisão da pele 2026-11-26 (`design/revisao/`, `tests/estetica.py`) — o que ficou
+- **Gaveta ENTRADA**: as colunas das faixas (kick, amp, Sub-bass…) ainda têm os knobs web teal e os campos numéricos crus — fazer com o
+  knob/fader do canvas.
+- **Janela de saída** sem dados (sem o native) mostra campos vazios e um quadro preto grande: um "aguardando a saída" no lugar.
+- **Painel do ALTERADOR**: o cabeçalho ainda não tem o material (o do módulo de átomo tem); a frase de ajuda longa podia ir pro `title`.
+
+## Repaginada 2026-11-27 (proposta B "cantos", topo do `dash5.html`; book `design/repaginada.html`) — o que ficou
+- **Peles (feito 27/11)**: 10 peles escuras no menu ⋯. Ficou: as GAVETAS (Equipamento/Socorro) e o painel do módulo só trocam o material nas peles
+  que definem `--pnl`; teclas/seletores/faders DENTRO dos módulos continuam com o desenho de hoje; as fontes de cada pele dependem do que o
+  sistema tem (sem internet = a reserva); o book `design/esteticas.html` ainda mostra as versões CLARAS (as do app viraram noturnas).
+- **MÃO**: fader sem Alt+roda (só arrasto/MIDI); a MÃO não entra no retângulo de seleção nem no ARRUMAR; um por cena.
+- **Monitor do PROGRAMA** pode cobrir módulos no canto de baixo (rolar a vista / recolher na aba NO AR).
+
+## Revisão geral 2026-11-27 (book "PRISMA — revisão geral" = `design/revisao-geral/`; decisões em `DECISOES.md`) — o que ficou
+Feito em 8 rodadas: consertos, segurança no show (desfazer por cena, cena segurada, a grade não grava a cada evento), canvas (Ctrl+F,
+G, módulo nasce ligado, alvos 24 px, nomes de longe, menu do direito), biblioteca (lista única com busca, ★/↺, receitas, Fundo oculto),
+entrada simples/avançada + perfis, TELÃO (aba, teste por bloco no motor, PNG, casa, setas), erros de átomo à vista, concordância JS×Python,
+poda (≈460 regras CSS, grupos v4, código Python sem uso), `historico/`, `tests/tudo.sh`, gaveta ≤ 640 px, dica no canvas vazio, HUD do motor.
+- **F1 · migração única no Python** (ids determinísticos, ao ler a cena; o JS `graphFix` é hoje o migrador de verdade) — risco alto: rodada própria.
+- **F6 · bloco CONTROLES** fora de `BINDINGS` (`~ctl`/`~ev`/`~mao`, com migração) e **F8 · plano do quadro** extraído do `render_mix` (testável no CI).
+- **F7 · `tuning.py` como banco** → `scenes.json`: depois de F1/F2.
+- **Etapa 4**: build novo do executável (`packaging/build.sh`) e só então apagar `dist/prisma/dash{,2,3,4}.html` (o binário de 26/10 ainda copia).
+- **Etapa 7**: dividir o `native_synth.py` (motor_grafo, movimento, captura, análise, saída — nomes NOVOS). **Etapa 8**: o painel em pasta (`painel/`).
+- **Sets de shader/mídia** (v1–v3) no servidor: rotas sem cliente, mas a partida e o self-check de mídia ainda usam — desmontar com calma.
+- **1ª abertura**: a semente do repo agora é VAZIA (com a dica); falta um vídeo de demonstração que possa ir no pacote (a pasta `media/` não está no git).
+- **P6**: várias saídas/telões, warp e borda suave entre projetores. **Entrada**: o `// ritmo:` dos átomos (travar no BPM) segue só declarado.
+- **Motor**: a medida de ms por quadro (HUD) e o erro de shader por arquivo só foram testados de forma estática — conferir abrindo o app.
+- **Limpeza de disco** (fora do git, só apagar à mão): `build/` (536 MB, gerado), `dist/prisma_0.60+9358291_amd64.deb` (27 MB, de 23/09).
+

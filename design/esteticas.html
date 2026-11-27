@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRISMA — estéticas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;600&family=Inter:wght@400;600;700&family=Nunito:wght@600;800&family=Orbitron:wght@600;800&family=Righteous&family=Rubik:wght@500;700&family=VT323&family=Work+Sans:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: catálogo de amostras de uma fábrica de instrumentos — cada pele é uma "placa de amostra" do mesmo aparelho.
+   IDEA: o mesmo patch (layout B, MÃO, envelope E2) fotografado em 9 peles, como o mostruário de acabamentos de um sintetizador.
+   PICTURE: a tela inteira de 1366×768 em cada pele + as peças de perto (knob, jack, jack de evento, tecla, fader, cabos).
+   COLOUR/TYPE: a página é cinza neutra (não compete com as peles); Barlow Condensed nos títulos, Plex no texto; cada mockup usa a letra da pele.
+   LAYOUT: regras que não mudam → índice das peles → uma faixa por pele (tela, peças, o que muda, nota) → a escolha final. */
+:root { color-scheme: dark;
+  --bg: #121316; --card: #1a1c20; --line: #2a2d33; --tx: #e8eaed; --tx2: #a9b0b8; --tx3: #767e88; --sel: #ff9d52; --ok: #3fd08f;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif; --body: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace; }
+:root[data-theme=light], :root[data-theme=dark] { color-scheme: dark; }
+* { box-sizing: border-box; min-width: 0; }
+html { scroll-padding-top: 70px; }
+body { margin: 0; background: var(--bg); color: var(--tx); font: 16px/1.55 var(--body); overflow-x: clip; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px max(2vw, 16px) 90px; display: grid; gap: 40px; }
+h1 { font: 700 46px/1.05 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 32px/1.05 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 700 19px/1.2 var(--display); margin: 0; }
+p, li { color: var(--tx2); max-width: 78ch; } p { margin: 0; }
+b.k { color: var(--tx); font-weight: 600; }
+.top { position: sticky; top: 0; z-index: 10; display: flex; gap: 2px 12px; align-items: center; flex-wrap: wrap; padding: 8px max(2vw, 16px); background: #121316ee; border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.top a { color: var(--tx2); text-decoration: none; font: 600 14px var(--body); padding: 8px 2px; white-space: nowrap; }
+.top a:hover { color: var(--tx); } .top .grow { flex: 1; }
+.save { font: 600 13px var(--mono); color: var(--tx3); } .save.ok { color: var(--ok); } .save.err { color: #ff8a8a; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
+.card ul { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
+.idx { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.idx a { display: grid; gap: 6px; text-decoration: none; color: var(--tx); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.idx a:hover { border-color: #3a3e45; }
+.idx svg { width: 100%; height: auto; border-radius: 6px; display: block; }
+.idx b { font: 700 16px var(--display); letter-spacing: .02em; } .idx span { font-size: 13px; color: var(--tx3); }
+.skin { display: grid; gap: 14px; }
+.skin header { display: flex; gap: 10px 16px; align-items: baseline; flex-wrap: wrap; }
+.tag { font: 700 12px var(--body); border-radius: 999px; padding: 2px 10px; border: 1px solid; }
+.tag.minimal { color: #bcd7ff; border-color: #4b6a99; } .tag.louca { color: #ffc2e5; border-color: #99507a; } .tag.ref { color: var(--tx2); border-color: var(--line); }
+.shot { border-radius: 12px; overflow: hidden; border: 1px solid #000; box-shadow: 0 12px 40px #0008; }
+.shot svg, .kit svg { display: block; width: 100%; height: auto; }
+.kit { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.facts div { font-size: 15px; color: var(--tx2); } .facts b { display: block; font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--tx); }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+.q p { font-size: 15px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { font: 600 14px var(--body); color: var(--tx2); background: #202328; border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; min-height: 44px; cursor: pointer; }
+.opt:hover { color: var(--tx); background: #262a30; }
+.opt.on { background: #3a2410; border-color: var(--sel); color: #ffd9b8; } .opt.on::before { content: '✓ '; }
+button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+textarea.nota { width: 100%; min-height: 46px; resize: vertical; background: #101114; color: var(--tx); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 16px var(--body); }
+@media (max-width: 600px) { h1 { font-size: 34px; } h2 { font-size: 26px; } }
+</style>
+</head>
+<body>
+<nav class="top" aria-label="peles" id="nav"><span class="grow"></span><span class="save" id="save">conectando…</span><span class="save" id="count"></span></nav>
+<main>
+<header style="display:grid;gap:12px">
+  <h1>Estéticas: o mesmo PRISMA em nove peles</h1>
+  <p>Cada tela abaixo é o mesmo patch (o layout B que entrou, com a MÃO e o envelope E2), desenhado em uma pele diferente: quatro minimalistas e cinco loucas, com a de hoje como referência. Embaixo de cada uma estão as peças de perto (knob livre e modulado, jack de imagem, jack de evento, tecla, tecla acesa, fader, plaqueta e os três cabos). Marque o que gosta em cada uma e escolha no fim; dá pra misturar (ex.: "os módulos do Aero com a barra do Papel").</p>
+</header>
+
+<section class="card">
+  <h3>O que NÃO muda em nenhuma pele</h3>
+  <ul>
+    <li><b class="k">Cor = significado:</b> imagem azul, sinal âmbar, evento verde, no ar verde, escolhido laranja, perigo vermelho. Cada pele escolhe o TOM, não o sentido. (O Terminal é monocromático: lá o tipo vira traço — cheio, tracejado, pontilhado. Está marcado como risco.)</li>
+    <li><b class="k">As prévias nunca mudam:</b> a imagem dentro das telas é a mesma em todas (aqui, um pôr do sol de amostra).</li>
+    <li><b class="k">Legibilidade primeiro:</b> texto em plaqueta, ≥ 10 px, contraste alto. Pele que não passa disso fica só como inspiração.</li>
+    <li><b class="k">Custo:</b> brilho (glow), vidro e desfoque custam rasterização fora do JS; cada pele diz o quanto pesa no fps.</li>
+  </ul>
+</section>
+
+<section><h2 style="margin-bottom:12px">As peles</h2><div class="idx" id="idx"></div></section>
+<div id="skins" style="display:grid;gap:56px"></div>
+
+<section id="escolha" style="display:grid;gap:12px">
+  <h2>A escolha</h2>
+  <p>Fica salvo; eu leio daqui antes de mexer na pele.</p>
+  <div id="qs" style="display:grid;gap:12px"></div>
+</section>
+</main>
+
+<script>
+{
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+// ================================================================ AS PELES (parametros do desenho)
+const D = {   // a base: o que a pele nao muda herda daqui
+  font: { ui: 'IBM Plex Sans', disp: 'Barlow Condensed', mono: 'IBM Plex Mono' }, up: true,
+  page: '#1c1f24', dots: '#3a4049', outer: '#0b0d10', deco: () => '',
+  bar: { bg: '#25282d', edge: '#0a0b0d', key: '#30343b', keyEdge: '#0c0d0f', keyTx: '#dfe3e8', on: '#1f4a37', onEdge: '#3fd08f', onTx: '#dcffee', r: 6,
+    visor: '#0b1310', visorEdge: '#1f3328', visorTx: '#6fe3a6', guard: '#4a1c20', guardTx: '#ffb3b6', well: '#0f1114', fx: '#b8742c', gloss: 0 },
+  fam: { fonte: '#b9bec5', verde: '#b7c7b3', rosa: '#d6bec7', saida: '#b9bec5', ctl: '#b9bec5', evm: '#2a2e35', mao: '#b9bec5' },
+  famTx: { evm: '#e6e9ed' }, modEdge: '#0008', modSw: 1, modR: 10, modTx: '#1c1f23', gloss: 0, shadow: 'soft', shadowCol: '#000', stripe: false,
+  plate: { fill: '#eceef0', edge: '#0003', tx: '#1c1f23', r: 3, dark: '#16191d', darkTx: '#e2e5e8' },
+  knob: { body: '#1d1f23', edge: '#000', cap: '#b9bec5', ptr: '#f2f4f5', sw: 1, gloss: 0 },
+  jack: { outer: '#a3a9ae', edge: '#3c4146', hole: '#101214', sw: 1, sq: 3 },
+  cable: { w: 4.5, glow: false, dash: false, hi: true, shade: true, cols: { img: '#4f8fe8', cv: '#e8a33a', ev: '#46c98a' } },
+  sel: '#ff9d52', scr: '#0d0e10', pill: { bg: '#24272c', edge: '#0b0c0e', tx: '#c4cad1' }, hud: '#8b939c66', defs: '',
+  led: '#3fd08f'
+};
+const SKINS = [
+  { id: 'atual', nome: 'Hoje (referência)', tipo: 'ref', resumo: 'O metal escuro com módulos de cor por família, como está agora.',
+    muda: 'nada — é a base de comparação', custo: 'o de hoje (60 fps medidos)', risco: '—' },
+
+  // ---------------------------------------------------- MINIMALISTAS
+  { id: 'papel', nome: 'Papel', tipo: 'minimal', resumo: 'Suíço, claro: papel off-white, traço preto de 1 px, nada de sombra. A cor só aparece onde significa algo.',
+    muda: 'fundo claro, módulos brancos de contorno fino, família vira uma letra/tarja pequena, cabos finos chapados',
+    custo: 'o menor de todos (sem sombra, sem brilho)', risco: 'tela clara em show no escuro ofusca; precisa de um modo escuro irmão',
+    font: { ui: 'Inter', disp: 'Inter', mono: 'IBM Plex Mono' }, up: false,
+    page: '#f4f3ef', dots: '#d6d3cb', outer: '#e9e7e1',
+    bar: { bg: '#ffffff', edge: '#d8d5cd', key: '#ffffff', keyEdge: '#1a1a1a', keyTx: '#1a1a1a', on: '#1a1a1a', onEdge: '#1a1a1a', onTx: '#ffffff', r: 4,
+      visor: '#f4f3ef', visorEdge: '#1a1a1a', visorTx: '#1a1a1a', guard: '#ffffff', guardTx: '#d62d2d', well: '#efede7', fx: '#1a1a1a', gloss: 0 },
+    fam: { fonte: '#ffffff', verde: '#ffffff', rosa: '#ffffff', saida: '#ffffff', ctl: '#ffffff', evm: '#ffffff', mao: '#ffffff' }, famTx: { evm: '#1a1a1a' },
+    modEdge: '#1a1a1a', modSw: 1, modR: 4, modTx: '#1a1a1a', shadow: 'none', stripe: true,
+    plate: { fill: 'none', edge: 'none', tx: '#1a1a1a', r: 0, dark: '#1a1a1a', darkTx: '#ffffff' },
+    knob: { body: '#ffffff', edge: '#1a1a1a', cap: '#ffffff', ptr: '#1a1a1a', sw: 1.4 },
+    jack: { outer: '#ffffff', edge: '#1a1a1a', hole: '#1a1a1a', sw: 1.4, sq: 1 },
+    cable: { w: 2.6, hi: false, shade: false, cols: { img: '#2563eb', cv: '#d98a00', ev: '#16a34a' } },
+    sel: '#ff6a00', scr: '#1a1a1a', pill: { bg: '#ffffff', edge: '#1a1a1a', tx: '#1a1a1a' }, hud: '#00000055', led: '#16a34a' },
+
+  { id: 'sobrio', nome: 'Grafite sóbrio', tipo: 'minimal', resumo: 'O escuro de hoje sem o hardware: chapado, borda fina, raio médio, uma sombra leve. A família vira uma tarja de cor no topo.',
+    muda: 'sem relevo, sem metal, sem gradiente; módulos todos grafite; cores só nas tarjas, nos cabos e nos LEDs',
+    custo: 'baixo (uma sombra simples por módulo)', risco: 'perde o "instrumento": tudo parece igual de longe (as tarjas seguram)',
+    font: { ui: 'IBM Plex Sans', disp: 'IBM Plex Sans', mono: 'IBM Plex Mono' }, up: false,
+    page: '#141518', dots: '#26282d', outer: '#0e0f11',
+    bar: { bg: '#18191c', edge: '#232529', key: '#222428', keyEdge: '#2e3136', keyTx: '#d7dade', on: '#173a2b', onEdge: '#3fd08f', onTx: '#c9f7e0', r: 7,
+      visor: '#101113', visorEdge: '#2e3136', visorTx: '#9fe6c2', guard: '#2a1416', guardTx: '#ff8f94', well: '#101113', fx: '#9a6a34' },
+    fam: { fonte: '#202227', verde: '#202227', rosa: '#202227', saida: '#202227', ctl: '#202227', evm: '#202227', mao: '#202227' }, famTx: { evm: '#e6e6e6' },
+    modEdge: '#2e3136', modSw: 1, modR: 10, modTx: '#e6e6e6', shadow: 'soft', stripe: true,
+    plate: { fill: 'none', edge: 'none', tx: '#e6e6e6', r: 0, dark: '#111214', darkTx: '#e6e6e6' },
+    knob: { body: '#2b2e34', edge: '#3a3e45', cap: '#2b2e34', ptr: '#e6e6e6', sw: 1 },
+    jack: { outer: '#2b2e34', edge: '#4a4f57', hole: '#0b0c0e', sw: 1.2, sq: 2 },
+    cable: { w: 3, hi: false, shade: false },
+    scr: '#0b0c0e', pill: { bg: '#1c1e22', edge: '#2e3136', tx: '#d7dade' } },
+
+  { id: 'braun', nome: 'Braun', tipo: 'minimal', resumo: 'O desenho industrial dos anos 60 (Rams): plástico cinza-quente, knobs brancos cilíndricos, um só laranja pros botões que importam.',
+    muda: 'tudo claro e quente; knobs brancos com sombra curta; GO e BLACKOUT laranja; tipografia simples em caixa baixa',
+    custo: 'baixo (sombra curta, sem brilho)', risco: 'o laranja do GO encosta no laranja de "escolhido" — o escolhido vira contorno grosso',
+    font: { ui: 'Work Sans', disp: 'Work Sans', mono: 'IBM Plex Mono' }, up: false,
+    page: '#e3e0d9', dots: '#cbc7bd', outer: '#d4d0c7',
+    bar: { bg: '#ecebe6', edge: '#c9c5bb', key: '#f6f5f1', keyEdge: '#b9b5ab', keyTx: '#3b3a37', on: '#ff6a13', onEdge: '#d4520a', onTx: '#ffffff', r: 8,
+      visor: '#2d2c29', visorEdge: '#1d1c1a', visorTx: '#f2c14e', guard: '#ff6a13', guardTx: '#ffffff', well: '#dcd9d1', fx: '#ff6a13' },
+    fam: { fonte: '#d7d4cc', verde: '#cfd2c8', rosa: '#dcd0cc', saida: '#d7d4cc', ctl: '#d7d4cc', evm: '#3b3a37', mao: '#d7d4cc' }, famTx: { evm: '#f2f1ec' },
+    modEdge: '#b3afa5', modSw: 1, modR: 14, modTx: '#3b3a37', shadow: 'soft',
+    plate: { fill: 'none', edge: 'none', tx: '#3b3a37', r: 0, dark: '#3b3a37', darkTx: '#f2f1ec' },
+    knob: { body: '#fbfaf7', edge: '#b9b5ab', cap: '#fbfaf7', ptr: '#ff6a13', sw: 1, gloss: .5 },
+    jack: { outer: '#cfccc4', edge: '#8f8b82', hole: '#2d2c29', sw: 1, sq: 3 },
+    cable: { w: 3.6, hi: true, shade: true, cols: { img: '#3f7fd8', cv: '#e39a1e', ev: '#3aa873' } },
+    sel: '#2d2c29', scr: '#2d2c29', pill: { bg: '#f6f5f1', edge: '#b9b5ab', tx: '#3b3a37' }, hud: '#00000055', led: '#3aa873' },
+
+  { id: 'brinquedo', nome: 'Brinquedo de bolso', tipo: 'minimal', resumo: 'Na linha dos sintetizadores de bolso: cinza-claro chapado, peças grandes, cada knob com uma tampa de cor primária, números em vez de enfeite.',
+    muda: 'módulos claros e planos; knobs com tampas coloridas (a cor = o lugar, não o tipo); letra arredondada e grande',
+    custo: 'baixo', risco: 'tampas coloridas competem com as cores de sinal — elas usam tons que não são azul/âmbar/verde',
+    font: { ui: 'Rubik', disp: 'Rubik', mono: 'IBM Plex Mono' }, up: false,
+    page: '#d9d9d6', dots: '#c3c3bf', outer: '#cfcfcb',
+    bar: { bg: '#efefec', edge: '#c4c4c0', key: '#f9f9f7', keyEdge: '#aaaaa5', keyTx: '#222', on: '#222222', onEdge: '#222', onTx: '#fff', r: 12,
+      visor: '#222222', visorEdge: '#111', visorTx: '#ff4d3d', guard: '#ff4d3d', guardTx: '#fff', well: '#e2e2de', fx: '#222' },
+    fam: { fonte: '#f4f4f2', verde: '#f4f4f2', rosa: '#f4f4f2', saida: '#f4f4f2', ctl: '#f4f4f2', evm: '#222222', mao: '#f4f4f2' }, famTx: { evm: '#f4f4f2' },
+    modEdge: '#bdbdb8', modSw: 1, modR: 8, modTx: '#222', shadow: 'none', toyCaps: ['#ff4d3d', '#2f2f2f', '#c9c9c4', '#7b61ff'],
+    plate: { fill: 'none', edge: 'none', tx: '#222', r: 0, dark: '#222', darkTx: '#f4f4f2' },
+    knob: { body: '#e4e4e0', edge: '#a9a9a4', cap: '#ff4d3d', ptr: '#ffffff', sw: 1 },
+    jack: { outer: '#e4e4e0', edge: '#8c8c87', hole: '#222', sw: 1.2, sq: 4 },
+    cable: { w: 4, hi: false, shade: false, cols: { img: '#2f6fe0', cv: '#f0a020', ev: '#2fb36a' } },
+    sel: '#ff4d3d', scr: '#222', pill: { bg: '#f9f9f7', edge: '#aaaaa5', tx: '#222' }, hud: '#00000055' },
+
+  // ---------------------------------------------------- LOUCAS
+  { id: 'aero', nome: 'Frutiger Aero', tipo: 'louca', resumo: 'O otimismo de 2006: céu azul, bolhas, grama, vidro brilhante e botões de gel. Módulos como peças de acrílico com reflexo em cima.',
+    muda: 'céu e bolhas no fundo; módulos de vidro claro com brilho; teclas de gel azul-água; cabos grossos e lustrosos; letra arredondada',
+    custo: 'médio (gradientes e reflexos; as bolhas são uma camada parada — não podem andar a cada quadro)', risco: 'fundo claro e cheio de enfeite atrás dos cabos: precisa de contorno escuro nos cabos',
+    font: { ui: 'Nunito', disp: 'Nunito', mono: 'IBM Plex Mono' }, up: false, cw: 7,
+    page: 'url(#P-sky)', dots: null, outer: '#2b8fd8',
+    deco: () => aeroDeco(),
+    bar: { bg: 'url(#P-barAero)', edge: '#1f6fb3', key: 'url(#P-gel)', keyEdge: '#2a7bbf', keyTx: '#ffffff', on: 'url(#P-gelOn)', onEdge: '#2f9a3c', onTx: '#ffffff', r: 15,
+      visor: '#0d2f4d', visorEdge: '#7fc4ff', visorTx: '#9ff3ff', guard: 'url(#P-gelRed)', guardTx: '#ffffff', well: '#ffffff55', fx: '#ffb347', gloss: 1 },
+    fam: { fonte: 'url(#P-glass)', verde: 'url(#P-glassG)', rosa: 'url(#P-glassP)', saida: 'url(#P-glass)', ctl: 'url(#P-glass)', evm: 'url(#P-glassD)', mao: 'url(#P-glass)' }, famTx: { evm: '#ffffff' },
+    modEdge: '#ffffffcc', modSw: 1.5, modR: 18, modTx: '#0d3a5c', gloss: 1, shadow: 'soft', shadowCol: '#0a4a80',
+    plate: { fill: '#ffffffb3', edge: '#ffffff', tx: '#0d3a5c', r: 9, dark: '#0d3a5c', darkTx: '#ffffff' },
+    knob: { body: 'url(#P-orb)', edge: '#1f6fb3', cap: 'url(#P-orb)', ptr: '#ffffff', sw: 1, gloss: 1 },
+    jack: { outer: 'url(#P-orbS)', edge: '#4a86b8', hole: '#0d2f4d', sw: 1, sq: 5 },
+    cable: { w: 6, hi: true, shade: true, outline: '#0d2f4d', cols: { img: '#1e90ff', cv: '#ff9f1c', ev: '#22c55e' } },
+    sel: '#ff8a00', scr: '#0d2f4d', pill: { bg: 'url(#P-barAero)', edge: '#ffffffaa', tx: '#ffffff' }, hud: '#ffffffaa', led: '#5dff6a',
+    defs: `<linearGradient id="P-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f9be8"/><stop offset=".55" stop-color="#8fd6ff"/><stop offset="1" stop-color="#e9fbff"/></linearGradient>
+      <linearGradient id="P-barAero" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe8ff"/><stop offset=".48" stop-color="#5fb7f2"/><stop offset=".5" stop-color="#2b8fd8"/><stop offset="1" stop-color="#4fb0ee"/></linearGradient>
+      <linearGradient id="P-gel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fe2ff"/><stop offset=".5" stop-color="#36a8f0"/><stop offset=".52" stop-color="#1786d6"/><stop offset="1" stop-color="#47b8ff"/></linearGradient>
+      <linearGradient id="P-gelOn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c6ff9f"/><stop offset=".5" stop-color="#5fd34a"/><stop offset=".52" stop-color="#2fa52a"/><stop offset="1" stop-color="#7be35a"/></linearGradient>
+      <linearGradient id="P-gelRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb3a6"/><stop offset=".5" stop-color="#ff5a46"/><stop offset=".52" stop-color="#d9301f"/><stop offset="1" stop-color="#ff6b57"/></linearGradient>
+      <linearGradient id="P-glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffffee"/><stop offset="1" stop-color="#d4efffcc"/></linearGradient>
+      <linearGradient id="P-glassG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4ffeeee"/><stop offset="1" stop-color="#bff0b0cc"/></linearGradient>
+      <linearGradient id="P-glassP" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2faee"/><stop offset="1" stop-color="#ffcbe8cc"/></linearGradient>
+      <linearGradient id="P-glassD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a8fd0ee"/><stop offset="1" stop-color="#0d3a5cee"/></linearGradient>
+      <radialGradient id="P-orb" cx=".38" cy=".3" r=".75"><stop offset="0" stop-color="#ffffff"/><stop offset=".35" stop-color="#8fd6ff"/><stop offset="1" stop-color="#1d6fb8"/></radialGradient>
+      <radialGradient id="P-orbS" cx=".38" cy=".3" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#7fb6dc"/></radialGradient>
+      <radialGradient id="P-bub" cx=".35" cy=".3" r=".7"><stop offset="0" stop-color="#ffffffcc"/><stop offset=".6" stop-color="#ffffff22"/><stop offset="1" stop-color="#ffffff66"/></radialGradient>` },
+
+  { id: 'vapor', nome: 'Vaporwave cromado', tipo: 'louca', resumo: 'Pôr do sol listrado, grade em perspectiva até o horizonte, módulos de cromo com reflexo rosa e ciano, letra de fliperama nas plaquetas.',
+    muda: 'fundo roxo→rosa com sol e grade; módulos cromados; cabos néon; plaquetas em letra de fliperama',
+    custo: 'médio-alto (cromo = gradientes; néon = desfoque) — o fundo tem que ser camada parada', risco: 'rosa e roxo por todo lado diluem o laranja de "escolhido" — o escolhido vira contorno branco grosso',
+    font: { ui: 'Inter', disp: 'Righteous', mono: 'IBM Plex Mono' }, up: true, cw: 8,
+    page: 'url(#P-vsky)', dots: null, outer: '#1a0b2e', deco: () => vaporDeco(),
+    bar: { bg: 'url(#P-chromeBar)', edge: '#ff6ad5', key: 'url(#P-chrome)', keyEdge: '#ffffffaa', keyTx: '#2a0f40', on: '#ff2fa8', onEdge: '#ffd1f0', onTx: '#ffffff', r: 4,
+      visor: '#14052a', visorEdge: '#ff6ad5', visorTx: '#5cf2ff', guard: '#ff2f6d', guardTx: '#fff', well: '#14052a99', fx: '#ff6ad5' },
+    fam: { fonte: 'url(#P-chrome)', verde: 'url(#P-chromeC)', rosa: 'url(#P-chromeP)', saida: 'url(#P-chrome)', ctl: 'url(#P-chrome)', evm: '#1b0a33', mao: 'url(#P-chrome)' }, famTx: { evm: '#5cf2ff' },
+    modEdge: '#ffffff', modSw: 1.2, modR: 4, modTx: '#2a0f40', gloss: 0, shadow: 'glow', shadowCol: '#ff6ad5',
+    plate: { fill: '#2a0f40', edge: '#ff6ad5', tx: '#5cf2ff', r: 2, dark: '#14052a', darkTx: '#ff9ce6' },
+    knob: { body: '#2a0f40', edge: '#ff6ad5', cap: 'url(#P-chrome)', ptr: '#ff2fa8', sw: 1.5 },
+    jack: { outer: 'url(#P-chrome)', edge: '#ff6ad5', hole: '#14052a', sw: 1, sq: 2 },
+    cable: { w: 3.5, glow: true, hi: false, shade: false, cols: { img: '#38b6ff', cv: '#ffb020', ev: '#3dff9a' } },
+    sel: '#ffffff', scr: '#14052a', pill: { bg: '#14052acc', edge: '#ff6ad5', tx: '#5cf2ff' }, hud: '#ff9ce699', led: '#3dff9a',
+    defs: `<linearGradient id="P-vsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a0b2e"/><stop offset=".5" stop-color="#5b1a7a"/><stop offset=".72" stop-color="#e2417e"/><stop offset="1" stop-color="#ff9a5a"/></linearGradient>
+      <linearGradient id="P-sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe36b"/><stop offset="1" stop-color="#ff3f8e"/></linearGradient>
+      <linearGradient id="P-chrome" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f7ff"/><stop offset=".45" stop-color="#b9c0e0"/><stop offset=".5" stop-color="#6a5a8e"/><stop offset=".56" stop-color="#e6b8ff"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+      <linearGradient id="P-chromeC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0ffff"/><stop offset=".45" stop-color="#9fe6ee"/><stop offset=".5" stop-color="#3a6a8e"/><stop offset=".56" stop-color="#b8fff6"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+      <linearGradient id="P-chromeP" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2fb"/><stop offset=".45" stop-color="#f0b0d8"/><stop offset=".5" stop-color="#8e3a6a"/><stop offset=".56" stop-color="#ffc8ee"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+      <linearGradient id="P-chromeBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a0f40"/><stop offset="1" stop-color="#14052a"/></linearGradient>` },
+
+  { id: 'brutal', nome: 'Brutalista', tipo: 'louca', resumo: 'Cartaz de lambe-lambe: blocos chapados de cor forte, borda preta grossa, sombra dura deslocada, letra pesada em caixa alta.',
+    muda: 'fundo creme sem pontos; módulos amarelo/rosa/branco com borda de 3 px e sombra dura; cabos grossos com contorno preto',
+    custo: 'baixo (sombra dura é só um retângulo, nada de desfoque)', risco: 'cansa a vista numa noite longa; o amarelo dos módulos fica perto do âmbar do sinal — o sinal escurece pra laranja-queimado',
+    font: { ui: 'Inter', disp: 'Archivo Black', mono: 'IBM Plex Mono' }, up: true, cw: 9.4, lblF: 'Inter',
+    page: '#f1ede2', dots: null, outer: '#111111', deco: () => brutalDeco(),
+    bar: { bg: '#111111', edge: '#111', key: '#ffffff', keyEdge: '#111', keyTx: '#111', on: '#00d26a', onEdge: '#111', onTx: '#111', r: 0,
+      visor: '#ffe600', visorEdge: '#111', visorTx: '#111', guard: '#ff2e2e', guardTx: '#fff', well: '#2a2a2a', fx: '#ffe600', hard: 1 },
+    fam: { fonte: '#ffffff', verde: '#ffe600', rosa: '#ff7ac6', saida: '#ffffff', ctl: '#ffffff', evm: '#111111', mao: '#7ad7ff' }, famTx: { evm: '#ffffff' },
+    modEdge: '#111111', modSw: 3, modR: 0, modTx: '#111', shadow: 'hard', shadowCol: '#111',
+    plate: { fill: '#111', edge: '#111', tx: '#ffffff', r: 0, dark: '#111', darkTx: '#ffe600' },
+    knob: { body: '#ffffff', edge: '#111', cap: '#ffffff', ptr: '#111', sw: 3 },
+    jack: { outer: '#ffffff', edge: '#111', hole: '#111', sw: 2.5, sq: 0 },
+    cable: { w: 5, hi: false, shade: false, outline: '#111', cols: { img: '#2d5bff', cv: '#ff7a00', ev: '#00c060' } },
+    sel: '#ff2e2e', scr: '#111', pill: { bg: '#ffffff', edge: '#111', tx: '#111' }, hud: '#111111aa', led: '#00c060' },
+
+  { id: 'neon', nome: 'Néon / grade', tipo: 'louca', resumo: 'Escuro total, só contornos que brilham (estilo ficção-científica dos 80): cada família é uma cor de néon, a mesa é uma grade em perspectiva.',
+    muda: 'módulos vazados (só o contorno aceso); tudo brilha; letra geométrica; a grade da mesa some no horizonte',
+    custo: 'o mais alto (brilho em tudo = desfoque) — precisaria pintar o brilho uma vez no sprite, nunca por quadro', risco: 'contorno colorido por família briga com a cor dos cabos — a família usa ciano/magenta/roxo, os cabos ficam com azul/âmbar/verde',
+    font: { ui: 'Inter', disp: 'Orbitron', mono: 'IBM Plex Mono' }, up: true, cw: 9.6, lblF: 'Inter',
+    page: '#05060b', dots: null, outer: '#020306', deco: () => neonDeco(),
+    bar: { bg: '#07080f', edge: '#00e5ff55', key: '#0a0c16', keyEdge: '#00e5ff', keyTx: '#bff8ff', on: '#062a1c', onEdge: '#3dff9a', onTx: '#3dff9a', r: 2,
+      visor: '#020306', visorEdge: '#00e5ff', visorTx: '#00e5ff', guard: '#1a0508', guardTx: '#ff3355', well: '#020306', fx: '#ff2fd0', neon: 1 },
+    fam: { fonte: '#0a0c16', verde: '#0a0c16', rosa: '#0a0c16', saida: '#0a0c16', ctl: '#0a0c16', evm: '#0a0c16', mao: '#0a0c16' }, famTx: { evm: '#bff8ff' },
+    famEdge: { fonte: '#00e5ff', verde: '#b06bff', rosa: '#ff2fd0', saida: '#00e5ff', ctl: '#8a9bff', evm: '#00e5ff', mao: '#b06bff' },
+    modEdge: '#00e5ff', modSw: 1.6, modR: 6, modTx: '#bff8ff', shadow: 'glow',
+    plate: { fill: 'none', edge: 'none', tx: '#bff8ff', r: 0, dark: '#020306', darkTx: '#00e5ff' },
+    knob: { body: '#0a0c16', edge: '#00e5ff', cap: '#0a0c16', ptr: '#bff8ff', sw: 1.5 },
+    jack: { outer: '#0a0c16', edge: '#bff8ff', hole: '#000', sw: 1.4, sq: 1 },
+    cable: { w: 3, glow: true, hi: false, shade: false, cols: { img: '#3a8bff', cv: '#ffb020', ev: '#3dff9a' } },
+    sel: '#ff7a1a', scr: '#000', pill: { bg: '#07080f', edge: '#00e5ff', tx: '#bff8ff' }, hud: '#00e5ff88', led: '#3dff9a' },
+
+  { id: 'terminal', nome: 'Terminal fósforo', tipo: 'louca', resumo: 'Um monitor de fósforo verde: tudo é traço, letra de terminal, linhas de varredura. Louco e minimalista ao mesmo tempo.',
+    muda: 'uma cor só; o TIPO do cabo vira o traço (imagem = cheio, sinal = tracejado, evento = pontilhado); módulos são caixas de linha',
+    custo: 'baixo (linhas finas; a varredura é uma camada parada)', risco: 'QUEBRA a regra "cor = significado" — fica como inspiração, ou com as 3 cores de volta só nos cabos',
+    font: { ui: 'VT323', disp: 'VT323', mono: 'VT323' }, up: true, big: 1.25, cw: 5.4,
+    page: '#030a05', dots: '#0f3a1c', outer: '#010402', deco: () => termDeco(),
+    bar: { bg: '#020804', edge: '#39ff7a', key: '#020804', keyEdge: '#39ff7a', keyTx: '#39ff7a', on: '#39ff7a', onEdge: '#39ff7a', onTx: '#020804', r: 0,
+      visor: '#020804', visorEdge: '#39ff7a', visorTx: '#39ff7a', guard: '#020804', guardTx: '#39ff7a', well: '#020804', fx: '#39ff7a' },
+    fam: { fonte: '#030a05', verde: '#030a05', rosa: '#030a05', saida: '#030a05', ctl: '#030a05', evm: '#030a05', mao: '#030a05' }, famTx: { evm: '#39ff7a' },
+    modEdge: '#39ff7a', modSw: 1, modR: 0, modTx: '#39ff7a', shadow: 'glow', shadowCol: '#39ff7a',
+    plate: { fill: 'none', edge: 'none', tx: '#39ff7a', r: 0, dark: '#39ff7a', darkTx: '#020804' },
+    knob: { body: '#030a05', edge: '#39ff7a', cap: '#030a05', ptr: '#39ff7a', sw: 1.2 },
+    jack: { outer: '#030a05', edge: '#39ff7a', hole: '#39ff7a', sw: 1.2, sq: 0 },
+    cable: { w: 2, glow: true, dash: true, hi: false, shade: false, cols: { img: '#39ff7a', cv: '#39ff7a', ev: '#39ff7a' } },
+    sel: '#c8ffd9', scr: '#39ff7a', scopeBg: '#020804', pill: { bg: '#020804', edge: '#39ff7a', tx: '#39ff7a' }, hud: '#39ff7a99', led: '#39ff7a' }
+];
+const merge = (a, b) => { const o = Array.isArray(a) ? [...a] : { ...a }; for (const k in b) o[k] = b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]) && a[k] && typeof a[k] === 'object' ? merge(a[k], b[k]) : b[k]; return o; };
+const TH = SKINS.map(s => merge(D, s));
+
+// decoracoes de fundo (camadas paradas)
+function aeroDeco(){ let s = `<path d="M10 640 C 300 560, 600 700, 900 620 S 1300 600, 1356 640 V 758 H 10 Z" fill="#6fd16a"/><path d="M10 680 C 350 620, 700 740, 1000 670 S 1300 660, 1356 690 V 758 H 10 Z" fill="#3fb24a"/>`;
+  [[120, 120, 44], [300, 90, 22], [1150, 110, 60], [980, 180, 18], [640, 140, 30], [1260, 300, 26], [80, 420, 30], [700, 620, 24], [460, 110, 14]].forEach(([x, y, r]) => {
+    s += `<circle cx="${x}" cy="${y}" r="${r}" fill="url(#P-bub)" stroke="#ffffffaa" stroke-width="1.2"/><ellipse cx="${x - r * .32}" cy="${y - r * .38}" rx="${r * .32}" ry="${r * .18}" fill="#ffffffcc" transform="rotate(-30 ${x - r * .32} ${y - r * .38})"/>`; });
+  return s + `<ellipse cx="1200" cy="70" rx="220" ry="40" fill="#ffffff" opacity=".18"/>`; }
+function vaporDeco(){ let s = `<circle cx="683" cy="470" r="210" fill="url(#P-sun)"/>`;
+  for (let i = 0; i < 7; i++) s += `<rect x="460" y="${430 + i * 22}" width="446" height="${4 + i * 1.6}" fill="#5b1a7a"/>`;
+  s += `<rect x="10" y="520" width="1346" height="238" fill="#1a0b2e"/>`;
+  for (let i = 0; i <= 26; i++){ const x = 10 + i * 1346 / 26; s += `<line x1="${683 + (x - 683) * .12}" y1="520" x2="${x + (x - 683) * 1.6}" y2="758" stroke="#ff4fc3" stroke-width="1.2" opacity=".7"/>`; }
+  [528, 540, 558, 584, 620, 668, 730].forEach(y => s += `<line x1="10" y1="${y}" x2="1356" y2="${y}" stroke="#ff4fc3" stroke-width="1.2" opacity=".7"/>`);
+  return s; }
+function brutalDeco(){ return `<rect x="40" y="90" width="210" height="44" fill="#111"/><text x="54" y="122" font-family="Archivo Black" font-size="26" fill="#ffe600">PRISMA</text><circle cx="1290" cy="640" r="60" fill="#ff7ac6" stroke="#111" stroke-width="3"/>`; }
+function neonDeco(){ let s = ''; for (let i = 0; i <= 30; i++){ const x = 10 + i * 1346 / 30; s += `<line x1="${683 + (x - 683) * .2}" y1="380" x2="${x + (x - 683) * 1.4}" y2="758" stroke="#b06bff" stroke-width="1" opacity=".22"/>`; }
+  [390, 405, 428, 462, 510, 575, 660, 758].forEach(y => s += `<line x1="10" y1="${y}" x2="1356" y2="${y}" stroke="#b06bff" stroke-width="1" opacity=".22"/>`); return s; }
+function termDeco(){ let s = ''; for (let y = 62; y < 758; y += 4) s += `<rect x="10" y="${y}" width="1346" height="1.4" fill="#000" opacity=".35"/>`; return s; }
+
+// ================================================================ o DESENHO (uma pele T)
+function draw(T, pid, mode){   // mode: 'tela' | 'mini'
+  const F = T.font, up = s => T.up ? String(s).toUpperCase() : s, big = T.big || 1;
+  const txt = (x, y, s, o = {}) => `<text x="${x}" y="${y}" font-family="${o.f || F.ui}" font-weight="${o.w || 600}" font-size="${(o.z || 12) * big}" fill="${o.c || T.modTx}" text-anchor="${o.a || 'start'}" letter-spacing="${o.ls ?? (T.up ? '.06em' : '0')}">${esc(s)}</text>`;
+  const filt = T.shadow === 'soft' ? 'filter="url(#P-soft)"' : T.shadow === 'glow' ? 'filter="url(#P-glow)"' : '';
+  const plate = (x, y, s, dark) => { const p = T.plate, w = String(s).length * (T.cw || 6.6) * big + 14;
+    return (p.fill === 'none' && !dark ? '' : `<rect x="${x}" y="${y}" width="${w}" height="${18 * big}" rx="${p.r}" fill="${dark ? p.dark : p.fill}" stroke="${dark ? p.dark : p.edge}"/>`) +
+      txt(x + (p.fill === 'none' && !dark ? 0 : 7), y + 13 * big, up(s), { f: F.disp, w: 700, z: 11.5, c: dark ? p.darkTx : p.tx }); };
+  const scrn = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(5, T.modR / 2)}" fill="${T.scr}"/><rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="2" fill="url(#P-img)"/><circle cx="${x + w * .62}" cy="${y + h * .5}" r="${h * .16}" fill="#ffd36b"/><path d="M${x + 3} ${y + h - 3} L${x + 3} ${y + h * .72} Q${x + w * .3} ${y + h * .55} ${x + w * .55} ${y + h * .74} T${x + w - 3} ${y + h * .66} L${x + w - 3} ${y + h - 3} Z" fill="#160d33"/>`;
+  const mod = (x, y, w, h, fam, name, o = {}) => {
+    let s = '';
+    if (T.shadow === 'hard') s += `<rect x="${x + 7}" y="${y + 7}" width="${w}" height="${h}" rx="${T.modR}" fill="${T.shadowCol}"/>`;
+    const edge = (T.famEdge || {})[fam] || T.modEdge;
+    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${T.modR}" fill="${T.fam[fam]}" stroke="${o.sel ? T.sel : edge}" stroke-width="${o.sel ? Math.max(2.5, T.modSw + 1) : T.modSw}" ${T.shadow !== 'hard' && !o.sel ? filt : ''}/>`;
+    if (o.sel && T.shadow !== 'none') s += `<rect x="${x - 4}" y="${y - 4}" width="${w + 8}" height="${h + 8}" rx="${T.modR + 4}" fill="none" stroke="${T.sel}" stroke-width="2" opacity=".55"/>`;
+    if (T.gloss) s += `<rect x="${x + 3}" y="${y + 2}" width="${w - 6}" height="${h * .42}" rx="${T.modR - 2}" fill="url(#P-gloss)"/>`;
+    if (T.stripe){ const C = { fonte: '#8a96a8', verde: '#5fbf7a', rosa: '#e46cb0', saida: '#8a96a8', ctl: '#e8a33a', evm: '#46c98a', mao: '#b88cff' }; s += `<rect x="${x + 10}" y="${y + 7}" width="22" height="3" rx="1.5" fill="${C[fam]}"/>`; }
+    if (name && fam === 'evm' && T.plate.fill === 'none') s += txt(x + (o.px ?? 10), y + (T.stripe ? 14 : 9) + 13, up(name), { f: F.disp, w: 700, z: 11.5, c: T.famTx.evm });
+    else if (name) s += plate(x + (o.px ?? 10), y + (T.stripe ? 14 : 9), name, fam === 'evm' && T.plate.fill !== 'none');
+    return s; };
+  const jack = (x, y) => `<circle cx="${x}" cy="${y}" r="7.5" fill="${T.jack.outer}" stroke="${T.jack.edge}" stroke-width="${T.jack.sw}"/><circle cx="${x}" cy="${y}" r="3" fill="${T.jack.hole}"/>`;
+  const evj = (x, y) => `<rect x="${x - 8}" y="${y - 8}" width="16" height="16" rx="${T.jack.sq}" fill="${T.jack.outer}" stroke="${T.jack.edge}" stroke-width="${T.jack.sw}"/><circle cx="${x}" cy="${y}" r="4.6" fill="none" stroke="${T.cable.cols.ev}" stroke-width="1.8"/><circle cx="${x}" cy="${y}" r="2.2" fill="${T.jack.hole}"/>`;
+  let capI = 0;
+  const knob = (x, y, r, v, md) => { const a = (-135 + 270 * v) * Math.PI / 180, K = T.knob, cap = T.toyCaps ? T.toyCaps[capI++ % T.toyCaps.length] : K.cap;
+    let s = `<circle cx="${x}" cy="${y}" r="${r}" fill="${K.body}" stroke="${K.edge}" stroke-width="${K.sw}"/>`;
+    if (md){ const a0 = -135 * Math.PI / 180, R = r + 4; s += `<path d="M${x + R * Math.sin(a0)} ${y - R * Math.cos(a0)} A${R} ${R} 0 ${v > .66 ? 1 : 0} 1 ${x + R * Math.sin(a)} ${y - R * Math.cos(a)}" fill="none" stroke="${T.cable.cols.cv}" stroke-width="3" stroke-linecap="round"/>`; }
+    s += `<circle cx="${x}" cy="${y}" r="${r * .62}" fill="${cap}" stroke="${K.edge}" stroke-width="${K.sw * .7}"/>`;
+    if (K.gloss) s += `<ellipse cx="${x - r * .2}" cy="${y - r * .35}" rx="${r * .38}" ry="${r * .2}" fill="#ffffff" opacity=".6"/>`;
+    return s + `<line x1="${x + r * .15 * Math.sin(a)}" y1="${y - r * .15 * Math.cos(a)}" x2="${x + r * .8 * Math.sin(a)}" y2="${y - r * .8 * Math.cos(a)}" stroke="${K.ptr}" stroke-width="2.6" stroke-linecap="round"/>`; };
+  const cable = (x1, y1, x2, y2, t, sag = 60) => { const C = T.cable, col = C.cols[t], my = Math.max(y1, y2) + sag, d = `M${x1} ${y1} C${x1 + (x2 - x1) * .25} ${my} ${x2 - (x2 - x1) * .25} ${my} ${x2} ${y2}`;
+    const dash = C.dash ? (t === 'cv' ? 'stroke-dasharray="9 6"' : t === 'ev' ? 'stroke-dasharray="1.5 6"' : '') : '';
+    let s = '';
+    if (C.shade) s += `<path d="${d}" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="${C.w + 5}" stroke-linecap="round" transform="translate(1.5 5)"/>`;
+    if (C.outline) s += `<path d="${d}" fill="none" stroke="${C.outline}" stroke-width="${C.w + 3}" stroke-linecap="round" ${dash}/>`;
+    s += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${C.w}" stroke-linecap="round" ${dash} ${C.glow ? 'filter="url(#P-glow)"' : ''}/>`;
+    if (C.hi) s += `<path d="${d}" fill="none" stroke="#ffffff" stroke-opacity=".38" stroke-width="${C.w * .28}" stroke-linecap="round" transform="translate(0 ${-C.w * .22})"/>`;
+    const plug = (x, y) => t === 'ev' ? `<rect x="${x - 7}" y="${y - 7}" width="14" height="14" rx="${T.jack.sq}" fill="${col}" stroke="${C.outline || '#0008'}" stroke-width="1.5"/><circle cx="${x}" cy="${y}" r="2.2" fill="#0009"/>` :
+      `<circle cx="${x}" cy="${y}" r="8" fill="${col}" stroke="${C.outline || '#0008'}" stroke-width="1.5"/><circle cx="${x}" cy="${y}" r="3" fill="#0009"/>`;
+    return s + plug(x1, y1) + plug(x2, y2); };
+  const B = T.bar, key = (x, y, w, l, st) => { const fill = st === 'on' ? B.on : st === 'guard' ? B.guard : B.key, ed = st === 'on' ? B.onEdge : B.keyEdge, tx = st === 'on' ? B.onTx : st === 'guard' ? B.guardTx : B.keyTx;
+    let s = B.hard ? `<rect x="${x + 3}" y="${y + 3}" width="${w}" height="30" fill="#ffe600"/>` : '';
+    s += `<rect x="${x}" y="${y}" width="${w}" height="30" rx="${B.r}" fill="${fill}" stroke="${ed}" stroke-width="${B.hard ? 2 : 1}" ${B.neon ? 'filter="url(#P-glow)"' : ''}/>`;
+    if (B.gloss) s += `<rect x="${x + 3}" y="${y + 2}" width="${w - 6}" height="12" rx="${Math.max(0, B.r - 3)}" fill="#ffffff" opacity=".45"/>`;
+    return s + txt(x + w / 2, y + 20, up(l), { a: 'middle', z: 12, w: 700, c: tx, f: F.disp, ls: T.up ? '.08em' : '0' }); };
+  const bfader = (x, y, w, l, v) => `<rect x="${x}" y="${y}" width="${w}" height="30" rx="${B.r}" fill="${B.well}" stroke="${B.keyEdge}"/><rect x="${x + 2}" y="${y + 2}" width="${(w - 4) * v}" height="26" rx="${Math.max(0, B.r - 2)}" fill="${B.fx}" opacity=".55"/>` +
+    txt(x + 8, y + 19, up(l), { z: 11, w: 700, c: B.keyTx, f: F.disp }) + txt(x + w - 8, y + 19, Math.round(v * 100) + '%', { a: 'end', z: 11, f: F.mono, c: B.keyTx, w: 500, ls: 0 });
+
+  // ---- peças de perto (o kit)
+  if (mode === 'kit'){
+    let s = '';
+    s += knob(36, 40, 18, .3) + knob(96, 40, 18, .7, true) + jack(146, 40) + cable(146, 40, 196, 40, 'img', 0).replace(/<circle cx="196"[^>]*\/><circle cx="196"[^>]*\/>/, '') + evj(226, 40);
+    s += key(256, 25, 64, 'tap') + key(328, 25, 56, 'go', 'on') + bfader(392, 25, 104, 'master', .8);
+    s += plate(506, 31, 'contornar');
+    s += cable(600, 22, 700, 22, 'img', 0) + cable(600, 42, 700, 42, 'cv', 0) + cable(600, 62, 700, 62, 'ev', 0);
+    return s; }
+
+  // ---- a TELA (1366 x 768, o layout B que entrou)
+  let s = `<rect width="1366" height="768" fill="${T.outer}"/><rect x="10" y="62" width="1346" height="696" rx="12" fill="${T.page}"/>`;
+  if (T.dots) s += `<rect x="10" y="62" width="1346" height="696" rx="12" fill="url(#P-dots)"/>`;
+  s += `<g clip-path="url(#P-clip)">${T.deco(T)}</g>`;
+  const dy = -50, Y = v => v + dy;
+  // modulos
+  s += mod(40, 222, 200, 152, 'fonte', 'video.mp4') + scrn(80, 250, 120, 84) + `<rect x="76" y="344" width="132" height="24" rx="${Math.min(6, T.modR)}" fill="${T.scopeBg || T.scr}"/><rect x="80" y="347" width="34" height="18" rx="3" fill="url(#P-img)"/>` + jack(60, 300);
+  s += mod(293, 215, 372, 170, 'verde', 'contornar', { px: 190 }) + scrn(341, 243, 132, 96) + jack(322, 284) + jack(322, 314) + jack(322, 344) +
+    `<rect x="483" y="250" width="110" height="46" rx="${Math.min(6, T.modR)}" fill="#0000001a" stroke="${T.modEdge}" stroke-opacity=".3"/>` + txt(490, 266, up('fundo'), { z: 10, w: 700, f: F.disp }) +
+    `<rect x="490" y="273" width="46" height="16" rx="3" fill="${T.plate.dark}"/>` + txt(513, 285, 'imagem', { a: 'middle', z: 9.5, c: T.plate.darkTx, ls: 0 }) + txt(560, 285, 'preto', { a: 'middle', z: 9.5, ls: 0 }) +
+    knob(497, 348, 16, .25) + knob(545, 348, 16, .55, true) + knob(594, 348, 16, .8, true) +
+    txt(497, 322, 'limiar', { a: 'middle', z: 9.5, w: 700, f: T.lblF || F.disp }) + txt(545, 322, 'espessura', { a: 'middle', z: 9.5, w: 700, f: T.lblF || F.disp }) + txt(594, 322, 'borda', { a: 'middle', z: 9.5, w: 700, f: T.lblF || F.disp });
+  s += mod(716, 240, 286, 120, 'rosa', 'matiz', { px: 172 }) + scrn(756, 268, 120, 84) + jack(735, 287) + jack(735, 316) + jack(735, 345) + knob(908, 316, 16, .6, true) + txt(908, 292, 'giro', { a: 'middle', z: 9.5, w: 700, f: T.lblF || F.disp });
+  [[134, 2, 'Matiz'], [248, 1, 'Contornar'], [362, 3, 'video.mp4']].forEach(([y, n, src]) => {
+    s += mod(1049, y, 275, 95, 'saida', 'saída ' + n, { sel: n === 3 }) + scrn(1207, y + 11, 108, 72) + jack(1063, y + 57) + txt(1080, y + 50, src, { z: 9.5, ls: 0 }) +
+      `<rect x="1080" y="${y + 66}" width="90" height="3" rx="1.5" fill="${T.modTx}" opacity=".35"/><rect x="1150" y="${y + 60}" width="8" height="15" rx="2" fill="${T.knob.cap === 'url(#P-orb)' ? '#ffffff' : T.knob.body}" stroke="${T.knob.edge}"/>` +
+      `<circle cx="1188" cy="${y + 18}" r="3.5" fill="${T.led}"/>`; });
+  const env = (x, y, nm, sub, trig) => mod(x, y, 160, 110, 'ctl', nm) + txt(x + 10, y + 44, sub, { z: 9.5, ls: 0 }) + txt(x + 22, y + 62, trig, { a: 'middle', z: 9.5, w: 700, f: T.lblF || F.disp }) + evj(x + 22, y + 80) +
+    `<rect x="${x + 42}" y="${y + 52}" width="84" height="40" rx="3" fill="${T.scopeBg || T.scr}"/><path d="M${x + 46} ${y + 88} L${x + 54} ${y + 58} Q${x + 70} ${y + 82} ${x + 122} ${y + 88}" fill="none" stroke="#6fe3a6" stroke-width="1.6"/>` +
+    `<rect x="${x + 130}" y="${y + 46}" width="24" height="50" rx="3" fill="${T.plate.dark}"/>` + txt(x + 142, y + 56, 'OUT', { a: 'middle', z: 8, w: 700, c: T.plate.darkTx, ls: 0 }) + jack(x + 142, y + 68) + evj(x + 142, y + 86) +
+    `<rect x="${x + 44}" y="${y + 99}" width="104" height="4" rx="2" fill="${T.modTx}" opacity=".25"/><rect x="${x + 64}" y="${y + 99}" width="56" height="4" rx="2" fill="${T.cable.cols.cv}"/>`;
+  s += env(335, 426, 'estoura no drop', 'envelope · seção drop', 'drop') + env(717, 402, 'pulsa', 'envelope · kick', 'gatilho');
+  s += mod(538, 493, 100, 150, 'evm', 'relógio e som', { px: 6 });
+  ['kick', 'caixa', 'chimbal', 'golpe', 'batida', 'compasso', 'frase'].forEach((e, i) => { const yy = 530 + i * 16;
+    s += txt(546, yy + 4, e, { z: 9.5, c: T.famTx.evm, ls: 0 }) + `<circle cx="604" cy="${yy}" r="2.6" fill="${i ? '#00000055' : T.led}"/>` + evj(624, yy).replace(/r="4.6"/, 'r="3.6"').replace(/width="16" height="16"/, 'width="13" height="13"').replace(new RegExp(`x="${624 - 8}" y="${yy - 8}"`), `x="${624 - 6.5}" y="${yy - 6.5}"`); });
+  // MAO
+  s += mod(40, 520, 232, 150, 'mao', 'mão');
+  for (let i = 0; i < 4; i++){ const fx = 66 + i * 36, v = [.75, .3, .5, .1][i], hy = 626 - 66 * v;
+    s += `<rect x="${fx - 3}" y="556" width="6" height="80" rx="3" fill="${T.scr}" opacity=".85"/><rect x="${fx - 10}" y="${hy}" width="20" height="10" rx="2" fill="${T.knob.cap === 'url(#P-orb)' ? '#ffffff' : T.knob.cap}" stroke="${T.knob.edge}" stroke-width="${T.knob.sw}"/>` +
+      txt(fx, 648, 'M' + (i + 1), { a: 'middle', z: 9.5, w: 700, f: T.lblF || F.disp }) + jack(fx, 659); }
+  for (let i = 0; i < 4; i++){ const px = 218 + (i % 2) * 30, py = 552 + (i >> 1) * 52;
+    s += `<rect x="${px - 12}" y="${py}" width="24" height="22" rx="${Math.min(6, T.modR)}" fill="${T.plate.dark}" stroke="${T.modEdge}" stroke-opacity=".5"/>` + txt(px, py + 15, String(i + 1), { a: 'middle', z: 10, w: 700, c: T.plate.darkTx, ls: 0 }) + evj(px, py + 36); }
+  // cabos
+  s += cable(222, 300, 322, 284, 'img', 40) + cable(222, 300, 1063, 419, 'img', 120) + cable(636, 302, 735, 287, 'img', 30) + cable(636, 302, 1063, 305, 'img', 80) + cable(983, 302, 1063, 191, 'img', 10);
+  s += cable(477, 494, 545, 348, 'cv', 10) + cable(859, 470, 908, 316, 'cv', 10) + cable(66, 659, 594, 348, 'cv', 40) + cable(624, 530, 739, 482, 'ev', 20);
+  s += [[222, 300], [636, 302], [983, 302]].map(([x, y]) => `<rect x="${x - 11}" y="${y - 30}" width="22" height="42" rx="4" fill="${T.plate.dark}" opacity=".9"/>` + txt(x, y - 18, 'OUT', { a: 'middle', z: 8, w: 700, c: T.plate.darkTx, ls: 0 }) + jack(x, y)).join('');
+  // PROGRAMA (monitor) + pilula + HUD
+  s += `<rect x="1126" y="548" width="222" height="150" rx="${Math.min(12, T.modR + 2)}" fill="${T.pill.bg}" stroke="${T.led}" stroke-width="2"/>` + txt(1138, 568, up('programa'), { z: 11, w: 700, c: T.pill.tx, f: F.disp }) +
+    `<rect x="1282" y="557" width="46" height="15" rx="3" fill="${T.led}"/>` + txt(1305, 568, up('no ar'), { a: 'middle', z: 9, w: 700, c: '#06140d', ls: 0 }) + scrn(1134, 578, 206, 112);
+  s += `<rect x="1010" y="712" width="338" height="36" rx="18" fill="${T.pill.bg}" stroke="${T.pill.edge}"/>` + ['↶ 7', '−', '68%', '+', '⤢', '⋯'].map((t, i) => txt([1040, 1092, 1140, 1190, 1232, 1300][i], 735, t, { a: 'middle', z: 13, c: T.pill.tx, f: i === 2 ? F.mono : F.ui, ls: 0 })).join('');
+  s += txt(24, 744, '60 fps · 0.8 ms', { z: 10.5, f: F.mono, c: T.hud, w: 500, ls: 0 });
+  // BARRA DE CIMA
+  s += `<rect width="1366" height="54" fill="${B.bg}"/><line x1="0" y1="54" x2="1366" y2="54" stroke="${B.edge}" stroke-width="2"/>`;
+  s += `<rect x="12" y="12" width="288" height="30" rx="${Math.min(6, B.r)}" fill="${B.visor}" stroke="${B.visorEdge}"/>` + txt(24, 32, '128 bpm  ▮▮▮▯  verso  · lá menor', { f: F.mono, z: 12, c: B.visorTx, w: 500, ls: 0 });
+  s += key(308, 12, 50, 'tap');
+  s += `<rect x="366" y="8" width="378" height="38" rx="${B.r + 2}" fill="${B.well}"/>` + key(370, 12, 32, '◀') + key(406, 12, 150, 'cena · abertura ▾') + key(560, 12, 32, '▶') +
+    txt(604, 25, up('próx'), { z: 8.5, w: 700, c: B.visorTx, f: T.lblF || F.disp }) + txt(604, 38, 'drop', { z: 11, c: T.sel, f: F.mono, ls: 0 }) + key(690, 12, 50, 'go', 'on');
+  s += key(812, 12, 140, '⚙ equipamento') + bfader(960, 12, 104, 'efeitos', 1) + bfader(1070, 12, 104, 'master', .9) + key(1182, 12, 40, '◎') +
+    `<circle cx="1218" cy="14" r="8" fill="#e8c14a" stroke="${B.bg}" stroke-width="2"/>` + txt(1218, 18, '2', { a: 'middle', z: 10, w: 800, c: '#1a1406', ls: 0, f: F.mono }) + key(1230, 12, 126, 'blackout', 'guard');
+  return s;
+}
+function svgDefs(T, pid){ return (`<defs><filter id="P-soft" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="${T.shadowCol}" flood-opacity=".38"/></filter>
+  <filter id="P-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <linearGradient id="P-gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity=".05"/></linearGradient>
+  <linearGradient id="P-img" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1a5e"/><stop offset=".55" stop-color="#8a3a9c"/><stop offset="1" stop-color="#f27a5a"/></linearGradient>
+  <pattern id="P-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="11" cy="11" r="1.1" fill="${T.dots || 'none'}"/></pattern>
+  <clipPath id="P-clip"><rect x="10" y="62" width="1346" height="696" rx="12"/></clipPath>${T.defs}</defs>`); }
+const fix = (s, pid) => s.replaceAll('id="P-', `id="${pid}-`).replaceAll('url(#P-', `url(#${pid}-`);
+const svg = (T, pid, mode) => fix(svgDefs(T, pid) + draw(T, pid, mode), pid);
+
+// ================================================================ a PAGINA
+$('#nav').insertAdjacentHTML('afterbegin', TH.map(t => `<a href="#${t.id}">${esc(t.nome.replace(' (referência)', ''))}</a>`).join('') + '<a href="#escolha">Escolha</a>');
+$('#idx').innerHTML = TH.map(t => `<a href="#${t.id}"><svg viewBox="0 0 1366 768" role="img" aria-label="miniatura ${esc(t.nome)}">${svg(t, 'i' + t.id, 'tela')}</svg><b>${esc(t.nome)}</b><span>${t.tipo === 'minimal' ? 'minimalista' : t.tipo === 'louca' ? 'louca' : 'referência'}</span></a>`).join('');
+const RATE = [['amo', 'amo'], ['partes', 'gosto de partes'], ['nao', 'não']];
+$('#skins').innerHTML = TH.map(t => `<section class="skin" id="${t.id}">
+  <header><h2>${esc(t.nome)}</h2><span class="tag ${t.tipo}">${t.tipo === 'minimal' ? 'minimalista' : t.tipo === 'louca' ? 'louca' : 'referência'}</span></header>
+  <p>${esc(t.resumo)}</p>
+  <div class="shot"><svg viewBox="0 0 1366 768" role="img" aria-label="o PRISMA na pele ${esc(t.nome)}">${svg(t, 's' + t.id, 'tela')}</svg></div>
+  <div class="kit" style="background:${t.outer.startsWith('url') ? '#2b8fd8' : t.outer}"><svg viewBox="0 0 720 84" role="img" aria-label="peças de perto: knob, knob modulado, jack, jack de evento, teclas, fader, plaqueta e os três cabos">${fix(svgDefs(t, 'k' + t.id) + `<rect width="720" height="84" fill="${t.page.startsWith('url') ? t.outer : t.page}"/>` + draw(t, 'k' + t.id, 'kit'), 'k' + t.id)}</svg></div>
+  <div class="facts"><div><b>O que muda</b>${esc(t.muda)}</div><div><b>Custo no fps</b>${esc(t.custo)}</div><div><b>Risco</b>${esc(t.risco)}</div></div>
+  ${t.tipo === 'ref' ? '' : `<div class="q"><div class="opts">${RATE.map(([v, l]) => `<button class="opt" data-id="g-${t.id}" data-v="${v}">${esc(l)}</button>`).join('')}</div>
+  <textarea class="nota" data-id="g-${t.id}" placeholder="o que pegar ou largar desta (ex.: os knobs, o fundo, a letra)" aria-label="nota sobre ${esc(t.nome)}"></textarea></div>`}
+</section>`).join('');
+const QS = [
+  ['pele', 'Qual vira a pele do PRISMA?', 'Uma só, ou "mistura" (e diga na nota quais partes de quais).', [...TH.filter(t => t.tipo !== 'ref').map(t => [t.id, t.nome]), ['mistura', 'mistura (nota)'], ['atual', 'fica a de hoje']]],
+  ['claro', 'Claro ou escuro?', 'Show no escuro pede tela escura; montar de dia aguenta clara.', [['escuro', 'só escuro'], ['claro', 'só claro'], ['ambos', 'os dois (troca)']]],
+  ['intens', 'Quanto enfeite?', 'Fundo decorado, brilho, reflexo.', [['sobria', 'sóbria'], ['media', 'média'], ['maxima', 'máxima']]],
+  ['geral', 'Nota geral', 'Qualquer coisa que nenhuma opção cobre.', []]];
+$('#qs').innerHTML = QS.map(([id, t, d, o]) => `<div class="q"><h3>${esc(t)}</h3><p>${esc(d)}</p>${o.length ? `<div class="opts">${o.map(([v, l]) => `<button class="opt" data-id="${id}" data-v="${v}">${esc(l)}</button>`).join('')}</div>` : ''}<textarea class="nota" data-id="${id}" placeholder="nota (opcional)" aria-label="nota: ${esc(t)}"></textarea></div>`).join('');
+
+// ================================================================ escolhas (db 'escolhas'; sem conexão = este navegador)
+const ST = {}; const st = id => ST[id] || (ST[id] = { sel: '', nota: '' });
+let db = null; const timers = {}, saveEl = $('#save');
+const flag = (t, c) => { saveEl.textContent = t; saveEl.className = 'save ' + (c || ''); };
+const IDS = [...TH.filter(t => t.tipo !== 'ref').map(t => 'g-' + t.id), 'pele', 'claro', 'intens'];
+function paint(){
+  document.querySelectorAll('.opt[data-id]').forEach(o => { const on = st(o.dataset.id).sel === o.dataset.v; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+  document.querySelectorAll('textarea.nota').forEach(t => { if (document.activeElement !== t) t.value = st(t.dataset.id).nota || ''; });
+  $('#count').textContent = `${IDS.filter(q => st(q).sel).length}/${IDS.length}`;
+}
+function persist(id){ clearTimeout(timers[id]); flag('salvando…');
+  timers[id] = setTimeout(async () => { const d = { id, sel: st(id).sel, nota: st(id).nota, quando: new Date().toISOString() };
+    try { if (db) await db.collection('escolhas').doc(id).set(d); else localStorage.setItem('prisma-esteticas', JSON.stringify(ST));
+      flag(db ? 'salvo ✓' : 'salvo só neste navegador', db ? 'ok' : 'err'); } catch (e) { flag('não salvou: ' + (e.message || e), 'err'); } }, 400); }
+document.addEventListener('click', e => { const o = e.target.closest('.opt[data-id]'); if (!o) return; const x = st(o.dataset.id); x.sel = x.sel === o.dataset.v ? '' : o.dataset.v; persist(o.dataset.id); paint(); });
+document.addEventListener('input', e => { const t = e.target; if (t.classList.contains('nota')){ st(t.dataset.id).nota = t.value; persist(t.dataset.id); } });
+try { Object.assign(ST, JSON.parse(localStorage.getItem('prisma-esteticas') || '{}')); } catch (e) {}
+paint();
+(async () => {
+  const to = setTimeout(() => { if (!db) flag('sem conexão: salva só neste navegador', 'err'); }, 10000);
+  try { db = await window.claude?.use?.('db'); } catch (e) { db = null; }
+  clearTimeout(to);
+  if (!db){ flag('sem conexão: salva só neste navegador', 'err'); return; }
+  db.collection('escolhas').onSnapshot(snap => {
+    (snap.docs || snap).forEach(d => { const v = typeof d.data === 'function' ? d.data() : d.data; if (v && v.id) ST[v.id] = { sel: v.sel || '', nota: v.nota || '' }; });
+    paint(); flag('salvo ✓', 'ok'); }, err => flag('erro ao ler: ' + (err.message || err), 'err'));
+})();
+}
+</script>
+</body>
+</html>

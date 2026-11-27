@@ -4,7 +4,7 @@ roda dos .py soltos em src/ (mesmo layout do repo: src/, shaders/, transitions/,
 models/, dash*.html), pra manter o hot-reload por mtime e o dashboard gravando no tuning.py /
 nas galerias.
 
-Onde roda: na pasta de dados do usuario (plat.data_dir: ~/.local/share/prisma |
+Onde roda: na pasta de dados do usuario (_data_dir: ~/.local/share/prisma |
 %LOCALAPPDATA%\\prisma | $PRISMA_HOME), nunca na pasta do binario — dist/prisma/ e recriado a
 cada build, /opt/prisma (.deb) e Program Files so' admin grava. A cada abertura: codigo (CODE) e
 sobrescrito com o da versao do binario; dados do usuario (DATA: tuning, shaders, transicoes,
@@ -36,7 +36,7 @@ if False:
     import pyvirtualcam  # noqa  (so' no Windows: plat.VCam, webcam virtual pela camera do OBS)
 
 IS_WIN = sys.platform == 'win32'
-CODE_FILES = ['dash.html', 'dash2.html', 'dash3.html', 'dash4.html', 'dash5.html', 'favicon.png']        # + src/*.py menos o tuning.py
+CODE_FILES = ['dash5.html', 'favicon.png']        # + src/*.py menos o tuning.py
 DATA = ['src/tuning.py', 'shaders', 'transitions', 'media', 'models']
 
 
@@ -80,7 +80,7 @@ def _guard_tuning(bundle, home):
     shutil.copyfile(good if _tuning_ok(good) else os.path.join(bundle, 'src', 'tuning.py'), t)
 
 
-def _data_dir(here):   # = plat.data_dir (o plat.py ainda nao esta no path aqui)
+def _data_dir(here):   # a pasta de dados (o plat.py ainda nao esta no path aqui)
     if os.environ.get('PRISMA_HOME'):
         return os.environ['PRISMA_HOME']
     if updater.is_portable(here):   # zip portatil: dados dentro da propria pasta

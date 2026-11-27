@@ -111,7 +111,6 @@ def shot(c, keys, path, pad=24, z=1.0):
 def main(prefix, names):
     c, br, tmp, _ = D.boot()
     try:
-        D.load(c)
         for nm in names or list(CENAS):
             D.v6_open(c)
             c.js("warpOK = false; return 1")

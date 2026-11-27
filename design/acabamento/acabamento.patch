@@ -1,0 +1,419 @@
+--- dash5.html
++++ dash5.html
+@@ -219,6 +219,18 @@
+     touchpad (1o evento do gesto com deltaX ou passo < 40) = ROLA, pinca (wheel + ctrlKey) = zoom, roda do mouse = zoom. MOSTRAR EM VEZ
+     DE AVISAR: mexer num controle ligado pisca o ALTERADOR dono dele (pointAt; texto so' se ele estiver fora da vista).
+     Testes t6_fio_recebe_modulo, t6_sacudir_solta, t6_touchpad_rola.
++  ACABAMENTO (2026-11-26, pedido: "cabos expandir pra direita nao tem sentido, manter os botoes parados" + "embelezar tudo, muito mais
++    bonito, agradavel e impressionante sem perder simplicidade"; fotos antes/depois em design/acabamento/). Pesquisa: Comeau "designing
++    shadows" (uma luz so', sombra em camadas na cor do fundo), Linear "a calmer interface" (a moldura recua, menos borda, cinza menos
++    azul), Blender HIG (editor de nos que rola nos 2 eixos = grade de PONTOS), VCV "light bloom" e o modulo Clarity (cabo aceso mostra a
++    direcao). REGRAS: (1) UMA LUZ, de cima: sombra cai pra baixo, brilho so' na borda de cima (softShadow/bevelEdge nos sprites, knob,
++    plugue, cabo); (2) PROFUNDIDADE MACIA: 3 camadas de sombra (SHADOW_PAD = a margem do sprite); arrastando, o modulo SAI DA MESA
++    (liftShadow); (3) A MOLDURA RECUA: barra/cabecalho de menos contraste, HUD discreto (sem "v6 · jogo"), TAMPA = acrilico fume com a
++    faixa de aviso so' no pe' (o texto aparece com o mouse); (4) A MESA: luz no meio + vinheta (#cvw) + grade de pontos presa ao mundo
++    (drawDots = a camada CSS #gdots, que so' DESLIZA: pintar no canvas a cada quadro custou 60 -> 44 fps; o PROGRAMA de fundo cobre); (5) LUZ QUE BRILHA: LED com halo (led(): liga, no ar, eventos acendem e apagam em 260 ms),
++    anel de escolhido com brilho (selRing), knob com o TRILHO do curso e o arco com borda escura (le' no painel claro), cabo aceso
++    (mouse no no'/cabo, escolhido) com o SINAL ANDANDO da saida pro destino; (6) NADA ANDA SOZINHO: CABOS abre por cima (cablePop),
++    zoom/cenas/desfazer com largura fixa. Leve = sem sombra macia, halo, brilho nem sinal andando. Nada muda a IMAGEM das previas.
+ -->
+ <style>
+   :root {
+@@ -1612,6 +1624,47 @@
+   .pad.cue:not(.active) { background: linear-gradient(180deg, #6b4a22, #4a3216); border-style: solid; border-color: #2a1a08; color: #ffe6c4; animation: cuepulse 1.1s ease-in-out infinite; }
+   @keyframes cuepulse { 50% { box-shadow: inset 0 0 0 1px #ff9d52, 0 0 14px #ff9d5266, 0 3px 0 #000a; } }
+   .pad.add { background: none; box-shadow: none; text-transform: none; }
++
++  /* ================= ACABAMENTO (2026-11-26; as regras e a pesquisa estao no comentario do topo, "ACABAMENTO") ================= */
++  /* NADA ANDA SOZINHO: o que muda de texto tem largura fixa; CABOS abre por cima (preso embaixo do botao) */
++  #cable-cfg { position: relative; }
++  #cable-rs { position: fixed; z-index: 70; display: grid; gap: 10px; width: 236px; padding: 12px 14px 10px; border-radius: 10px;
++    background: linear-gradient(180deg, #2c3036, #23262b); border: 1px solid #0c0d10;
++    box-shadow: inset 0 1px 0 #ffffff14, 0 1px 2px #0008, 0 6px 14px #0007, 0 18px 40px #0008; }
++  #cable-rs label { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; font: 700 11px var(--panel-font); font-stretch: 87.5%;
++    text-transform: uppercase; letter-spacing: .07em; color: #b9c0c8; }
++  #cable-rs input { width: 100%; accent-color: #c9ccce; }
++  #cable-rs small { color: var(--tx3); font-size: 11px; }
++  #cvz-n { display: inline-block; width: 92px; min-width: 92px; text-align: center; }
++  #cn-btn { width: 160px; justify-content: flex-start; } #cn-btn b { max-width: 84px; }
++  #undo-btn { width: 138px; font-variant-numeric: tabular-nums; }
++  /* A MOLDURA RECUA (Linear, "a calmer interface"): barra e cabecalho mais baixos de contraste, sem brilho competindo com os modulos */
++  #top { background: linear-gradient(180deg, #2a2d32, #212328); border-bottom: 1px solid #0a0b0d; box-shadow: inset 0 1px 0 #ffffff0f, 0 1px 0 #ffffff05; }
++  #cv-p > .ph { background: linear-gradient(180deg, #24272c, #1d2024); border-bottom: 1px solid #0b0c0e; }
++  #cv-h .lbl { color: #858d96; }
++  #cv-h .btn { background: linear-gradient(180deg, #2b2f35, #24272c); color: #c4cad1; border-color: #0f1114; box-shadow: inset 0 1px 0 #ffffff12, 0 1px 1px #0009; }
++  #cv-h .btn:hover { background: linear-gradient(180deg, #353a41, #2b2f35); color: #fff; }
++  #cv-h .btn.on { background: linear-gradient(180deg, #295c45, #1d4333); color: #dcffee; box-shadow: inset 0 0 0 1px #3fd08fbb, 0 0 8px #3fd08f33; }
++  #top .btn, #cv-h .btn, #blk, .pad { transition: background-color .12s, color .12s, box-shadow .12s, transform .06s; }
++  /* A TAMPA mais discreta: acrilico fumê + so' uma faixa de aviso no pe'; o "levantar a tampa" aparece com o mouse em cima */
++  [data-guard]::after { background: repeating-linear-gradient(135deg, #f0b44ad0 0 4px, #0000 4px 8px) left bottom / 100% 3px no-repeat,
++      linear-gradient(180deg, #ffffff2a 0%, #ffffff0d 46%, #ffffff05 54%, #ffffff12 100%);
++    border: 1px solid #ffffff2e; color: transparent; padding-bottom: 4px; }
++  [data-guard]:hover::after { color: #ffdca0; }
++  /* A MESA: uma luz de cima no meio, que cai pra vinheta nas bordas (tom neutro-quente: o azul dos cabos sobressai); os pontos = o G6 */
++  body[data-mode="montar"] #cvw { background: radial-gradient(ellipse 70% 60% at 48% 36%, #2b2d31 0%, #1d1e21 48%, #121315 80%, #0b0c0d 100%); }
++  /* o PAINEL do modulo flutua com sombra em camadas (contato + media + ambiente), sem a borda grossa */
++  #insp { border: 1px solid #0b0c0e; box-shadow: inset 0 1px 0 #ffffff14, 0 1px 2px #0009, 0 8px 18px #0008, 0 24px 56px #0009; }
++  /* a TAMPA do painel de borda a borda: o × flutuava (float) e empurrava o cabecalho pra dentro; agora fica por cima (sticky, sem ocupar lugar) */
++  #insp-x { float: none; display: block; position: sticky; top: 8px; margin: 8px 8px -36px auto; z-index: 2; background: #0b0c0e99; border-radius: 6px; color: #e6e9ed; }
++  #insp #ctl > .ihead:first-child { margin: 0 -12px 8px; padding: 10px 46px 10px 12px; border-radius: 11px 11px 0 0; }
++  #insp .sect { border-top-color: #ffffff10; }   /* separador sentido, nao visto */
++  #insp .sect .ihead b { font-size: 13.5px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; word-break: break-all; }
++  #toast { box-shadow: inset 0 2px 7px #000d, 0 1px 2px #0009, 0 10px 28px #000a; }
++  /* os PONTOS da mesa: a camada que desliza (drawDots no G6); o <i> passa 80 px de cada lado pra deslizar sem mostrar a borda */
++  #gdots { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
++  #gdots > i { position: absolute; inset: -80px; will-change: transform;
++    background: radial-gradient(circle, #ffffff26 0 1.05px, #ffffff00 1.7px) 0 0 / var(--ds, 24px) var(--ds, 24px); }
+ </style>
+ <body data-mode="show">
+ <!-- ICONES: silhuetas em SVG (simbolos de fonte e emoji mudam de tamanho/desenho com o sistema) -->
+@@ -1778,9 +1831,10 @@
+       <div class="ph" id="cv-h"><span class="lbl">Canvas</span><span class="hint" id="cv-hint"></span><span class="grow"></span>
+         <span id="cv-zoom" title="tamanho das caixas no canvas (Ctrl + roda do mouse) · clique no número = 100%"><button class="ib" id="cvz-out">−</button><span class="hint num" id="cvz-n"></span><button class="ib" id="cvz-in">+</button><button class="ib" id="cvz-fit" title="CABER TUDO (H): o patch inteiro na vista · de novo = volta pra onde estava">⤢</button></span>
+         <button class="btn sm ed" id="tema-btn" title="VISUAL: foto-real ou cel shading, e o modo leve (máquina fraca: sem grão, decoração nem animação) — lembrado nesta tela">visual</button>
+-        <span id="cable-cfg" title="CABOS (como as configurações do VCV), lembrados por modo: tensão = quanto o cabo cai (reta ↔ funda) · opacidade"><button class="btn sm" id="cable-btn" title="CABOS: tensão e opacidade — preferência de vista, guardada por modo (fica escondida até precisar)">cabos</button><span id="cable-rs" hidden>
+-          <input type="range" id="cable-t" min="0" max="1" step="0.05" title="tensão: quanto o cabo cai (0 = reta, 1 = curva funda) · 2 cliques = padrão">
+-          <input type="range" id="cable-o" min="0.15" max="1" step="0.05" title="opacidade dos cabos · 2 cliques = padrão"></span></span>
++        <span id="cable-cfg" title="CABOS (como as configurações do VCV), lembrados por modo: tensão = quanto o cabo cai (reta ↔ funda) · opacidade"><button class="btn sm" id="cable-btn" title="CABOS: tensão e opacidade — preferência de vista, guardada por modo (abre por cima; clicar fora fecha)">cabos</button><div id="cable-rs" hidden>
++          <label><span>tensão</span><input type="range" id="cable-t" min="0" max="1" step="0.05" title="tensão: quanto o cabo cai (0 = reta, 1 = curva funda) · 2 cliques = padrão"></label>
++          <label><span>opacidade</span><input type="range" id="cable-o" min="0.15" max="1" step="0.05" title="opacidade dos cabos · 2 cliques = padrão"></label>
++          <small>2 cliques = padrão · lembrado por modo</small></div></span>
+         <button class="btn sm ed" id="cn-btn" title="CENAS: a lista (trocar, criar, transição) — abre por cima do canvas; clicar fora fecha">cenas · <b id="cn-name"></b></button>
+         <button class="btn sm ed" id="pv-btn" title="PROGRAMA (o que o público vê): janelinha ↔ escondido · na janelinha, “fundo” põe atrás do canvas"><svg class="ico sm"><use href="#i-tela"/></svg>programa</button>
+         <button class="btn sm ed" id="add-mix" title="MISTURA nova: junta várias entradas (cada uma, uma camada) numa imagem; átomos nela agem na imagem já junta"><svg class="ico sm"><use href="#i-mistura"/></svg>mistura</button>
+@@ -2288,7 +2342,13 @@
+ }
+ function setTema(k, v){ tema[k] = v; LS.set('v5tema', tema); applyTema(); cvSig = ''; renderBoxes(); }
+ $('#tema-btn').onclick = temaPop;
+-$('#cable-btn').onclick = () => { const r = $('#cable-rs'); r.hidden = !r.hidden; $('#cable-btn').classList.toggle('on', !r.hidden); };
++// CABOS = um painelzinho POR CIMA, preso embaixo do botao (2026-11-26, pedido: "cabos expandir pra direita nao tem sentido, manter os
++// botoes parados"): antes os 2 controles abriam NA BARRA e empurravam os vizinhos. Clicar fora ou Esc fecha.
++function cablePop(open){ const r = $('#cable-rs'), b = $('#cable-btn'); r.hidden = !open; b.classList.toggle('on', open);
++  if (open){ const q = b.getBoundingClientRect(); r.style.top = (q.bottom + 8) + 'px'; r.style.right = Math.max(8, innerWidth - q.right) + 'px'; } }
++$('#cable-btn').onclick = () => cablePop($('#cable-rs').hidden);
++document.addEventListener('pointerdown', e => { if (!$('#cable-rs').hidden && !e.target.closest('#cable-cfg')) cablePop(false); }, true);
++document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#cable-rs').hidden) cablePop(false); }, true);
+ function syncCableCfg(){ const c = cableCfg(); $('#cable-t').value = c.t; $('#cable-o').value = c.o; }   // por modo, como o zoom
+ for (const [id, k] of [['#cable-t', 't'], ['#cable-o', 'o']]){
+   $(id).oninput = e => setCableCfg(k, +e.target.value);
+@@ -3824,6 +3884,7 @@
+ const CABLE_IMG = ['#3b82f6', '#5b9cf2', '#2f6fd8', '#4fb0e8', '#6d7ff0', '#3fa0d0', '#5a8be0', '#2c8ad8'];
+ const CABLE_CV = ['#f0a23a', '#e8873a', '#f2c230', '#e07a2a', '#f5b24e', '#d9952a', '#eba03f', '#f08a4a'];
+ const dkC = c => `color-mix(in srgb, ${c} 58%, #000)`;   // o contorno do cabo/plugue (a mesma cor, escura)
++const ltC = c => `color-mix(in srgb, ${c} 60%, #fff)`;   // (acabamento) o meio do tubo (a mesma cor, clara)
+ function cableColor(sig){ let h = 2166136261; for (let i = 0; i < sig.length; i++){ h ^= sig.charCodeAt(i); h = Math.imul(h, 16777619); }
+   const P = sig.startsWith('["cv"') ? CABLE_CV : CABLE_IMG; return P[(h >>> 0) % P.length]; }
+ function cableD(x0, y0, d0, x1, y1, d1){   // como o VCV Rack: o cabo cai RETO pra baixo com o peso (quadratica pelo meio + o caimento)
+@@ -7652,21 +7713,29 @@
+     toast('cabo de evento tirado (Ctrl+Z volta)'); cvSig = ''; renderBoxes(); dirty = true;
+   }
+   function evFinish(e){ const h_ = evHand; evHand = null; edgeV = null; dirty = true; const t = evTarget(world(e)); if (t){ swallowClick(); linkEv(t, h_.ev); } }
+-  function drawEvm(e, t){   // o modulo RELOGIO E SOM: metal escuro, cada evento = plaqueta + LED (pisca no evento) + jack QUADRADO
+-    g.fillStyle = '#2b2e34'; rr(g, e.x, e.y, EVM.W, EVM.H, 14); g.fill(); g.strokeStyle = '#121418'; g.lineWidth = 2; g.stroke();
+-    g.fillStyle = '#c9ccce'; rr(g, e.x + 10, e.y + 8, EVM.W - 20, 20, 4); g.fill();
+-    g.fillStyle = '#1b1d21'; g.font = '700 11px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('RELÓGIO E SOM', e.x + EVM.W / 2, e.y + 18.5);
+-    EV_JACKS.forEach(([ev, lb], i) => { const [jx, jy] = evJack(e, i), c_ = lastEvc[ev];
++  function paintEvm(x){   // o gabinete do RELOGIO E SOM (sprite): metal escuro, plaquetas, os jacks QUADRADOS
++    const W_ = EVM.W, H_ = EVM.H;
++    if (!tema.leve) softShadow(x, W_, H_, 14);
++    const f = x.createLinearGradient(0, 0, 0, H_); f.addColorStop(0, '#34383e'); f.addColorStop(1, '#25282d'); x.fillStyle = f; rr(x, 0, 0, W_, H_, 14); x.fill();
++    bevelEdge(x, W_, H_, 14, true);
++    x.fillStyle = '#c9ccce'; rr(x, 10, 8, W_ - 20, 20, 4); x.fill();
++    x.fillStyle = '#1b1d21'; x.font = '700 11px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('RELÓGIO E SOM', W_ / 2, 18.5);
++    EV_JACKS.forEach(([, lb], i) => { const jx = W_ - 18, jy = EVM.HEAD + i * EVM.ROW + EVM.ROW / 2;
++      x.fillStyle = '#c9ccce'; rr(x, 10, jy - 8, 70, 16, 3); x.fill(); x.fillStyle = '#1b1d21'; x.font = '600 10.5px system-ui'; x.textAlign = 'left'; x.fillText(lb, 15, jy + 0.5);
++      x.fillStyle = '#121417'; x.beginPath(); x.arc(94, jy, 5.5, 0, 7); x.fill();   // o aro do LED
++      x.fillStyle = '#0d0e10'; x.fillRect(jx - 8, jy - 8, 16, 16); x.fillStyle = '#5b616b'; x.fillRect(jx - 5, jy - 5, 10, 10); x.fillStyle = '#0d0e10'; x.fillRect(jx - 3, jy - 3, 6, 6); });
++    x.textAlign = 'left'; x.textBaseline = 'alphabetic';
++  }
++  function drawEvm(e, t){   // o modulo RELOGIO E SOM: o gabinete (sprite) + os LEDs ao vivo (pisca no evento, com halo)
++    drawSprite('evm', JSON.stringify([EVM.W, EVM.H, tema.leve, EV_JACKS.length]), e.x, e.y, EVM.W, EVM.H, paintEvm, SHADOW_PAD);
++    EV_JACKS.forEach(([ev], i) => { const [, jy] = evJack(e, i), c_ = lastEvc[ev];
+       if (c_ !== undefined && evSeen[ev] !== undefined && c_ !== evSeen[ev]) evFlash[ev] = t; evSeen[ev] = c_;
+-      const lit = t - (evFlash[ev] || -1e9) < 140;
+-      g.fillStyle = '#c9ccce'; rr(g, e.x + 10, jy - 8, 70, 16, 3); g.fill(); g.fillStyle = '#1b1d21'; g.font = '600 10.5px system-ui'; g.textAlign = 'left'; g.fillText(lb, e.x + 15, jy + 0.5);
+-      g.fillStyle = lit ? '#7dffbe' : '#1f3a2c'; g.beginPath(); g.arc(e.x + 94, jy, 4, 0, 7); g.fill();
+-      g.fillStyle = '#0d0e10'; g.fillRect(jx - 8, jy - 8, 16, 16); g.fillStyle = '#5b616b'; g.fillRect(jx - 5, jy - 5, 10, 10); g.fillStyle = '#0d0e10'; g.fillRect(jx - 3, jy - 3, 6, 6); });
+-    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
++      const u = 1 - Math.min(1, (t - (evFlash[ev] || -1e9)) / 260);   // acende na hora e apaga em 260 ms (antes: 140 ms seco)
++      led(e.x + 94, jy, 4, '#7dffbe', u, '#1f3a2c'); });
+   }
+   function drawEvCables(z, wire){   // (wire = o do quadro: mesmo traco dos outros cabos)   // os cabos de EVENTO: da saida quadrada ate' o destino; no destino, o plugue QUADRADO; sem modulo = so' o plugue com o nome
+     for (const l of scene.evl){ const b = l.at(), a = evSrc(l.ev), sel_ = selEv && selEv === l;
+-      if (a){ wire(a[0], a[1], b[0], b[1], sel_ ? SEL : EVCOL, false, !!(selEv && !sel_), null, null, sel_);   // (a mesma curva que o clique mede: curveDist)
++      if (a){ wire(a[0], a[1], b[0], b[1], sel_ ? SEL : EVCOL, false, !!(selEv && !sel_), null, null, sel_, sel_);   // (a mesma curva que o clique mede: curveDist)
+         g.globalAlpha = 1; g.fillStyle = '#0d0e10'; g.fillRect(a[0] - 7, a[1] - 7, 14, 14); g.fillStyle = sel_ ? SEL : EVCOL; g.fillRect(a[0] - 5, a[1] - 5, 10, 10); }   // plugue QUADRADO
+       g.globalAlpha = 1; g.fillStyle = '#0d0e10'; g.fillRect(b[0] - 7, b[1] - 7, 14, 14); g.fillStyle = sel_ ? SEL : EVCOL; g.fillRect(b[0] - 5, b[1] - 5, 10, 10);
+       if (!a && z > 0.4){ g.font = '600 10px system-ui'; g.fillStyle = EVCOL; g.fillText(l.ev, b[0] + 8, b[1] - 6); } }
+@@ -7808,7 +7877,7 @@
+ 
+   // ---------- SPRITE: o desenho parado de cada peca, rasterizado na escala que a camera pede ----------
+   const sigOf = n => JSON.stringify([KSTYLE, n.kind, n.fam, n.name, n.no, n.w, n.h, n.fold, n.knobs.map(k => k.n), Object.keys(n.ports), n.rows.length, n.rowLbl || 0, n.wide ? n.wide.items.map(i => [i.n, i.sty, i.btns.length]) : 0, tema.t, tema.leve, !!(n.an && n.an.off), texN]);
+-  const padOf = fam => fam === 'luz' || fam === 'tempo' ? 40 : fam === 'forma' ? 14 : 10;   // a margem do sprite: halo (luz), eco (tempo), aro (forma)
++  const padOf = fam => fam === 'luz' || fam === 'tempo' ? Math.max(40, SHADOW_PAD) : SHADOW_PAD;   // a margem do sprite: a SOMBRA macia (acabamento), halo (luz), eco (tempo)
+   function spriteFor(id, sig, w, hh, paint, want, P = 10){
+     let sp = sprites.get(id);
+     if (sp && sp.sig === sig && (sp.s >= want || !camIdle())) return sp;   // zoom andando: usa o que tem (nitidez sobe quando para)
+@@ -7837,6 +7906,21 @@
+     chk: tile(16, 16, x => { x.fillStyle = '#ffffff08'; x.fillRect(0, 0, 8, 8); x.fillRect(8, 8, 8, 8); }),
+   };
+   const pat = (x, c) => c ? x.createPattern(c, 'repeat') : null;
++  // ACABAMENTO (2026-11-26; pesquisa no topo do arquivo): UMA LUZ, de cima. Sombra = 3 camadas (contato curta e escura, media, ambiente
++  // larga e fraca), na cor da mesa, nunca preto chapado (Comeau, "designing shadows"). O shadowBlur nao escala com o transform: vezes a
++  // escala do sprite. Cabe na margem do sprite (SHADOW_PAD).
++  const SHADOW_PAD = 44;
++  function softShadow(x, w, hh, r, k = 1){ const s_ = x.getTransform().a || 1;
++    x.save(); x.fillStyle = '#0b0c0e';
++    for (const [oy, bl, al] of [[1.5, 2, 0.5], [6, 10, 0.32], [16, 28, 0.3 * k]]){ x.shadowColor = `rgba(4,5,8,${al})`; x.shadowBlur = bl * s_; x.shadowOffsetY = oy * s_; rr(x, 1, 1, w - 2, hh - 2, r); x.fill(); }
++    x.restore(); }
++  function bevelEdge(x, w, hh, r, dark){   // aro de fora: claro em cima, escuro embaixo; o brilho de dentro some no meio da altura
++    const o = x.createLinearGradient(0, 0, 0, hh); o.addColorStop(0, dark ? '#4a4d52' : '#6a6e73'); o.addColorStop(1, '#16181b');
++    x.lineWidth = 1; x.strokeStyle = o; rr(x, 0, 0, w, hh, r); x.stroke();
++    const i = x.createLinearGradient(0, 0, 0, Math.min(hh, 90)); i.addColorStop(0, dark ? '#ffffff38' : '#ffffffb8'); i.addColorStop(0.35, dark ? '#ffffff10' : '#ffffff40'); i.addColorStop(1, '#ffffff00');
++    x.strokeStyle = i; rr(x, 1.5, 1.5, w - 3, hh - 3, Math.max(0, r - 1)); x.stroke();
++    const b = x.createLinearGradient(0, hh - 24, 0, hh); b.addColorStop(0, '#00000000'); b.addColorStop(1, '#0000002e');
++    x.strokeStyle = b; rr(x, 1.5, 1.5, w - 3, hh - 3, Math.max(0, r - 1)); x.stroke(); }
+   function body(x, n, w, hh, fam){
+     const p = PAL[fam] || PAL.outros, r = RAD[fam] ?? 18, leve = tema.leve, cel = tema.t === 'cel', off = !!(n && n.an && n.an.off);
+     const shape = () => rr(x, 0, 0, w, hh, r);
+@@ -7844,7 +7928,8 @@
+     if (!leve && fam === 'tempo' && !off) for (const [dx, dy, a] of [[-18, 14, cel ? 0.15 : 0.07], [-9, 7, cel ? 0.3 : 0.16]]){   // ECO: o gabinete repetido, em degrade
+       const g2 = x.createLinearGradient(dx, dy, dx + w, dy + hh); g2.addColorStop(0, '#b9a3d1'); g2.addColorStop(1, '#e6a3c9');
+       x.globalAlpha = a; x.fillStyle = g2; rr(x, dx, dy, w, hh, r); x.fill(); x.globalAlpha = 1; }
+-    if (!leve && !cel){ x.fillStyle = '#0008'; rr(x, 3, 5, w - 6, hh, r); x.fill(); }   // sombra de contato
++    if (!leve && !cel) softShadow(x, w, hh, r);   // (acabamento) sombra MACIA em camadas, caindo pra baixo
++    if (leve && !cel){ x.fillStyle = '#0007'; rr(x, 2, 4, w - 4, hh, r); x.fill(); }   // leve: so' o contato
+     if (cel){ x.fillStyle = '#160f2e8c'; rr(x, 11, 13, w, hh, r); x.fill(); }   // cel: sombra roxa chapada
+     if (fam === 'forma' && !leve){ x.fillStyle = '#1c1f1d'; rr(x, -5, -5, w + 10, hh + 10, r + 5); x.fill(); x.strokeStyle = '#ffffff1c'; x.lineWidth = 0.6; x.stroke(); }   // ARO de borracha
+     let fill;
+@@ -7882,8 +7967,8 @@
+       if (cel){ x.strokeStyle = '#ffffffc8'; x.lineWidth = 3; x.beginPath(); x.moveTo(2, hh - r); x.lineTo(2, 2 + r); x.quadraticCurveTo(2, 2, 2 + r, 2); x.lineTo(w - r, 2); x.stroke();   // luz de recorte
+         x.fillStyle = '#fff'; x.globalAlpha = 0.9; rr(x, 14, 5, w * 0.34, 3, 2); x.fill(); x.globalAlpha = 1; }
+       x.restore(); }
+-    x.lineWidth = 1; x.strokeStyle = '#3b3e41'; shape(); x.stroke();
+-    if (!cel){ x.strokeStyle = '#ffffff70'; rr(x, 1.5, 1.5, w - 3, hh - 3, r - 1); x.stroke(); }
++    if (cel){ x.lineWidth = 1; x.strokeStyle = '#3b3e41'; shape(); x.stroke(); }
++    else bevelEdge(x, w, hh, r, DARK[fam]);   // (acabamento) a borda pega a luz de cima
+     if (cel){ x.lineWidth = 3; x.strokeStyle = '#1d1b22'; shape(); x.stroke(); }
+   }
+   function bezel(x, n, S_){   // a MOLDURA da tela: a da familia (luz = aros dourados; mascara = roxa)
+@@ -7901,11 +7986,18 @@
+     return tw;
+   }
+   const JACK_TINT = { a: ['#d9f7e3', '#3fb86a', '#1d5a33'], m: ['#fbe0ec', '#e0609a', '#6e2747'] };   // in = VERDE, másc = ROSA (pedido 2026-11-18); B e o resto = metal
++  function sheen(x, px, py, r, a = 0.38){   // (acabamento) METAL USINADO: o reflexo em cruz que gira em volta do centro (gradiente conico)
++    if (tema.leve) return; const cg = x.createConicGradient(-Math.PI / 4, px, py);
++    [[0, a], [0.11, 0], [0.25, a * 0.45], [0.39, -a * 0.7], [0.5, a], [0.61, 0], [0.75, a * 0.45], [0.89, -a * 0.7], [1, a]]
++      .forEach(([t, v]) => cg.addColorStop(t, v >= 0 ? `rgba(255,255,255,${v})` : `rgba(0,0,0,${-v})`));
++    x.fillStyle = cg; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); }
+   function jack(x, px, py, r = 11, tint){
+     const gr = x.createRadialGradient(px - r * 0.3, py - r * 0.4, 1, px, py, r), c = tint || ['#f2f4f5', '#9aa0a5', '#4b5054'];
+     gr.addColorStop(0, c[0]); gr.addColorStop(0.6, c[1]); gr.addColorStop(1, c[2]);
+-    x.fillStyle = gr; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
++    x.fillStyle = gr; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); sheen(x, px, py, r, tint ? 0.22 : 0.38);
++    x.strokeStyle = '#00000059'; x.lineWidth = 1; x.beginPath(); x.arc(px, py, r - 0.5, 0, 7); x.stroke();
+     x.fillStyle = '#101214'; x.beginPath(); x.arc(px, py, r * 0.52, 0, 7); x.fill();
++    x.strokeStyle = '#ffffff2e'; x.beginPath(); x.arc(px, py, r * 0.52 + 0.6, Math.PI * 0.15, Math.PI * 0.85); x.stroke();   // o furo: a luz pega a borda de baixo
+   }
+   function tiny(x, t, px, py, dark, al = 'center'){ x.font = HZ.LBL_FONT; x.textAlign = al; x.textBaseline = 'middle'; x.fillStyle = dark ? '#c8c2d0' : '#3a3e42'; x.fillText(t, px, py); x.textAlign = 'left'; }
+   function lbl(x, t, px, top, dark, al = 'center'){   // ROTULO = plaqueta em relevo de 10 px (rodada 6: texto >= 10 px, sempre em plaqueta); px = o centro (ou a esquerda)
+@@ -7918,17 +8010,23 @@
+   let KSTYLE = 'A';
+   const KB_OFF = [17, 17];   // B: onde fica o jack, relativo ao centro do knob
+   function nut(x, px, py, r){ const gr = x.createRadialGradient(px - r * 0.3, py - r * 0.4, 1, px, py, r);   // a PORCA do jack (metal) + o furo
+-    gr.addColorStop(0, '#f2f4f5'); gr.addColorStop(0.6, '#9aa0a5'); gr.addColorStop(1, '#4b5054'); x.fillStyle = gr; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+-    x.strokeStyle = '#0006'; x.lineWidth = 1; x.stroke(); x.fillStyle = '#101214'; x.beginPath(); x.arc(px, py, r * 0.5, 0, 7); x.fill(); }
++    gr.addColorStop(0, '#f2f4f5'); gr.addColorStop(0.6, '#9aa0a5'); gr.addColorStop(1, '#4b5054'); x.fillStyle = gr; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); sheen(x, px, py, r);
++    x.strokeStyle = '#0006'; x.lineWidth = 1; x.beginPath(); x.arc(px, py, r, 0, 7); x.stroke(); x.fillStyle = '#101214'; x.beginPath(); x.arc(px, py, r * 0.5, 0, 7); x.fill();
++    x.strokeStyle = '#ffffff2e'; x.beginPath(); x.arc(px, py, r * 0.5 + 0.6, Math.PI * 0.15, Math.PI * 0.85); x.stroke(); }
+   function knobBody(x, kx, ky){
+     const R = KSTYLE === 'B' ? HZ.KR - 4 : HZ.KR;
+     if (KSTYLE === 'B'){ const [jx, jy] = [kx + KB_OFF[0], ky + KB_OFF[1]];   // o "8": a base escura junta o knob e o jack
+       x.fillStyle = '#0005'; x.beginPath(); x.arc(jx, jy + 2, 14, 0, 7); x.fill(); x.fillStyle = '#1c1e21'; x.beginPath(); x.arc(jx, jy, 13, 0, 7); x.fill();
+       x.beginPath(); x.moveTo(kx, ky); x.lineTo(jx, jy); x.lineWidth = 18; x.strokeStyle = '#1c1e21'; x.stroke(); nut(x, jx, jy, 10); }
+-    x.fillStyle = '#0005'; x.beginPath(); x.arc(kx, ky + 2, R + 1, 0, 7); x.fill();
++    { const s_ = x.getTransform().a || 1; x.save(); x.shadowColor = 'rgba(4,5,8,.6)'; x.shadowBlur = (tema.leve ? 0 : 6) * s_; x.shadowOffsetY = 3 * s_;   // (acabamento) sombra macia, a luz de cima
++      x.fillStyle = '#1f2124'; x.beginPath(); x.arc(kx, ky, R, 0, 7); x.fill(); x.restore(); }
+     const sk = x.createRadialGradient(kx - R * 0.3, ky - R * 0.4, 2, kx, ky, R); sk.addColorStop(0, '#45494d'); sk.addColorStop(1, '#1f2124');
+     x.fillStyle = sk; x.beginPath(); x.arc(kx, ky, R, 0, 7); x.fill();
+-    x.strokeStyle = '#ffffff1c'; x.lineWidth = 1; for (let i = 0; i < 24; i++){ const a = i * Math.PI / 12; x.beginPath(); x.moveTo(kx + Math.cos(a) * (R - 4), ky + Math.sin(a) * (R - 4)); x.lineTo(kx + Math.cos(a) * R, ky + Math.sin(a) * R); x.stroke(); }   // serrilha da saia
++    { const rim = x.createLinearGradient(0, ky - R, 0, ky + R); rim.addColorStop(0, '#ffffff3d'); rim.addColorStop(0.5, '#ffffff00'); rim.addColorStop(1, '#00000040');   // o aro pega a luz em cima
++      x.strokeStyle = rim; x.lineWidth = 1; x.beginPath(); x.arc(kx, ky, R - 0.5, 0, 7); x.stroke(); }
++    x.lineWidth = 1; for (let i = 0; i < 40; i++){ const a = i * Math.PI / 20;   // (acabamento) serrilha fina: um sulco claro + um escuro
++      for (const [d, c] of [[0, '#ffffff21'], [0.045, '#00000059']]){ x.strokeStyle = c; x.beginPath(); x.moveTo(kx + Math.cos(a + d) * (R - 4.5), ky + Math.sin(a + d) * (R - 4.5)); x.lineTo(kx + Math.cos(a + d) * (R - 0.5), ky + Math.sin(a + d) * (R - 0.5)); x.stroke(); } }
++    sheen(x, kx, ky, R, 0.12);
+     if (KSTYLE === 'B'){ x.fillStyle = '#2b2e31'; x.beginPath(); x.arc(kx, ky, R - 6, 0, 7); x.fill(); }
+     else nut(x, kx, ky, HZ.KJ + 1);   // A: a TAMPA = a porca do jack
+   }
+@@ -8022,6 +8120,33 @@
+     if (n.fam === 'gerador' && n.L.vu){ const [vx, vy] = n.L.vu, a = (t ? -4 + 38 * Math.sin(t / 1300 * Math.PI) : -38) * Math.PI / 180, px = n.x + vx + 29, py = n.y + vy + 34;   // a AGULHA
+       g.save(); rr(g, n.x + vx, n.y + vy, 58, 30, 4); g.clip(); g.strokeStyle = '#1a1a1a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.sin(a) * 30, py - Math.cos(a) * 30); g.stroke(); g.restore(); }
+   }
++  // LED COM HALO (acabamento; o "light bloom" do VCV): u = quanto esta' aceso (0..1); apagado = so' a cor escura. Leve = sem halo.
++  const hexA = (c, a) => c + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0');
++  function led(px, py, r, col, u, offCol){
++    g.fillStyle = offCol; g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
++    if (u <= 0.01) return;
++    if (!tema.leve){ const R = r * 3.4, gr = g.createRadialGradient(px, py, r * 0.5, px, py, R); gr.addColorStop(0, hexA(col, 0.5 * u)); gr.addColorStop(1, hexA(col, 0));
++      g.fillStyle = gr; g.beginPath(); g.arc(px, py, R, 0, 7); g.fill(); }
++    const a0 = g.globalAlpha; g.globalAlpha = a0 * u; g.fillStyle = col; g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
++    g.fillStyle = '#ffffffa6'; g.beginPath(); g.arc(px - r * 0.3, py - r * 0.35, r * 0.36, 0, 7); g.fill(); g.globalAlpha = a0; }
++  function selRing(x0, y0, w, hh, r, z, col = SEL, lw = 2.5){   // o ANEL de escolhido, com um brilho macio (acabamento)
++    g.save(); if (!tema.leve){ g.shadowColor = hexA(col, 0.7); g.shadowBlur = 14 * z * dpr; }
++    g.strokeStyle = col; g.lineWidth = lw / Math.max(z, 0.2); rr(g, x0, y0, w, hh, r); g.stroke(); g.restore(); }
++  function liftShadow(x0, y0, w, hh, z){   // ARRASTANDO: o modulo sai da mesa (sombra maior e mais longe, por baixo do sprite)
++    if (tema.leve) return; g.save(); g.shadowColor = 'rgba(2,3,5,.55)'; g.shadowBlur = 34 * z * dpr; g.shadowOffsetY = 20 * z * dpr;
++    g.fillStyle = '#000'; rr(g, x0 + 10, y0 + 10, w - 20, hh - 20, 16); g.fill(); g.restore(); }
++  // A MESA (acabamento): grade de PONTOS presa ao mundo (Blender HIG: editor de nos que rola nos 2 eixos = pontos; a vista andando se ve
++  // mesmo sem nada nela — bom no touchpad). Passo de 24 que dobra de longe (16..32 px na tela). NAO e' pintada no canvas (encher a tela
++  // com o padrao a cada quadro custava ~6 ms de rasterizacao, fora do JS: 60 -> 44 fps): e' uma CAMADA CSS (#gdots) por baixo do canvas
++  // que so' DESLIZA (transform = so' composicao) quando a vista anda e so' repinta quando o zoom muda o passo. Parada = custo zero.
++  // O PROGRAMA de fundo (#pvw.bg) vem depois no DOM: cobre os pontos.
++  const DOTS = h('div', { id: 'gdots' }, h('i')); host.prepend(DOTS); let dotKey = '', dotSp = 0;
++  function drawDots(z){
++    let s_ = 24; while (s_ * z < 16) s_ *= 2;
++    const sp = s_ * z, md = v => ((v % sp) + sp) % sp - sp, tx = md(-cam.x * z - sp / 2 + 80), ty = md(-cam.y * z - sp / 2 + 80), key = tx.toFixed(2) + ',' + ty.toFixed(2) + ',' + sp.toFixed(3);
++    if (key === dotKey) return; dotKey = key;
++    if (Math.abs(sp - dotSp) > 1e-3){ dotSp = sp; DOTS.style.setProperty('--ds', sp + 'px'); }
++    DOTS.firstChild.style.transform = `translate3d(${tx}px, ${ty}px, 0)`; }
+   function jackLive(px, py){ const r = HZ.JR, gr = g.createRadialGradient(px - r * 0.3, py - r * 0.4, 1, px, py, r);   // = jack() do sprite, ao vivo
+     gr.addColorStop(0, '#f2f4f5'); gr.addColorStop(0.6, '#9aa0a5'); gr.addColorStop(1, '#4b5054'); g.fillStyle = gr; g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
+     g.fillStyle = '#101214'; g.beginPath(); g.arc(px, py, r * 0.52, 0, 7); g.fill(); }
+@@ -8033,8 +8158,7 @@
+         ['#e9524a', '#f39c35', '#f2d33c', '#5cc46a', '#3fbfc9', '#3f9be6', '#9a5fd6', '#e95fa6', '#e9524a'].forEach((c_, i) => cg.addColorStop(i / 8, c_));
+         g.fillStyle = cg; g.globalAlpha = off ? 0.35 : 1; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill(); g.globalAlpha = 1;
+         if (!off){ g.strokeStyle = '#c9a0ff80'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 12, 0, 7); g.stroke(); } return; }
+-      g.fillStyle = off ? '#5a1d1d' : '#e8453c'; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill();
+-      if (!off){ g.fillStyle = '#ffffff60'; g.beginPath(); g.arc(x - 3, y - 3, 3, 0, 7); g.fill(); g.strokeStyle = '#e8453c66'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 12, 0, 7); g.stroke(); } }
++      led(x, y, 9, '#ec4a3f', off ? 0 : 1, '#4f1b1b'); }   // (acabamento) vidro aceso com halo; desligado = vidro escuro
+     else if (c.kind === 'eye'){ const on = c.on(); g.fillStyle = on ? '#3fd08f' : '#3a3f44'; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill();
+       if (!on){ g.strokeStyle = '#9aa0a8'; g.lineWidth = 2; g.beginPath(); g.moveTo(x - 6, y + 6); g.lineTo(x + 6, y - 6); g.stroke(); } }
+     else if (c.kind === 'cart') drawCart(c, x, y, z);
+@@ -8079,12 +8203,14 @@
+       g.fillStyle = turning ? '#ffffff' : '#e9ecef'; rr(g, fx - 7, y - 9, 14, 18, 3); g.fill(); g.fillStyle = '#0006'; g.fillRect(fx - 0.75, y - 7, 1.5, 14); }
+     else if (c.kind === 'knob'){   // KNOB-JACK: o anel de fora = o valor (livre) | a faixa de/ate + o valor vivo (ligado: o plugue vem por cima, no centro)
+       const far_ = zlOf(z) === 'far', R = KSTYLE === 'B' ? HZ.KR - 4 : HZ.KR, RO = R + 4;
+-      let v = clamp01(c.get()), col = '#ffffffb0';
++      let v = clamp01(c.get()), col = '#ffffffe6';
+       g.lineCap = 'round';
++      if (!far_){ g.strokeStyle = DARK[n.fam] ? '#ffffff1c' : '#00000026'; g.lineWidth = 3; arc(x, y, RO, 0, 1); }   // (acabamento) o TRILHO: o curso inteiro, fraco
+       if (c.md){ const [lo, hi] = c.lohi(), lv = modLevel(c.md, lastAudio); col = cableColor(wireSig({ t: 'cv', key: n.key, j: 0, n: c.kn.n, mid: c.md.id || null })); v = clamp01(lo + (hi - lo) * lv);
+         g.strokeStyle = col; g.lineWidth = far_ ? 6 : 3.5; arc(x, y, RO, lo, hi);
+         if (!far_){ const a = knobAng(v); g.fillStyle = col; g.beginPath(); g.arc(x + Math.sin(a) * RO, y - Math.cos(a) * RO, 3.4, 0, 7); g.fill(); } }
+-      else { g.strokeStyle = col; g.lineWidth = far_ ? 6 : 3; arc(x, y, RO, c.bip ? c.dflt : 0, v); }   // o arco do valor (bipolar: do meio)
++      else { if (!far_ && !DARK[n.fam]){ g.strokeStyle = '#0000005c'; g.lineWidth = 5; arc(x, y, RO, c.bip ? c.dflt : 0, v); }   // (acabamento) a borda escura: o arco branco le' no painel claro
++        g.strokeStyle = col; g.lineWidth = far_ ? 6 : 3; arc(x, y, RO, c.bip ? c.dflt : 0, v); }   // o arco do valor (bipolar: do meio)
+       if (!far_){ const a = knobAng(v), r0 = KSTYLE === 'B' ? 4 : HZ.KJ + 3;   // o PONTEIRO na saia (ligado: anda com o valor vivo, na cor do cabo)
+         g.strokeStyle = c.md ? col : '#f2f4f5'; g.lineWidth = 3; g.beginPath(); g.moveTo(x + Math.sin(a) * r0, y - Math.cos(a) * r0); g.lineTo(x + Math.sin(a) * (R - 2), y - Math.cos(a) * (R - 2)); g.stroke(); }
+       g.lineCap = 'butt'; }
+@@ -8106,12 +8232,14 @@
+     const z = cam.z, zl = zlOf(z), far = zl === 'bloco' || zl === 'ponto', vx0 = cam.x, vy0 = cam.y, vx1 = cam.x + W / z, vy1 = cam.y + H / z;
+     const inView = (x, y, w, hh) => x + w + 20 > vx0 && x - 20 < vx1 && y + hh + 30 > vy0 && y - 20 < vy1;
+     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
++    drawDots(z);   // (acabamento) a mesa: grade de pontos
+     g.setTransform(z * dpr, 0, 0, z * dpr, -cam.x * z * dpr, -cam.y * z * dpr);
+     g.imageSmoothingQuality = 'medium';
+     const sk = mkBase(sel.key), A = lastAudio, drawn = [];
+     for (const n of scene.nodes){
+       if (!inView(n.x, n.y, n.w, n.h)) continue; drawn.push(n);
+       {   // DE LONGE TAMBEM o modulo inteiro (2026-11-18: "sem necessidade de perder os detalhes de longe"; era um bloco liso na cor da familia)
++        if (act && act.kind === 'move' && act.moved && act.m.some(m => m.key === n.key)) liftShadow(n.x, n.y, n.w, n.h, z);   // (acabamento) arrastando: sai da mesa
+         drawSprite(n.key, sigOf(n), n.x, n.y, n.w, n.h, paintNode(n), padOf(n.fam));
+         const G = n.G, s = n.an ? stackOf(n.key)[0] : null;
+         if (n.an && n.L) liveSkin(n, tema.leve || n.an.off ? 0 : t);   // o que ANDA no gabinete (arco-iris, agulha do VU); leve/desligado = parado
+@@ -8119,9 +8247,9 @@
+         if (n.L && n.L.tray && !n.fold){ const T = n.L.tray; g.fillStyle = '#0e1012'; rr(g, n.x + T.x - 3, n.y + T.y - 3, T.w + 6, T.h + 6, 6); g.fill(); }   // o vao da BANDEJA (fase 2)
+         if (!n.fold) for (const c of n.ctrls) drawCtrl(n, c, z);   // VIVOS: liga, fader, knobs, olho (o valor de agora)
+         if (s && !n.fold){ /* (o liga/fader/knobs do atomo: drawCtrl) */
+-        } else if (n.L && n.L.liveLed){ g.fillStyle = n.live ? '#3fd08f' : '#2a3a33'; g.beginPath(); g.arc(n.x + n.L.liveLed[0], n.y + n.L.liveLed[1], 5, 0, 7); g.fill(); }
++        } else if (n.L && n.L.liveLed) led(n.x + n.L.liveLed[0], n.y + n.L.liveLed[1], 5, '#3fd08f', n.live ? 1 : 0, '#23302a');   // (acabamento) no ar = LED com halo
+       }
+-      if (n.key === sk){ g.strokeStyle = SEL; g.lineWidth = 2.5 / Math.max(z, 0.2); rr(g, n.x - 4, n.y - 4, n.w + 8, n.h + 8, 20); g.stroke(); }
++      if (n.key === sk) selRing(n.x - 4, n.y - 4, n.w + 8, n.h + 8, 20, z);
+       if (msel.has(n.key)){ g.strokeStyle = SEL + '99'; g.lineWidth = 2 / Math.max(z, 0.2); rr(g, n.x - 7, n.y - 7, n.w + 14, n.h + 14, 22); g.stroke(); }
+     }
+     if (flashCtl && performance.now() - flashCtl.t > 1100) flashCtl = null;
+@@ -8129,7 +8257,8 @@
+       if (c){ g.globalAlpha = 0.35 + 0.65 * Math.abs(Math.sin(u * Math.PI * 3)); g.strokeStyle = SEL; g.lineWidth = 4 / Math.max(z, 0.2); rr(g, c.x - 8, c.y - 8, c.w + 16, c.h + 16, 22); g.stroke(); g.globalAlpha = 1; } }
+     for (const e of scene.evms || []) if (inView(e.x, e.y, e.w, e.h)) drawEvm(e, performance.now());   // RELOGIO E SOM (fase 3)
+     for (const c of scene.ctls){ if (!inView(c.x, c.y, c.w, c.h)) continue;
+-      drawSprite('ctl:' + c.id, JSON.stringify([c.name, c.sub, c.col, c.w, c.h, c.rg.map(u => [u.key || u.row, u.n, u.layer]), tema.t, tema.leve, texN]), c.x, c.y, c.w, c.h, paintCtl(c));
++      if (act && act.kind === 'move' && act.moved && act.m.some(m => m.id === c.id)) liftShadow(c.x, c.y, c.w, c.h, z);
++      drawSprite('ctl:' + c.id, JSON.stringify([c.name, c.sub, c.col, c.w, c.h, c.rg.map(u => [u.key || u.row, u.n, u.layer]), tema.t, tema.leve, texN]), c.x, c.y, c.w, c.h, paintCtl(c), SHADOW_PAD);
+       const S_ = c.L.scr, sx0 = c.x + S_.x, sy0 = c.y + S_.y, sw0 = S_.w, sh0 = S_.h;
+       const b = SCOPE[c.id]; if (b && b.length){ const tn = performance.now(), X = ti => sx0 + (1 - (tn - ti) / SCOPE_MS) * sw0, Y = v => sy0 + sh0 - 3 - v * (sh0 - 6);   // = o osciloscopio do dash5 (tempo)
+         g.save(); g.beginPath(); g.rect(sx0, sy0, sw0, sh0); g.clip();
+@@ -8147,34 +8276,49 @@
+         const lx = X(lo + (hi - lo) * lv); g.fillStyle = '#16181b'; g.beginPath(); g.arc(lx, y, 4.4, 0, 7); g.fill(); g.fillStyle = '#f2f4f5'; g.beginPath(); g.arc(lx, y, 3.2, 0, 7); g.fill();
+         if (act && act.kind === 'rng' && act.cid === c.id && act.i === i){ const t = rgFmt(u, lo) + ' → ' + rgFmt(u, hi); g.font = '700 12px system-ui'; const tw = g.measureText(t).width + 14, px = x0 + ww / 2, py = y - 18;   // mexendo: de -> ate'
+           g.fillStyle = '#16181bee'; rr(g, px - tw / 2, py - 10, tw, 20, 5); g.fill(); g.fillStyle = '#f2f4f5'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, px, py); g.textAlign = 'left'; } });
+-      if (sel.key === CTL_KEY && (ctlStore()[sel.j] || {}).id === c.id){ g.strokeStyle = SEL; g.lineWidth = 2.5 / Math.max(z, 0.2); rr(g, c.x - 4, c.y - 4, c.w + 8, c.h + 8, 16); g.stroke(); }
++      if (sel.key === CTL_KEY && (ctlStore()[sel.j] || {}).id === c.id) selRing(c.x - 4, c.y - 4, c.w + 8, c.h + 8, 16, z);
+     }
+     // CABOS por cima (VCV): curva com peso (o cableD do dash5), contorno escuro + a cor + os plugues
+     const cfg = cableCfg(), hk = hoverKey, hw = hoverWire && wireSig(hoverWire), sw = selWire && wireSig(selWire), any = hk || hw;
+     const kAl = knobHeld ? 0.2 : 1;   // girando um knob: os cabos ficam fracos (nao somem)
+     g.globalAlpha = cfg.o * kAl; g.lineCap = 'round';
+-    const wire = (x0, y0, x1, y1, col, dash, dim, d0, d1, fat) => {
++    // CABO (acabamento 2026-11-26): a SOMBRA cai na mesa (o mesmo traco deslocado pra baixo, largo e fraco: sem filtro), o TUBO tem um fio
++    // de luz em cima, o PLUGUE tem sombra e brilho. FLOW = o cabo aceso (mouse no no'/no cabo, escolhido) mostra o SINAL ANDANDO da saida pro
++    // destino (o "Clarity" do VCV: tracejado andando = a direcao). Leve/longe = so' o traco.
++    const tN = performance.now();
++    const plugAt = (px, py, col, rich) => {
++      if (rich){ g.fillStyle = '#0306084d'; g.beginPath(); g.arc(px + 1, py + 3.5, 10, 0, 7); g.fill(); }
++      g.fillStyle = dkC(col); g.beginPath(); g.arc(px, py, 9.5, 0, 7); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(px, py, 7, 0, 7); g.fill();
++      if (rich){ g.strokeStyle = '#ffffff80'; g.lineWidth = 1.4; g.beginPath(); g.arc(px, py, 5.2, Math.PI * 1.05, Math.PI * 1.75); g.stroke(); }
++      g.fillStyle = '#111'; g.beginPath(); g.arc(px, py, 3.4, 0, 7); g.fill(); };
++    const wire = (x0, y0, x1, y1, col, dash, dim, d0, d1, fat, flow) => {
+       if (!inView(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0) + 200)) return;   // a curva cai ate' ~200 abaixo
+-      const p = new Path2D(d0 ? cableD(x0, y0, d0, x1, y1, d1) : curve(x0, y0, x1, y1));
+-      g.globalAlpha = cfg.o * kAl * (dim ? 0.25 : 1);
++      const p = new Path2D(d0 ? cableD(x0, y0, d0, x1, y1, d1) : curve(x0, y0, x1, y1)), a0 = cfg.o * kAl * (dim ? 0.25 : 1), rich = !far && !tema.leve;
++      g.globalAlpha = a0;
+       if (dash) g.setLineDash([10, 8]);
+-      if (!far && !tema.leve){ g.strokeStyle = dkC(col); g.lineWidth = 7; g.stroke(p); }
++      if (rich && !dim){ g.save(); g.translate(1.5, 6); g.strokeStyle = '#030406'; g.globalAlpha = a0 * 0.14; g.lineWidth = 12; g.stroke(p); g.globalAlpha = a0 * 0.2; g.lineWidth = 6; g.stroke(p); g.restore(); g.globalAlpha = a0; }   // a SOMBRA na mesa
++      if (rich){ g.strokeStyle = dkC(col); g.lineWidth = 7; g.stroke(p); }
+       if (fat){ g.globalAlpha = 1; g.strokeStyle = SEL; g.lineWidth = 11; g.stroke(p); }
++      const aC = fat ? 1 : a0;
+       g.strokeStyle = col; g.lineWidth = far ? 3 / Math.max(z, 0.05) : fat ? 6.5 : 4.5; g.stroke(p); g.setLineDash([]);
+-      if (!far) for (const [px, py] of [[x0, y0], [x1, y1]]){ g.fillStyle = dkC(col); g.beginPath(); g.arc(px, py, 9.5, 0, 7); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(px, py, 7, 0, 7); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(px, py, 3.4, 0, 7); g.fill(); }
++      if (rich && !dash){ g.save(); g.translate(-0.3, -0.7); g.globalAlpha = aC * 0.7; g.strokeStyle = ltC(col); g.lineWidth = fat ? 3 : 2; g.stroke(p);   // o VOLUME: o meio do tubo mais claro
++        g.translate(-0.2, -0.6); g.globalAlpha = aC * 0.45; g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.stroke(p); g.restore(); }   // e o BRILHO em cima
++      if (rich && flow){ g.globalAlpha = aC; g.setLineDash([3, 13]); g.lineDashOffset = -(tN / 28) % 16; g.strokeStyle = '#ffffffd0'; g.lineWidth = 2.4; g.stroke(p); g.setLineDash([]); g.lineDashOffset = 0; }   // o SINAL andando
++      g.globalAlpha = aC;
++      if (!far) for (const [px, py] of [[x0, y0], [x1, y1]]) plugAt(px, py, col, rich);
+     };
+     const at = (o, p, par) => o.dx != null ? [par.x + o.dx + p[0], par.y + o.dy + p[1]] : [o.x + p[0], o.y + p[1]];
+     const dimOf = (sig, keys) => any && !(hw === sig || (!hw && keys.includes(hk)));
+     let top = null; const hotIns = act && act.kind === 'move' && act.hotW;
+     for (const w of scene.wires){ const [x0, y0] = at(w.a, w.ap), [x1, y1] = at(w.b, w.bp, w.par);
+-      if (w === hotIns){ top = () => wire(x0, y0, x1, y1, SEL, false, false, null, null, true); continue; }   // o fio que vai RECEBER o modulo
+-      if (w.sig === sw){ top = () => wire(x0, y0, x1, y1, w.col, w.late, false, null, null, true); continue; }
+-      wire(x0, y0, x1, y1, w.col, w.late, w.off || dimOf(w.sig, w.keys)); }
++      if (w === hotIns){ top = () => wire(x0, y0, x1, y1, SEL, false, false, null, null, true, true); continue; }   // o fio que vai RECEBER o modulo
++      if (w.sig === sw){ top = () => wire(x0, y0, x1, y1, w.col, w.late, false, null, null, true, true); continue; }
++      const dm = w.off || dimOf(w.sig, w.keys); wire(x0, y0, x1, y1, w.col, w.late, dm, null, null, false, !!any && !dm); }
+     const fromK = cvHand && cvHand.from;
+     for (const v of scene.cvs){ if (fromK && v.n.key === fromK.key && v.kn.n === fromK.n && (v.kn.layer ?? null) === (fromK.i ?? null) && v.c.id === fromK.mid) continue;   // o cabo PEGO: na mao, nao no lugar
+       const x0 = v.c.x + v.c.out[0], y0 = v.c.y + v.c.out[1], x1 = v.n.x + v.kn.x, y1 = v.n.y + v.kn.cvy;
+-      if (v.sig === sw){ top = () => wire(x0, y0, x1, y1, v.col, false, false, [0, -1], [0, 1], true); continue; }
+-      wire(x0, y0, x1, y1, v.col, false, dimOf(v.sig, [v.n.key]), [0, -1], [0, 1]); }
++      if (v.sig === sw){ top = () => wire(x0, y0, x1, y1, v.col, false, false, [0, -1], [0, 1], true, true); continue; }
++      const dm = dimOf(v.sig, [v.n.key]); wire(x0, y0, x1, y1, v.col, false, dm, [0, -1], [0, 1], false, !!any && !dm); }
+     if (evHand && evHand.sticky && evHand.sp) evHand.ptr = world({ clientX: evHand.sp[0], clientY: evHand.sp[1] });
+     drawEvCables(z, wire);   // cabos de EVENTO (fase 3)
+     if (top) top();
+@@ -8200,9 +8344,9 @@
+     // HUD (como num jogo: o custo de cada quadro na tela)
+     const ft = performance.now() - t0; hud.ft.push(ft); hud.dt.push(t); if (hud.ft.length > 60){ hud.ft.shift(); hud.dt.shift(); }
+     const fps = hud.dt.length > 1 ? (hud.dt.length - 1) * 1000 / (hud.dt[hud.dt.length - 1] - hud.dt[0]) : 0, avg = hud.ft.reduce((a, b) => a + b, 0) / hud.ft.length;
+-    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.font = '600 11px ui-monospace, monospace'; g.textBaseline = 'top';
+-    const txt = `v6 · jogo · ${fps.toFixed(0)} fps · ${avg.toFixed(1)} ms/quadro · ${drawn.length}/${scene.nodes.length} na vista · ${Math.round(z * 100)}%`;
+-    g.fillStyle = '#000a'; g.fillRect(8, H - 26, g.measureText(txt).width + 14, 18); g.fillStyle = '#9fe0b8'; g.fillText(txt, 15, H - 23);
++    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.font = '500 10.5px ui-monospace, monospace'; g.textBaseline = 'top';   // (acabamento) o HUD discreto: cinza, sem caixa
++    const txt = `${fps.toFixed(0)} fps · ${avg.toFixed(1)} ms · ${drawn.length}/${scene.nodes.length} na vista`;
++    g.fillStyle = '#8b939c80'; g.fillText(txt, 12, H - 20); g.textBaseline = 'alphabetic';
+     G6.stats = { fps, ms: avg, vista: drawn.length, nos: scene.nodes.length, z };
+     if (tema.auto && hud.ft.length >= 60){ const tn = performance.now();   // (fase 4) LEVE AUTOMATICO: quadro > 8 ms por 2 s liga; < 3 ms por 6 s desliga
+       if (!tema.leve && avg > 8){ if (!G6.lvT) G6.lvT = tn; else if (tn - G6.lvT > 2000){ tema.leve = 1; applyTema(); dirty = true; G6.lvT = 0; toast('modo leve: o quadro estava pesado (sem grão nem animação)'); } }
